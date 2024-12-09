@@ -3,6 +3,9 @@ articleID: 11623
 ---
 
 
+import MarkMessageType from '/core_products/zim/zh/snippets/MessageType.mdx'
+import MarkSendMessageEvent from '/core_products/zim/zh/snippets/SendMessageEvent.mdx'
+
 # 实现基本消息收发
 
 --- 
@@ -128,8 +131,8 @@ articleID: 11623
 // 请注意：ZIM 从 2.3.0 版本开始支持 AppSign 鉴权，SDK 也默认为 AppSign 鉴权，如果您需要切换鉴权方式：
 // (1) 2.3.3 及以上版本的 SDK，支持鉴权方式的自主切换; (2) 2.3.0 ~ 2.3.1 版本的 SDK，需要切换为 “Token 鉴权” 时，请联系 ZEGO 技术支持处理
 zim::ZIMAppConfig app_config;
-app_config.appID = 12345;     //替换为您申请到的 AppID
-app_config.appSign = "appSign";   //替换为您申请到的 AppSign
+app_config.appID = 0;     //替换为您申请到的 AppID
+app_config.appSign = "";   //替换为您申请到的 AppSign
 zim_ = zim::ZIM::create(app_config);
 ```
 
@@ -165,7 +168,7 @@ class ZIMManager {
 ...
 
 // 以登录为例
-ZIMManager::sharedInstance()->login(userInfo, token, [=](zim::ZIMError errorInfo){
+ZIMManager::sharedInstance()->login(userID, config, token, [=](zim::ZIMError errorInfo){
     // 登录结果回调
 });
 ...
@@ -201,7 +204,7 @@ zim_->setEventHandler(im_event_handler_);
 // 开发者接下来可通过 Register##callback_name 注册自己希望接受到的回调
 ```
 
-详细的接口介绍，请参考 [onConnectionStateChanged](@onConnectionStateChanged)、[onTokenWillExpire](@onTokenWillExpire)、[onReceivePeerMessage](@onReceivePeerMessage)。
+详细的接口介绍，请参考 [onConnectionStateChanged](@onConnectionStateChanged)、[onTokenWillExpire](@onTokenWillExpire)、[onPeerMessageReceived](@onPeerMessageReceived)。
 
 
 <div class = 'mk-warning'>
@@ -212,11 +215,13 @@ zim_->setEventHandler(im_event_handler_);
 例如收到房间消息时，若要处理该消息，开发者需要将其切换至自己的线程进行操作（示例代码中以切换至 UI 线程为例）。
 
 ```cpp
-// 此处的 OnReceiveRoomMessage 是绑定的 SDK 中的 onReceiveRoomMessage
-void CZIMDemoDlg::OnReceiveRoomMessage(zim::ZIM* zim, const std::vector<std::shared_ptr<zim::ZIMMessage>>& message_list, const std::string& from_room_id)
+// 此处的 OnRoomMessageReceived 是绑定的 SDK 中的 onRoomMessageReceived
+void CZIMDemoDlg::OnRoomMessageReceived(zim::ZIM* zim,
+    const std::vector<std::shared_ptr<zim::ZIMMessage>>& message_list,
+    const ZIMMessageReceivedInfo& info, const std::string& from_room_id)
 {
   global_main_dialog_->PostUiThread([=]() {
-    global_main_dialog_->im_mode_select_dialog_->OnReceiveRoomMessage(zim, message_list, from_room_id);
+    global_main_dialog_->im_mode_select_dialog_->OnRoomMessageReceived(zim, message_list, info, from_room_id);
   });
 }
 ```
@@ -227,26 +232,24 @@ void CZIMDemoDlg::OnReceiveRoomMessage(zim::ZIM* zim, const std::vector<std::sha
 
 创建实例后，客户端 A 和 B 需要登录 ZIM，只有登录成功后才可以开始发送、接收消息、更新 Token 等。
 
-客户端需要使用各自的用户信息进行登录。调用 [login](@login) 接口，传入用户信息 [ZIMUserInfo](@-ZIMUserInfo) 对象，进行登录。
+客户端需要使用各自的用户信息进行登录。调用 [login](@login) 接口，传入 userID 和 [ZIMLoginConfig](@-ZIMLoginConfig) 对象，进行登录。
 
 <Warning title="注意">
 
 - “userID”、“userName” 支持开发者自定义规则生成。建议开发者将 “userID” 设置为一个有意义的值，可将其与自己的业务账号系统进行关联。
-- `2.3.0` 或以上版本的 SDK，默认鉴权方式为 “AppSign 鉴权”，登录 ZIM 时只需传入 [ZIMUserInfo](@-ZIMUserInfo)、Token 传入空字符串即可。
+- `2.3.0` 或以上版本的 SDK，默认鉴权方式为 “AppSign 鉴权”，登录 ZIM 时 Token 传入空字符串即可。
 - 如果您使用的是 “Token 鉴权”，请参考 [使用 Token 鉴权](./Guides/Users/Authentication.mdx) 文档，获取 Token 后，并在登录 ZIM 时传入 Token，鉴权通过后才能登录成功。
 </Warning>
 ```cpp
 // userID 最大 32 字节的字符串。仅支持数字，英文字符 和 '!', '#', '$', '%', '&', '(', ')', '+', '-', ':', ';', '<', '=', '.', '>', '?', '@', '[', ']', '^', '_', '{', '}', '|', '~'。
 // userName 最大 256 字节的字符串，无特殊字符限制。
-zim::ZIMUserInfo user_info;
-user_info.userID = user_id;
-user_info.userName = user_name;
-
-// 登录时：
+zim::ZIMLoginConfig config;
+config.userName = "";
 // 使用 Token 鉴权，请传入您的 Token，详情请参考 [使用 Token 鉴权] 或使用临时 Token
 // 使用 AppSign 鉴权 (2.3.0 或以上版本的默认鉴权方式)，Token 字段填空字符串
+config.token = "";
 
-zim_->login(user_info, [=](zim::ZIMError errorInfo){
+zim_->login(userID, config, [=](zim::ZIMError errorInfo){
     // 这里可以获取登录结果返回值，并根据错误码执行用户代码
 });
 ```
@@ -255,88 +258,9 @@ zim_->login(user_info, [=](zim::ZIMError errorInfo){
 
 客户端 A 登录成功后，可以向客户端 B 发送消息。
 
-<table>
+目前 ZIM 支持的消息类型如下：
 
-<tbody><tr data-row-level="1">
-<th>消息类型</th>
-<th>说明</th>
-<th>特性及适用场景</th>
-</tr>
-<tr data-row-level="2">
-<td>ZIMTextMessage(1)</td>
-<td>文本消息。消息大小不超过 32 KB，单个客户端发送频率限制为 10 次/秒。</td>
-<td>
-消息可靠有序，可存储为历史消息（保存时间请参考 [计费说明 - 版本说明](./Introduction/Pricing.mdx) 中“历史消息存储天数”。）；
-一般适用于“单聊”、“群聊”等即时聊天的场景和“房间聊天”的公屏聊天场景。房间解散后，“房间聊天”的消息不存储。
-
-相关接口：[sendMessage](@sendMessage)
-</td>
-</tr>
-<tr data-row-level="3">
-<td>ZIMCommandMessage(2)</td>
-<td>开发者可自定义数据内容的信令消息。消息大小不超过 5 KB，单个客户端发送频率限制为 10 次/秒。</td>
-<td>
-不可存储，支持更高的并发；一般适用于“语聊房”、“在线课堂”等房间内的信令传输，比如上下麦操作、送礼物，发送在线课堂课件等。
-
-相关接口：[sendMessage](@sendMessage)
-</td>
-</tr>
-<tr data-row-level="4">
-<td>ZIMBarrageMessage(20)</td>
-<td>房间内弹幕文本消息。消息大小不超过 5 KB，单个客户端发送频率无限制。</td>
-<td>
-<p>不可存储，专门用于房间内的高频、不可靠、允许丢掉的消息，一般适用于发送“弹幕消息”的场景中。</p><p>支持高并发，但不可靠，不保证消息送达。</p>
-
-相关接口：[sendMessage](@sendMessage)
-</td>
-</tr>
-<tr data-row-level="5">
-<td>ZIMImageMessage(11)</td>
-<td>图片消息。支持主流图片格式，包括 JPG、PNG、BMP、TIFF、GIF、WebP，大小不超过 10 MB，单个客户端发送频率限制为 10 次/秒。</td>
-<td rowspan="4">
-消息可靠有序，可存储为历史消息（保存时间请参考 [计费说明 - 版本说明](./Introduction/Pricing.mdx) 中“历史消息存储天数”。）；
-一般用于单聊、房间、群聊等即时聊天场景。
-
-相关接口：
-[sendMediaMessage](@sendMediaMessage)
-</td>
-</tr>
-<tr data-row-level="6">
-<td>ZIMFileMessage(12)</td>
-<td>文件消息。消息内容为文件，格式不限，大小不超过 100 MB，单个客户端发送频率限制为 10 次/秒。</td>
-</tr>
-<tr data-row-level="7">
-<td>ZIMAudioMessage(13)</td>
-<td>语音消息。支持 MP3、M4A 格式的语音文件，时长不超过 300 秒，大小不超过 6 MB，单个客户端发送频率限制为 10 次/秒。</td>
-</tr>
-<tr data-row-level="8">
-<td>ZIMVideoMessage(14)</td>
-<td>视频消息。支持 MP4、MOV 格式的视频文件，大小不超过 100 MB，单个客户端发送频率限制为 10 次/秒。**仅支持视频编码格式为 H264 和 H265 的视频文件在消息发送成功后获取该视频首帧的宽、高信息。**</td>
-</tr>
-<tr data-row-level="9">
-<td>ZIMCombineMessage(100)</td>
-<td>合并消息，消息大小无限制，单个客户端发送频率限制为 10 次/秒。</td>
-<td>
-消息可靠有序，可存储为历史消息（保存时间请参考 [计费说明 - 版本说明](./Introduction/Pricing.mdx) 中“历史消息存储天数”。）；
-一般用于单聊、房间、群聊等即时聊天场景。
-
-相关接口：[sendMessage](@sendMessage)
-</td>
-</tr>
-<tr data-row-level="10">
-<td>ZIMCustomMessage(200)</td>
-<td>自定义消息。开发者可自定义消息的类型，并自行完成消息的解析，ZIM SDK 不负责定义和解析自定义消息的具体内容。</td>
-<td>
-消息可靠有序，可存储为历史消息（保存时间请参考 [计费说明 - 版本说明](./Introduction/Pricing.mdx) 中“历史消息存储天数”。）；
-一般可用于发送投票类型、接龙类型、视频卡片类型等消息。
-
-相关接口：
-[sendMessage](@sendMessage)
-</td>
-</tr>
-</tbody>
-</table>
-
+<MarkMessageType />
 
 以下为发送`单聊文本消息`为例：客户端 A 可以调用 [sendMessage](@sendMessage) 接口，传入客户端 B 的 userID、消息内容、消息类型 [ZIMConversationType](@-ZIMConversationType)，即可发送一条`文本消息`到 B 的客户端。
 
@@ -369,7 +293,7 @@ zim_->sendMessage(std::static_pointer_cast<zim::ZIMMessage>(smessage), "conversa
 
 #### 6. 接收消息
 
-客户端 B 登录 ZIM 后，将会收到在 [setEventHandler](@setEventHandler) 设置的回调类中 [onReceivePeerMessage](@onReceivePeerMessage) 监听接口，收到客户端 A 发送过来的消息。
+客户端 B 登录 ZIM 后，将会收到在 [setEventHandler](@setEventHandler) 设置的回调类中 [onPeerMessageReceived](@onPeerMessageReceived) 监听接口，收到客户端 A 发送过来的消息。
 
 <Warning title="注意">
 
@@ -377,7 +301,6 @@ zim_->sendMessage(std::static_pointer_cast<zim::ZIMMessage>(smessage), "conversa
 </Warning>
 
 ```cpp
-// 此处的 OnReceivePeerMessage 是绑定的 SDK 中的 onReceivePeerMessage
 void ZIMConversationView::onPeerMessageReceived(
         ZIM * /*zim*/, const std::vector<std::shared_ptr<ZIMMessage>> & messageList,
         const ZIMMessageReceivedInfo & info, const std::string & fromUserID) 
@@ -423,16 +346,7 @@ zim_->destroy();
 
 <Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/ZIM/Android/peerMessage_Android_Windows_new.png" /></Frame>
 
-<div class="mk-hint">
-
-- 发送消息时，统一使用 [sendMessage](@sendMessage) 接口，并根据消息类型传入对应的 ZIMConversationType 取值。
-- 接收消息时：
-  + 单聊消息（Peer 类型），通过 [onReceivePeerMessage](@onReceivePeerMessage) 回调接收。
-  + 房间消息（Room 类型），通过 [onReceiveRoomMessage](@onReceiveRoomMessage) 回调接收。
-  + 群组消息（Group 类型），通过 [onReceiveGroupMessage](@onReceiveGroupMessage) 回调接收。
-</div>
-
-
+<MarkSendMessageEvent platform="win" />
 
 ## 相关文档
 
