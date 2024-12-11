@@ -2,6 +2,9 @@
 articleID: 11622
 ---
 
+import MarkMessageType from '/core_products/zim/zh/snippets/MessageType.mdx'
+import MarkSendMessageEvent from '/core_products/zim/zh/snippets/SendMessageEvent.mdx'
+
 # 实现基本消息收发
 
 --- 
@@ -177,7 +180,7 @@ static ZGZIMManager *_sharedManager = nil;
 }
 ```
 
-详细的接口介绍，请参考 [tokenWillExpire](/article/api?doc=zim_API~objective-c_macos~protocol~ZIMEventHandler#zim-token-will-expire)、[connectionStateChanged](/article/api?doc=zim_API~objective-c_macos~protocol~ZIMEventHandler#zim-connection-state-changed-event-extended-data)、[receivePeerMessage](/article/api?doc=zim_API~objective-c_macos~protocol~ZIMEventHandler#zim-receive-peer-message-from-room-id)。
+详细的接口介绍，请参考 [tokenWillExpire](/article/api?doc=zim_API~objective-c_macos~protocol~ZIMEventHandler#zim-token-will-expire)、[connectionStateChanged](/article/api?doc=zim_API~objective-c_macos~protocol~ZIMEventHandler#zim-connection-state-changed-event-extended-data)、[peerMessageReceived](/article/api?doc=zim_API~objective-c_macos~protocol~ZIMEventHandler#zim-peer-message-received-info-from-user-id)。
 
 <a id="login"></a>
 
@@ -185,29 +188,25 @@ static ZGZIMManager *_sharedManager = nil;
 
 创建实例后，客户端 A 和 B 需要登录 ZIM，只有登录成功后才可以开始发送、接收消息、更新 Token 等。
 
-客户端需要使用各自的用户信息进行登录。调用 [loginWithUserInfo](@loginWithUserInfo) 接口，传入用户信息 [ZIMUserInfo](@-ZIMUserInfo) 对象，进行登录。
+首先，请创建用户个人登录配置（[ZIMLoginConfig](@-ZIMLoginConfig) 对象）；创建完毕后，调用 [loginWithUserID](/article/api?doc=zim_API~objective-c_macos~protocol~ZIM#login-with-user-id-config-callback-2) 接口，传入上述对象，即可登录 ZIM。
 
 <Warning title="注意">
 
 - “userID”、“userName” 支持开发者自定义规则生成。建议开发者将 “userID” 设置为一个有意义的值，可将其与自己的业务账号系统进行关联。
-- `2.3.0` 或以上版本的 SDK，默认鉴权方式为 “AppSign 鉴权”，登录 ZIM 时只需传入 [ZIMUserInfo](@-ZIMUserInfo)、Token 传入空字符串即可。
+- `2.3.0` 或以上版本的 SDK，默认鉴权方式为 “AppSign 鉴权”，登录 ZIM 时 Token 传入空字符串即可。
 - 如果您使用的是 “Token 鉴权”，请参考 [使用 Token 鉴权](./Guides/Users/Authentication.mdx) 文档，获取 Token 后，并在登录 ZIM 时传入 Token，鉴权通过后才能登录成功。
 </Warning>
-
-首先创建客户端的用户个人信息对象 [ZIMUserInfo](@-ZIMUserInfo)；创建完毕后，客户端可以调用 [loginWithUserInfo](@loginWithUserInfo) 接口登录 ZIM。
 
 ```objc
 // userID 最大 32 字节的字符串。仅支持数字，英文字符 和 '!', '#', '$', '%', '&', '(', ')', '+', '-', ':', ';', '<', '=', '.', '>', '?', '@', '[', ']', '^', '_', '{', '}', '|', '~'。
 // userName 最大 256 字节的字符串，无特殊字符限制。
-ZIMUserInfo *userInfo = [[ZIMUserInfo alloc]init];
-userInfo.userID = @"zegoUser1"; //填入NSString类型的值
-userInfo.userName = @"zegotest";//填入NSString类型的值
-
-// 登录时：
+ZIMLoginConfig *config = [[ZIMLoginConfig alloc]init];
+config.userName = @"";
 // 使用 Token 鉴权，需要开发者填入 "使用 Token 鉴权" 文档生成的 Token，详情请参考 [使用 Token 鉴权]
 // 使用 AppSign 鉴权 (2.3.0 或以上版本的默认鉴权方式)，Token 参数填空字符串
+config.token = @"";//填入NSString类型的值
 
-[zim loginWithUserInfo:userInfo callback:^(ZIMError * _Nonnull errorInfo) {
+[zim loginWithUserID:userID config:config callback:^(ZIMError * _Nonnull errorInfo) {
     //这里填写登录的回调
 }];
 ```
@@ -216,88 +215,9 @@ userInfo.userName = @"zegotest";//填入NSString类型的值
 
 客户端 A 登录成功后，可以向客户端 B 发送消息。
 
-<table>
+目前 ZIM 支持的消息类型如下：
 
-<tbody><tr data-row-level="1">
-<th>消息类型</th>
-<th>说明</th>
-<th>特性及适用场景</th>
-</tr>
-<tr data-row-level="2">
-<td>ZIMTextMessage(1)</td>
-<td>文本消息。消息大小不超过 32 KB，单个客户端发送频率限制为 10 次/秒。</td>
-<td>
-消息可靠有序，可存储为历史消息（保存时间请参考 [计费说明 - 版本说明](./Introduction/Pricing.mdx) 中“历史消息存储天数”。）；
-一般适用于“单聊”、“群聊”等即时聊天的场景和“房间聊天”的公屏聊天场景。房间解散后，“房间聊天”的消息不存储。
-
-相关接口：[sendMessage](@sendMessage)
-</td>
-</tr>
-<tr data-row-level="3">
-<td>ZIMCommandMessage(2)</td>
-<td>开发者可自定义数据内容的信令消息。消息大小不超过 5 KB，单个客户端发送频率限制为 10 次/秒。</td>
-<td>
-不可存储，支持更高的并发；一般适用于“语聊房”、“在线课堂”等房间内的信令传输，比如上下麦操作、送礼物，发送在线课堂课件等。
-
-相关接口：[sendMessage](@sendMessage)
-</td>
-</tr>
-<tr data-row-level="4">
-<td>ZIMBarrageMessage(20)</td>
-<td>房间内弹幕文本消息。消息大小不超过 5 KB，单个客户端发送频率无限制。</td>
-<td>
-<p>不可存储，专门用于房间内的高频、不可靠、允许丢掉的消息，一般适用于发送“弹幕消息”的场景中。</p><p>支持高并发，但不可靠，不保证消息送达。</p>
-
-相关接口：[sendMessage](@sendMessage)
-</td>
-</tr>
-<tr data-row-level="5">
-<td>ZIMImageMessage(11)</td>
-<td>图片消息。支持主流图片格式，包括 JPG、PNG、BMP、TIFF、GIF、WebP，大小不超过 10 MB，单个客户端发送频率限制为 10 次/秒。</td>
-<td rowspan="4">
-消息可靠有序，可存储为历史消息（保存时间请参考 [计费说明 - 版本说明](./Introduction/Pricing.mdx) 中“历史消息存储天数”。）；
-一般用于单聊、房间、群聊等即时聊天场景。
-
-相关接口：
-[sendMediaMessage](@sendMediaMessage)
-</td>
-</tr>
-<tr data-row-level="6">
-<td>ZIMFileMessage(12)</td>
-<td>文件消息。消息内容为文件，格式不限，大小不超过 100 MB，单个客户端发送频率限制为 10 次/秒。</td>
-</tr>
-<tr data-row-level="7">
-<td>ZIMAudioMessage(13)</td>
-<td>语音消息。支持 MP3、M4A 格式的语音文件，时长不超过 300 秒，大小不超过 6 MB，单个客户端发送频率限制为 10 次/秒。</td>
-</tr>
-<tr data-row-level="8">
-<td>ZIMVideoMessage(14)</td>
-<td>视频消息。支持 MP4、MOV 格式的视频文件，大小不超过 100 MB，单个客户端发送频率限制为 10 次/秒。**仅支持视频编码格式为 H264 和 H265 的视频文件在消息发送成功后获取该视频首帧的宽、高信息。**</td>
-</tr>
-<tr data-row-level="9">
-<td>ZIMCombineMessage(100)</td>
-<td>合并消息，消息大小无限制，单个客户端发送频率限制为 10 次/秒。</td>
-<td>
-消息可靠有序，可存储为历史消息（保存时间请参考 [计费说明 - 版本说明](./Introduction/Pricing.mdx) 中“历史消息存储天数”。）；
-一般用于单聊、房间、群聊等即时聊天场景。
-
-相关接口：[sendMessage](@sendMessage)
-</td>
-</tr>
-<tr data-row-level="10">
-<td>ZIMCustomMessage(200)</td>
-<td>自定义消息。开发者可自定义消息的类型，并自行完成消息的解析，ZIM SDK 不负责定义和解析自定义消息的具体内容。</td>
-<td>
-消息可靠有序，可存储为历史消息（保存时间请参考 [计费说明 - 版本说明](./Introduction/Pricing.mdx) 中“历史消息存储天数”。）；
-一般可用于发送投票类型、接龙类型、视频卡片类型等消息。
-
-相关接口：
-[sendMessage](@sendMessage)
-</td>
-</tr>
-</tbody>
-</table>
-
+<MarkMessageType />
 
 以下为发送`单聊文本消息`为例：客户端 A 可以调用 [sendMessage](@sendMessage) 接口，传入客户端 B 的 userID、消息内容、消息类型 conversationType 等参数，即可发送一条`文本消息`到 B 的客户端。
 
@@ -324,7 +244,7 @@ config.priority = ZIMMessagePriorityMedium;  // 消息优先级，取值为 低:
 
 #### 6. 接收消息
 
-客户端 B 登录 ZIM 后，将会收到在 [setEventHandler](@setEventHandler) 回调中设置的 [receivePeerMessage](/article/api?doc=zim_API~objectivec_ios~protocol~ZIMEventHandler#zim-receive-peer-message-from) 监听接口，收到客户端 A 发送过来的消息。
+客户端 B 登录 ZIM 后，将会收到在 [setEventHandler](@setEventHandler) 回调中设置的 [peerMessageReceived](/article/api?doc=zim_API~objective-c_macos~protocol~ZIMEventHandler#zim-peer-message-received-info-from-user-id) 监听接口，收到客户端 A 发送过来的消息。
 
 <Warning title="注意">
 
@@ -369,14 +289,7 @@ config.priority = ZIMMessagePriorityMedium;  // 消息优先级，取值为 低:
 
 <Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/ZIM/iOS/peerMessage_iOS_new.png" /></Frame>
 
-<Note title="说明">
-
-- 发送消息时，统一使用 [sendMessage](@sendMessage) 接口，并根据消息类型传入对应的 conversationType 取值。
-- 接收消息时：
-    - 单聊消息（Peer 类型），通过 [receivePeerMessage](https://doc-zh.zego.im/article/api?doc=zim_API~objective-c_macos~protocol~ZIMEventHandler#zim-receive-peer-message-from-room-id) 回调接收。
-    - 房间消息（Room 类型），通过 [receiveRoomMessage](https://doc-zh.zego.im/article/api?doc=zim_API~objective-c_macos~protocol~ZIMEventHandler#zim-receive-room-message-from-room-id) 回调接收。
-    - 群组消息（Group 类型），通过 [receiveGroupMessage](https://doc-zh.zego.im/article/api?doc=zim_API~objective-c_macos~protocol~ZIMEventHandler#zim-receive-group-message-from-group-id) 回调接收。
-</Note>
+<MarkSendMessageEvent platform="macos" />
 
 ## 相关文档
 
