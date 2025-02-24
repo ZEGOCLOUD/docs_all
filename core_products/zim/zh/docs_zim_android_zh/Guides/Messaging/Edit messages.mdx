@@ -2,6 +2,245 @@
 articleID: 17429
 ---
 
+import { getPlatformData } from "/snippets/utils-content-parser.js"
+import { ZIMTextMessageMap, ZIMCustomMessageMap, ZIMMultipleMessageMap, setEventHandlerMap, messageEditedMap, editMessageMap } from "/snippets/zim/const-link.mdx"
+
+export const ZIMMessageEditedCallbackMap = {
+  'Android': <a href='@-ZIMMessageEditedCallback' target='_blank'>ZIMMessageEditedCallback</a>,
+  'Web': <a href='@-ZIMMessageEditedResult' target='_blank'>ZIMMessageEditedResult</a>,
+  'window,iOS,mac': <a href='@ZIMMessageEditedCallback' target='_blank'>ZIMMessageEditedCallback</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMMessageEditedResult-class.html' target='_blank'>ZIMMessageEditedResult</a>,
+}
+
 # 编辑消息
 
----
+- - -
+
+## 功能简介
+
+ZIM SDK 支持在单聊或群聊会话中对自己发送成功的消息做编辑，编辑成功后会同步给会话的所有参与者。
+
+## 接口说明
+
+支持编辑的消息类型为：{getPlatformData(props,ZIMTextMessageMap)}、{getPlatformData(props,ZIMCustomMessageMap)}、{getPlatformData(props,ZIMMultipleMessageMap)}。
+
+消息对应的可编辑的属性如下：
+- extendedData: 消息拓展字段
+- isMentionAll: @所有人
+- mentionedUserIDs: @某用户
+- message: {getPlatformData(props,ZIMTextMessageMap)} 或 {getPlatformData(props,ZIMCustomMessageMap)} 的消息内容
+- subType: {getPlatformData(props,ZIMCustomMessageMap)} 的子类型
+- messageInfoList: {getPlatformData(props,ZIMMultipleMessageMap)} 的 item 列表
+
+<Warning title="注意">
+- 不能修改消息类型，比如不能把文本消息改为自定义消息等。
+- 编辑消息各属性的限制和发送消息时一致。
+- 如果开启了消息审核，消息内容编辑后也会被审核，审核流程和限制等和发送消息时一致。
+</Warning>
+
+## 实现流程
+
+以客户端 A 编辑发送给客户端 B 的指定消息为例：
+
+1. 客户端 A 和 客户端 B 分别创建自己的 ZIM 实例，注册 {getPlatformData(props,setEventHandlerMap)} 监听的 {getPlatformData(props,messageEditedMap)} 回调接口，用于接收消息编辑通知。
+2. 客户端 A 和 客户端 B 分别登录 ZIM SDK。
+3. 客户端 A 向 客户端 B 发送单聊消息后，需要编辑发送给客户端 B 的某条消息时：
+    1. 客户端 A 调用 {getPlatformData(props,editMessageMap)} 接口，传入参数 message 和 config，编辑指定的消息。
+    2. 客户端 A 通过 {getPlatformData(props,ZIMMessageEditedCallbackMap)} 回调接口得知编辑操作的结果。
+    3. 客户端 B 通过 {getPlatformData(props,messageEditedMap)} 回调得知消息编辑的相关通知。
+
+### 1 设置监听
+
+用户登录成功后，可以通过 {getPlatformData(props,messageEditedMap)} 回调监听消息编辑的相关通知。当其他用户编辑消息后，可以直接获取编辑后的消息的相关信息，包括编辑时间和编辑者等。
+
+### 2 编辑消息
+
+在默认情况下，用户可以在发送消息后的 24 小时内调用 {getPlatformData(props,editMessageMap)} 编辑消息。编辑操作的结果将通过 {getPlatformData(props,ZIMMessageEditedCallbackMap)} 回调给用户。
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+// 1. 注册事件
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onMessageEdited(ZIM zim, ArrayList<ZIMMessage> messageList) {
+        // 收到编辑后的消息列表时，可按照业务需求更新  UI
+    }
+});
+
+// 2. 编辑文本消息内容
+ZIMTextMessage messageObj; // 从 queryHistoryMessage 接口获取
+messageObj.message = "编辑后的消息内容";
+
+ZIMMessageEditConfig config = new ZIMMessageEditConfig();
+
+zim.editMessage(messageObj, config, new ZIMMessageEditedCallback() {
+    @Override
+    public void onMessageAttached(ZIMMessage zimMessage) {}
+
+    // 当编辑的是 ZIMMultipleMessage 并且有本地文件上传时会触发该回调
+    @Override
+    public void onMultipleMediaUploadingProgress(
+        ZIMMultipleMessage message,
+        long currentFileSize,      
+        long totalFileSize,        
+        int messageInfoIndex,      
+        long currentIndexFileSize, 
+        long totalIndexFileSize,   
+    ) {}
+
+    @Override
+    public void onMessageEdited(ZIMMessage zimMessage, ZIMError errorInfo) {
+        // 根据 errorInfo 判断是否操作成功
+    }
+});
+```
+</CodeGroup>
+:::
+
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+// 1. 注册事件
+- (void)zim:(ZIM *)zim messageEdited:(NSArray<ZIMMessage *> *)messageList {
+    if (zim != self.zim) {
+        return;
+    }
+    // 收到编辑后的消息列表时，可按照业务需求更新  UI
+};
+
+// 2. 编辑文本消息内容
+ZIMTextMessage *messageObj; // 从 queryHistoryMessage 接口获取
+messageObj.message = "编辑后的消息内容";
+
+ZIMMessageEditConfig *config = [[ZIMMessageEditConfig alloc] init];
+
+ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
+notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {};
+// 当编辑的是 ZIMMultipleMessage 并且有本地文件上传时会触发该回调        
+notification.onMultipleMediaUploadingProgress = ^(
+    ZIMMultipleMessage * _Nonnull message,
+    unsigned long long currentFileSize,      
+    unsigned long long totalFileSize,        
+    unsigned int messageInfoIndex,          
+    unsigned long long currentIndexFileSize,
+    unsigned long long totalIndexFileSize   
+) {};
+
+[[ZIM getInstance] editMessage:messageObj config:config notification:notification callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+    // 根据 errorInfo 判断是否操作成功
+}];
+```
+</CodeGroup>
+:::
+
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+// 1. 注册事件
+void onMessageEdited(zim::ZIM *zim, const std::vector<std::shared_ptr<zim::ZIMMessage>> &messageList) {
+    // 收到编辑后的消息列表时，可按照业务需求更新  UI
+}
+
+// 2. 编辑文本消息内容
+zim::ZIMTextMessage message_obj; // 从 queryHistoryMessage 接口获取
+message_obj.message = "编辑后的消息内容";
+
+zim::ZIMMessageEditConfig config;
+
+auto notification = std::make_shared<zim::ZIMMessageSendNotification>(
+    [=](const std::shared_ptr<zim::ZIMMessage> &message) {},
+    // 当编辑的是 ZIMMultipleMessage 并且有本地文件上传时会触发该回调 
+    [=](const std::shared_ptr<zim::ZIMMultipleMessage> &message,
+        unsigned long long currentFileSize, 
+        unsigned long long totalFileSize, 
+        unsigned int messageInfoIndex, 
+        unsigned long long currentIndexFileSize, 
+        unsigned long long totalIndexFileSize 
+    ) {}
+);
+
+zim_->editMessage(
+    message_obj, config, notification,
+    [=](const std::shared_ptr<zim::ZIMMessage> &message, const zim::ZIMError &errorInfo) {
+        // 根据 errorInfo 判断是否操作成功
+    });
+```
+</CodeGroup>
+:::
+
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+// 1. 注册事件
+ZIMEventHandler.onMessageEdited = (zim, messageList) {
+    // 收到编辑后的消息列表时，可按照业务需求更新  UI
+};
+
+// 2. 编辑文本消息内容
+ZIMTextMessage messageObj; // 从 queryHistoryMessage 接口获取
+messageObj.message = "编辑后的消息内容";
+
+ZIMMessageEditConfig config = ZIMMessageEditConfig();
+
+ZIMMessageSendNotification notification = ZIMMessageSendNotification(
+    onMessageAttached: (message){},
+
+    // 当编辑的是 ZIMMultipleMessage 并且有本地文件上传时会触发该回调
+    onMultipleMediaUploadingProgress: (
+        message,
+        currentFileSize,      
+        totalFileSize,        
+        messageInfoIndex,     
+        currentIndexFileSize,
+        totalIndexFileSize
+    ){}
+);
+
+ZIM.getInstance().editMessage(messageObj, config, notification)
+    .then((result){
+      // 操作成功
+    })
+    .catchError((onError) {
+      // 操作失败
+    }); 
+```
+</CodeGroup>
+:::
+
+:::if{props.platform="Web"}
+<CodeGroup>
+```javascript title="示例代码"
+// 1. 注册事件
+zim.on('messageEdited', (zim, { messageList }) => {
+    // 收到编辑后的消息列表时，可按照业务需求更新  UI
+})
+
+// 2. 编辑文本消息内容
+var messageObj; // 从 queryHistoryMessage 接口获取
+messageObj.message = "编辑后的消息内容";
+
+var config = {};
+var notification = {
+    onMessageAttached: (message) => {},
+
+    // 当编辑的是 ZIMMultipleMessage 并且有本地文件上传时会触发该回调
+    onMultipleMediaUploadingProgress: (
+        message,
+        currentFileSize,
+        totalFileSize,
+        messageInfoIndex,
+        currentIndexFileSize,
+        totalIndexFileSize,
+    ) => {},
+};
+
+zim.editMessage(messageObj, config, notification)
+    .then(function ({ message }) {
+        // 操作成功
+    })
+    .catch(function (err) {
+        // 操作失败 
+    });
+```
+</CodeGroup>
