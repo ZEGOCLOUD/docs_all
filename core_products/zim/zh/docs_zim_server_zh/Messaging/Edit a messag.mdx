@@ -1,3 +1,116 @@
 ## 编辑消息
 
----
+### 描述
+
+ZIM 服务端支持开发者编辑已发送的单聊或群聊消息。
+
+<Note title="说明">单次调用仅可每次修改一个会话的一条消息。</Note>
+
+### 接口原型
+
+- 请求方法：POST
+- 请求地址：
+    - 单聊消息：`https://zim-api.zego.im/?Action=EditC2cMsgBody`
+    - 群聊消息：`https://zim-api.zego.im/?Action=EditGroupMsgBody`
+- 传输协议：HTTPS
+- 调用频率限制：20次/秒。
+
+### 请求参数
+
+以下请求参数列表仅列出了接口请求参数和部分公共参数，完整公共参数列表请参考 [调用方式 - 公共请求参数](../Accessing%20Server%20APIs.mdx#2-公共参数)。
+
+| 参数 | 类型 | 是否必选 | 描述 |
+|------|------|----------|------|
+| FromUserId | String | 是 | 目标用户Id，为消息编辑者。群聊的话消息编辑者需要在群内。|
+| SenderId | String | 是 | 单聊的时候为消息发送者，群聊可以忽略。|
+| ConvId | string | 是 | 注意每次请求要么是群聊会话，要么是单聊会话。|
+| MsgType | Number | 是 | 消息类型，支持文本、自定义、图文混合。|
+| ConvMsgSeq | Number | 是 | 会话消息seq |
+| EditType | Number | 是 | 编辑类型：<br/>EM_MSG = 1; // 修改msgBody，那么msg_body不能为空<br/>EM_PAYLOAD = 2; // 修改payload，payload可以为空<br/>EM_AT = 4; // 修改at_list或is_at_all，at_list和is_at_all都可以为空<br/>EM_AT_ALL = 8; // 修改AtAll<br/>EM_SUBMSGTYPE = 16; // 修改subMsgType<br/>可以任意五个类型之间混合（做位运算），如：EM_MSG \| EM_PAYLOAD = 3，EM_MSG\|EM_AT_ALL\|EM_SUBMSGTYPE |
+| MessageBody | Object of MessageBody | 否 | 当EditType包含EM_MSG、EM_PAYLOAD时必填<br/>复用发消息的MessageBody，但是只有Message、ExtendedData字段有效 |
+| AtListInfo | EditMsgAtList | 否 | 当EditType包含EM_AT时必填 |
+| IsAtAll | Bool | 否 | 当EditType包含EM_AT_ALL时必填 |
+| SubMsgType | Number | 否 | 当EditType包含EM_SUBMSGTYPE时必填 |
+
+#### MessageBody 部分结构
+
+| 参数 | 类型 | 是否必选 | 描述 |
+|------|------|----------|------|
+| Message | String | 是 | 图文组合消息内容，为按照组合消息类型的 Message 结构 （参考2）生成的 JSON 字节串，默认为 5 KB。如有需要，请联系 ZEGO 技术支持配置，最大可达 32 KB。当EditType包含EM_MSG时必填 |
+| ExtendedData | String | 否 | 扩展字段，长度上限为 1 KB，如需上调，请联系 ZEGO 技术支持。当EditType包含EM_PAYLOAD时必填 |
+
+#### AtListInfo结构
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| AtList | Repeated String | At列表，用户id，可以为空 |
+
+## 请求示例
+
+- 请求地址 URL：
+
+```json
+https://zim-api.zego.im/?Action=EditGroupMsgBody
+&<公共请求参数>
+```
+
+- 请求消息体：
+
+```json
+{
+    "FromUserId": "editer",
+    "SenderId": "sender",
+    "ConvId": "conv_id_007",
+    "MsgType": 0,
+    "ConvMsgSeq": 110,
+    "EditType": 31,
+    "Msg": "edit msg",
+    "ExtendedDataInfo": {
+        "ExtendedData": "extend data",
+    },
+    "AtListInfo": {
+        "AtList": [
+            "userA",
+            "userB"
+        ],
+    },
+    "IsAtAll": false,
+    "SubMsgType": 101
+}
+```
+
+## 响应参数
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| Code | Number | 返回码。 |
+| Message | String | 操作结果描述。 |
+| RequestId | String | 请求 ID。 |
+| StateMsgSeq | Number | 消息状态seq。 |
+| EditMsgSeq | Number | 消息编辑seq。 |
+| LatestEditTime | Number | 最近一次消息编辑时间，秒级别。 |
+
+## 响应示例
+
+```json
+{
+    "Code": 0,
+    "Message": "success",
+    "RequestId": "343649807833778782",
+    "StateMsgSeq": 1,
+    "EditMsgSeq": 1,
+    "LatestEditTime": "173436478"
+}
+```
+
+## 返回码
+
+以下仅列出了接口业务逻辑相关的返回码，完整返回码请参考 [全局返回码](../Return%20codes.mdx)。
+
+| 返回码 | 说明 | 解决方案 |
+| --- | --- | --- |
+| 661000001 | 超过可编辑时间。 | 请联系技术支持 |
+| 661000002 | 消息id错误。 | 请检查参数 |
+| 660600021 | 单聊消息发送者可编辑，群聊内的成员可编辑。 | 请检查参数 |
+| 660000002 | 编辑的消息类型错误。 | 请检查参数 |
+| 661000005 | 编辑失败 | 请联系技术支持 |
