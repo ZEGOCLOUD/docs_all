@@ -1,22 +1,510 @@
 # API
 
-## ZegoUIKitPrebuiltCallFragment
+---
 
+## ZegoAIAgent
 
-### init
-使用 appSign 初始化 ZegoUIKitPrebuiltCallService，用户登录（或重新登录、自动登录）到您的应用后，您必须立即调用此方法。   
-如果您需要设置 `ZegoUIKitPrebuiltCallConfig`，可以通过 `ZegoUIKitPrebuiltCallInvitationConfig.provider` 进行设置。   
-使用呼叫邀请服务时，每次 `ZegoUIKitPrebuiltCallFragment` 启动将请求此回调以获取当前通话的配置。   
-此外，您可以通过 `ZegoUIKitPrebuiltCallInvitationConfig.incomingCallRingtone` 和 `ZegoUIKitPrebuiltCallInvitationConfig.outgoingCallRingtone` 自定义通话铃声，并通过 `notificationConfig` 配置通知。   
-您还可以使用 `ZegoUIKitPrebuiltCallInvitationConfig.incomingCallBackground` 和 `ZegoUIKitPrebuiltCallInvitationConfig.outgoingCallBackground` 自定义邀请界面。如果您想修改界面上的相关文本，可以设置 `innerText`。   
-如果您想监听事件并执行自定义逻辑，可以使用 `addInvitationCallListener` 获取相关的邀请事件。
+Zego AI Agent SDK 主入口类，提供了以下核心功能：
+- SDK 的初始化和配置
+- AI 会话的创建、查询、更新和删除
+- 语音/视频通话的开启和关闭
+- 会话配置的动态更新（包括 LLM、TTS 等设置）
+
+使用单例模式实现，通过 `sharedInstance` 方法获取实例。
+
+### sharedInstance
+
+获取 ZegoAIAgent 的单例实例。使用单例模式确保在整个应用程序中只有一个 ZegoAIAgent 实例。
 
 <CodeGroup>
-```java title="函数原型"
-public static void init(Application application, long appID, String appSign, String userID, String userName,ZegoUIKitPrebuiltCallInvitationConfig config)
+```objectivec title="函数原型"
++ (instancetype)sharedInstance;
 ```
 
-```java title="示例代码"
-// 写你的示例，用AI生成也行
+```objectivec title="调用示例"
+ZegoAIAgent *agent = [ZegoAIAgent sharedInstance];
 ```
 </CodeGroup>
+
+### initSDK
+
+初始化 SDK。
+
+<CodeGroup>
+```objectivec title="函数原型"
+-(void)initSDK:(AuthData*)authData userProfile:(UserProfile*)userProfile;
+```
+
+```objectivec title="调用示例"
+AuthData *authData = [[AuthData alloc] init];
+authData.appID = your_app_id;
+authData.appSign = @"your_app_sign";
+authData.token = @"your_token";
+
+UserProfile *profile = [[UserProfile alloc] init];
+profile.userID = @"user123";
+profile.userName = @"张三";
+
+[[ZegoAIAgent sharedInstance] initSDK:authData userProfile:profile];
+```
+</CodeGroup>
+
+参数说明：
+- authData: 鉴权信息，包含 appID、appSign 等信息
+- userProfile: 当前用户信息，包含用户ID和用户名
+
+### getVersion
+
+获取 SDK 版本号。返回当前 AI Agent SDK 的版本号字符串。
+
+<CodeGroup>
+```objectivec title="函数原型"
+- (NSString *)getVersion;
+```
+
+```objectivec title="调用示例"
+NSString *version = [[ZegoAIAgent sharedInstance] getVersion];
+NSLog(@"SDK Version: %@", version);
+```
+</CodeGroup>
+
+返回值：
+- SDK 版本号，格式为 "x.y.z"
+
+### renewToken
+
+更新 Token。当 Token 过期时，可以通过此方法更新 Token。
+
+<CodeGroup>
+```objectivec title="函数原型"
+- (void)renewToken:(NSString *)token;
+```
+
+```objectivec title="调用示例"
+NSString *newToken = @"your_new_token";
+[[ZegoAIAgent sharedInstance] renewToken:newToken];
+```
+</CodeGroup>
+
+参数说明：
+- token: 新的 token 字符串
+
+### startChat (语音聊天)
+
+开始语音聊天会话。开启语音聊天功能，需要先完成 createExpressEngine 和 loginRoom 流程。
+
+<CodeGroup>
+```objectivec title="函数原型"
+-(void)startChat:(NSString*)conversationID
+          roomID:(NSString*)roomID
+    userStreamID:(NSString*)userStreamID
+   agentStreamID:(NSString*)agentStreamID
+    withCallback:(StartRTCChatCallback)callback;
+```
+
+```objectivec title="调用示例"
+NSString *conversationId = @"conversation123";
+NSString *roomId = @"room001";
+NSString *userStreamId = @"user_stream_001";
+NSString *agentStreamId = @"agent_stream_001";
+
+[[ZegoAIAgent sharedInstance] startChat:conversationId
+                                  roomID:roomId
+                            userStreamID:userStreamId
+                           agentStreamID:agentStreamId
+                            withCallback:^(NSInteger errorCode, NSString *errMsg, NSString *requestId) {
+    if (errorCode == 0) {
+        // 开启语音通话成功
+        NSLog(@"Voice chat started successfully");
+    } else {
+        // 处理错误
+        NSLog(@"Error: %ld, %@", (long)errorCode, errMsg);
+    }
+}];
+```
+</CodeGroup>
+
+参数说明：
+- conversationID: 会话ID，通过创建会话步骤获得
+- roomID: 房间ID
+- userStreamID: 用户推流ID
+- agentStreamID: 智能体推流ID
+- callback: 开启结果回调
+
+### startChat (视频聊天)
+
+开始数字人视频聊天会话。开启数字人视频聊天功能，需要先完成 createExpressEngine 和 loginRoom 流程。
+
+<CodeGroup>
+```objectivec title="函数原型"
+-(void)startChat:(NSString*)conversationID
+          roomID:(NSString*)roomID
+    userStreamID:(NSString*)userStreamID
+metaHumanStreamID:(NSString*)metaHumanStreamID
+ withPreviewView:(UIView*)previewView
+    withCallback:(StartRTCVideoChatCallback)callback;
+```
+
+```objectivec title="调用示例"
+NSString *conversationId = @"conversation123";
+NSString *roomId = @"room001";
+NSString *userStreamId = @"user_stream_001";
+NSString *metaHumanStreamId = @"metahuman_stream_001";
+UIView *previewView = self.videoPreviewView;
+
+[[ZegoAIAgent sharedInstance] startChat:conversationId
+                                  roomID:roomId
+                            userStreamID:userStreamId
+                        metaHumanStreamID:metaHumanStreamId
+                         withPreviewView:previewView
+                            withCallback:^(NSInteger errorCode, NSString *errMsg, NSString *requestId) {
+    if (errorCode == 0) {
+        // 开启视频通话成功
+        NSLog(@"Video chat started successfully");
+    } else {
+        // 处理错误
+        NSLog(@"Error: %ld, %@", (long)errorCode, errMsg);
+    }
+}];
+```
+</CodeGroup>
+
+参数说明：
+- conversationID: 会话ID，通过创建会话步骤获得
+- roomID: 房间ID
+- userStreamID: 用户推流ID
+- metaHumanStreamID: 数字人推流ID
+- previewView: 视频预览视图
+- callback: 开启结果回调
+
+### stopChat
+
+停止音视频聊天会话。
+
+<CodeGroup>
+```objectivec title="函数原型"
+-(void)stopChat:(NSString*)conversationID withCallback:(StopRTCChatCallback)callback;
+```
+
+```objectivec title="调用示例"
+NSString *conversationId = @"conversation123";
+[[ZegoAIAgent sharedInstance] stopChat:conversationId withCallback:^(NSInteger errorCode, NSString *errMsg, NSString *requestId) {
+    if (errorCode == 0) {
+        // 停止成功
+        NSLog(@"Chat stopped successfully");
+    } else {
+        // 处理错误
+        NSLog(@"Error: %ld, %@", (long)errorCode, errMsg);
+    }
+}];
+```
+</CodeGroup>
+
+参数说明：
+- conversationID: 会话ID
+- callback: 停止结果回调
+
+### queryConversation
+
+查询指定的会话。
+
+<CodeGroup>
+```objectivec title="函数原型"
+-(void)queryConversation:(NSString*)conversationID complete:(QueryConversationCallback)complete;
+```
+
+```objectivec title="调用示例"
+[[ZegoAIAgent sharedInstance] queryConversation:@"conversation123" complete:^(NSInteger errorCode, NSString *errMsg, NSString *requestId, ConversationConfigInfo *conversation) {
+    if (errorCode == 0) {
+        // 查询成功，处理会话数据
+        NSLog(@"Conversation ID: %@, Agent ID: %@", conversation.conversationId, conversation.agentId);
+    } else {
+        // 处理错误
+        NSLog(@"Error: %ld, %@", (long)errorCode, errMsg);
+    }
+}];
+```
+</CodeGroup>
+
+参数说明：
+- conversationID: 会话ID
+- complete: 查询结果回调
+
+### queryConversationList
+
+查询所有该账号拥有的所有会话。
+
+<CodeGroup>
+```objectivec title="函数原型"
+-(void)queryConversationList:(NSInteger)pageNum pageSize:(NSInteger)pageSize complete:(QueryConversationListCallback)complete;
+```
+
+```objectivec title="调用示例"
+[[ZegoAIAgent sharedInstance] queryConversationList:1 pageSize:20 complete:^(NSInteger errorCode, NSString *errMsg, NSString *requestId, NSArray<ConversationConfigInfo *> *conversations, NSInteger totalCount) {
+    if (errorCode == 0) {
+        // 查询成功，处理会话列表数据
+        for (ConversationConfigInfo *conversation in conversations) {
+            NSLog(@"Conversation ID: %@, Agent ID: %@", conversation.conversationId, conversation.agentId);
+        }
+        NSLog(@"Total conversations: %ld", (long)totalCount);
+    } else {
+        // 处理错误
+        NSLog(@"Error: %ld, %@", (long)errorCode, errMsg);
+    }
+}];
+```
+</CodeGroup>
+
+参数说明：
+- pageNum: 页码，从1开始
+- pageSize: 每页数量
+- complete: 查询结果回调
+
+### createConversation
+
+创建会话，不依赖IM。该方法用于创建一个不保存会话历史消息的AIAgent会话。
+
+<CodeGroup>
+```objectivec title="函数原型"
+-(void)createConversation:(CustomAgentConfig*)customAgentConfig withChatConfig:(ChatConfig*)chatConfig withCallback:(CreateConversationCallback)complete;
+```
+
+```objectivec title="调用示例"
+CustomAgentConfig *config = [[CustomAgentConfig alloc] init];
+config.name = @"智能助手";
+config.sex = @"女";
+config.intro = @"我是一个友好的AI助手";
+
+ChatConfig *chatConfig = [[ChatConfig alloc] init];
+chatConfig.temperature = 0.7;
+chatConfig.maxTokens = 2000;
+
+[[ZegoAIAgent sharedInstance] createConversation:config withChatConfig:chatConfig withCallback:^(NSInteger errorCode, NSString *errMsg, NSString *requestId, ConversationConfigInfo *conversation) {
+    if (errorCode == 0) {
+        // 创建成功，获取会话信息
+        NSString *conversationId = conversation.conversationId;
+        NSLog(@"Created conversation: %@", conversationId);
+    } else {
+        // 处理错误
+        NSLog(@"Error: %ld, %@", (long)errorCode, errMsg);
+    }
+}];
+```
+</CodeGroup>
+
+参数说明：
+- customAgentConfig: 会话配置，包含智能体的基本设置如名称、性别、角色等
+- chatConfig: 聊天配置，可以自定义聊天相关的参数
+- complete: 创建会话回调，返回创建结果
+
+### createConversationWithZIM
+
+创建会话，依赖IM。该方法用于创建一个支持ZIM即时通讯功能的AIAgent会话，会保存会话历史消息。
+
+<CodeGroup>
+```objectivec title="函数原型"
+-(void)createConversationWithZIM:(CustomAgentConfig*)customAgentConfig withChatConfig:(ChatConfig*)chatConfig withCallback:(CreateConversationCallback)complete;
+```
+
+```objectivec title="调用示例"
+CustomAgentConfig *config = [[CustomAgentConfig alloc] init];
+config.name = @"智能助手";
+config.sex = @"女";
+config.intro = @"我是一个支持即时通讯的AI助手";
+
+ChatConfig *chatConfig = [[ChatConfig alloc] init];
+chatConfig.temperature = 0.7;
+chatConfig.maxTokens = 2000;
+
+[[ZegoAIAgent sharedInstance] createConversationWithZIM:config withChatConfig:chatConfig withCallback:^(NSInteger errorCode, NSString *errMsg, NSString *requestId, ConversationConfigInfo *conversation) {
+    if (errorCode == 0) {
+        // 创建成功，获取会话信息
+        NSString *conversationId = conversation.conversationId;
+        NSLog(@"Created conversation with ZIM: %@", conversationId);
+    } else {
+        // 处理错误
+        NSLog(@"Error: %ld, %@", (long)errorCode, errMsg);
+    }
+}];
+```
+</CodeGroup>
+
+参数说明：
+- customAgentConfig: 会话配置，包含智能体的基本设置如名称、性别、角色等
+- chatConfig: 聊天配置，可以自定义聊天相关的参数
+- complete: 创建会话回调，返回创建结果
+
+### updateConversation
+
+更新会话配置。
+
+<CodeGroup>
+```objectivec title="函数原型"
+-(void)updateConversation:(NSString*)conversationID withCustomAgentConfig:(CustomAgentConfig*)customAgentConfig withChatConfig:(ChatConfig*)chatConfig withCallback:(UpdateConversationCallback)complete;
+```
+
+```objectivec title="调用示例"
+NSString *conversationId = @"conversation123";
+
+CustomAgentConfig *config = [[CustomAgentConfig alloc] init];
+config.name = @"智能助手";
+config.sex = @"女";
+config.intro = @"我是一个更新后的AI助手";
+
+ChatConfig *chatConfig = [[ChatConfig alloc] init];
+chatConfig.temperature = 0.8;
+chatConfig.maxTokens = 2500;
+
+[[ZegoAIAgent sharedInstance] updateConversation:conversationId withCustomAgentConfig:config withChatConfig:chatConfig withCallback:^(NSInteger errorCode, NSString *errMsg, NSString *requestId) {
+    if (errorCode == 0) {
+        // 更新成功
+        NSLog(@"Conversation updated successfully");
+    } else {
+        // 处理错误
+        NSLog(@"Error: %ld, %@", (long)errorCode, errMsg);
+    }
+}];
+```
+</CodeGroup>
+
+参数说明：
+- conversationID: 会话ID
+- customAgentConfig: 更新后的会话配置
+- chatConfig: 更新后的聊天配置
+- complete: 更新结果回调
+
+### deleteConversation
+
+删除指定的会话。
+
+<CodeGroup>
+```objectivec title="函数原型"
+-(void)deleteConversation:(NSString*)conversationID withCallback:(DeleteConversationCallback)complete;
+```
+
+```objectivec title="调用示例"
+NSString *conversationId = @"conversation123";
+[[ZegoAIAgent sharedInstance] deleteConversation:conversationId withCallback:^(NSInteger errorCode, NSString *errMsg, NSString *requestId) {
+    if (errorCode == 0) {
+        // 删除成功
+        NSLog(@"Conversation deleted successfully");
+    } else {
+        // 处理错误
+        NSLog(@"Error: %ld, %@", (long)errorCode, errMsg);
+    }
+}];
+```
+</CodeGroup>
+
+参数说明：
+- conversationID: 要删除的会话ID
+- complete: 删除结果回调
+
+### resetConversationMsg
+
+重置会话上下文。该方法用于清除会话的历史消息记录，重新开始对话。
+
+<CodeGroup>
+```objectivec title="函数原型"
+-(void)resetConversationMsg:(NSString*)conversationId withCallback:(ResetConversationMsgCallback)complete;
+```
+
+```objectivec title="调用示例"
+NSString *conversationId = @"conversation123";
+[[ZegoAIAgent sharedInstance] resetConversationMsg:conversationId withCallback:^(NSInteger errorCode, NSString *errMsg, NSString *requestId) {
+    if (errorCode == 0) {
+        // 重置成功
+        NSLog(@"Conversation context reset successfully");
+    } else {
+        // 处理错误
+        NSLog(@"Error: %ld, %@", (long)errorCode, errMsg);
+    }
+}];
+```
+</CodeGroup>
+
+参数说明：
+- conversationId: 会话ID，通过创建会话步骤获得
+- complete: 重置结果回调
+
+### getConversation
+
+查询会话信息。该方法用于获取指定会话ID的配置信息。
+
+<CodeGroup>
+```objectivec title="函数原型"
+- (ConversationConfigInfo*)getConversation:(NSString*)conversationId;
+```
+
+```objectivec title="调用示例"
+NSString *conversationId = @"conversation123";
+ConversationConfigInfo *conversationInfo = [[ZegoAIAgent sharedInstance] getConversation:conversationId];
+if (conversationInfo) {
+    NSLog(@"Conversation name: %@", conversationInfo.name);
+    NSLog(@"Agent template ID: %@", conversationInfo.agentTemplateId);
+    // 处理其他会话信息
+} else {
+    NSLog(@"Failed to get conversation info");
+}
+```
+</CodeGroup>
+
+参数说明：
+- conversationId: 会话ID，通过创建会话步骤获得
+
+返回值：
+- 返回 ConversationConfigInfo 对象，包含会话的完整配置信息。如果会话不存在，返回 nil
+
+### setZegoAIAgentSDKDelegate
+
+设置 SDK 事件回调。
+
+<CodeGroup>
+```objectivec title="函数原型"
+-(void)setZegoAIAgentSDKDelegate:(id<ZegoAIAgentDelegate>)delegate;
+```
+
+```objectivec title="调用示例"
+@interface YourClass <ZegoAIAgentDelegate>
+- (void)setupDelegate {
+    [[ZegoAIAgent sharedInstance] setZegoAIAgentSDKDelegate:self];
+}
+@end
+```
+</CodeGroup>
+
+参数说明：
+- delegate: 实现了 ZegoAIAgentDelegate 协议的对象
+
+### onRemoteVideoFrameRawData
+
+RTC 数字人路推流视频数据回调。
+
+<CodeGroup>
+```objectivec title="函数原型"
+- (void)onRemoteVideoFrameRawData:(unsigned char *_Nonnull *_Nonnull)data
+                       dataLength:(unsigned int *_Nullable)dataLength
+                            param:(ZegoAIAgentVideoFrameParam *_Nullable)param
+                         streamID:(NSString *_Nullable)streamID;
+```
+</CodeGroup>
+
+参数说明：
+- data: 视频帧数据 buffer
+- dataLength: 数据长度
+- param: 视频帧参数
+- streamID: 该路视频帧流 ID
+
+### onPlayerSyncRecvSEI
+
+RTC SEI 信息回调，对应 ZegoExpressEventHandler::onPlayerSyncRecvSEI。
+
+<CodeGroup>
+```objectivec title="函数原型"
+- (void)onPlayerSyncRecvSEI:(NSData *)data streamID:(NSString *)streamID;
+```
+</CodeGroup>
+
+参数说明：
+- data: 同步 SEI 数据
+- streamID: 该路视频帧流 ID
