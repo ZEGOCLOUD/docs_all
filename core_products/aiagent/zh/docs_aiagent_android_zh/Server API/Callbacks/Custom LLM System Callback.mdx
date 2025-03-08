@@ -1,31 +1,27 @@
 
-# 自定义回调
+# 自定义 LLM System 回调
 
 - - -
 
 ## 描述
 
-如果自定义当此对话System的能力，通常用于针对用户当轮对话的问题进行RAG处理，重新拼装system后交由LLM针对原问题输出。
+凭借本回调可以自定义本轮对话 LLM System，通常用于针对用户本轮对话的问题进行 RAG 处理。
 
 <Note title="说明">
 
 - 前提条件：
-  - 联系技术支持提前开通，配置请求地址。
-  - LLMSystemMode  != 0
-- 使用方式：基于此回调，需要5秒内响应处理结果，即当轮对话的临时system。
-- 响应处理：返回 HTTP status code 为 2XX （例如 200）表示成功，其他响应都表示失败。如果 ZEGO 服务器没有收到响应，或收到的 HTTP status code 不为 2XX（例如 200），都会尝试重试，最多进行 3 次重试。每次重试请求与上一次请求的间隔时间为 2s。若第 3次重试后仍然失败，将不再重试，该请求丢失。
+  - 联系技术支持提前开通，配置回调地址。
+  - 创建会话时 ChatConfig 下的 LLMSystemMode 设置为非 0。
 
 </Note>
 
 ## 回调说明
 
-- 请求方法：
-- 请求地址：
-- 传输协议：
+- 请求方法：POST。
+- 请求地址：请联系技术支持配置。
+- 传输协议：HTTPS/HTTP，建议使用 HTTPS。
 
 ## 回调参数
-
-### 公共参数
 
 | 参数 | 类型 | 描述 |
 |------|------|------|
@@ -33,48 +29,45 @@
 | Nonce | String | 随机数，用于检验串计算。 |
 | Timestamp | Int | 发送时的 Unix 时间戳（秒），用于检验串计算。 |
 | Signature | String | 检验串，验证发送方身份。 |
-| RequestId | String | 请求唯一Id。 |
-
-### 业务参数
-
-| 参数 | 类型 | 描述 |
-|------|------|------|
+| RequestId | String | 请求唯一 Id。 |
 | ConversationId | String | 会话的唯一标识。 |
-| Round | Int64 | 对话轮次，每次用户主动说话，轮次自增。<br/>业务可以基于对话轮次处理打断逻辑。<br/>例如：<br/>t1:Round=1，业务方处理回调流程P1，尚未返回结果R1<br/>t2:Round=2，业务方处理回调P2，并返回R1，ZEGO AI Agent不会处理，仅会处理本次P2的结果R2 |
-| ASRText | String | ASR识别文本。 |
+| Round | Int64 | 对话轮次，每次用户主动说话，轮次都会增加（有序，非递增）。<br/>业务可以基于对话轮次处理打断逻辑。<br/>例如：<br/>t1:Round=1，业务方处理回调流程P1，尚未返回结果R1<br/>t2:Round=2，业务方处理回调P2，并返回R1，ZEGO AI Agent不会处理，仅会处理本次P2的结果R2 |
+| ASRText | String | ASR 识别文本。 |
 
 
-
-## 数据示例
+## 回调示例
 
 ```json
 {
     "AppId": 1234567,
-    "Timestamp": 1499676978,
     "Nonce": "350176",
+    "Timestamp": 1499676978,
     "Signature": "signature",
+    "RequestId": "req_1234567",
     "ConversationId": "cid_1234567",
     "Round": 2,
-    "ASRText": "你好呀，你是谁"
+    "ASRText": "你好，今天天气怎么样？"
+}
+```
+
+## 应答参数
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| System | String | 自定义本轮 LLM System。<br/>LLMSystemMode=1：<br/>若为空，不进行第二次 LLM 处理<br/>LLMSystemMode=2：<br/>若为空，则使用创建会话时设置的 System |
+
+## 应答示例
+
+```json
+{
+    "System": "这是一条自定义的Prompt。"
 }
 ```
 
 ## 返回响应
 
-### 响应参数
-
-| 参数 | 类型 | 描述 |
-|------|------|------|
-| System | String | 自定义的System。<br/>LLMSystemMode=1：<br/>若为空，默认不进行第二次LLM 处理<br/>LLMSystemMode=2：<br/>若为空，则走原逻辑 |
-
-### 响应示例
-
-```json
-{
-    "System": "这是一条自定义的Prompt"
-}
-```
+收到回调后，如果您的服务器返回的 HTTP status code 为 2XX （例如 200），表示成功；返回其他，表示失败。
 
 ## 回调重试策略
 
-如果 ZEGO 服务器没有收到响应，或收到的 HTTP status code 不为 2XX（例如 200），都会尝试重试，**最多进行 5 次重试**。每次重试请求与**上一次请求**的间隔时间分别为 2s、4s、8s、16s、32s。若第 5 次重试后仍然失败，将不再重试，该回调丢失。
+如果 ZEGO 服务器在 5s 内没有收到响应，或收到的 HTTP status code 不为 2XX（例如 200），都会尝试重试，最多进行 3 次重试。每次重试请求与上一次请求的间隔时间为 2s。若第 3 次重试后仍然失败，将不再重试，该请求丢失。

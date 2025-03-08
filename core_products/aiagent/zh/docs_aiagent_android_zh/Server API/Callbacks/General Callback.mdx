@@ -1,0 +1,91 @@
+
+# 通用回调
+
+- - -
+
+## 描述
+
+凭借本回调可以监听用户与智能体对话过程中所发生的事件。
+
+## 回调说明
+
+- 请求方法：POST。
+- 请求地址：请联系技术支持配置。
+- 传输协议：HTTPS/HTTP，建议使用 HTTPS。
+
+## 回调参数
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| AppId | Uint32 | ZEGO 给开发者 APP 的唯一标识。 |
+| EventType | Int | 事件通知类型。<br/>204：LLM 输出文本。<br/>301: 异常事件。 |
+| Nonce | String | 随机数，用于检验串计算。 |
+| Timestamp | Int | 回调发送时的 Unix 时间戳（秒），用于检验串计算。 |
+| Signature | String | 检验串，验证回调发送方身份。 |
+| ConversationId | String | 会话的唯一标识。 |
+| Data | Object | 事件详细信息。根据 EventType 取值不同，该回调参数的成员不同。 |
+
+- EventType 为 204 时，Data 字段包含以下参数：
+
+<Note title="说明">
+
+创建会话时 ChatConfig 下的 EnableLLMServerMessage 设置为 1 才会触发本回调事件。
+
+</Note>
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| Round | Int64 | 对话轮次，每次用户主动说话，轮次都会增加（有序，非递增）。 |
+| Text | String | LLM 输出文本。 |
+
+- EventType 为 301 时，Data 字段包含以下参数：
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| Code | Int | 事件码：<br/>1001: AI Agent 通用错误【无法细化的错误，参考异常信息描述】<br/>1002: 自定义 LLM System 回调地址为空【联系技术支持检查自定义Prompt地址配置】<br/>1003: 自定义 LLM System 回调请求失败【请检查地址是否正常访问】<br/>2201: LLM 通用错误【无法细化的LLM错误，参考异常信息描述】<br/>2202: LLM 参数错误【请检查请求参数是否合法】<br/>2203: LLM 请求鉴权失败【联系技术支持检查配置的LLM账号】<br/>2204: LLM 请求并发限制<br/>2205: LLM 账号欠费<br/>2206: LLM 内容审核失败<br/>2301: TTS 通用错误【无法细化的TTS错误，参考异常信息描述】<br/>2302: TTS 参数错误【请检查请求参数是否合法】<br/>2303: TTS 请求鉴权失败【联系技术支持检查配置的TTS账号】<br/>2304: TTS 请求并发限制<br/>2305: TTS 账号欠费 |
+| Message | String | 异常信息描述 |
+
+
+## 数据示例
+
+**回调 LLM 输出文本时的示例**
+
+```json
+{
+    "AppId": 1234567,
+    "ConversationId": "1234567_chat",
+    "Data": {
+        "Round": 11,
+        "Text": "哈喽呀，今天的你看起来充满活力呢。"
+    },
+    "EventType": 204,
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1734680430
+}
+```
+
+**回调异常事件时的示例**
+
+```json
+{
+    "AppId": 1234567,
+    "ConversationId": "1234567_chat",
+    "Data": {
+        "Code": 1001,
+        "Message": "AI Agent 通用错误"
+    },
+    "EventType": 301,
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1734680430
+}
+```
+
+
+## 返回响应
+返回 HTTP status code 为 2XX （例如 200）表示成功，其他响应都表示失败。
+
+## 回调重试策略
+
+如果 ZEGO 服务器没有收到响应，或收到的 HTTP status code 不为 2XX（例如 200），都会尝试重试，**最多进行 5 次重试**。每次重试请求与**上一次请求**的间隔时间分别为 2s、4s、8s、16s、32s。若第 5 次重试后仍然失败，将不再重试，该回调丢失。
