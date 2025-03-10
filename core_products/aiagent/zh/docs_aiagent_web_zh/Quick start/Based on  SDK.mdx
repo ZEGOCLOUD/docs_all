@@ -18,15 +18,59 @@
 
 
 ## 初始化项目并集成SDK
+1. 下载并安装Node.js。
 
-1. 【添加项目初始化的过程】
+2. 新建项目
+```bash
+npm create vue@latest
+```
+选择默认选项即可
+```bash
+> npx
+> create-vue
+Vue.js - The Progressive JavaScript Framework
+✔ 请输入项目名称： … ai_agent_web_demo
+✔ 是否使用 TypeScript 语法？ … [否] / 是
+✔ 是否启用 JSX 支持？ … [否] / 是
+✔ 是否引入 Vue Router 进行单页面应用开发？ … [否] / 是
+✔ 是否引入 Pinia 用于状态管理？ … [否] / 是
+✔ 是否引入 Vitest 用于单元测试？ … [否] / 是
+✔ 是否要引入一款端到端（End to End）测试工具？ › 不需要
+✔ 是否引入 ESLint 用于代码质量检测？ › 否
+正在初始化项目 /xxx/ai_agent_web_demo...
+项目初始化完成，可执行以下命令：
+ cd ai_agent_web_demo
+ npm install
+ npm run dev
 
-2. 【添加SDK的集成步骤】
+```
+3. 通过包管理器 安装 SDK。
+```bash
+npm install zego-ai-agent-web
+```
+
+注意
+    - 安装的依赖包支持 typescript 语言。
+    - 如果在 macOS 或 Linux 系统中执行安装命令失败，提示 “permission denied”，请在SDK安装命令前加上 sudo 重新执行即可。
+
+
+4. 在项目中引入 RTC SDK，示例代码如下：
 【[RTC SDK](https://doc-zh.zego.im/article/199)】
 
 
-【添加AI Agent SDK的集成步骤】
+5. 在项目中引入 AI Agent SDK，示例代码如下：
+```javascript
+<script setup>
+import { ZegoExpressEngine } from "zego-express-engine-webrtc"
+import { ZegoAIAgent } from "zego-ai-agent-web";
+</script>
+<template>
+ <div>
+   <h1>Zego AI Agent Demo</h1>
+ </div>
+</template>
 
+```
 
 ## 核心能力实现
 
@@ -41,9 +85,11 @@
 在实现 AI Agent 的功能之前，请确保已经集成了 [ZEGO Express Web SDK](https://doc-zh.zego.im/article/199)。
 </Warning>
 
-1. 引入SDK并获取实例： 【省略RTC】
+1. 引入SDK并获取实例： 
 
 【以下流程添加说明使用的API（包括RTC）和实现的功能，例如，使用getInstance获取ZegoAIAgent的单例实例。】
+
+这段代码展示了如何使用 ZegoAIAgent SDK 进行初始化，通过 getInstance() 获取单例实例，然后调用 initSDK 方法完成 SDK 的初始化，需要传入认证信息（appID和token）以及用户信息（userID和userName）。
 ```typescript
 import { ZegoAIAgent } from 'zego-AIAgent';
 
@@ -75,30 +121,27 @@ try {
 
 ### 创建会话
 
+使用 createConversation 创建会话。
+
 ```typescript
 const customAgentConfig = {
-    agentTemplateId: 'template_id',  // AI智能体模板ID
-    name: 'AI助手',                  // AI智能体名称
-    intro: 'AI助手简介',            // 简介
-    system: '系统提示词',           // 系统提示词
-    welcomeMessage: '您好，我是AI助手', // 欢迎语
-    sex: 'female',                  // AI性别
-    // 大语言模型配置
+    agentTemplateId: "xiaozhi",
+    intro: "一个小百科，上知天文下知地理。懂得如何陪伴人类，还会角色扮演。\n（标签：聪慧、机灵）",
     llm: {
-        type: 'llm_type',
-        model: 'model_name',
-        responseFormatType: 0,
-        responseMessageName: 'assistant'
+        type: 'Doubao', 
+        model: 'ep-20240806100628-6dfw7', 
+        responseFormatType: 0, 
+        responseMessageName: ''
     },
-    // 语音合成配置
+    name: "小智",
+    sex: "女",
+    source: "Zego",
+    system: "你是小智，成年女性，是**即构科技创造的陪伴助手**，上知天文下知地理，聪明睿智、热情友善。\n对话要求：1、按照人设要求与用户对话。\n2、不能超过100字。 ",
     tts: {
-        type: 'tts_type',
-        voice: 'voice_type'
+        type: 'Huoshan', 
+        voice: 'BV700_streaming'
     },
-    // 语音识别配置
-    asr: {
-        HotWordId: 'hot_word_id'
-    }
+    welcomeMessage: "嗨,我是你的新朋友小智!初次见面很开心。我呢,可以回答你的各种问题,给你工作学习上提供帮助,还能随时陪你聊天。嗯,你想问点什么呢?",
 };
 
 // 创建会话
@@ -113,18 +156,80 @@ try {
 }
 ```
 ### 实现 AI 语音互动
+用户登录房间后，需要推流自己的语音。可以调用 startChat 接口，启动语音互动。需要用户自行监听 RTC 流新增回调去拉取 AI Agent 的流，然后通过语音互动功能实现语音聊天。
+
 ```typescript
+let publishStreamID = 'YOUR_PUBLISH_STREAM_ID';// 推流自己语音的流ID
+let pullStreamID = 'YOUR_PULL_STREAM_ID';// 需要拉流的流ID
+let conversationID = 'YOUR_CONVERSATION_ID';// 要启动的会话ID
+let roomID = 'YOUR_ROOM_ID';// 要登录的房间ID
+let token = 'YOUR_TOKEN';// 登录房间的 Token
+let user = {
+    userID: 'your_user_id',
+    userName: 'your_user_name'
+};
+
 // 1. 用户需要登录房间
-// 2. 用户需要音频推流
+await zg.loginRoom(roomID, token, user);
+
+// 2. 登录成功后，用户需要音频推流
+ const custom = {
+    camera: {
+        video: false,
+        audio: {
+            ANS: true,
+            AGC: true,
+            AEC: true,
+        },
+    },
+};
+
+const localAudioStream = await zg.createZegoStream(custom);
+zg.startPublishingStream(
+    publishStreamID,
+    localAudioStream
+);
 // 3. 监听 RTC 流新增事件
-// 3.1 拉流智能体流
+zg.on("roomStreamUpdate",  async (roomID, updateType, streamList) => {
+    if (updateType === "ADD") {
+        if (activeConversationID) {
+            // 遍历 streamList，只有当流 ID 匹配时才播放
+            for (const stream of streamList) {
+                if (stream.streamID === pullStreamID) {
+                    // 播放流
+                    playRemoteStream(pullStreamID);
+                    break;
+                }
+            }
+        }
+    }
+});
+
+async playRemoteStream(streamID, isMetaHuman) {
+    try {
+        const remoteStream = await zg.startPlayingStream(streamID, {
+            playoutDelayHint: 0.5,
+        });
+
+        if (!remoteStream) {
+            throw new Error("remoteStream is undefined");
+        }
+
+        const remoteView = zg.createRemoteStreamView(remoteStream);
+        remoteView.play(document.createElement("div"),{enableAutoplayDialog: true,}
+        );
+    } catch (error) {
+        console.error("Failed to play remote stream:", error);
+        throw error;
+    }
+}
 // 4. 开始语音聊天
 const voiceChatOptions = {
-    conversationID: 'conversation_id',  // 会话ID
-    roomID: 'room_id',                 // 房间ID
-    userStreamID: 'user_stream_id',    // 用户流ID
-    agentStreamID: 'agent_stream_id',  // 智能体流ID
-    chatMode: ChatMode.Voice           // 聊天模式：语音
+    conversationID: conversationID,  // 会话ID
+    roomID: roomID,                  // 房间ID
+    userStreamID: publishStreamID,   // 用户流ID
+    agentStreamID: pullStreamID,     // 智能体流ID
+    chatMode: 0                      // 聊天模式：语音
 };
 
 try {
@@ -138,17 +243,18 @@ try {
 
 ```
 ### 结束会话
+调用 stopChat 接口，结束语音互动。
 ```typescript
-//1. 结束语音聊天
 try {
-    const stopResult = await AIAgent.stopChat('conversation_id');
+    const stopResult = await AIAgent.stopChat(conversationID);
     if (stopResult.code === 0) {
-        console.log('聊天结束成功');
+        // 停止拉流
+        zg.stopPlayingStream(pullStreamID);
+        // 退出房间
+        zg.logoutRoom();
     }
 } catch (error) {
     console.error('结束聊天失败:', error);
 }
 
-// 2. 停止推流
-// 3. 退出房间
 ```
