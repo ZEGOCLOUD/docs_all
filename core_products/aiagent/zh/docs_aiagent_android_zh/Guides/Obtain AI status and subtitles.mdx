@@ -1,268 +1,63 @@
-# 获取AI状态&字幕
-
----
-
-本文介绍如何通过监听 RTC 的 IMRecvCustomCommand 回调获取 AI 状态和字幕。
-
-## 功能概述
-
-通过监听 IMRecvCustomCommand 回调，您可以：
-1. 获取用户和 AI 的说话状态（开始/结束）
-2. 获取实时语音转文字的字幕内容
-3. 跟踪对话轮次
-
-## 消息格式说明
-
-通过 IMRecvCustomCommand 回调接收到的消息格式如下：
-
-```typescript
-interface CommandMessage {
-  cmd: number;      // 命令类型
-  seq_id: number;   // 消息序列号
-  data: {
-    speak_status?: number;  // 说话状态：1-开始说话，2-结束说话
-    text?: string;         // 语音转文字内容
-    end_flag?: boolean;    // 是否是最后一条消息
-    message_id: string;    // 消息唯一标识
-  };
-  round?: number;   // 对话轮次
+{
+    "AgentTemplateId": "xiaozhi",
+    "Avatar": "https://zego-aigc-test.oss-accelerate.aliyuncs.com/airobotdemo/native_icon/xiaozhi/m_avatar_xiaozhi.png",
+    "ImageSource": {
+        "Avatar": "https://zego-aigc-test.oss-accelerate.aliyuncs.com/airobotdemo/web_icon/tanchuang/xiaozhi.png",
+        "MobileBackground": "https://zego-ai.oss-cn-shanghai.aliyuncs.com/agent-avatar/38597_1740990880443-20250303-163355.jpeg",
+        "PcBackground": "https://zego-ai.oss-cn-shanghai.aliyuncs.com/agent-avatar/38597_1741347025784-20250307-192857.png"
+    },
+    "Intro": "上知天文下知地理的小百科",
+    "LLM": {
+        "Model": "ep-20240806100628-6dfw7",
+        "ResponseFormatType": 0,
+        "ResponseMessageName": "",
+        "Type": "Doubao"
+    },
+    "MetaHumanNormalConfig": {
+        "BackgroundColor": "#545454",
+        "BackgroundMode": 0,
+        "MetaHuman": {
+            "Layout": {
+                "Height": 1920,
+                "Layer": 0,
+                "Left": 0,
+                "Top": 0,
+                "Width": 1080
+            },
+            "MetaHumanId": "b79d43b1-7781-42f3-9a51-62828df7db7e"
+        },
+        "VideoOption": {
+            "Height": 1920,
+            "Width": 1080
+        }
+    },
+    "MetaHumanRoiConfig": {
+        "BackgroundColor": "#545454",
+        "BackgroundMode": 0,
+        "MetaHuman": {
+            "Layout": {
+                "Height": 480,
+                "Layer": 0,
+                "Left": 0,
+                "Top": 0,
+                "Width": 384
+            },
+            "MetaHumanId": "b79d43b1-7781-42f3-9a51-62828df7db7e"
+        },
+        "VideoOption": {
+            "Height": 480,
+            "Width": 384
+        }
+    },
+    "Name": "小智",
+    "Pin": true,
+    "Sex": "女",
+    "Source": "Zego",
+    "System": "你是小智，成年女性，是**即构科技创造的陪伴助手**，上知天文下知地理，聪明睿智、热情友善。\n对话要求：1、按照人设要求与用户对话。\n2、不能超过100字。 ",
+    "TTS": {
+        "SilenceDuration": 0,
+        "Type": "Huoshan",
+        "Voice": "BV700_streaming"
+    },
+    "WelcomeMessage": "嗨,我是你的新朋友小智!初次见面很开心。我呢,可以回答你的各种问题,给你工作学习上提供帮助,还能随时陪你聊天。嗯,你想问点什么呢?"
 }
-```
-
-### 命令类型说明
-
-- cmd = 1: 用户说话状态
-- cmd = 2: AI 说话状态
-- cmd = 3: 用户说话文本内容
-- cmd = 4: AI 说话文本内容
-
-## 完整代码示例
-
-```typescript
-// 状态类型定义
-type SignalStatus = 'listening' | 'thinking' | 'speaking';
-
-// 消息类型定义
-interface Message {
-  sender: 'user' | 'bot';
-  message_id: string;
-  seq_id: number;
-  content: string;
-  type: string;
-}
-
-// 响应式变量声明
-const messages = ref<Message[]>([]);
-const currentStatus = ref<SignalStatus>('listening');
-const userMsgSeq = ref(0);
-const currentRound = ref(0);
-const botMsgMap = ref<Record<number, string>>({});
-
-// 监听 IMRecvCustomCommand 回调
-rtcEngine.on('IMRecvCustomCommand', (command) => {
-    try {
-        handleRoomCommandMessage(command);
-    } catch (error) {
-        console.error('处理房间命令消息失败:', error);
-    }
-});
-
-/**
- * 处理房间命令消息
- * @param {Object} message - 接收到的消息对象
- */
-function handleRoomCommandMessage(message) {
-  const msg = JSON.parse(message);
-  const { cmd, seq_id, data, round } = msg;
-  
-  // 日志记录
-  if (data.text) {
-    console.log(`收到消息 - 命令: ${cmd}, 序列号: ${seq_id}, 内容: ${data.text}`);
-  }
-
-  try {
-    switch (cmd) {
-      case 1: // 用户说话状态处理
-        console.log(`用户说话状态: ${data.speak_status === 1 ? "开始" : "结束"}`);
-        handleUserSpeakStatus(data.speak_status);
-        break;
-
-      case 2: // AI说话状态处理
-        console.log(`AI说话状态: ${data.speak_status === 1 ? "开始" : "结束"}`);
-        handleRobotSpeakStatus(data.speak_status);
-        break;
-
-      case 3: // 用户说话文本处理
-        handleUserMessage(seq_id, data);
-        break;
-
-      case 4: // AI说话文本处理
-        handleBotMessage(seq_id, data, round);
-        break;
-
-      default:
-        console.warn(`未知命令类型: ${cmd}`);
-    }
-  } catch (error) {
-    console.error('处理消息失败:', error);
-  }
-}
-
-/**
- * 处理用户说话状态
- * @param {number} status - 1:开始说话 2:结束说话/思考中
- */
-function handleUserSpeakStatus(status) {
-  if (status === 1) {
-    handleSignal("listening");
-  } else if (status === 2) {
-    handleSignal("thinking");
-  }
-}
-
-/**
- * 处理AI说话状态
- * @param {number} status - 1:开始说话 2:结束说话
- */
-function handleRobotSpeakStatus(status) {
-  if (status === 1) {
-    // 清空 botMsgMap，以便下次对话时不展示上次的内容
-    botMsgMap.value = {};
-    handleSignal("speaking");
-  } else if (status === 2) {
-    handleSignal("listening");
-  }
-}
-
-/**
- * 更新交互状态信号
- * @param {SignalStatus} signal - 状态信号
- */
-function handleSignal(signal: SignalStatus) {
-  currentStatus.value = signal;
-  console.log(`当前状态更新为: ${signal}`);
-}
-
-/**
- * 处理用户消息
- * @param {number} seq_id - 消息序列号
- * @param {Object} data - 消息数据
- */
-function handleUserMessage(seq_id, data) {
-  console.log(`用户说话文本内容 - 序列号: ${seq_id}, 内容: ${data.text}`);
-  
-  // 只处理新的消息
-  if (seq_id > userMsgSeq.value) {
-    if (data.end_flag) {
-      console.log(`用户说话完毕，当前轮次: ${currentRound.value}`);
-      currentRound.value++;
-    }
-    
-    addOrUpdateMessage({
-      sender: "user",
-      message_id: data.message_id,
-      seq_id: seq_id,
-      content: data.text,
-      type: "message",
-    });
-    
-    userMsgSeq.value = seq_id;
-  }
-}
-
-/**
- * 处理AI消息
- * @param {number} seq_id - 消息序列号
- * @param {Object} data - 消息数据
- * @param {number} round - 对话轮次
- */
-function handleBotMessage(seq_id, data, round) {
-  console.log(`AI说话文本内容 - 序列号: ${seq_id}, 内容: ${data.text}`);
-  
-  if (data.end_flag) {
-    console.log(`AI回答完毕 - 序列号: ${seq_id}, 轮次: ${round}`);
-  }
-  
-  addOrUpdateMessage({
-    sender: "bot",
-    message_id: data.message_id,
-    seq_id: seq_id,
-    content: data.text,
-    type: "message",
-  });
-}
-
-/**
- * 添加或更新消息
- * @param {Message} newMessage - 新消息对象
- */
-function addOrUpdateMessage(newMessage: Message) {
-  // 空消息处理
-  if (!newMessage.content?.trim()) {
-    console.log('收到空消息，已忽略');
-    return;
-  }
-
-  const isBotMessage = newMessage.sender === "bot";
-  const index = messages.value.findIndex(
-    (message) => message.message_id === newMessage.message_id
-  );
-
-  if (index !== -1) {
-    // 更新已存在的消息
-    if (isBotMessage) {
-      botMsgMap.value[newMessage.seq_id] = newMessage.content;
-
-      // 按序列号排序并合并AI消息内容
-      const sortedMessages = Object.entries(botMsgMap.value)
-        .sort((a, b) => a[0] - b[0])
-        .map(([, value]) => value)
-        .join("");
-
-      if (sortedMessages.trim()) {
-        messages.value[index].content = sortedMessages;
-      }
-    } else if (newMessage.content.trim()) {
-      messages.value[index].content = newMessage.content;
-    }
-  } else {
-    // 添加新消息
-    if (isBotMessage) {
-      botMsgMap.value[newMessage.seq_id] = newMessage.content;
-    }
-    messages.value.push(newMessage);
-  }
-}
-```
-
-## 使用说明
-
-1. 确保已正确初始化 RTC 引擎并成功加入房间。
-
-2. 实现上述代码中的状态管理和消息处理逻辑。
-
-3. 在您的界面中可以通过监听 `currentStatus` 来展示当前的交互状态：
-   - listening: 正在聆听用户说话
-   - thinking: 正在思考/处理用户输入
-   - speaking: AI 正在说话
-
-4. 通过 `messages` 数组获取完整的对话历史，可用于展示对话内容。
-
-## 错误处理
-
-代码中已包含基本的错误处理机制：
-
-1. 消息解析错误处理
-2. 命令处理错误捕获
-3. 空消息过滤
-4. 消息重复处理避免
-
-## 注意事项
-
-1. 确保正确处理消息序列号（seq_id），以保证消息按正确顺序显示。
-
-2. AI 消息可能分多次返回，需要通过 seq_id 排序后合并显示。
-
-3. 注意处理 end_flag 标志，它表示当前轮次的消息是否结束。
-
-4. 建议在界面上通过不同的视觉效果展示不同的状态，提升用户体验。
