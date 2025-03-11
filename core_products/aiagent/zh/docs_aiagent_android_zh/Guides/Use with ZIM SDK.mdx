@@ -1,5 +1,8 @@
 # 和 ZIM SDK 配合使用
-AI Agent SDK 可以和 ZIM SDK 一起集成使用来快速集成AI聊天功能
+
+---
+
+AI Agent SDK 可以和 ZIM SDK 一起集成，快速实现 AI 文本聊天功能
 
 ## 准备环境
 请确保开发环境满足以下要求：
@@ -10,17 +13,17 @@ AI Agent SDK 可以和 ZIM SDK 一起集成使用来快速集成AI聊天功能
 - Android 设备已经连接到 Internet。
 
 ## 前提条件
-- 已在 ZEGO 控制台 创建项目，获取到了接入 ZIM SDK 服务所需的 AppID、AppSign。ZIM 服务权限不是默认开启的，使用前，请先在 ZEGO 控制台 自助开通 ZIM 服务（详情请参考控制台文档 项目管理 - 即时通讯），若无法开通 ZIM 服务，请联系 ZEGO 技术支持开通。
-- 已经集成了 AI Agent SDK 
-
-## 集成 ZIM SDK 
-参考 ZIM SDK 集成文档
+- 已在 ZEGO 控制台 创建项目，获取到了接入 ZIM SDK 服务所需的 AppID、AppSign。
+<Warning title="注意">
+ZIM 服务权限不是默认开启的，使用前，请先在 ZEGO 控制台 自助开通 ZIM 服务（详情请参考控制台文档 项目管理 - 即时通讯），若无法开通 ZIM 服务，请联系 ZEGO 技术支持开通。
+</Warning>
+- 已经集成了 [AI Agent SDK](../Quick%20start/Based%20on%20%20SDK.mdx) 和 [ZIM SDK](/zh/zim-android/send-and-receive-messages#2-集成-sdk)
 
 ## 核心能力实现
 
 ### 初始化 AI Agent SDK 和 ZIM SDK 
-1. 参考 快速开始， 完成 初始化 AI Agent SDK
-2. 初始化 ZIM SDK
+1. 参考[快速开始](../Quick%20start/Based%20on%20%20SDK.mdx#初始化-ai-agent-sdk)， 完成 AI Agent SDK 初始化 
+2. 初始化 ZIM SDK，使用 [create](https://doc-zh.zego.im/article/api?doc=zim_API~java_android~class~ZIM#create) 创建 ZIM 实例
     ```java
     long appID ;   // 从即构控制台获取
     String appSign;  // 从即构控制台获取
@@ -30,27 +33,77 @@ AI Agent SDK 可以和 ZIM SDK 一起集成使用来快速集成AI聊天功能
     appConfig.appSign = appSign;   //替换为您申请到的 AppSign
     ZIM.create(appConfig, getApplication());
     ```
-### 申请录音权限
-参考 快速开始 - 申请录音权限，完成权限申请
+
 
 ### 创建会话
-1. 创建会话时，需要先登录 ZIM SDK 再创建会话：
-    ```java
-    private String userId = ;  // 用户自己定义的 userId
-    private String userName = ; // 用户自己定义的 userName
-    ZIMLoginConfig config = new ZIMLoginConfig();
-    config.userName = userName;
-    ZIM.getInstance().login(userId, config, new ZIMLoggedInCallback() {
-        @Override
-        public void onLoggedIn(ZIMError errorInfo) {
-            if (errorInfo.code == ZIMErrorCode.SUCCESS) {
-                createConversationIfNeed();
-            }
+
+<Steps>
+<Step title="登录 ZIM SDK">
+
+在创建会话之前，需要先调用 [login](https://doc-zh.zego.im/article/api?doc=zim_API~java_android~class~ZIM#login-1) 登录 ZIM SDK 
+```java
+private String userId = ;  // 用户自己定义的 userId
+private String userName = ; // 用户自己定义的 userName
+ZIMLoginConfig config = new ZIMLoginConfig();
+config.userName = userName;
+ZIM.getInstance().login(userId, config, new ZIMLoggedInCallback() {
+    @Override
+    public void onLoggedIn(ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            createConversationIfNeed();
         }
-    });
-    ``` 
-2. 创建会话，参考 快速开始 -创建会话，注意，和ZIM SDK 一起使用的时候，使用`ZegoAIAgent.instance().createConversationWithZIM` 来创建会话。
-### 初始化和创建会话的完整代码：
+    }
+});
+``` 
+</Step>
+<Step title="创建会话">
+
+根据预先创建并且获得的AI模版来创建会话,实现逻辑如下：
+
+1. 使用 AIAgent SDK 接口 [queryConversationList](../Client%20API/API%20reference.mdx#queryconversationlist) 查询当前用户是否已经创建过会话，如果已经创建过会话，则不用再创建。
+2. 如果没有创建过会话，则需要使用 AIAgent SDK 接口 [createConversationWithZIM](../Client%20API/API%20reference.mdx#createconversationwithzim) 来创建会话。
+
+<Warning title="注意">
+当 AI Agent SDK 和 ZIM SDK 一起使用的时候，需要使用 [createConversationWithZIM](../Client%20API/API%20reference.mdx#createconversationwithzim) 来创建会话。
+</Warning>
+```java
+
+private String agentJson;   // 预先创建并且获得的 AI 模版
+
+private void createConversationIfNeed() {
+  CustomAgentConfig xiaoZhiConfig = new Gson().fromJson(agentJson, CustomAgentConfig.class);
+  ZegoAIAgent.instance()
+      .queryConversationList(new QueryConversationConfig(), new QueryConversationListCallback() {
+          @Override
+          public void onResult(int errorCode, String message, String requestId,
+              QueryConversationListData conversationListData) {
+              if (errorCode == 0) {
+                  if (conversationListData.conversationList != null
+                      && conversationListData.conversationList.length > 0) {
+                      Conversation conversation = conversationListData.conversationList[0];
+                      onConversationReady(conversation, new UserProfile(userId, userName));
+                  } else {
+                      ZegoAIAgent.instance()
+                          .createConversationWithZIM(xiaoZhiConfig, new CreateConversationCallback() {
+                              @Override
+                              public void onResult(int errorCode, String message, String requestId,
+                                  Conversation conversation) {
+                                  if (errorCode == 0) {
+                                      onConversationReady(conversation, new UserProfile(userId, userName));
+                                  }
+                              }
+                          });
+                  }
+              }
+          }
+      });
+  }
+```
+</Step>
+</Steps>
+
+<Accordion title="初始化和创建会话的完整代码：" defaultOpen="false">
+
 ```java
 import android.Manifest;
 import android.content.Context;
@@ -183,8 +236,14 @@ public class MainActivity extends AppCompatActivity {
     }
 }
 ```
+</Accordion>
+
+
+
 ### 发送和接收文本消息
-创建完会话以后，就可以发送和接收文本消息了。这里我们发送单聊消息：
+完成创建会话后，即可实现发送和接收文本消息的功能。
+
+通过 [sendMessage](https://doc-zh.zego.im/article/api?doc=zim_API~java_android~class~ZIM#send-message) 发送单聊消息
 ```java
 Conversation conversation; // 上一步中创建的会话 
 String zimConversationID = conversation.agentId; //  conversation.agentId 即是机器人在zim sdk 中的 id
@@ -219,7 +278,9 @@ ZIM.getInstance().sendMessage(zimMessage, zimConversationID, ZIMConversationType
     }
 });
 ```
-通过ZIM SDK 的回调即可接收别人发送给你的消息：
+
+通过 ZIM SDK 的 [setEventHandler](https://doc-zh.zego.im/article/api?doc=zim_API~java_android~class~ZIM#set-event-handler) 监听 [onPeerMessageReceived](https://doc-zh.zego.im/article/api?doc=zim_API~java_android~class~ZIMEventHandler#on-peer-message-received) 回调接收单聊消息
+
 ```java
 RecyclerView chatListView ; // 用于展示聊天消息的控件，
 Conversation conversation; // 上一步中创建的会话 
@@ -236,12 +297,13 @@ ZIM.getInstance().setEventHandler(new ZIMEventHandler() {
     }
 });
 ```
-这样子，我们就完成了和机器人的文本聊天。当你发送单聊消息时，就会收到来自AI 机器人的回复了。
 
+这样我们就实现了基本的 AI 文本互动功能
 
-### 文本聊天页面完整代码：
+<Accordion title="文本聊天页面完整代码：" defaultOpen="false">
 
-
+<Tabs>
+<Tab title="TextChatActivity.java">
 ```java
 import android.content.Intent;
 import android.os.Bundle;
@@ -361,7 +423,8 @@ public class TextChatActivity extends AppCompatActivity {
 }
 ```
 
-activity_text_chat.xml:
+</Tab>
+<Tab title="activity_text_chat.xml">
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -433,7 +496,8 @@ activity_text_chat.xml:
 </androidx.constraintlayout.widget.ConstraintLayout>
 ```
 
-聊天页面列表控件：
+</Tab>
+<Tab title="TextChatListView.java">
 ```java
 
 import android.content.Context;
@@ -639,8 +703,9 @@ public class TextChatListView extends RecyclerView {
 
 ```
 
-聊天消息列表控件 item_chat_message.xml:
-```java
+</Tab>
+<Tab title="item_chat_message.xml">
+```xml
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
   android:layout_width="match_parent"
@@ -688,5 +753,31 @@ public class TextChatListView extends RecyclerView {
 </LinearLayout>
 ```
 
+</Tab>
+</Tabs>
+
+</Accordion>
+
 ### 实现语音聊天界面【可选】
-参考 快速开始- 实现 AI 语音互动 来完成语音聊天界面
+
+实现语音聊天界面之前，需要申请录音权限：
+
+```java
+
+private final ActivityResultLauncher<String> requestPermissionLauncher = registerForActivityResult(
+    new ActivityResultContracts.RequestPermission(), new ActivityResultCallback<Boolean>() {
+        @Override
+        public void onActivityResult(Boolean isGranted) {
+            if (isGranted) {
+                // 同意权限
+            } else {
+
+            }
+        }
+    });
+
+// 通过以下代码触发申请录音权限弹窗
+requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);
+```
+
+参考 [快速开始- 实现 AI 语音互动](../Quick%20start/Based%20on%20%20SDK.mdx#实现-ai-语音互动) 来完成语音聊天界面
