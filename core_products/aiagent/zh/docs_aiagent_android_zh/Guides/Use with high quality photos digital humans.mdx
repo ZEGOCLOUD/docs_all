@@ -19,17 +19,131 @@
 - 丰富的语音配置：可调节音调、语速和音量，实现个性化的语音表现。（待定）
 - 视频输出控制：支持设置视频分辨率和格式。（待定）
 
-## 使用步骤
+## 实现AI数字人互动
+参考 快速开始 -  创建会话，创建会话完成以后，就可以准备开启数字人会话了。
 
-### 1. 创建数字人会话
-使用 `ZegoAIAgent.instance().startChat()` 来创建视频数字人
+### 开启数字人会话
+<Steps>
+<Step title="初始化 ZegoExpress SDK">
+通过 [createEngine](https://doc-zh.zego.im/article/api?doc=express-audio-sdk_API~java_android~class~ZegoExpressEngine#create-engine) 接口初始化 ZegoExpress SDK
 ```java
-// AI Agent SDK
+     
+private void initExpressSDK() {
+    ZegoEngineConfig config = new ZegoEngineConfig();
+    HashMap<String, String> advanceConfig = new HashMap<>();
+    advanceConfig.put("notify_remote_device_unknown_status", "true");
+    advanceConfig.put("notify_remote_device_init_status", "true");
 
+    /**下面的设置用来做应答延迟优化的，需要集成对应版本的ZegoExpressEngine sdk，请联系即构同学**/
+    advanceConfig.put("enforce_audio_loopback_in_sync", "true");  // 应答延迟优化
+    /*********************************************************************************************************/
+    advanceConfig.put("sideinfo_callback_version", "3");  // 让 sei 和 frame 一一对应
+    config.advancedConfig = advanceConfig;
+    ZegoExpressEngine.setEngineConfig(config);
 
+    ZegoEngineProfile zegoEngineProfile = new ZegoEngineProfile();
+    zegoEngineProfile.appID = KeyCenter.appID;
+    zegoEngineProfile.appSign = KeyCenter.appSign;
+    zegoEngineProfile.scenario = ZegoScenario.STANDARD_VOICE_CALL;
+    zegoEngineProfile.application = getApplication();
+    ZegoExpressEngine.createEngine(zegoEngineProfile, null);
+    }
 ```
+</Step>
+<Step title="登录 Express 房间">
+完成 ZegoExpress SDK 初始化后，调用 [loginRoom](https://doc-zh.zego.im/article/api?doc=express-audio-sdk_API~java_android~class~ZegoExpressEngine#login-room-2) 登录 Express 房间
 
-### 2. 结束数字人会话
+```java
+
+String roomId ; // 由用户自己定义
+ZegoRoomConfig roomConfig = new ZegoRoomConfig();
+roomConfig.isUserStatusNotify = true;
+ZegoExpressEngine.getEngine().loginRoom(roomID, new ZegoUser(userProfile.userID, userProfile.userName), roomConfig, new IZegoRoomLoginCallback() {
+    @Override
+    public void onRoomLoginResult(int errorCode, JSONObject extendedData) {
+    }
+});
+```
+</Step>
+
+<Step title="开启会话并且拉流">
+进入房间成功以后，调用 AIAgentSDK 接口 `ZegoAIAgent.instance().startChat`开启数字人会话,开启成功以后设置RTC自定义渲染并且监听回调并推拉流：
+```java
+// .. 参考上一步
+Conversation conversation;  // 当前页面的会话信息
+ZegoPreviewView previewView  ; // 用户自己创建，用来渲染数字人的view
+ZegoExpressEngine.getEngine().loginRoom(...,new IZegoRoomLoginCallback() {
+    @Override
+    public void onRoomLoginResult(int errorCode, JSONObject extendedData) 
+    {
+        if(errorCode == 0){
+            customRender();
+            String metaHumanStreamID // 数字人的流ID，由客户自定义规则生成;
+            ZegoAIAgentKit.getInstance().startChat(conversation.conversationId, previewView, new StartRTCVideoChatCallback() {
+                @Override
+                public void onResult(int errorCode1, String message1,String requestId1) {
+                    if (errorCode1 == 0) {
+                        // 设置拉流缓冲大小
+                        ZegoExpressEngine.getEngine().setPlayStreamBufferIntervalRange(metaHumanStreamID, 100, 2000);
+                        // 开始拉流
+                        ZegoExpressEngine.getEngine().startPlayStream(metaHumanStreamID);
+                    } 
+                }
+
+                @Override
+                public void onSurfaceFirstFrameDraw() {
+                    // 在首帧过来的时候才认为 AIAgent 启动成功，startRTC success 的时候还没有创建成功，后台启动数字人需要时间。
+                    // 开始推流
+                    ZegoExpressManager.getInstance().startPublishingStream(publishStreamID);
+                }
+            });
+        }
+    }
+});
+
+pulic void customRender(){
+     // 开启自定义渲染
+    ZegoCustomVideoRenderConfig renderConfig = new ZegoCustomVideoRenderConfig();
+    renderConfig.bufferType = ZegoVideoBufferType.RAW_DATA;
+    renderConfig.frameFormatSeries = ZegoVideoFrameFormatSeries.RGB;
+    renderConfig.enableEngineRender = false;
+    ZegoExpressEngine.getEngine().enableCustomVideoRender(true, renderConfig);
+    // 监听视频帧回调
+    ZegoExpressEngine.getEngine()setCustomVideoRenderHandler(new IZegoCustomVideoRenderHandler() {
+        @Override
+        public void onRemoteVideoFrameRawData(ByteBuffer[] data, int[] dataLength, ZegoVideoFrameParam param,String streamID) {
+            IAIAgentZegoExpressEventHandler.ZegoAIAgentVideoFrameParam aiAgentParam = new IAIAgentZegoExpressEventHandler.ZegoAIAgentVideoFrameParam();
+            aiAgentParam.format = IAIAgentZegoExpressEventHandler.ZegoVideoFrameFormat.getZegoVideoFrameFormat(param.format.value());
+            aiAgentParam.height = param.height;
+            aiAgentParam.width = param.width;
+            aiAgentParam.rotation = param.rotation;
+            for (int i = 0; i < 4; i++) {
+                aiAgentParam.strides[i] = param.strides[i];
+            }
+            // 需要把数据传给 AI Agent SDK.
+            ZegoAIAgent.instance().onRemoteVideoFrameRawData(data, dataLength, aiAgentParam, streamID);
+        }
+
+        @Override
+        public void onRemoteVideoFrameEncodedData(ByteBuffer data, int dataLength, ZegoVideoEncodedFrameParam param,long referenceTimeMillisecond, String streamID) {
+        }
+    });
+
+    // 监听 SEI 回调
+    mExpressEventListener = new IZegoEventHandler() {
+        @Override
+        public void onPlayerSyncRecvSEI(String streamID, byte[] data) {
+            ZegoAIAgent.instance().onPlayerSyncRecvSEI(streamID, data);
+        }
+    };
+    ZegoExpressEngine.getEngine().setEventHandler(mExpressEventListener)
+    }
+```
+</Step>
+
+</Steps>
+
+### 结束数字人会话
 
 用户选择结束会话时，需要按照以下步骤处理：
 1. 调用 AIAgent SDK 接口 `ZegoAIAgent.instance().stopChat` 结束会话。
