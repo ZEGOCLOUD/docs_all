@@ -1,10 +1,558 @@
 # 快速开始
 --- 
 ## 准备环境
+在开始集成 ZEGO AIAgent SDK 前，请确保开发环境满足以下要求：
 
+- Android Studio 2020.3.1 或以上版本。
+- Android SDK 25、Android SDK Build-Tools 25.0.2、Android SDK Platform-Tools 25.x.x 或以上版本。
+- Android 4.4 或以上版本，且支持音视频的 Android 设备。
+- Android 设备已经连接到 Internet。
 
 ## 前提条件
+- 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目信息](https://doc-zh.zego.im/article/12107)。
+- 联系 ZEGO 商务人员开通 AI Agent 相关服务。
+- 已经集成了 [ZEGO Express SDK](https://doc-zh.zego.im/article/3575)。
 
 
-## 基于SDK的实现流程
+## 集成SDK
 
+
+### 新建项目（已有项目，可忽略此步骤）
+
+### 复制 SDK AAR 文件手动集成
+1. 下载 SDK
+2. 将解压后的 AAR 文件中的 “xxx.aar” 文件拷贝至您的项目目录下，如 “app/libs”。
+3. 在项目的 app 级别的 build.gradle 文件的 android 节点下添加以下代码：
+```java
+android{
+    // ...
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['libs']
+        }
+    }
+}
+```
+在 dependencies 节点下添加以下代码：
+```java
+// 集成 AI agent SDK 到项目中
+dependencies {
+    api fileTree(dir: 'libs', include: ['*.jar'])
+    // 需要用到这两个库
+    api "com.squareup.picasso:picasso:2.8"
+    api "com.google.code.gson:gson:2.9.1"
+}
+```
+
+
+## 核心能力实现
+
+在开始使用 AI Agent 之前，您需要完成以下步骤：
+    - 完成 ZEGO Express Web SDK 初始化
+
+    <Warning title="注意">
+    在实现 AI Agent 的功能之前，请确保已经集成了 [ZEGO Express SDK](https://doc-zh.zego.im/article/7636#2_1)。
+    </Warning>
+
+    - 已经预先创建并且获得 AI 模版
+    - 已经获取到用户信息包含id,name
+    - 已经获取到用于 SDK 鉴权的 appid,appSign,token
+
+### 初始化 AI Agent SDK
+    ```java
+    String userId = "userId";  // 用户自己定义的 userId
+    String userName = "userName" ; // 用户自己定义的 userName
+    String token =  // 用于SDK鉴权的 token,由用户业务服务器生成或者是从即构控制台获取临时token;
+    long appID ;   // 从即构控制台获取
+    String appSign;  // 从即构控制台获取
+    AuthData authData = new AuthData(appID, appSign, token);
+    UserProfile userProfile = new UserProfile(userId, userName);
+    ZegoAIAgent.instance().initSDK(getApplication(), authData, userProfile);
+    ```
+### 申请录音权限
+进入语音聊天之前，需要申请语音权限：
+    ```java
+    private final ActivityResultLauncher<String> requestPermissionLauncher = registerForActivityResult(
+        new ActivityResultContracts.RequestPermission(), new ActivityResultCallback<Boolean>() {
+            @Override
+            public void onActivityResult(Boolean isGranted) {
+                if (isGranted) {
+                    // 同意权限
+                } else {
+
+                }
+            }
+        });
+
+    // 通过以下代码触发申请语音权限弹窗
+    requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);
+    ```
+
+
+### 创建会话
+在获取语音权限以后，需要根据预先创建并且获得的AI模版来创建会话,实现逻辑如下：
+1. 使用 AIAgent SDK 接口 `ZegoAIAgent.instance().queryConversationList` 查询当前用户是否已经创建过会话，如果已经创建过会话，则不用再创建。
+2. 如果没有创建过会话，则需要使用 AIAgent SDK 接口 `ZegoAIAgent.instance().createConversation` 来创建会话。
+```java
+private void createConversationIfNeed() {
+    CustomAgentConfig xiaoZhiConfig ; // 预先创建并且获得的AI模版
+    ZegoAIAgent.instance()
+        .queryConversationList(new QueryConversationConfig(), new QueryConversationListCallback() {
+            @Override
+            public void onResult(int errorCode, String message, String requestId,
+                QueryConversationListData conversationListData) {
+                if (errorCode == 0) {
+                    if (conversationListData != null && conversationListData.conversationList != null
+                        && conversationListData.conversationList.length > 0) {
+                        Conversation conversation = conversationListData.conversationList[0];
+                        //  创建对话完毕，接下来可以开启语音互动了
+                        onConversationReady(conversation, userProfile);
+                    } else {
+                        ZegoAIAgent.instance().createConversation(xiaoZhiConfig, new CreateConversationCallback() {
+                            @Override
+                            public void onResult(int errorCode, String message, String requestId,
+                                Conversation conversation) {
+                                if (errorCode == 0) {
+                                    // 创建对话完毕，接下来可以开启语音互动了
+                                    onConversationReady(conversation, userProfile);
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        });
+}
+```
+
+### 初始化和创建会话完整代码：
+通过上面的步骤，我们就创建了会话，以下是完整代码：
+
+```java
+import android.Manifest;
+import android.content.Context;
+import android.content.Intent;
+import android.content.res.AssetManager;
+import android.os.Bundle;
+import androidx.activity.result.ActivityResultCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+import com.google.gson.Gson;
+import im.zego.ai_agent.exprss.chat.VoiceChatActivity;
+import im.zego.aiagent.sdk.ZegoAIAgent;
+import im.zego.aiagent.sdk.callback.CreateConversationCallback;
+import im.zego.aiagent.sdk.callback.QueryConversationListCallback;
+import im.zego.aiagent.sdk.data.AuthData;
+import im.zego.aiagent.sdk.data.Conversation;
+import im.zego.aiagent.sdk.data.CustomAgentConfig;
+import im.zego.aiagent.sdk.data.QueryConversationConfig;
+import im.zego.aiagent.sdk.data.QueryConversationListData;
+import im.zego.aiagent.sdk.data.UserProfile;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+
+public class MainActivity extends AppCompatActivity {
+
+    private String userId = "userId";  // 用户自己定义的 userId
+    private String userName = "userName" ; // 用户自己定义的 userName
+    private String token =  // 用于SDK鉴权的 token,由用户业务服务器生成或者是从即构控制台获取临时token;
+    private String appID ;   // 从即构控制台获取
+    private String appSign;  // 从即构控制台获取
+    private String agentJson;   // 预先创建并且获得的 AI 模版
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        AuthData authData = new AuthData(appId, appSign, token);
+        UserProfile userProfile = new UserProfile(userId, userName)
+        ZegoAIAgent.instance().initSDK(getApplication(), authData, userProfile);
+
+        // 点击按钮申请声音权限
+        findViewById(R.id.start_voice_chat).setOnClickListener(v -> {
+            requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);
+        });
+    }
+
+    private final ActivityResultLauncher<String> requestPermissionLauncher = registerForActivityResult(
+        new ActivityResultContracts.RequestPermission(), new ActivityResultCallback<Boolean>() {
+            @Override
+            public void onActivityResult(Boolean isGranted) {
+                if (isGranted) {
+                    // 用户同意权限以后，开始创建会话
+                    createConversationIfNeed();
+                } else {
+                }
+            }
+        });
+
+    private void createConversationIfNeed() {
+        // agentJson 是预先创建并且获得的 AI 模版
+        CustomAgentConfig xiaoZhiConfig = new Gson().fromJson(agentJson, CustomAgentConfig.class);
+        ZegoAIAgent.instance().queryConversationList(new QueryConversationConfig(), new QueryConversationListCallback() {
+                @Override
+                public void onResult(int errorCode, String message, String requestId,
+                    QueryConversationListData conversationListData) {
+                    if (errorCode == 0) {
+                        // 如果已经有会话了，直接ready
+                        if (conversationListData != null && conversationListData.conversationList != null
+                            && conversationListData.conversationList.length > 0) {
+                            Conversation conversation = conversationListData.conversationList[0];
+                            onConversationReady(conversation, userProfile);
+                        } else {
+                            // 如果没有会话，就先创建
+                            ZegoAIAgent.instance().createConversation(xiaoZhiConfig, new CreateConversationCallback() {
+                                @Override
+                                public void onResult(int errorCode, String message, String requestId,
+                                    Conversation conversation) {
+                                    if (errorCode == 0) {
+                                        onConversationReady(conversation, userProfile);
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+            });
+    }
+
+    // 进入到语音聊天页面
+    private void onConversationReady(Conversation conversation, UserProfile userProfile) {
+        Intent intent = new Intent(MainActivity.this, VoiceChatActivity.class);
+        Gson gson = new Gson();
+        intent.putExtra("conversation", gson.toJson(conversation));
+        intent.putExtra("userProfile", gson.toJson(userProfile));
+        startActivity(intent);
+    }
+}
+```
+
+### 实现 AI 语音互动
+创建会话以后，就可以继续以下步骤来进行语音互动了：
+1. 初始化 ZegoExpress SDK :
+```java
+     
+private void initExpressSDK() {
+    ZegoEngineConfig config = new ZegoEngineConfig();
+    HashMap<String, String> advanceConfig = new HashMap<>();
+    advanceConfig.put("notify_remote_device_unknown_status", "true");
+    advanceConfig.put("notify_remote_device_init_status", "true");
+
+    /**下面的设置用来做应答延迟优化的，需要集成对应版本的ZegoExpressEngine sdk，请联系即构同学**/
+    advanceConfig.put("enforce_audio_loopback_in_sync", "true");  // 应答延迟优化
+    /*********************************************************************************************************/
+    advanceConfig.put("sideinfo_callback_version", "3");  // 让 sei 和 frame 一一对应
+    config.advancedConfig = advanceConfig;
+    ZegoExpressEngine.setEngineConfig(config);
+
+    ZegoEngineProfile zegoEngineProfile = new ZegoEngineProfile();
+    zegoEngineProfile.appID = KeyCenter.appID;
+    zegoEngineProfile.appSign = KeyCenter.appSign;
+    zegoEngineProfile.scenario = ZegoScenario.STANDARD_VOICE_CALL;
+    zegoEngineProfile.application = getApplication();
+    ZegoExpressEngine.createEngine(zegoEngineProfile, null);
+    }
+```
+2. 登录 Express 房间并且推流， 具体过程见 [](https://doc-zh.zego.im/article/7627#4)
+```java
+//  roomID  由用户自己定义生成规则
+// userProfile 包含 userId 和 userName，由用户自己定义
+public void loginRoom(UserProfile userProfile, String roomID, IZegoRoomLoginCallback callBack) {
+    mUserProfile = userProfile;
+    ZegoExpressEngine.getEngine().setRoomScenario(ZegoScenario.STANDARD_VOICE_CALL);
+
+    ZegoExpressEngine.getEngine().setAudioDeviceMode(ZegoAudioDeviceMode.GENERAL);
+
+    ZegoExpressEngine.getEngine().enableAEC(true);
+    ZegoExpressEngine.getEngine().setAECMode(ZegoAECMode.AI);
+    ZegoExpressEngine.getEngine().enableAGC(true);
+    ZegoExpressEngine.getEngine().enableANS(true);
+    ZegoExpressEngine.getEngine().setANSMode(ZegoANSMode.AI_AGGRESSIVE);
+
+    ZegoRoomConfig roomConfig = new ZegoRoomConfig();
+    roomConfig.isUserStatusNotify = true;
+
+    ZegoExpressEngine.getEngine().loginRoom(roomID, new ZegoUser(userProfile.userID, userProfile.userName), roomConfig, new IZegoRoomLoginCallback() {
+            @Override
+            public void onRoomLoginResult(int errorCode, JSONObject extendedData) {
+                if (errorCode == 0) {
+                    String userSteamID = xxx; // 用户推流 ID，由用户自己定义生成规则
+                    ZegoExpressEngine.getEngine().startPublishingStream(userSteamID);
+
+                    startChat();
+                }
+
+            }
+        });
+}
+```
+3. 推流成功后，调用 AIAgentSDK 接口 `ZegoAIAgent.instance().startChat`来开启会话，并且在开启会话成功以后，主动去拉 AI 的语音流：
+```java
+//...
+ZegoExpressEngine.getEngine().loginRoom(roomID, new ZegoUser(userProfile.userID, userProfile.userName), roomConfig, new IZegoRoomLoginCallback() {
+    @Override
+    public void onRoomLoginResult(int errorCode, JSONObject extendedData) {
+        if (errorCode == 0) {
+            String userSteamID = xxx; // 用户推流 ID，由用户自己定义生成规则
+            ZegoExpressEngine.getEngine().startPublishingStream(userSteamID);
+
+            String agentStreamID = xx //  AI的推流 ID，由用户自己定义生成规则;
+            ZegoAIAgent.instance().startChat(conversation.conversationId, roomID, userSteamID, agentStreamID,
+                new StartRTCChatCallback() {
+                    @Override
+                    public void onResult(int errorCode, String message, String requestId) {
+                        if (errorCode == 0) {
+                            ZegoExpressEngine.getEngine().startPlayStream(agentStreamID);
+                            onVoiceChatReady();
+                        }
+                    }
+                });
+        }
+    }
+});
+```
+4. 此时会话已经成功建立，用户可以通过 ZEGO Express SDK 的 `onIMRecvCustomCommand` 回调来获取并且展示语音聊天的文本内容,具体的展示逻辑见 [获取AI状态 & 字幕](../Guides/Obtain%20AI%20status%20and%20subtitles.mdx)
+
+### 结束会话
+用户选择结束会话时，需要按照以下步骤处理：
+1. 调用 AIAgent SDK 接口 `ZegoAIAgent.instance().stopChat` 结束会话。
+2. ZEGO Express SDK 也需要退出房间并且销毁。
+```java
+Conversation conversation;  // 当前页面的会话信息
+ZegoAIAgent.instance().stopChat(conversation.conversationId, null);
+ZegoExpressEngine.getEngine().logoutRoom();
+ZegoExpressEngine.getEngine().destroyEngine();
+```
+
+### 语音聊天页面完整代码
+```java
+import android.net.Uri;
+import android.os.Bundle;
+import android.widget.ImageView;
+import android.widget.TextView;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+import com.google.gson.Gson;
+import com.squareup.picasso.Picasso;
+import im.zego.ai_agent.exprss.KeyCenter;
+import im.zego.ai_agent.exprss.R;
+import im.zego.aiagent.sdk.ZegoAIAgent;
+import im.zego.aiagent.sdk.callback.StartRTCChatCallback;
+import im.zego.aiagent.sdk.data.Conversation;
+import im.zego.aiagent.sdk.data.UserProfile;
+import im.zego.zegoexpress.ZegoExpressEngine;
+import im.zego.zegoexpress.callback.IZegoRoomLoginCallback;
+import im.zego.zegoexpress.constants.ZegoAECMode;
+import im.zego.zegoexpress.constants.ZegoANSMode;
+import im.zego.zegoexpress.constants.ZegoAudioDeviceMode;
+import im.zego.zegoexpress.constants.ZegoScenario;
+import im.zego.zegoexpress.entity.ZegoEngineConfig;
+import im.zego.zegoexpress.entity.ZegoEngineProfile;
+import im.zego.zegoexpress.entity.ZegoRoomConfig;
+import im.zego.zegoexpress.entity.ZegoUser;
+import java.util.HashMap;
+import org.json.JSONObject;
+
+public class VoiceChatActivity extends AppCompatActivity {
+
+    private Gson gson = new Gson();
+    private String background_url = xxx; // 用户自定义的背景图片
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_video_chat);
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
+            return insets;
+        });
+
+        Conversation conversation = gson.fromJson(getIntent().getStringExtra("conversation"), Conversation.class);
+        UserProfile userProfile = gson.fromJson(getIntent().getStringExtra("userProfile"), UserProfile.class);
+
+        TextView name = findViewById(R.id.ai_name);
+        name.setText(conversation.customAgentConfig.name);
+        ImageView bg = findViewById(R.id.background);
+        Picasso.get().load(Uri.parse(background_url)).into(bg);
+
+        findViewById(R.id.end_call).setOnClickListener(v -> {
+            ZegoAIAgent.instance().stopChat(conversation.conversationId, null);
+            ZegoExpressEngine.getEngine().logoutRoom();
+            ZegoExpressEngine.getEngine().destroyEngine(null);
+            finish();
+        });
+
+        initExpressSDK();
+
+        loginRoom(conversation, userProfile);
+
+    }
+
+    private void onVoiceChatReady() {
+        // AI READY
+        TextView textView = findViewById(R.id.status);
+        textView.setText("已连接");
+    }
+
+    @Override
+    public void onBackPressed() {
+
+    }
+
+    private void loginRoom(Conversation conversation, UserProfile userProfile) {
+        ZegoExpressEngine.getEngine().setRoomScenario(ZegoScenario.STANDARD_VOICE_CALL);
+
+        ZegoExpressEngine.getEngine().setAudioDeviceMode(ZegoAudioDeviceMode.GENERAL);
+
+        ZegoExpressEngine.getEngine().enableAEC(true);
+        ZegoExpressEngine.getEngine().setAECMode(ZegoAECMode.AI);
+        ZegoExpressEngine.getEngine().enableAGC(true);
+        ZegoExpressEngine.getEngine().enableANS(true);
+        ZegoExpressEngine.getEngine().setANSMode(ZegoANSMode.AI_AGGRESSIVE);
+
+        ZegoRoomConfig roomConfig = new ZegoRoomConfig();
+        roomConfig.isUserStatusNotify = true;
+
+        // 用户可以自定义房间ID生成规则
+        String roomID = generateRoomID(conversation, userProfile);
+        ZegoExpressEngine.getEngine()
+            .loginRoom(roomID, new ZegoUser(userProfile.userID, userProfile.userName), roomConfig,
+                new IZegoRoomLoginCallback() {
+                    @Override
+                    public void onRoomLoginResult(int errorCode, JSONObject extendedData) {
+                        if (errorCode == 0) {
+                            // 用户可以推流ID生成规则
+                            String userSteamID = generateUserSteamID(conversation, userProfile);
+                            ZegoExpressEngine.getEngine().startPublishingStream(userSteamID);
+                            // 用户可以自定义拉流ID生成规则
+                            String agentStreamID = generateAgentStreamID(conversation, userProfile);
+                            ZegoAIAgent.instance()
+                                .startChat(conversation.conversationId, roomID, userSteamID, agentStreamID,
+                                    new StartRTCChatCallback() {
+                                        @Override
+                                        public void onResult(int errorCode, String message, String requestId) {
+                                            if (errorCode == 0) {
+                                                ZegoExpressEngine.getEngine().startPlayingStream(agentStreamID);
+                                                onVoiceChatReady();
+                                            }
+                                        }
+                                    });
+                        }
+
+                    }
+                });
+    }
+
+    private void initExpressSDK() {
+
+        ZegoEngineConfig config = new ZegoEngineConfig();
+        HashMap<String, String> advanceConfig = new HashMap<>();
+        advanceConfig.put("notify_remote_device_unknown_status", "true");
+        advanceConfig.put("notify_remote_device_init_status", "true");
+
+        /**下面的设置用来做应答延迟优化的，需要集成对应版本的ZegoExpressEngine sdk，请联系即构同学**/
+        advanceConfig.put("enforce_audio_loopback_in_sync", "true");  // 应答延迟优化
+        /*********************************************************************************************************/
+        advanceConfig.put("sideinfo_callback_version", "3");  // 让 sei 和 frame 一一对应
+        config.advancedConfig = advanceConfig;
+        ZegoExpressEngine.setEngineConfig(config);
+
+        ZegoEngineProfile zegoEngineProfile = new ZegoEngineProfile();
+        zegoEngineProfile.appID = KeyCenter.appID;
+        zegoEngineProfile.appSign = KeyCenter.appSign;
+        zegoEngineProfile.scenario = ZegoScenario.STANDARD_VOICE_CALL;
+        zegoEngineProfile.application = getApplication();
+        ZegoExpressEngine.createEngine(zegoEngineProfile, null);
+    }
+
+    // 用户可以自定义房间ID生成规则
+    public static String generateRoomID(Conversation conversation, UserProfile userProfile) {
+        return "ar_" + conversation.conversationId;
+    }
+
+    // 用户可以推流ID生成规则
+    public static String generateUserSteamID(Conversation conversation, UserProfile userProfile) {
+        return generateRoomID(conversation, userProfile) + "_" + userProfile.userID + "_main";
+    }
+
+    // 用户可以自定义拉流ID生成规则
+    public static String generateAgentStreamID(Conversation conversation, UserProfile userProfile) {
+        return conversation.conversationId + "_" + userProfile.userID + "_robot" + "_main";
+    }
+}
+```
+
+activity_voice_chat.xml:
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:app="http://schemas.android.com/apk/res-auto"
+  android:id="@+id/main"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:background="@color/white">
+
+  <ImageView
+    android:id="@+id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:scaleType="centerCrop" />
+
+  <LinearLayout
+    android:layout_width="wrap_content"
+    android:layout_height="56dp"
+    android:layout_marginTop="15dp"
+    android:gravity="center"
+    android:minWidth="72dp"
+    android:orientation="vertical"
+    app:layout_constraintEnd_toEndOf="parent"
+    app:layout_constraintStart_toStartOf="parent"
+    app:layout_constraintTop_toTopOf="parent">
+
+    <TextView
+      android:id="@+id/ai_name"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:ellipsize="end"
+      android:maxLines="1"
+      android:text="小智"
+      android:textSize="18sp"
+      android:textStyle="bold" />
+
+    <TextView
+      android:id="@+id/status"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_marginStart="10dp"
+      android:layout_marginEnd="10dp"
+      android:ellipsize="end"
+      android:maxLines="1"
+      android:textSize="16sp" />
+  </LinearLayout>
+
+
+  <Button
+    android:id="@+id/end_call"
+    android:layout_width="wrap_content"
+    android:layout_height="60dp"
+    android:layout_marginBottom="27dp"
+    android:text="退出"
+    app:layout_constraintBottom_toBottomOf="parent"
+    app:layout_constraintLeft_toLeftOf="parent"
+    app:layout_constraintRight_toRightOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
+```
+
+## demo 地址
