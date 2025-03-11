@@ -1,3 +1,172 @@
-import Content from '/core_products/aiagent/zh/docs_aiagent_android_zh/Guides/Use with high quality photos digital humans.mdx'
+# 和精品照片数字人搭配使用
 
-<Content />
+---
+
+精品照片数字人是 AI Agent SDK 的一项高级功能，它能让您的 AI 助手拥有逼真的数字人形象，提供更加自然和沉浸式的交互体验。本文将指导您如何在 AI Agent SDK 中使用精品照片数字人功能。
+
+## 前提条件
+
+在开始使用精品照片数字人功能之前，请确保：
+
+1. 已完成 AI Agent SDK 的初始化，包括配置认证信息和用户信息。
+2. 已创建基础会话，了解基本的会话管理流程。
+3. 已在控制台开通精品照片数字人相关服务。
+
+## 功能特点
+
+- 高品质视觉效果：基于精品照片的数字人形象，提供逼真的面部表情和动作。
+- 灵活的布局控制：支持自定义数字人显示位置、大小和图层。（待定）
+- 丰富的语音配置：可调节音调、语速和音量，实现个性化的语音表现。（待定）
+- 视频输出控制：支持设置视频分辨率和格式。（待定）
+
+## 实现AI数字人互动
+参考 快速开始 -  创建会话，创建会话完成以后，就可以准备开启数字人会话了。
+
+### 开启数字人会话
+<Steps>
+<Step title="初始化 ZegoExpress SDK">
+通过 [createEngineWithProfile](https://doc-zh.zego.im/article/api?doc=express-audio-sdk_API~objectivec_ios~class~ZegoExpressEngine#create-engine-with-profile-event-handler) 接口初始化 ZegoExpress SDK
+```objective-c
+ // 初始化即构引擎
+-(void)initZegoExpressEngine{
+    // 创建引擎配置文件
+    ZegoEngineProfile* profile = [[ZegoEngineProfile alloc]init];
+    profile.appID = ZEGO_APP_ID;
+    profile.appSign = ZEGO_APP_SIGN;
+    profile.scenario = ZegoScenarioStandardVoiceCall; //设置该场景可以避免申请相机权限，接入方应按自己的业务场景设置具体值
+    
+    // 高级配置
+    ZegoEngineConfig* engineConfig = [[ZegoEngineConfig alloc] init];
+    engineConfig.advancedConfig = @{
+        @"notify_remote_device_unknown_status": @"true",
+        @"notify_remote_device_init_status":@"true",
+        @"enforce_audio_loopback_in_sync": @"true", /**该配置用来做应答延迟优化的，需要集成对应版本的ZegoExpressEngine sdk，请联系即构同学**/
+    };
+    
+    // 设置引擎配置并创建引擎实例
+    [ZegoExpressEngine setEngineConfig:engineConfig];
+    [ZegoExpressEngine createEngineWithProfile:profile eventHandler:self];
+}
+```
+</Step>
+<Step title="登录 Express 房间">
+完成 ZegoExpress SDK 初始化后，调用 [loginRoom](https://doc-zh.zego.im/article/api?doc=express-audio-sdk_API~objectivec_ios~class~ZegoExpressEngine#login-room-user-config-callback) 登录 Express 房间
+
+```objective-c
+//请注意：开启AI降噪需要联系即构同学拿对应的ZegoExpressionEngine.xcframework，具备该能力的版本还未发布
+[[ZegoExpressEngine sharedEngine] enableAEC:enable];
+[[ZegoExpressEngine sharedEngine] enableAGC:enable];
+[[ZegoExpressEngine sharedEngine] enableANS:enable];
+[[ZegoExpressEngine sharedEngine] setAECMode:ZegoAECModeAI];
+[[ZegoExpressEngine sharedEngine] setANSMode:ZegoANSModeAIAggressive];
+
+ZegoRoomConfig* roomConfig = [[ZegoRoomConfig alloc]init];
+roomConfig.isUserStatusNotify = YES;
+ZegoUser* user = [[ZegoUser alloc]init];
+user.userName = @"user_name";
+user.userID = @"user_id";
+NSString* roomID = @"room_id";
+[[ZegoExpressEngine sharedEngine] loginRoom:roomID
+                                        user:user
+                                        config:roomConfig
+                                    callback:^(int errorCode, NSDictionary * extendedData) {
+    if (errorCode != 0) {
+        return;
+    }
+    
+}];
+```
+</Step>
+
+<Step title="开启会话并且拉流">
+进入房间成功以后，调用 AIAgentSDK 接口 `ZegoAIAgent.instance().startChat`开启数字人会话,开启成功以后设置RTC自定义渲染并且监听回调并推拉流：
+```objective-c
+// 启用自定义视频渲染
+- (void)enableCustomVideoRender {
+    // 创建自定义视频渲染配置
+    ZegoCustomVideoRenderConfig *renderConfig =
+    [[ZegoCustomVideoRenderConfig alloc] init];
+    // 选择 RawData 类型视频帧数据
+    renderConfig.bufferType = ZegoVideoBufferTypeRawData;
+    // 选择 RGB 色系数据格式
+    renderConfig.frameFormatSeries = ZegoVideoFrameFormatSeriesRGB;
+    // 指定在自定义视频渲染的同时引擎也渲染
+    renderConfig.enableEngineRender = NO;
+    
+    // 启用自定义视频渲染并设置处理器
+    [[ZegoExpressEngine sharedEngine] enableCustomVideoRender:YES
+                                                       config:renderConfig];
+    [[ZegoExpressEngine sharedEngine] setCustomVideoRenderHandler:self];
+}
+```
+```objective-c
+NSString* userSteamID = @"user_stream_id"; // 用户推流 ID，由用户自己定义生成规则
+[[ZegoExpressEngine sharedEngine] startPublishingStream:userSteamID
+                                                channel:ZegoPublishChannelMain];
+
+UIView* previewView;    // 用户自己创建，用来渲染数字人的view
+NSString* metaHumanID = @"metaHuman_id"; // 
+NSString* metaHumanStreamID = @"metaHuman_stream_id"; // 
+[[ZegoAIAgent sharedInstance] startChat:conversationID //  当前页面的会话信息ID 
+                                    roomID:roomID
+                            userStreamID:userSteamID
+                        metaHumanStreamID:metaHumanStreamID
+                            metaHumanID:metaHumanID
+                        withPreviewView:previewView
+                            withCallback:^(NSInteger errorCode, NSString *errMsg, StartRTCVideoChatData *data, NSString * requestId) {
+    if (errorCode == 0) {
+        // 开启会话成功以后，主动去拉 AI 的语音流：
+        [[ZegoExpressEngine sharedEngine] startPlayingStream:agentStreamID];
+        return;
+    }
+}];
+```
+```objective-c
+#pragma mark - delegate ZegoCustomVideoRenderHandler
+
+- (void)onRemoteVideoFrameRawData:(unsigned char *_Nonnull *_Nonnull)data
+                       dataLength:(unsigned int *)dataLength
+                            param:(ZegoVideoFrameParam *)param
+                         streamID:(NSString *)streamID {
+    ZegoAIAgentVideoFrameParam* aiagentParam = [[ZegoAIAgentVideoFrameParam alloc]init];
+    aiagentParam.format =(AIAgentVideoFrameFormat)param.format;
+    aiagentParam.strides = *param.strides;
+    aiagentParam.size = param.size;
+    aiagentParam.rotation = param.rotation;
+    
+    // 需要把数据传给 AI Agent SDK.
+    [[ZegoAIAgent sharedInstance] onRemoteVideoFrameRawData:data
+                                                 dataLength:dataLength
+                                                      param:aiagentParam
+                                                   streamID:streamID];
+}
+
+- (void)onPlayerSyncRecvSEI:(NSData *)data streamID:(NSString *)streamID {
+    // 需要把数据传给 AI Agent SDK.
+    [[ZegoAIAgent sharedInstance] onPlayerSyncRecvSEI:data streamID:streamID];
+}
+```
+</Step>
+
+</Steps>
+
+### 结束数字人会话
+
+用户选择结束会话时，需要按照以下步骤处理：
+1. 调用 AIAgent SDK 接口 `[ZegoAIAgent sharedInstance] stopChat` 结束会话。
+2. ZEGO Express SDK 也需要退出房间并且销毁。
+```objective-c
+[[ZegoAIAgent sharedInstance] stopChat:conversationID withCallback:^(NSInteger errorCode, NSString *errMsg, NSString * requestId) {
+}];
+[[ZegoExpressEngine sharedEngine] logoutRoomWithCallback:^(int errorCode, NSDictionary * _Nonnull extendedData) {
+}];
+[ZegoExpressEngine destroyEngine:^{
+}];
+```
+
+## 注意事项
+
+1. 确保在调用 `startChat` 之前已经完成 SDK 初始化和会话创建。
+2. 数字人相关的配置参数（如 metaHumanId等）需要从[数字人PaaS 服务](https://doc-zh.zego.im/article/18584)获取。
+3. 视频分辨率设置需要考虑实际的显示区域和性能需求。(如果这些参数需要用户传，是否需要根据不同场景设置推荐？才能达到最佳体验)
+4. 音频参数调节要在合理范围内，避免影响用户体验。（待定）
