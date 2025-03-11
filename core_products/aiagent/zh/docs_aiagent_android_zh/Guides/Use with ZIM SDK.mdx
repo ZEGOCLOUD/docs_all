@@ -1,0 +1,692 @@
+# 和 ZIM SDK 配合使用
+AI Agent SDK 可以和 ZIM SDK 一起集成使用来快速集成AI聊天功能
+
+## 准备环境
+请确保开发环境满足以下要求：
+
+- Android Studio 2020.3.1 或以上版本。
+- Android SDK 25、Android SDK Build-Tools 25.0.2、Android SDK Platform-Tools 25.x.x 或以上版本。
+- Android 4.4 或以上版本，且支持音视频的 Android 设备。
+- Android 设备已经连接到 Internet。
+
+## 前提条件
+- 已在 ZEGO 控制台 创建项目，获取到了接入 ZIM SDK 服务所需的 AppID、AppSign。ZIM 服务权限不是默认开启的，使用前，请先在 ZEGO 控制台 自助开通 ZIM 服务（详情请参考控制台文档 项目管理 - 即时通讯），若无法开通 ZIM 服务，请联系 ZEGO 技术支持开通。
+- 已经集成了 AI Agent SDK 
+
+## 集成 ZIM SDK 
+参考 ZIM SDK 集成文档
+
+## 核心能力实现
+
+### 初始化 AI Agent SDK 和 ZIM SDK 
+1. 参考 快速开始， 完成 初始化 AI Agent SDK
+2. 初始化 ZIM SDK
+    ```java
+    long appID ;   // 从即构控制台获取
+    String appSign;  // 从即构控制台获取
+
+    ZIMAppConfig appConfig = new ZIMAppConfig();
+    appConfig.appID = appID;  //替换为您申请到的 AppID
+    appConfig.appSign = appSign;   //替换为您申请到的 AppSign
+    ZIM.create(appConfig, getApplication());
+    ```
+### 申请录音权限
+参考 快速开始 - 申请录音权限，完成权限申请
+
+### 创建会话
+1. 创建会话时，需要先登录 ZIM SDK 再创建会话：
+    ```java
+    private String userId = ;  // 用户自己定义的 userId
+    private String userName = ; // 用户自己定义的 userName
+    ZIMLoginConfig config = new ZIMLoginConfig();
+    config.userName = userName;
+    ZIM.getInstance().login(userId, config, new ZIMLoggedInCallback() {
+        @Override
+        public void onLoggedIn(ZIMError errorInfo) {
+            if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+                createConversationIfNeed();
+            }
+        }
+    });
+    ``` 
+2. 创建会话，参考 快速开始 -创建会话，注意，和ZIM SDK 一起使用的时候，使用`ZegoAIAgent.instance().createConversationWithZIM` 来创建会话。
+### 初始化和创建会话的完整代码：
+```java
+import android.Manifest;
+import android.content.Context;
+import android.content.Intent;
+import android.content.res.AssetManager;
+import android.os.Bundle;
+import androidx.activity.result.ActivityResultCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+import com.google.gson.Gson;
+import im.zego.ai_agent.zim.chat.TextChatActivity;
+import im.zego.aiagent.sdk.ZegoAIAgent;
+import im.zego.aiagent.sdk.callback.CreateConversationCallback;
+import im.zego.aiagent.sdk.callback.QueryConversationListCallback;
+import im.zego.aiagent.sdk.data.AuthData;
+import im.zego.aiagent.sdk.data.Conversation;
+import im.zego.aiagent.sdk.data.CustomAgentConfig;
+import im.zego.aiagent.sdk.data.QueryConversationConfig;
+import im.zego.aiagent.sdk.data.QueryConversationListData;
+import im.zego.aiagent.sdk.data.UserProfile;
+import im.zego.zim.ZIM;
+import im.zego.zim.callback.ZIMLoggedInCallback;
+import im.zego.zim.entity.ZIMAppConfig;
+import im.zego.zim.entity.ZIMError;
+import im.zego.zim.entity.ZIMLoginConfig;
+import im.zego.zim.enums.ZIMErrorCode;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+
+public class MainActivity extends AppCompatActivity {
+
+    private String userId = ;  // 用户自己定义的 userId
+    private String userName = ; // 用户自己定义的 userName
+    private String token = ;// 用于SDK鉴权的 token,由用户业务服务器生成或者是从即构控制台获取临时token;
+    private long appID = ;   // 从即构控制台获取
+    private String appSign ;  // 从即构控制台获取
+    private String agentJson;   // 预先创建并且获得的 AI 模版
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
+            return insets;
+        });
+
+        AuthData authData = new AuthData(appID, appSign, token);
+        UserProfile userProfile = new UserProfile(userId, userName);
+        ZegoAIAgent.instance().initSDK(getApplication(), authData, userProfile);
+        initZIM(authData);
+
+        findViewById(R.id.start_voice_chat).setOnClickListener(v -> {
+            requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);
+        });
+
+    }
+
+    private final ActivityResultLauncher<String> requestPermissionLauncher = registerForActivityResult(
+        new ActivityResultContracts.RequestPermission(), new ActivityResultCallback<Boolean>() {
+            @Override
+            public void onActivityResult(Boolean isGranted) {
+                if (isGranted) {
+                    ZIMLoginConfig config = new ZIMLoginConfig();
+                    config.userName = userName;
+                    ZIM.getInstance().login(userId, config, new ZIMLoggedInCallback() {
+                        @Override
+                        public void onLoggedIn(ZIMError errorInfo) {
+                            if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+                                createConversationIfNeed();
+                            }
+                        }
+                    });
+                } else {
+
+                }
+            }
+        });
+
+    private void initZIM(AuthData authData) {
+        ZIMAppConfig appConfig = new ZIMAppConfig();
+        appConfig.appID = authData.appID;  //替换为您申请到的 AppID
+        appConfig.appSign = authData.appSign;   //替换为您申请到的 AppSign
+        ZIM.create(appConfig, getApplication());
+    }
+
+    private void createConversationIfNeed() {
+        CustomAgentConfig xiaoZhiConfig = new Gson().fromJson(agentJson, CustomAgentConfig.class);
+        ZegoAIAgent.instance()
+            .queryConversationList(new QueryConversationConfig(), new QueryConversationListCallback() {
+                @Override
+                public void onResult(int errorCode, String message, String requestId,
+                    QueryConversationListData conversationListData) {
+                    if (errorCode == 0) {
+                        if (conversationListData.conversationList != null
+                            && conversationListData.conversationList.length > 0) {
+                            Conversation conversation = conversationListData.conversationList[0];
+                            onConversationReady(conversation, new UserProfile(userId, userName));
+                        } else {
+                            ZegoAIAgent.instance()
+                                .createConversationWithZIM(xiaoZhiConfig, new CreateConversationCallback() {
+                                    @Override
+                                    public void onResult(int errorCode, String message, String requestId,
+                                        Conversation conversation) {
+                                        if (errorCode == 0) {
+                                            onConversationReady(conversation, new UserProfile(userId, userName));
+                                        }
+                                    }
+                                });
+                        }
+                    }
+                }
+            });
+    }
+
+    private void onConversationReady(Conversation conversation, UserProfile userProfile) {
+        Intent intent = new Intent(MainActivity.this, TextChatActivity.class);
+        Gson gson = new Gson();
+        intent.putExtra("conversation", gson.toJson(conversation));
+        intent.putExtra("userProfile", gson.toJson(userProfile));
+        startActivity(intent);
+    }
+}
+```
+### 发送和接收文本消息
+创建完会话以后，就可以发送和接收文本消息了。这里我们发送单聊消息：
+```java
+Conversation conversation; // 上一步中创建的会话 
+String zimConversationID = conversation.agentId; //  conversation.agentId 即是机器人在zim sdk 中的 id
+String string =  ;  // 用户输入的文本消息
+RecyclerView chatListView ; // 用于展示聊天消息的控件
+ZIMTextMessage zimMessage = new ZIMTextMessage();
+zimMessage.message = string;
+// 在单聊场景中，ZIMConversationType 设置为 PEER, 向机器人发送文本消息。
+ZIM.getInstance().sendMessage(zimMessage, zimConversationID, ZIMConversationType.PEER, new ZIMMessageSendConfig(),new ZIMMessageSentFullCallback() {
+    @Override
+    public void onMessageAttached(ZIMMessage message) {
+        // 消息进行网络发送之前，触发此回调，可以添加到聊天控件去展示。
+        chatListView.onMessageAttached(zimMessage);
+    }
+
+    @Override
+    public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {
+
+    }
+
+    @Override
+    public void onMediaUploadingProgress(ZIMMediaMessage message, long currentFileSize,
+        long totalFileSize) {
+
+    }
+
+    @Override
+    public void onMultipleMediaUploadingProgress(ZIMMultipleMessage message, long currentFileSize,
+        long totalFileSize, int messageInfoIndex, long currentIndexFileSize,
+        long totalIndexFileSize) {
+
+    }
+});
+```
+通过ZIM SDK 的回调即可接收别人发送给你的消息：
+```java
+RecyclerView chatListView ; // 用于展示聊天消息的控件，
+Conversation conversation; // 上一步中创建的会话 
+String zimConversationID = conversation.agentId; //  conversation.agentId 即是机器人在zim sdk 中的 id
+ZIM.getInstance().setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onPeerMessageReceived(ZIM zim, ArrayList<ZIMMessage> messageList, ZIMMessageReceivedInfo info,
+        String fromUserID) {
+        // 只添加本会话的消息到本页面
+        List<ZIMMessage> collect = messageList.stream()
+            .filter(zimMessage -> Objects.equals(zimConversationID, zimMessage.getConversationID()))
+            .collect(Collectors.toList());
+        chatListView.onPeerMessageReceived(collect, info, fromUserID);
+    }
+});
+```
+这样子，我们就完成了和机器人的文本聊天。当你发送单聊消息时，就会收到来自AI 机器人的回复了。
+
+
+### 文本聊天页面完整代码：
+
+
+```java
+import android.content.Intent;
+import android.os.Bundle;
+import android.text.TextUtils;
+import android.widget.EditText;
+import android.widget.TextView;
+import android.widget.Toast;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+import com.google.gson.Gson;
+import im.zego.ai_agent.zim.R;
+import im.zego.aiagent.sdk.data.Conversation;
+import im.zego.aiagent.sdk.data.UserProfile;
+import im.zego.zim.ZIM;
+import im.zego.zim.callback.ZIMEventHandler;
+import im.zego.zim.callback.ZIMMessageSentFullCallback;
+import im.zego.zim.entity.ZIMError;
+import im.zego.zim.entity.ZIMMediaMessage;
+import im.zego.zim.entity.ZIMMessage;
+import im.zego.zim.entity.ZIMMessageReceivedInfo;
+import im.zego.zim.entity.ZIMMessageSendConfig;
+import im.zego.zim.entity.ZIMMultipleMessage;
+import im.zego.zim.entity.ZIMTextMessage;
+import im.zego.zim.enums.ZIMConversationType;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
+
+public class TextChatActivity extends AppCompatActivity {
+
+    private Gson gson = new Gson();
+    private String zimConversationID;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_text_chat);
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
+            return insets;
+        });
+
+        // 当前聊天的会话
+        Conversation conversation = gson.fromJson(getIntent().getStringExtra("conversation"), Conversation.class);
+        UserProfile userProfile = gson.fromJson(getIntent().getStringExtra("userProfile"), UserProfile.class);
+
+        zimConversationID = conversation.agentId; //  // agentId 被用作zim 的 userID,也就是 zim 的 ConversationId
+
+        TextChatListView chatListView = findViewById(R.id.chat_message_layout);
+        chatListView.setUserInfo(userProfile, conversation);
+
+        ZIM.getInstance().setEventHandler(new ZIMEventHandler() {
+            @Override
+            public void onPeerMessageReceived(ZIM zim, ArrayList<ZIMMessage> messageList, ZIMMessageReceivedInfo info,
+                String fromUserID) {
+                // 只添加本会话的消息到本页面
+                List<ZIMMessage> collect = messageList.stream()
+                    .filter(zimMessage -> Objects.equals(zimConversationID, zimMessage.getConversationID()))
+                    .collect(Collectors.toList());
+                chatListView.onPeerMessageReceived(collect, info, fromUserID);
+            }
+        });
+
+        TextView aiName = findViewById(R.id.ai_name);
+        aiName.setText(conversation.customAgentConfig.name);
+
+        EditText chatText = findViewById(R.id.chat_text);
+        findViewById(R.id.send_text).setOnClickListener(v -> {
+            String string = chatText.getText().toString();
+            if (TextUtils.isEmpty(string)) {
+                Toast.makeText(TextChatActivity.this, "请输入文本", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            ZIMTextMessage zimMessage = new ZIMTextMessage();
+            zimMessage.message = string;
+            // 在单聊场景中，ZIMConversationType 设置为 PEER
+            ZIM.getInstance().sendMessage(zimMessage, zimConversationID, ZIMConversationType.PEER, new ZIMMessageSendConfig(),
+                    new ZIMMessageSentFullCallback() {
+                        @Override
+                        public void onMessageAttached(ZIMMessage message) {
+                            chatListView.onMessageAttached(zimMessage);
+                        }
+
+                        @Override
+                        public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {
+
+                        }
+
+                        @Override
+                        public void onMediaUploadingProgress(ZIMMediaMessage message, long currentFileSize,
+                            long totalFileSize) {
+
+                        }
+
+                        @Override
+                        public void onMultipleMediaUploadingProgress(ZIMMultipleMessage message, long currentFileSize,
+                            long totalFileSize, int messageInfoIndex, long currentIndexFileSize,
+                            long totalIndexFileSize) {
+
+                        }
+                    });
+            chatText.setText("");
+        });
+
+        findViewById(R.id.voice_chat).setOnClickListener(v -> {
+            Intent intent = new Intent(TextChatActivity.this, VoiceChatActivity.class);
+            Gson gson = new Gson();
+            intent.putExtra("conversation", gson.toJson(conversation));
+            intent.putExtra("userProfile", gson.toJson(userProfile));
+            startActivity(intent);
+        });
+    }
+}
+```
+
+activity_text_chat.xml:
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:app="http://schemas.android.com/apk/res-auto"
+  xmlns:tools="http://schemas.android.com/tools"
+  android:id="@+id/main"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  tools:context=".chat.TextChatActivity">
+
+  <TextView
+    android:id="@+id/ai_name"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="8dp"
+    android:ellipsize="end"
+    android:gravity="center_vertical"
+    android:maxLines="1"
+    android:textSize="18sp"
+    android:textStyle="bold"
+    app:layout_constraintEnd_toEndOf="parent"
+    app:layout_constraintStart_toStartOf="parent"
+    app:layout_constraintTop_toTopOf="parent" />
+
+  <Button
+    android:id="@+id/voice_chat"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="8dp"
+    android:ellipsize="end"
+    android:gravity="center_vertical"
+    android:maxLines="1"
+    android:text="语音聊天"
+    android:textSize="18sp"
+    android:textStyle="bold"
+    app:layout_constraintEnd_toEndOf="parent"
+    app:layout_constraintTop_toTopOf="parent" />
+
+  <im.zego.ai_agent.zim.chat.TextChatListView
+    android:id="@+id/chat_message_layout"
+    android:layout_width="match_parent"
+    android:layout_height="0dp"
+    app:layout_constraintBottom_toTopOf="@id/chat_text"
+    app:layout_constraintEnd_toEndOf="parent"
+    app:layout_constraintStart_toStartOf="parent"
+    app:layout_constraintTop_toBottomOf="@id/ai_name" />
+
+
+  <EditText
+    android:id="@+id/chat_text"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="24dp"
+    app:layout_constraintBottom_toBottomOf="parent"
+    app:layout_constraintEnd_toStartOf="@+id/send_text"
+    app:layout_constraintStart_toStartOf="parent" />
+
+  <Button
+    android:id="@+id/send_text"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="24dp"
+    android:text="发送"
+    app:layout_constraintBottom_toBottomOf="parent"
+    app:layout_constraintEnd_toEndOf="parent"
+    app:layout_constraintStart_toEndOf="@+id/chat_text" />
+
+
+</androidx.constraintlayout.widget.ConstraintLayout>
+```
+
+聊天页面列表控件：
+```java
+
+import android.content.Context;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
+import android.util.AttributeSet;
+import android.view.Gravity;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+import im.zego.ai_agent.zim.R;
+import im.zego.aiagent.sdk.data.Conversation;
+import im.zego.aiagent.sdk.data.UserProfile;
+import im.zego.zim.entity.ZIMMessage;
+import im.zego.zim.entity.ZIMMessageReceivedInfo;
+import im.zego.zim.entity.ZIMTextMessage;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+
+public class TextChatListView extends RecyclerView {
+
+    private ChatMessageAdapter adapter;
+
+    public TextChatListView(@NonNull Context context) {
+        super(context);
+        initView();
+    }
+
+    public TextChatListView(@NonNull Context context, @Nullable AttributeSet attrs) {
+        super(context, attrs);
+        initView();
+    }
+
+    public TextChatListView(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+        initView();
+    }
+
+    private void initView() {
+        // 创建并设置布局管理器
+        LinearLayoutManager layoutManager = new LinearLayoutManager(getContext());
+        layoutManager.setStackFromEnd(true); // 设置从底部开始堆叠
+        setLayoutManager(layoutManager);
+        // 初始化适配器
+        adapter = new ChatMessageAdapter();
+        setAdapter(adapter);
+    }
+
+    public void onPeerMessageReceived(List<ZIMMessage> messageList, ZIMMessageReceivedInfo info, String fromUserID) {
+        adapter.onPeerMessageReceived(messageList);
+        smoothScrollToPosition(adapter.getItemCount() - 1);
+    }
+
+    public void onMessageAttached(ZIMMessage zimMessage) {
+        adapter.onMessageAttached(zimMessage);
+        smoothScrollToPosition(adapter.getItemCount() - 1);
+    }
+
+    public void setUserInfo(UserProfile userProfile, Conversation conversation) {
+        adapter.setUserInfo(userProfile, conversation);
+    }
+
+    public static class ChatMessageAdapter extends RecyclerView.Adapter<ChatMessageAdapter.MessageViewHolder> {
+
+        private List<ZIMMessage> chatMessageList;
+        private SimpleDateFormat dateFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
+        private GradientDrawable selfBackground; // 自己消息的背景
+        private UserProfile userProfile;
+        private Conversation conversation;
+        private GradientDrawable otherBackground;
+
+        public ChatMessageAdapter() {
+            this.chatMessageList = new ArrayList<>();
+        }
+
+        // 辅助方法：将 dp 转换为 px
+        private int dpToPx(int dp, Context context) {
+            return (int) (dp * context.getResources().getDisplayMetrics().density + 0.5f);
+        }
+
+        @NonNull
+        @Override
+        public MessageViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_chat_message, parent, false);
+            return new MessageViewHolder(view);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull MessageViewHolder holder, int position) {
+            ZIMMessage message = chatMessageList.get(position);
+
+            // 假设文本消息是 ZIMTextMessage 类型，需要类型转换
+            if (message instanceof ZIMTextMessage) {
+                ZIMTextMessage textMessage = (ZIMTextMessage) message;
+                holder.contentTextView.setText(textMessage.message);
+            }
+
+            // 设置发送者名字
+            if (userProfile != null) {
+                if (Objects.equals(message.getSenderUserID(), userProfile.userID)) {
+                    holder.senderNameTextView.setText(userProfile.userName);
+                }
+            }
+
+            if (conversation != null) {
+                if (Objects.equals(message.getSenderUserID(), conversation.agentId)) {
+                    holder.senderNameTextView.setText(conversation.customAgentConfig.name);
+                }
+            }
+
+            // 设置时间
+            String time = dateFormat.format(new Date(message.getTimestamp()));
+            holder.timestampTextView.setText(time);
+
+            // 初始化自己消息的背景 (相当于 message_background_self.xml)
+            if (selfBackground == null) {
+                selfBackground = new GradientDrawable();
+                selfBackground.setShape(GradientDrawable.RECTANGLE);
+                selfBackground.setColor(Color.parseColor("#90CAF9")); // 蓝色背景
+                selfBackground.setCornerRadius(dpToPx(8, holder.contentTextView.getContext())); // 8dp 圆角
+            }
+
+            if (otherBackground == null) {
+                otherBackground = new GradientDrawable();
+                otherBackground.setShape(GradientDrawable.RECTANGLE);
+                otherBackground.setColor(Color.parseColor("#bbbbbb")); // 灰色背景
+                otherBackground.setCornerRadius(dpToPx(8, holder.contentTextView.getContext())); // 8dp 圆角
+            }
+
+            // 根据消息方向调整布局
+            LinearLayout.LayoutParams containerParams = (LinearLayout.LayoutParams) holder.messageContainer.getLayoutParams();
+            LinearLayout.LayoutParams contentParams = (LinearLayout.LayoutParams) holder.contentTextView.getLayoutParams();
+            LinearLayout.LayoutParams timeParams = (LinearLayout.LayoutParams) holder.timestampTextView.getLayoutParams();
+            LinearLayout.LayoutParams nameParams = (LinearLayout.LayoutParams) holder.senderNameTextView.getLayoutParams();
+
+            if (userProfile != null) {
+                if (Objects.equals(message.getSenderUserID(), userProfile.userID)) {
+                    holder.messageContainer.setGravity(Gravity.END); // 设置容器内的子视图靠右
+                    holder.contentTextView.setBackground(selfBackground);
+                    contentParams.gravity = Gravity.END;
+                    timeParams.gravity = Gravity.END;
+                    nameParams.gravity = (Gravity.END); // 名字也靠右
+                } else {
+                    holder.messageContainer.setGravity(Gravity.START); // 设置容器内的子视图靠左
+                    holder.contentTextView.setBackground(otherBackground);
+                    contentParams.gravity = Gravity.START;
+                    timeParams.gravity = Gravity.START;
+                    nameParams.gravity = (Gravity.START); // 名字靠左
+                }
+            }
+
+            holder.contentTextView.setLayoutParams(contentParams);
+            holder.messageContainer.setLayoutParams(containerParams);
+        }
+
+        @Override
+        public int getItemCount() {
+            return chatMessageList.size();
+        }
+
+        public void onPeerMessageReceived(List<ZIMMessage> messageList) {
+            this.chatMessageList.addAll(messageList);
+            notifyItemRangeInserted(chatMessageList.size() - messageList.size(), messageList.size());
+        }
+
+        public void onMessageAttached(ZIMMessage zimMessage) {
+            chatMessageList.add(zimMessage);
+            notifyItemInserted(chatMessageList.size() - 1);
+        }
+
+        public void setUserInfo(UserProfile userProfile, Conversation conversation) {
+            this.userProfile = userProfile;
+            this.conversation = conversation;
+        }
+
+        static class MessageViewHolder extends RecyclerView.ViewHolder {
+
+            TextView senderNameTextView;
+            TextView contentTextView;
+            TextView timestampTextView;
+            LinearLayout messageContainer;
+
+            MessageViewHolder(@NonNull View itemView) {
+                super(itemView);
+                senderNameTextView = itemView.findViewById(R.id.tv_sender_name);
+                contentTextView = itemView.findViewById(R.id.tv_message_content);
+                timestampTextView = itemView.findViewById(R.id.tv_timestamp);
+                messageContainer = itemView.findViewById(R.id.message_container);
+            }
+        }
+    }
+}
+
+```
+
+聊天消息列表控件 item_chat_message.xml:
+```java
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:layout_width="match_parent"
+  android:layout_height="wrap_content"
+  android:orientation="vertical"
+  android:padding="8dp">
+
+  <!-- 发送者名字 -->
+  <TextView
+    android:id="@+id/tv_sender_name"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:textColor="@android:color/darker_gray"
+    android:textSize="12sp" />
+
+  <!-- 消息内容容器 -->
+  <LinearLayout
+    android:id="@+id/message_container"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal">
+
+    <!-- 消息内容 -->
+    <TextView
+      android:id="@+id/tv_message_content"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_marginTop="4dp"
+      android:maxWidth="240dp"
+      android:padding="8dp"
+      android:textColor="@android:color/black"
+      android:textSize="16sp" />
+
+  </LinearLayout>
+
+  <!-- 时间 -->
+  <TextView
+    android:id="@+id/tv_timestamp"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="2dp"
+    android:textColor="@android:color/darker_gray"
+    android:textSize="10sp" />
+
+</LinearLayout>
+```
+
+### 实现语音聊天界面【可选】
+参考 快速开始- 实现 AI 语音互动 来完成语音聊天界面
