@@ -20,14 +20,13 @@
 - 视频输出控制：支持设置视频分辨率和格式。（待定）
 
 ## 实现AI数字人互动
-参考 快速开始 -  创建会话，创建会话完成以后，就可以准备开启数字人会话了。
+参考 [快速开始 -  创建会话](../Quick%20Start/Based%20on%20%20SDK.mdx#创建会话)，创建会话完成后，即可开启数字人会话功能。
 
 ### 开启数字人会话
 <Steps>
 <Step title="初始化 ZegoExpress SDK">
-通过 [createEngine](https://doc-zh.zego.im/article/api?doc=express-audio-sdk_API~java_android~class~ZegoExpressEngine#create-engine) 接口初始化 ZegoExpress SDK
+通过 [createEngine](https://doc-zh.zego.im/article/api?doc=express-audio-sdk_API~java_android~class~ZegoExpressEngine#create-engine) 接口初始化 Zego Express SDK
 ```java
-     
 private void initExpressSDK() {
     ZegoEngineConfig config = new ZegoEngineConfig();
     HashMap<String, String> advanceConfig = new HashMap<>();
@@ -51,7 +50,7 @@ private void initExpressSDK() {
 ```
 </Step>
 <Step title="登录 Express 房间">
-完成 ZegoExpress SDK 初始化后，调用 [loginRoom](https://doc-zh.zego.im/article/api?doc=express-audio-sdk_API~java_android~class~ZegoExpressEngine#login-room-2) 登录 Express 房间
+完成 Zego Express SDK 初始化后，调用 [loginRoom](https://doc-zh.zego.im/article/api?doc=express-audio-sdk_API~java_android~class~ZegoExpressEngine#login-room-2) 登录 Express 房间
 
 ```java
 
@@ -67,32 +66,36 @@ ZegoExpressEngine.getEngine().loginRoom(roomID, new ZegoUser(userProfile.userID,
 </Step>
 
 <Step title="开启会话并且拉流">
-进入房间成功以后，调用 AIAgentSDK 接口 `ZegoAIAgent.instance().startChat`开启数字人会话,开启成功以后设置RTC自定义渲染并且监听回调并推拉流：
+进入房间成功以后，调用 AIAgentSDK 接口 [startChat](../Client%20API/API%20reference.mdx#startchat) 开启数字人会话,开启成功以后设置 ZEGO Express SDK 自定义渲染并且监听回调，调用 [startPublishingStream](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~java_android~class~ZegoExpressEngine#start-publishing-stream) 和 [startPlayingStream](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~java_android~class~ZegoExpressEngine#start-playing-stream-2) 推拉流。
 ```java
 // .. 参考上一步
 Conversation conversation;  // 当前页面的会话信息
 ZegoPreviewView previewView  ; // 用户自己创建，用来渲染数字人的view
+String roomId; // 房间ID，用户可以自定义生成规则
+String userStreamID ;  // 用户推流ID，用户可以自定义生成规则
+String agentStreamId ;  // AI语音流ID，用户可以自定义生成规则
+String metaHumanStreamID // 数字人的流ID，用户可以自定义生成规则
+String metaHumanID ;     // 
 ZegoExpressEngine.getEngine().loginRoom(...,new IZegoRoomLoginCallback() {
     @Override
     public void onRoomLoginResult(int errorCode, JSONObject extendedData) 
     {
         if(errorCode == 0){
             customRender();
-            String metaHumanStreamID // 数字人的流ID，由客户自定义规则生成;
-            ZegoAIAgentKit.getInstance().startChat(conversation.conversationId, previewView, new StartRTCVideoChatCallback() {
+      
+            ZegoAIAgent.instance().startChat(conversation.conversationId,roomId,userStreamID,agentStreamId,metaHumanStreamId,metaHumanID,previewView, new StartRTCVideoChatCallback() {
                 @Override
                 public void onResult(int errorCode1, String message1,String requestId1) {
                     if (errorCode1 == 0) {
                         // 设置拉流缓冲大小
                         ZegoExpressEngine.getEngine().setPlayStreamBufferIntervalRange(metaHumanStreamID, 100, 2000);
                         // 开始拉流
-                        ZegoExpressEngine.getEngine().startPlayStream(metaHumanStreamID);
+                        ZegoExpressEngine.getEngine().startPlayingStream(metaHumanStreamID);
                     } 
                 }
 
                 @Override
                 public void onSurfaceFirstFrameDraw() {
-                    // 在首帧过来的时候才认为 AIAgent 启动成功，startRTC success 的时候还没有创建成功，后台启动数字人需要时间。
                     // 开始推流
                     ZegoExpressManager.getInstance().startPublishingStream(publishStreamID);
                 }
@@ -133,6 +136,7 @@ pulic void customRender(){
     mExpressEventListener = new IZegoEventHandler() {
         @Override
         public void onPlayerSyncRecvSEI(String streamID, byte[] data) {
+            // 需要把数据传给 AI Agent SDK.
             ZegoAIAgent.instance().onPlayerSyncRecvSEI(streamID, data);
         }
     };
@@ -146,19 +150,17 @@ pulic void customRender(){
 ### 结束数字人会话
 
 用户选择结束会话时，需要按照以下步骤处理：
-1. 调用 AIAgent SDK 接口 `ZegoAIAgent.instance().stopChat` 结束会话。
-2. ZEGO Express SDK 也需要退出房间并且销毁。
+1. 调用 AIAgent SDK 接口 [stopChat](../Client%20API/API%20reference.mdx#stopchat) 结束会话。
+2. ZEGO Express SDK 也需要调用 [logoutRoom](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~java_android~class~ZegoExpressEngine#logout-room-2) 和 [destroyEngine](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~java_android~class~ZegoExpressEngine#destroy-engine) 退出并且销毁房间。
 ```java
 Conversation conversation;  // 当前页面的会话信息
 ZegoAIAgent.instance().stopChat(conversation.conversationId, null);
 ZegoExpressEngine.getEngine().logoutRoom();
 ZegoExpressEngine.getEngine().destroyEngine();
 ```
-```
 
 ## 注意事项
 
-1. 确保在调用 `startChat` 之前已经完成 SDK 初始化和会话创建。
-2. 数字人相关的配置参数（如 metaHumanId等）需要从[数字人PaaS 服务](https://doc-zh.zego.im/article/18584)获取。
-3. 视频分辨率设置需要考虑实际的显示区域和性能需求。(如果这些参数需要用户传，是否需要根据不同场景设置推荐？才能达到最佳体验)
-4. 音频参数调节要在合理范围内，避免影响用户体验。（待定）
+1. 确保在调用 [startChat](../Client%20API/API%20reference.mdx#startchat) 之前已经完成 SDK 初始化和会话创建。
+2. 数字人相关的配置参数（如 metaHumanId 等）需要从[数字人 PaaS 服务](https://doc-zh.zego.im/article/18584)获取。
+3. 音频参数调节要在合理范围内，避免影响用户体验。（待定）
