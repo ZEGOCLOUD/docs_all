@@ -2,7 +2,7 @@
 --- 
 ## 准备环境
 
-在开始集成 ZEGO Express SDK 前，请确保开发环境满足以下要求：
+在开始集成 AI Agent SDK 前，请确保开发环境满足以下要求：
 
 - Xcode 15.0 或以上版本。
 - iOS 12.0 或以上版本且支持音视频的 iOS 设备。
@@ -11,18 +11,35 @@
 ## 前提条件
 - 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目信息](https://doc-zh.zego.im/article/12107)。
 - 联系 ZEGO 技术支持，开通 AI Agent 相关服务。
-- 已经集成了 [ZEGO Express SDK](https://doc-zh.zego.im/article/195)。
+- 已经集成了 [ZEGO Express SDK](https://doc-zh.zego.im/article/3574)。
 
 
 ## 集成SDK
 
-### 新建项目（已有项目，可忽略此步骤）
+### 新建项目【可选】
+
+<Accordion title="此步骤以如何创建新项目为例，如果是集成到已有项目，可忽略此步。" defaultOpen="false">
+
+1. 启动 Xcode，在 “Welcome to Xcode” 窗口中单击 “Create a new Xcode project” 或选择 “File > New > Project” 菜单。在出现的表单中，选择 iOS 平台，并在 “Application” 下选择 “App”。
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/QuickStart/NewProject_1.png" /></Frame>
+
+2. 填写表单并选取各个选项来配置项目，完成后，单击 “Next”。
+
+    必须提供 “Product Name” 和 “Organization Identifier”，用于创建 App 的唯一标识 “Bundle Identifier”。
+    <Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/QuickStart/NewProject_2.png" /></Frame>
+
+3. 选择项目存储路径，单击 “Create” 创建项目。
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/QuickStart/NewProject_3.png" /></Frame>
+
+</Accordion>
 
 ### 复制 SDK 文件手动集成
+
 1. 下载 SDK
 2. 将解压后的 libs 文件夹拷贝至您的项目同级目录下，如 “$project_root/libs”。
 3. 在项目目录下的 Podfile 文件添加以下代码：
-```podfile
+
+```bash
 platform :ios, '13.0'
 
 target 'YourProjectName' do
@@ -44,31 +61,37 @@ end
 ## 核心能力实现
 
 ### 初始化用户信息和 SDK 参数
-1. 在开始使用 AI Agent 之前，您需要完成以下步骤：
-    - 完成 RTC 初始化
+
+在开始使用 AI Agent 之前，您需要完成以下步骤：
+    - 完成 ZEGO Express SDK 初始化
 
     <Warning title="注意">
-    在实现 AI Agent 的功能之前，请确保已经集成了 [ZEGO Express iOS SDK](https://doc-zh.zego.im/article/196)。
+    在实现 AI Agent 的功能之前，请确保已经集成了 [ZEGO Express SDK](https://doc-zh.zego.im/article/3574)。
     </Warning>
 
     - 已经预先创建并且获得 AI 模版
     - 已经获取到用户信息包含id,name
     - 已经获取到用于 SDK 鉴权的 appid,appSign,token
-2. 初始化SDK
-    ```objective-c
-    UserProfile *userProfile = [[UserProfile alloc] init];
-    userProfile.userID = @"userid";// 用户自己定义的 userId
-    userProfile.userName = @"username";// 用户自己定义的 userName
-    
-    AuthData *authData = [[AuthData alloc] init];
-    authData.appID = @"appid";// 从即构控制台获取
-    authData.appSign = @"appSign";// 从即构控制台获取
-    authData.token = @"appToken";// 用于SDK鉴权的 token,由用户业务服务器生成或者是从即构控制台获取临时token;
-    
-    [[ZegoAIAgent sharedInstance] initSDK:authData userProfile:userProfile];
-    ```
-3. 进入语音聊天之前，需要申请语音权限
-    ```objective-c
+
+<Steps>
+<Step title="初始化SDK">
+通过 [initSDK](../Client%20API/API%20reference.mdx#initsdk) 接口初始化 AI Agent SDK
+```objc
+UserProfile *userProfile = [[UserProfile alloc] init];
+userProfile.userID = @"userid";// 用户自己定义的 userId
+userProfile.userName = @"username";// 用户自己定义的 userName
+
+AuthData *authData = [[AuthData alloc] init];
+authData.appID = @"appid";// 从即构控制台获取
+authData.appSign = @"appSign";// 从即构控制台获取
+authData.token = @"appToken";// 用于SDK鉴权的 token,由用户业务服务器生成或者是从即构控制台获取临时token;
+
+[[ZegoAIAgent sharedInstance] initSDK:authData userProfile:userProfile];
+```
+</Step>
+<Step title="申请语音权限">
+进入语音聊天之前，需要申请语音权限
+    ```objc
     AVAudioSession *audioSession = [AVAudioSession sharedInstance];
     [audioSession requestRecordPermission:^(BOOL granted) {
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -81,13 +104,15 @@ end
     <key>NSMicrophoneUsageDescription</key>
     <string>需要访问麦克风以进行语音聊天</string>
     ```
+</Step>
+</Steps>
 
 
 ### 创建会话
 在获取语音权限以后，需要根据预先创建并且获得的AI模版来创建会话,实现逻辑如下：
-1. 使用 SDK 接口 `[ZegoAIAgent sharedInstance] queryConversationList` 查询当前用户是否已经创建过会话，如果已经创建过会话，则不用再创建。
-2. 如果没有创建过会话，则需要使用 SDK 接口 `[ZegoAIAgent sharedInstance] createConversation` 来创建会话。
-```objective-c
+1. 使用 AI Agent SDK 接口 [queryConversationList](../Client%20API/API%20reference.mdx#queryconversationlist) 查询当前用户是否已经创建过会话，如果已经创建过会话，则不用再创建。
+2. 如果没有创建过会话，则需要使用 AI Agent SDK 接口 [createConversation](../Client%20API/API%20reference.mdx#createconversation) 来创建会话。
+```objc
     - (void)createConversationIfNeeded:(void(^)(ConversationConfigInfo *conversation, NSError *error))completion {
         CustomAgentConfig *xiaoZhiConfig = [[CustomAgentConfig alloc] init];// 预先创建并且获得的AI模版
 
@@ -132,27 +157,35 @@ end
 
 ### 实现 AI 语音互动
 
-创建会话以后，就可以继续以下步骤来进行语音互动了：
-1. 初始化 ZegoExpress SDK 并且登录房间 和推流，具体过程见 [实现流程](https://doc-zh.zego.im/article/7628#4)
-```objective-c
-ZegoEngineProfile* profile = [[ZegoEngineProfile alloc]init];
-profile.appID = @"appid";
-profile.appSign = @"appSign";
-profile.scenario = ZegoScenarioStandardVoiceCall; //设置该场景可以避免申请相机权限，接入方应按自己的业务场景设置具体值
+<Steps>
+<Step title="初始化 ZegoExpress SDK">
+通过[createEngineWithProfile](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#create-engine-with-profile-event-handler) 接口初始化 ZegoExpress SDK ，具体过程见 [创建引擎](https://doc-zh.zego.im/article/7631#2_1)
+```objc
+  ZegoEngineProfile* profile = [[ZegoEngineProfile alloc]init];
+  profile.appID = @"appid";
+  profile.appSign = @"appSign";
+  profile.scenario = ZegoScenarioStandardVoiceCall; //设置该场景可以避免申请相机权限，接入方应按自己的业务场景设置具体值
 
-ZegoEngineConfig* engineConfig = [[ZegoEngineConfig alloc] init];
-engineConfig.advancedConfig = @{
-    @"notify_remote_device_unknown_status": @"true",
-    @"notify_remote_device_init_status":@"true",
-    @"enforce_audio_loopback_in_sync": @"true", /**该配置用来做应答延迟优化的，需要集成对应版本的ZegoExpressEngine sdk，请联系即构同学**/
-};
+  ZegoEngineConfig* engineConfig = [[ZegoEngineConfig alloc] init];
+  engineConfig.advancedConfig = @{
+      @"notify_remote_device_unknown_status": @"true",
+      @"notify_remote_device_init_status":@"true",
+      @"enforce_audio_loopback_in_sync": @"true",
+  };
 
-[ZegoExpressEngine setEngineConfig:engineConfig];
+  // 设置引擎配置并创建引擎实例
+  [ZegoExpressEngine setEngineConfig:engineConfig];
+  [ZegoExpressEngine createEngineWithProfile:profile eventHandler:self];
+
 ```
 
-2. 登录 Express 房间并且推流， 具体过程见 [](https://doc-zh.zego.im/article/7628#4)。推流成功后，调用 AIAgentSDK 接口 `[ZegoAIAgent sharedInstance] startChat`来开启会话，并且在开启会话成功以后，主动去拉 AI 的语音流：
-```objective-c
-    //请注意：开启AI降噪需要联系即构同学拿对应的ZegoExpressionEngine.xcframework，具备该能力的版本还未发布
+</Step>
+<Step title="登录 Express 房间并且推流">
+调用 [loginRoom](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#login-room-user-config-callback) 和 [startPlayingStream](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#start-playing-stream) 接口登录 Express 房间并且推流， 具体过程见 [登录房间](https://doc-zh.zego.im/article/7631#2_2)。
+
+推流成功后，调用 AI Agent SDK 的 [startChat](../Client%20API/API%20reference.mdx#startchat) 接口来开启会话，并且在开启会话成功以后，主动去拉 AI 的语音流：
+```objc
+
     [[ZegoExpressEngine sharedEngine] enableAEC:enable];
     [[ZegoExpressEngine sharedEngine] enableAGC:enable];
     [[ZegoExpressEngine sharedEngine] enableANS:enable];
@@ -192,32 +225,46 @@ engineConfig.advancedConfig = @{
         }];
     }];
 ```
-3. 此时会话已经成功建立，用户可以通过 Express SDK 的 `onIMRecvCustomCommand` 回调来获取并且展示语音聊天的文本内容,具体的展示逻辑见 [获取AI状态 & 字幕](../Guides/Obtain%20AI%20status%20and%20subtitles.mdx)
+</Step>
+<Step title="获取 AI 状态和字幕">
+此时会话已经成功建立，用户可以通过 ZEGO Express SDK 的 [onIMRecvCustomCommand](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~objective-c_ios~protocol~ZegoEventHandler#on-im-recv-custom-command-from-user-room-id) 回调来获取并且展示语音聊天的文本内容,具体的展示逻辑见 [获取 AI 状态和字幕](../Guides/Obtain%20AI%20status%20and%20subtitles.mdx)
+</Step>
+</Steps>
+
 
 
 ### 结束会话
 用户选择结束会话时，需要按照以下步骤处理：
-1. 调用 AIAgent SDK 接口 `[ZegoAIAgent sharedInstance] stopChat` 结束会话。
-2. Express SDK 也需要退出房间并且销毁。
-```objective-c
+1. 调用 AIAgent SDK 接口 [stopChat](../Client%20API/API%20reference.mdx#stopchat) 结束会话。
+2. ZEGO Express SDK 也需要退出房间并且销毁。
+```objc
+// 结束会话
 [[ZegoAIAgent sharedInstance] stopChat:conversationID withCallback:^(NSInteger errorCode, NSString *errMsg, NSString * requestId) {
 }];
+
+// 退出房间
 [[ZegoExpressEngine sharedEngine] logoutRoomWithCallback:^(int errorCode, NSDictionary * _Nonnull extendedData) {
 }];
+
+// 销毁引擎
 [ZegoExpressEngine destroyEngine:^{
 }];
 ```
 
+<Accordion title="语音聊天页面完整示例代码" defaultOpen="false">
 
-### 语音聊天页面完整代码
-```
+<Tabs>
+<TabItem title="AudioChatViewController.h">
+```objc
 #import <UIKit/UIKit.h>
 
 @interface AudioChatViewController : UIViewController
 
 @end 
 ```
-```
+</TabItem>
+<TabItem title="AudioChatViewController.m">
+```objc
 
 #import "AudioChatViewController.h"
 
@@ -484,7 +531,7 @@ engineConfig.advancedConfig = @{
     }];
 }
 
-// 初始化即构表达引擎
+// 初始化 Zego Express SDK
 - (void)initZegoExpressEngine {
     // 创建引擎配置文件
     ZegoEngineProfile* profile = [[ZegoEngineProfile alloc]init];
@@ -497,7 +544,7 @@ engineConfig.advancedConfig = @{
     engineConfig.advancedConfig = @{
         @"notify_remote_device_unknown_status": @"true",
         @"notify_remote_device_init_status":@"true",
-        @"enforce_audio_loopback_in_sync": @"true", /**该配置用来做应答延迟优化的，需要集成对应版本的ZegoExpressEngine sdk，请联系即构同学**/
+        @"enforce_audio_loopback_in_sync": @"true",
     };
     
     // 设置引擎配置并创建引擎实例
@@ -643,7 +690,7 @@ engineConfig.advancedConfig = @{
     [self unInitZegoExpressEngine];
 }
 
-// 销毁即构表达引擎
+// 销毁 Zego Express SDK
 - (void)unInitZegoExpressEngine {
     // 停止音量监控
     [[ZegoExpressEngine sharedEngine] stopSoundLevelMonitor];
@@ -697,4 +744,6 @@ engineConfig.advancedConfig = @{
 
 ```
 
-## demo 地址
+</TabItem>
+</Tabs>
+</Accordion>
