@@ -1,0 +1,251 @@
+---
+articleID: 17429
+---
+
+import { getPlatformData } from "/snippets/utils-content-parser.js"
+import { ZIMTextMessageMap, ZIMCustomMessageMap, ZIMMultipleMessageMap, setEventHandlerMap, messageEditedMap, editMessageMap } from "/snippets/zim/const-link.mdx"
+
+export const ZIMMessageEditedCallbackMap = {
+  'Web': <a href='@-ZIMMessageEditedResult' target='_blank'>ZIMMessageEditedResult</a>,
+  'window,iOS,mac': <a href='@ZIMMessageEditedCallback' target='_blank'>ZIMMessageEditedCallback</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMMessageEditedResult-class.html' target='_blank'>ZIMMessageEditedResult</a>,
+}
+
+# 编辑消息
+
+- - -
+
+## 功能简介
+
+<Note title="说明">
+
+如需使用本功能，请开通旗舰版套餐。
+</Note>
+
+ZIM SDK 支持用户在单聊或群聊中修改已发送的消息，更新内容将实时同步至会话所有成员，确保沟通信息即时一致。
+
+<Frame width="60%" height="auto">
+  <img src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/27f9807483.png" alt="Edit_a_message_zh.png"/>
+</Frame>
+
+
+## 设置监听
+
+会话参与者注册 {getPlatformData(props,setEventHandlerMap)} 监听 {getPlatformData(props,messageEditedMap)} 回调监听消息编辑的相关通知。当其他用户编辑消息后，可以直接获取编辑后的消息的相关信息，包括编辑时间和编辑者等。
+
+:::if{props.platform=undefined}
+```java title="示例代码"
+// 注册事件
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onMessageEdited(ZIM zim, ArrayList<ZIMMessage> messageList) {
+        // 收到编辑后的消息列表时，可按照业务需求更新  UI
+    }
+});
+:::
+:::if{props.platform="iOS|mac"}
+```objc title="示例代码"
+// 注册事件
+- (void)zim:(ZIM *)zim messageEdited:(NSArray<ZIMMessage *> *)messageList {
+    if (zim != self.zim) {
+        return;
+    }
+    // 收到编辑后的消息列表时，可按照业务需求更新  UI
+};
+```
+:::
+:::if{props.platform="window"}
+```cpp title="示例代码"
+// 注册事件
+void onMessageEdited(
+    ZIM *zim, const std::vector<std::shared_ptr<ZIMMessage>> &messageList) {
+    // 收到编辑后的消息列表时，可按照业务需求更新  UI
+}
+```
+:::
+:::if{props.platform="Flutter"}
+```dart title="示例代码"
+// 注册事件
+ZIMEventHandler.onMessageEdited = (zim, messageList) {
+    // 收到编辑后的消息列表时，可按照业务需求更新  UI
+};
+```
+:::
+:::if{props.platform="Web"}
+```javascript title="示例代码"
+// 注册事件
+zim.on('messageEdited', (zim, { messageList }) => {
+    // 收到编辑后的消息列表时，可按照业务需求更新  UI
+})
+```
+:::
+
+## 编辑消息
+
+**成功登录 ZIM SDK 后**，会话参与者可以调用 {getPlatformData(props,editMessageMap)} 接口编辑自身已发送的消息（仅支持以下类型的消息：{getPlatformData(props,ZIMTextMessageMap)}、{getPlatformData(props,ZIMCustomMessageMap)}、{getPlatformData(props,ZIMMultipleMessageMap)}），支持编辑的属性如下：
+- extendedData：消息拓展字段。
+- isMentionAll：是否需要提醒所有人（@所有人）。
+- mentionedUserIDs：被提醒的用户列表（@某用户）。
+- message: {getPlatformData(props,ZIMTextMessageMap)} 或 {getPlatformData(props,ZIMCustomMessageMap)} 的消息内容。
+- subType: {getPlatformData(props,ZIMCustomMessageMap)} 的子类型。
+- messageInfoList: {getPlatformData(props,ZIMMultipleMessageMap)} 的 item 列表。
+
+:::if{props.platform=undefined}
+随后通过 [ZIMMessageSentFullCallback](@-ZIMMessageSentFullCallback) 得知编辑操作结果。
+:::
+:::if{props.platform="iOS|mac|window|flutter|Web"}
+随后通过  {getPlatformData(props,ZIMMessageEditedCallbackMap)}  得知编辑操作结果。
+:::
+
+<Note title="说明">
+- 仅支持编辑 24 小时内的消息，以消息发送的 `timestamp` 为准。消息的 `timestamp` 不会因消息编辑而更新。
+- 消息类型不可变更，例如：{getPlatformData(props,ZIMTextMessageMap)} 无法转换为{getPlatformData(props,ZIMCustomMessageMap)} 或 {getPlatformData(props,ZIMMultipleMessageMap)}。
+- 编辑消息接口对各属性的限制与发送消息接口相关限制一致。
+- 编辑消息会触发服务端 [消息发送前回调](https://doc-zh.zego.im/zim-server/callbacks/message-not-sent-yet) 和 [消息发送后回调](https://doc-zh.zego.im/zim-server/callbacks/message-sent) 。      
+- 如果您开通了 ZIM 内容审核，消息内容编辑后也会被审核，审核流程和限制等和发送消息时一致。
+    - 当消息为文本（先审后发），未通过审核会导致编辑失败，消息内容不会更新。
+    - 当消息为图片、语音或视频（先发后审），未通过审核会导致消息撤回，不会恢复为编辑前内容。
+</Note>
+
+
+:::if{props.platform=undefined}
+```java title="示例代码"
+// 编辑文本消息内容
+ZIMTextMessage messageObj; // 从 queryHistoryMessage 接口获取
+messageObj.message = "编辑后的消息内容";
+
+ZIMMessageEditConfig config = new ZIMMessageEditConfig();
+
+zim.editMessage(messageObj, config, new ZIMMessageSentFullCallback() {
+    @Override
+    public void onMessageAttached(ZIMMessage zimMessage) {}
+
+    // 当编辑的是 ZIMMultipleMessage 并且有本地文件上传时会触发该回调
+    @Override
+    public void onMultipleMediaUploadingProgress(
+        ZIMMultipleMessage message,
+        long currentFileSize,      
+        long totalFileSize,        
+        int messageInfoIndex,      
+        long currentIndexFileSize, 
+        long totalIndexFileSize,   
+    ) {}
+
+    @Override
+    public void onMessageSent(ZIMMessage zimMessage, ZIMError errorInfo) {
+        // 根据 errorInfo 判断是否操作成功
+    }
+});
+```
+:::
+:::if{props.platform="iOS|mac"}
+```objc title="示例代码"
+// 编辑文本消息内容
+ZIMTextMessage *messageObj; // 从 queryHistoryMessage 接口获取
+messageObj.message = "编辑后的消息内容";
+
+ZIMMessageEditConfig *config = [[ZIMMessageEditConfig alloc] init];
+
+ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
+notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {};
+// 当编辑的是 ZIMMultipleMessage 并且有本地文件上传时会触发该回调        
+notification.onMultipleMediaUploadingProgress = ^(
+    ZIMMultipleMessage * _Nonnull message,
+    unsigned long long currentFileSize,      
+    unsigned long long totalFileSize,        
+    unsigned int messageInfoIndex,          
+    unsigned long long currentIndexFileSize,    
+    unsigned long long totalIndexFileSize   
+) {};
+
+[[ZIM getInstance] editMessage:messageObj 
+                        config:config 
+                notification:notification 
+                    callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+    // 根据 errorInfo 判断是否操作成功
+}];
+```
+:::
+:::if{props.platform="window"}
+```cpp title="示例代码"
+// 编辑文本消息内容
+std::shared_ptr<zim::ZIMTextMessage> message_obj; // 从 queryHistoryMessage 接口获取
+message_obj->message = "编辑后的消息内容";
+
+zim::ZIMMessageEditConfig config;
+
+auto notification = std::make_shared<zim::ZIMMessageSendNotification>(
+    [=](const std::shared_ptr<zim::ZIMMessage> &message) {},
+    [=](const std::shared_ptr<ZIMMediaMessage> &message,
+        unsigned long long currentFileSize, unsigned long long totalFileSize) {
+    },
+    // 当编辑的是 ZIMMultipleMessage 并且有本地文件上传时会触发该回调 
+    [=](const std::shared_ptr<zim::ZIMMultipleMessage> &message,
+        unsigned long long currentFileSize, 
+        unsigned long long totalFileSize, 
+        unsigned int messageInfoIndex, 
+        unsigned long long currentIndexFileSize, 
+        unsigned long long totalIndexFileSize 
+    ) {}
+);
+
+zim_->editMessage(
+    message_obj, config, notification,
+    [=](const std::shared_ptr<zim::ZIMMessage> &message, const zim::ZIMError &errorInfo) {
+        // 根据 errorInfo 判断是否操作成功
+    });
+```
+:::
+:::if{props.platform="Flutter"}
+```dart title="示例代码"
+// 编辑文本消息内容
+ZIMTextMessage messageObj; // 从 queryHistoryMessage 接口获取
+messageObj.message = "编辑后的消息内容";
+
+ZIMMessageEditConfig config = ZIMMessageEditConfig();
+ZIMMessageSendNotification notification = ZIMMessageSendNotification();
+notification.onMultipleMediaUploadingProgress = (message,
+    currentFileSize, totalFileSize, messageInfoIndex,
+    currentIndexFileSize, totalIndexFileSize) async {
+
+    };
+
+ZIM.getInstance().editMessage(messageObj, config, notification)
+    .then((result){
+    // 操作成功
+    })
+    .catchError((onError) {
+    // 操作失败
+    }); 
+```
+:::
+:::if{props.platform="Web"}
+```javascript title="示例代码"
+// 编辑文本消息内容
+var messageObj; // 从 queryHistoryMessage 接口获取
+messageObj.message = "编辑后的消息内容";
+
+var config = {};
+var notification = {
+    onMessageAttached: (message) => {},
+
+    // 当编辑的是 ZIMMultipleMessage 并且有本地文件上传时会触发该回调
+    onMultipleMediaUploadingProgress: (
+        message,
+        currentFileSize,
+        totalFileSize,
+        messageInfoIndex,
+        currentIndexFileSize,
+        totalIndexFileSize,
+    ) => {},
+};
+
+zim.editMessage(messageObj, config, notification)
+    .then(function ({ message }) {
+        // 操作成功
+    })
+    .catch(function (err) {
+        // 操作失败 
+    });
+```
+:::

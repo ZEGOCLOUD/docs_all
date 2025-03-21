@@ -387,6 +387,163 @@ ZIMEventHandler.onRoomMessageReceived = (zim, messageList, info, fromGroupID) {
 };
 ```
 :::
+:::if{props.platform="undefined|iOS|mac|win|rn|flutter|Web|miniprogram"}
+## 重发消息
+
+<Note title="说明">如需使用本功能，请集成 2.20.0 及以上版本的 ZIM SDK。</Note>
+
+当用户发送**单聊**和**群聊**消息时，网络断开：
+
+<div>
+- 若在 30 秒内网络恢复，则 ZIM SDK 会自动重发该消息。
+- 若在 30 秒内网络未恢复，则消息发送失败。
+- 如需配置网络恢复等待时间，请联系 ZEGO 技术支持。
+</div>
+
+当自动重发失败时，用户可以在网络恢复后，手动重发该消息。此时，再次调用 {getPlatformData(props,sendMessageMap)} 接口，将发送失败的消息对象重新填入，并且参数 `config.isRetrySend` 设置为 true。
+
+手动重发成功后，该消息会排序到当前最后位置。例如：当前消息排序为：A（成功）、B（失败）、C（成功），当重发消息 B 成功后，排序为 A、C、B。
+
+<Note title="说明">当 ZIM SDK 自动重发消息时，若用户同时进行手动重发，接口将调用失败，ZIM SDK 提示参数错误。</Note>
+
+:::
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码" {10,14}
+// 重发单聊 `Text` 信息
+String toConversationID = "xxxx1";
+
+ZIMTextMessage zimMessage; // 从 queryHistoryMessage 接口获取发送失败的消息
+
+ZIMMessageSendConfig config = new ZIMMessageSendConfig();
+// 设置消息优先级
+config.priority = ZIMMessagePriority.LOW;
+// 需要设置为 true，表示重发此消息
+config.isRetrySend = true;
+
+ZIMConversationType type = ZIMConversationType.Peer;
+
+zim.sendMessage(zimMessage, toConversationID, type, config, new ZIMMessageSentFullCallback() {
+    @Override
+    public void onMessageAttached(ZIMMessage zimMessage) {
+        // 开发者可以通过该回调，监听消息是否开始准备发送。只有当通过本地基础参数检验的消息才会抛出该回调，否则通过 onMessageSent 回调抛出错误。
+    }
+
+    @Override
+    public void onMessageSent(ZIMMessage zimMessage, ZIMError error) {
+        // 开发者可以通过该回调监听消息是否发送成功。
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码" {10,19}
+// 重发单聊 `Text` 信息
+NSString *toConversationID = @"xxxx1";
+
+ZIMTextMessage *textMessage; // 从 queryHistoryMessage 接口获取发送失败的消息
+
+ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+// 设置消息优先级
+config.priority = ZIMMessagePriorityLow;
+// 需要设置为 true，表示重发此消息
+config.isRetrySend = true;
+
+ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
+notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
+    // 发送前的回调，客户可以在这里获取一个临时对象，该对象与开发者创建的 zimMessage 对象属于同一对象，开发者可利用此特性做一些业务逻辑，如提前展示 UI 等
+};
+
+ZIMConversationType type = ZIMConversationTypePeer;
+
+[self.zim sendMessage:textMessage toConversationID:toConversationID conversationType:type config:config notification:notification callback:^((ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo)) {
+    // 开发者可以通过该回调监听消息是否发送成功。
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="win"}
+<CodeGroup>
+```c++ title="示例代码" {9,16}
+// 重发单聊 `Text` 信息
+
+std::shared_ptr<zim::ZIMTextMessage> message; // 从 queryHistoryMessage 接口获取发送失败的消息
+
+// 设置消息优先级
+zim::ZIMMessageSendConfig config;
+config.priority = zim::ZIM_MESSAGE_PRIORITY_LOW;
+// 需要设置为 true，表示重发此消息
+config.isRetrySend = true;
+
+zim::ZIMConversationType type = zim::ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER
+
+auto notification = std::make_shared<zim::ZIMMessageSendNotification>(
+            [=](const std::shared_ptr<zim::ZIMMessage> &message) { int i = 0; });
+
+zim_->sendMessage(message, "toConversationID", type, config, notification,
+                    [=](const std::shared_ptr<zim::ZIMMessage> &message,
+                              const zim::ZIMError &errorInfo) { int i = 0; });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|miniprogram|rn|miniprogram"}
+<CodeGroup>
+```javascript title="示例代码" {7,17}
+// 重发单聊 `Text` 信息
+
+var toConversationID = ''; // 对方 userID
+var conversationType = 0; // 会话类型，取值为 单聊：0，房间：1，群组：2
+var config = { 
+    priority: 1, // 设置消息优先级，取值为 低：1（默认），中:2，高：3
+    isRetrySend: true, // 需要设置为 true，表示重发此消息
+};
+
+var notification = {
+    onMessageAttached: function(message) {
+    }
+}
+
+var messageTextObj; // 从 queryHistoryMessage 接口获取发送失败的消息
+
+zim.sendMessage(messageTextObj, toConversationID, conversationType, config, notification)
+    .then(function ({ message }) {
+        // 发送成功
+    })
+    .catch(function (err) {
+        // 发送失败
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="flutter"}
+<CodeGroup>
+```dart title="示例代码" {8,16}
+// 重发单聊 `Text` 信息
+
+ZIMTextMessage textMessage; // 从 queryHistoryMessage 接口获取发送失败的消息
+ZIMMessageSendConfig sendConfig = ZIMMessageSendConfig();
+// 设置消息优先级
+sendConfig.priority = ZIMMessagePriority.low;
+// 需要设置为 true，表示重发此消息
+sendConfig.isRetrySend = true;
+
+ZIMMessageSendNotification notification = ZIMMessageSendNotification(onMessageAttached: (message){
+    // 发送前的回调，开发者可以在这里获取一个临时对象，该对象与开发者创建的 zimMessage 对象属于同一对象，开发者可利用此特性做一些业务逻辑，如提前展示 UI 等
+});
+
+ZIMConversationType type = ZIMConversationType.peer;
+
+ZIM.getInstance()!.sendMessage(textMessage, toConversationID, type, sendConfig).then((value) => {
+    // 开发者可以通过该回调监听消息是否发送成功。
+}).catchError((onError){
+    // 开发者可以捕获发送失败的异常。
+});
+```
+</CodeGroup>
+:::
+
 
 ## 收发富媒体消息
 

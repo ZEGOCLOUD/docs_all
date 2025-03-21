@@ -386,8 +386,162 @@ ZIMEventHandler.onRoomMessageReceived = (zim, messageList, info, fromGroupID) {
 ```
 :::
 
-## Send/Receive rich media content
+## Resend messages
 
+<Note title="Note">To use this feature, please integrate ZIM SDK version 2.20.0 or higher.</Note>
+
+When a user sends **one-on-one** or **group chat** messages and the network disconnects:
+
+<div>
+- If the network recovers within 30 seconds, the ZIM SDK will automatically resend the message.
+- If the network does not recover within 30 seconds, the message sending fails.
+- To configure the network recovery waiting time, please contact ZEGOCLOUD Technical Support.
+</div>
+
+When automatic resend fails, the user can manually resend the message after the network is restored. At this point, call the {getPlatformData(props,sendMessageMap)} interface again, re-enter the failed message object, and set the parameter `config.isRetrySend` to true.
+
+After a manual resend succeeds, the message will be reordered to the current last position. For example: the current message order is A (successful), B (failed), C (successful). After resending message B successfully, the order becomes A, C, B.
+
+<Note title="Note">When the ZIM SDK automatically resends a message, if the user simultaneously attempts a manual resend, the interface call will fail, and the ZIM SDK will prompt a parameter error.</Note>
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Sample Code" {10,14}
+// Resend a text message in a one-to-one conversation 
+String toConversationID = "xxxx1";
+
+ZIMTextMessage zimMessage; // Obtain the failed message by the queryHistoryMessage interface
+
+ZIMMessageSendConfig config = new ZIMMessageSendConfig();
+// Set the message priority
+config.priority = ZIMMessagePriority.LOW;
+// Needs to be true, indicating that this message is resent
+config.isRetrySend = true;
+
+ZIMConversationType type = ZIMConversationType.Peer;
+
+zim.sendMessage(zimMessage, toConversationID, type, config, new ZIMMessageSentFullCallback() {
+    @Override
+    public void onMessageAttached(ZIMMessage zimMessage) {
+        // Developers can use this callback to monitor whether the message starts preparing for sending. Only messages that pass local basic parameter checks will trigger this callback; otherwise, errors are thrown through the onMessageSent callback.
+    }
+
+    @Override
+    public void onMessageSent(ZIMMessage zimMessage, ZIMError error) {
+        // Developers can use this callback to monitor whether the message was sent successfully.
+    }
+});```
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Sample Code" {10,19}
+// Resend a text message in a one-to-one conversation 
+NSString *toConversationID = @"xxxx1";
+
+ZIMTextMessage *textMessage; // Obtain the failed message by the queryHistoryMessage interface
+
+ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+// Set the message priority
+config.priority = ZIMMessagePriorityLow;
+// Needs to be true, indicating that this message is resent
+config.isRetrySend = true;
+
+ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
+notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
+// The callback before sending, where customers can obtain a temporary object. This object is the same as the zimMessage object created by the developer. Developers can use this feature to implement some business logic, such as pre-displaying UI, etc.};
+
+ZIMConversationType type = ZIMConversationTypePeer;
+
+[self.zim sendMessage:textMessage toConversationID:toConversationID conversationType:type config:config notification:notification callback:^((ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo)) {
+    // Developers can use this callback to monitor whether the message was sent successfully.
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="win"}
+<CodeGroup>
+```c++ title="Sample Code" {9,16}
+// Resend a text message in a one-to-one conversation 
+std::shared_ptr<zim::ZIMTextMessage> message; // Obtain the failed message by the queryHistoryMessage interface
+
+// Set the message priority
+zim::ZIMMessageSendConfig config;
+config.priority = zim::ZIM_MESSAGE_PRIORITY_LOW;
+// Needs to be true, indicating that this message is resent
+config.isRetrySend = true;
+
+zim::ZIMConversationType type = zim::ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER
+
+auto notification = std::make_shared<zim::ZIMMessageSendNotification>(
+            [=](const std::shared_ptr<zim::ZIMMessage> &message) { int i = 0; });
+
+zim_->sendMessage(message, "toConversationID", type, config, notification,
+                    [=](const std::shared_ptr<zim::ZIMMessage> &message,
+                              const zim::ZIMError &errorInfo) { int i = 0; });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|rn"}
+<CodeGroup>
+```javascript title="Sample Code" {7,17}
+// Resend a text message in a one-to-one conversation
+
+var toConversationID = ''; // Opponent userID
+var conversationType = 0; // Conversation type, value for One-on-one: 0, Room: 1, Group: 2
+var config = { 
+    priority: 1, // Set the message priority, value for Low: 1 (default), Medium: 2, High: 3
+    isRetrySend: true, // Needs to be true, indicating that this message is resent
+};
+
+var notification = {
+    onMessageAttached: function(message) {
+    }
+}
+
+var messageTextObj; // Obtain the failed message by the queryHistoryMessage interface
+
+zim.sendMessage(messageTextObj, toConversationID, conversationType, config, notification)
+    .then(function ({ message }) {
+        // Send successfully
+    })
+    .catch(function (err) {
+        // Send failed
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="flutter"}
+<CodeGroup>
+```dart title="Sample Code" {8,16}
+// Resend a text message in a one-to-one conversation 
+
+ZIMTextMessage textMessage; // Obtain the failed message by the queryHistoryMessage interface
+ZIMMessageSendConfig sendConfig = ZIMMessageSendConfig();
+// Set the message priority
+sendConfig.priority = ZIMMessagePriority.low;
+// Needs to be true, indicating that this message is resent
+sendConfig.isRetrySend = true;
+
+ZIMMessageSendNotification notification = ZIMMessageSendNotification(onMessageAttached: (message){
+    // Callback before sending, developers can obtain a temporary object here. This object is the same as the zimMessage object created by the developer. You can use this feature to implement some business logic, such as pre-displaying UI, etc.
+});
+
+ZIMConversationType type = ZIMConversationType.peer;
+
+ZIM.getInstance()!.sendMessage(textMessage, toConversationID, type, sendConfig).then((value) => {
+    // Developers can use this callback to monitor whether the message was sent successfully.
+}).catchError((onError){
+    // Developers can catch exceptions for failed sends here.
+});
+});
+```
+</CodeGroup>
+:::
+
+
+## Send/Receive rich media content
 
 The ZIM SDK now supports sending and receiving messages of different rich media types, such as images, audio, video, and files. To send and receive rich media content, refer to the following:
 
@@ -2810,7 +2964,7 @@ ArrayList<String> userIds = message.getMentionedUserIDs();
 std::vector<std::string> userIds = message.mentionedUserIDs;
 ```
 :::
-:::if{props.platform="Web|miniprogram|rn|uniapp"}
+:::if{props.platform="Web|rn"}
 ```javascript
 var userIds = message.mentionedUserIDs;
 ```
@@ -2841,7 +2995,7 @@ BOOL isMentionAll = message.isMentionAll;
 boolean isMentionAll = message.isMentionAll;
 ```
 :::
-:::if{props.platform="Web|miniprogram|rn|uniapp"}
+:::if{props.platform="Web|rn"}
 ```javascript
 var isMentionAll = message.isMentionAll;
 ```
@@ -2897,7 +3051,7 @@ public void onBroadcastMessageReceived(ZIM zim, ZIMMessage message) {
 virtual void onBroadcastMessageReceived(ZIM * /*zim*/, const std::shared_ptr<ZIMMessage> & /*message*/) {}
 ```
 :::
-:::if{props.platform="Web|miniprogram|rn|uniapp"}
+:::if{props.platform="Web|rn"}
 ```javascript
  // User receives broadcast messages
 zim.on('broadcastMessageReceived', function (zim, { message }) {
