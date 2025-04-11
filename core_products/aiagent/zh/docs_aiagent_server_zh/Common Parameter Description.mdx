@@ -16,13 +16,14 @@
 
 | 参数            | 类型            | 是否必选 | 描述                                                                                                                                                  |
 |-----------------|-----------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Url             | String          | 是       | LLM 回调地址，要求与 OpenAI 协议兼容。                                                                                                                |
-| ApiKey          | String          | 否       | LLM 校验 api key。默认为空，生产环境中务必启用 api key。                                                                                               |
-| Model           | String          | 是       | 模型。                                                                                                                                                 |
-| SystemPrompt    | String          | 否       | 智能体系统提示（prompt）。                                                                                                                                                                                   |
-| Temperature     | Float           | 否       |                                                                                                                                                       |
-| TopP            | Float           | 否       |                                                                                                                                                       |
-| Params          | Object          | 否       | 在消息体内传输的 LLM 附加信息，例如使用的模型、最大 Token 数限制等。不同的 LLM 供应商支持的配置不同，请参考对应文档按需填入。 |
+| Url             | String          | 是       | 接收请求的端点 (可以是您自己的服务，也可以是任意 LLM 服务供应商提供的服务)，需与 [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat)。
+ 兼容。                                                                  |
+| ApiKey          | String          | 否       | LLM 服务供应商用于鉴权的参数。默认为空，生产环境中务必传入。             |
+| Model           | String          | 是       | LLM 模型。不同的 LLM 服务供应商支持的模型各异，请参考其官网文档选择合适的模型。 |
+| SystemPrompt    | String          | 否       | 智能体系统提示（prompt）。   |
+| Temperature     | Float           | 否       | 较高的值将使输出更加随机，而较低的值将使输出更加集中和确定。    |
+| TopP            | Float           | 否       | 采样方法，数值越小结果确定性越强；数值越大，结果越随机。    |
+| Params          | Object          | 否       | LLM 服务供应商支持的其他参数，例如最大 Token 数限制等。不同的 LLM 供应商支持的参数各异，请参考其官网文档按需填入。 |
 
 ```json title="Params 示例"
 {
@@ -35,8 +36,7 @@
 | 参数 | 类型 | 是否必选 | 描述   |
 | ----------------------- | --------------- | -------- | ----- |
 | Vendor                    | String          | 是       | 文本转语音（TTS）服务供应商。可选：<ul><li>`Aliyun`：阿里云 TTS。</li><li>`Bytedance`：火山引擎 TTS。</li><li>`Minimax`：MiniMax TTS， Minimax 在扩展参数 ExtensionTTSParams 中如果指定 model，将使用 ExtensionTTSParams 的指定的 model。</li></ul> |
-| Voice                   | String          | 是       | 音色，不同 TTS 支持的音色不同。具体请参考对应云商的官网文档：<ul><li>阿里云 TTS：[语音合成 - 接口说明 - 音色列表](https://help.aliyun.com/zh/isi/developer-reference/overview-of-speech-synthesis?spm=a2c4g.11186623.0.0.54de622dhrDXcY#5186fe1abb7ag)</li><li>火山云 TTS：[大模型语音合成 - 音色列表](https://www.volcengine.com/docs/6561/1257544)</li><li>MiniMax：[T2A v2（语音生成） - API说明 - ](https://platform.minimaxi.com/document/T2A%20V2?key=66719005a427f0c8a5701643#YqSh1KAoyms1WH4XJrdeIrrb)</li></ul> |
-| ExtensionParams         | Object          | 否       | 第三方 TTS 扩展参数。本参数结构，请见 [ExtensionParams](#extensionparams)。 |
+| Params         | Object          | 否       | TTS 配置参数。不同 TTS 供应商下该参数结构各异，请参考其官网文档按需填写。 |
 | FilterText       | Array of Object | 否       | <p>将 LLM 返回内容中指定标点符号中的文字过滤后，再进行语音合成。本参数结构，请参考 [FilterText](#filtertext)。</p><Note title="说明">你需要在 [LLM > SystemPrompt](#LLM) 中自行定义哪些内容需要放在指定标点符号内。</Note> |
 | PauseDuration         | Int          | 否       | 在进行 TTS 时，断句时额外增加的停顿时长。默认为 0，单位为毫秒。取值范围 [0, 5000]。 |
 | ExtensionTTSParams      | String          | 否       | <p>第三方 TTS 请求参数，一般为第三方请求体。</p><p>格式为：转义之后的 JSON 字符串。</p>比如：`\{\"key1\":\"value1\",\"key2\":\"value2\",\"key3\":0.1,\"key4\":1.0\}`<p>目前支持第三方的参数：</p><ul><li>MiniMax 大模型 TTS。</li><li>火山引擎 TTS（大模型语音合成API)。</li><li>火山引擎 TTS（双向流式 API）。</li></ul>本参数结构，请见 [ExtensionTTSParams（各第三方 TTS 扩展透传参数说明）](#extensionttsparams各第三方-tts-扩展透传参数说明)。    |
@@ -85,99 +85,11 @@
 
 | 参数 | 类型 | 是否必选 | 描述 |
 |------|------|----------|------|
-| HotWord | String | 否 | 临时热词。 |
+| HotWord | String | 否 | 热词。 |
 
-## ExtensionTTSParams（各第三方 TTS 扩展透传参数说明）
+## ExtensionParams
 
-<Warning title="注意">
-使用 ExtensionTTSParams 时，需要将以下 JSON 格式内容转义为字符串（`\" key/value \"`）。
-</Warning>
-
-<Tabs title="TTS厂商">
-<Tab title="MiniMax TTS">
-
-MiniMax TTS 的 JSON 格式说明请参考 MiniMax 官方文档 [T2A v2（语音生成）](https://platform.minimaxi.com/document/T2A%20V2?key=66719005a427f0c8a5701643)（请参考其中开启“流式”的请求体）。
-
-当前仅支持以下字段：
-- speed
-- vol
-- pitch
-- emotion
-
-json 示例：
-
-```json
-{
-    "model": "speech-01-turbo",
-    "voice_setting":{
-        "speed": 1,
-        "vol": 1,
-        "pitch": 0,
-        "emotion": "happy"
-    }
-}
-```
-转义后的字符串示例：
-
-`"{\"model\": \"speech-01-turbo\",\"voice_setting\": {\"speed\": 1, \"vol\": 1, \"pitch\": 0, \"emotion\": \"happy\"}}"`
-
-</Tab>
-<Tab title="火山引擎 TTS（大模型语音合成API)(默认)">
-
-火山引擎 TTS（大模型）单向(默认)的 JSON 格式说明请参考火山引擎官方文档 [大模型语音合成API](https://www.volcengine.com/docs/6561/1257584)。
-
-当前仅支持以下字段：
-- cluster   
-
-  集群 ID，默认为 `volcano_tts`（普通音色集群）。当您使用火山引擎 TTS 复刻音色以及其大模型语音合成 API 时需指定本参数为 `volcano_icl`（声音复刻集群）。
-
-- speed_ratio
-
-json 示例：
-```json
-{
-    "app": {
-        "cluster": "volcano_tts"
-    },
-    "audio": {
-        "speed_ratio": 1.0
-    }
-}
-```
-转义后的字符串示例：
-
-`"{\"app\": {\"cluster\": \"volcano_tts\"}, \"audio\": {\"speed_ratio\": 1.0}}"`
-</Tab>
-<Tab title="火山引擎 TTS（双向流式 API）">
-
-火山引擎 TTS（双向流式 API）的 JSON 格式说明请参考火山引擎官方文档 [双向流式API](https://www.volcengine.com/docs/6561/1329505)。
-
-当前仅支持以下字段：
-- pitch_rate
-- speech_rate
-
-json示例：
-```json
-{
-    "req_params": {
-        "audio_params": {
-            "pitch_rate": 0,
-            "speech_rate": 100
-        }
-    }
-}
-```
-转义后的字符串示例：
-
-`"{\"req_params\": {\"audio_params\": {\"pitch_rate\": 0, \"speech_rate\": 100}}}"`
-</Tab>
-</Tabs>
-
----
-
-## ChatConfig
-
-| 参数                  | 类型   | 是否必选 | 描述                                                                                                                                   |
-|----------------------|--------|----------|--------------------------------------------------------------------------------------------------------------------------------------|
-| LLMSystemMode        | int    | 否       | LLM 的 System 输入来源，支持的值如下：<ul><li>0：使用当前会话配置中的 `System`。</li><li>1：既使用当前会话配置中的`System`，您也可以基于用户语音 ASR 识别结果自定义本轮对话的 `System`，即总共存在两个 `System`。</li><li>2：由您基于用户语音 ASR 识别结果自定义本轮对话 System。若 5s 内您没有返回，则 ZEGO 服务端不再等待，使用当前会话配置中的 `System`，即仅会存在一个 `System`</li></ul><Note title="注意">基于ASR语音识别结果，自定义当轮对话 LLM - System的处理方式，请查看 [自定义 LLM System 回调](./Callbacks/Custom%20LLM%20System%20Callback.mdx)。</Note> |
-| EnableLLMServerMessage | Int  | 否       | 是否开启服务端回调 LLM 结果。若开启，则按照每句话返回 LLM 输出结果。回调内容请参考 [通用回调](./../Callbacks/General%20Callback.mdx)。支持的值如下：<ul><li>0：不开启。（默认）</li><li>1：开启。</li></ul>                                               |
+| 参数   | 类型   | 是否必选 | 描述     |
+|--------|--------|----------|----------|
+| Key    | String | 否       | Key 值。 |
+| Value  | String | 否       | Value 值。 |
