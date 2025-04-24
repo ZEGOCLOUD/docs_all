@@ -4,6 +4,8 @@ articleID: 21414
 
 # 实现离线推送
 
+---
+
 ZEGO 即时通讯（ZIM）支持离线推送消息的功能。例如在“单聊”或“群组聊天”时，如果您的程序在后台被冻结、或被系统或用户杀掉，与 ZEGO 服务后台的长连接超时断开后，此时如果您已接入“离线推送”功能，ZEGO 后台会为目标用户发送离线推送的消息。
 
 开发者可以通过集成 ZPNs SDK，与 ZIM SDK 搭配使用，实现离线推送功能。
@@ -20,8 +22,8 @@ ZIM 实现离线推送的方案如下：
   <img src="https://storage.zego.im/sdk-doc/Pics/ZIM/OfflinePush/Android.png" />
 </Frame>
 
-1. 首先消息接收方（即接收离线消息的用户），开启各厂商的推送通道，向各厂商的推送服务器发送请求，获取 Token。
-2. 各厂商的推送服务器，将 Token 返回给接收方。
+1. 首先消息接收方（即接收离线消息的用户），开启 HarmonyOS 推送通道，向 HarmonyOS 推送服务器发送请求，获取 Token。
+2. HarmonyOS 推送服务器，将 Token 返回给接收方。
 3. 接收方生成 PushID，并向 ZIM 服务器发送请求，绑定用户与 PushID 的关系。
     
     开发者如果将 ZPNs SDK 与 ZIM SDK 搭配使用，SDK 内部会自动绑定用户与 PushID 的关系，无需特殊处理；如果单独使用 ZPNs SDK，则需自行对接 ZPNs 服务器、实现绑定逻辑。**请注意，同一设备切换 userID 前，请调用 zim.[logout](@logout) 接口，该接口会清除 userID 绑定的 PushID。**
@@ -29,8 +31,8 @@ ZIM 实现离线推送的方案如下：
 4. 发送方开始发送消息，消息存储到 ZIM 服务器。
 5. ZIM 服务器会确认接收方的客户端是否在线。
 6. 如果接收方的客户端不在线，ZIM 服务器会将消息转发给 ZPNs 服务器。
-7. ZPNs 服务器将离线消息转发给各厂商的推送服务器。
-8. 各厂商的服务器将消息通过“离线推送”的方式，推送给接收方；接收方登录后（至少登录一次），即可收到离线消息。
+7. ZPNs 服务器将离线消息转发给 HarmonyOS 推送服务器。
+8. HarmonyOS 推送服务器将消息通过“离线推送”的方式，推送给接收方；接收方登录后（至少登录一次），即可收到离线消息。
 
 ## 前提条件
 
@@ -62,11 +64,11 @@ ZIM 实现离线推送的方案如下：
 <Note title="说明">如果您的项目中没有 libs 目录，手动新建一个即可。</Note>
 
 <Frame width="auto" height="auto">
-<img src="https://media-resource.spreading.io/docuo/workspace745/03e04f98099440df3547898e90a80a96/f5fbda474a.jpeg"/>
+<img src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/11edb309f7.jpeg" alt="ZPNsHarmonyOS.jpeg"/>
 </Frame>
 </Step>
 <Step title="添加 SDK 引用">
-打开 `entry/oh-package.json5` 文件，在 `dependencies` 节点中引入 “libs” 下的 `ZIM.har`。
+打开 `entry/oh-package.json5` 文件，在 `dependencies` 节点中引入 “libs” 下的 `ZPNs.har`。
 
 ```json5 title="entry/oh-package.json5"
 "@zego/ZPNs": "file:./libs/ZPNs.har"
@@ -86,9 +88,9 @@ import ZPNs from '@zego/ZPNs'
 
 开发者可以根据实际应用需要，设置应用所需权限。
 
-调用 `requestEnableNotification` 接口，向用户申请通知权限。本接口仅第一次调用时生效，请开发者注意调用时机。
+调用 [requestEnableNotification](https://developer.huawei.com/consumer/cn/doc/harmonyos-references/js-apis-notificationmanager#notificationmanagerrequestenablenotification10-1) 接口，向用户申请通知权限。本接口仅第一次调用时生效，请开发者注意调用时机。
 
-```typescript
+```typescript {3}
 import { notificationManager } from '@kit.NotificationKit';
 
 notificationManager.requestEnableNotification(this.context).then((res) => {
@@ -111,36 +113,26 @@ notificationManager.requestEnableNotification(this.context).then((res) => {
 
 ### 使用 ZPNs SDK 注册离线推送功能
 
-1.  使用 [ZPNsEventHandler](@-ZPNsEventHandler) 获取回调。
-
-    [ZPNsEventHandler](@-ZPNsEventHandler) 类包含了 ZPNs 中各种事件回调的 Function，开发者可通过传入 Function 来接收 ZPNs 中的事件回调，处理 SDK 异常、消息通知回调。
-
-    <a id="HowToGetPushID"></a>
-
-    <Accordion title="使用 ZPNsEventHandler 注册回调示例" defaultOpen="false">
-    开发者可以通过监听 [registered](@registered) 回调获取 ZPNs 注册结果，并在该方法触发时打印 PushID。
-
-    ```javascript
-    ZPNs.getInstance().on("registered",(message:ZPNsRegisterMessage)=>{
-      console.log("code:"+message.errorCode+"message:"+message.msg+" push id:"+message.pushID)
-    })
-    ```
-    </Accordion>
-
-
-2. 调用 [registerPush](@registerPush) 接口注册离线推送。
-
-
-    ```javascript
-        try {
-            ZPNs.getInstance().registerPush({})
-        } catch (e) {
-            console.log("registerPush failed with exception:"+e)
-        }
-    ```
-
-    注册离线推送功能后，可以通过 [ZPNsEventHandler](@-ZPNsEventHandler) 类中的 [registered](@registered) 回调，获取到离线推送的 `pushID`，向指定设备推送离线消息。
-
+<Steps>
+<Step title="监听注册回调">
+监听 [ZPNsEventHandler.registered](@registered-ZPNsEventHandler) 回调，获取 ZPNs 注册结果，并在该方法触发时打印 `pushID`（用于向指定设备推送离线消息）。
+```typescript
+ZPNs.getInstance().on("registered",(message:ZPNsRegisterMessage)=>{
+    console.log("code:"+message.errorCode+"message:"+message.msg+" push id:"+message.pushID)
+})
+```
+</Step>
+<Step title="注册离线推送">
+调用 [registerPush](@registerPush) 接口注册离线推送。
+```typescript
+try {
+    ZPNs.getInstance().registerPush({})
+} catch (e) {
+    console.log("registerPush failed with exception:"+e)
+}
+```
+</Step>
+</Steps  >
 
 ### 使用 ZIM SDK 实现离线推送功能
 
@@ -148,7 +140,7 @@ ZIM 支持在发送单聊消息、群组消息和呼叫邀请时使用离线推�
 
 <Warning title="注意">
 在实现离线推送前，请确保：
-- 参考 [发送消息](./../Send%20and%20receive%20messages.mdx)，实现发送单聊/群聊消息的功能。
+- 参考 [发送消息](./../Send%20and%20receive%20messages.mdx)，实现发送单聊或群聊消息的功能。
 - 参考 [呼叫邀请](./Call%20invitation%20signaling.mdx)，实现呼叫邀请。
 </Warning>
 
@@ -157,7 +149,7 @@ ZIM 支持在发送单聊消息、群组消息和呼叫邀请时使用离线推�
 
 1. 首先开发者需要通过 [ZIMPushConfig](@-ZIMPushConfig) 对象，设置离线推送标题、内容、以及其他自定义属性。
 
-    ```javascript
+    ```typescript
     var pushConfig = {
         title = "离线推送标题";
         content = "离线推送内容";
@@ -168,7 +160,7 @@ ZIM 支持在发送单聊消息、群组消息和呼叫邀请时使用离线推�
 
 2. 然后通过 [ZIMMessageSendConfig](@-ZIMMessageSendConfig) 对象的 `pushConfig` 参数，配置离线消息的相关配置等。
 
-   ```javascript
+   ```typescript
     var sendConfig = {
         priority: 2,
         pushConfig: pushConfig
@@ -177,7 +169,7 @@ ZIM 支持在发送单聊消息、群组消息和呼叫邀请时使用离线推�
 
 3. 发送方调用 [sendMessage](@sendMessage)，传入 `sendConfig`，向接收方发送单聊消息。
 
-    ```javascript
+    ```typescript
     var toUserID = '';
     var messageTextObj = { type: 1, message: '文本消息内容' };
     zim.sendMessage(messageTextObj, toUserID, 0, sendConfig)
@@ -196,7 +188,7 @@ ZIM 支持在发送单聊消息、群组消息和呼叫邀请时使用离线推�
 
 1. 开发者通过 [ZIMPushConfig](@-ZIMPushConfig) 对象，设置离线推送标题、内容、以及其他自定义属性。
 
-    ```javascript
+    ```typescript
     var pushConfig = {
         title = "离线推送标题";
         content = "离线推送内容";
@@ -207,7 +199,7 @@ ZIM 支持在发送单聊消息、群组消息和呼叫邀请时使用离线推�
 
 2. 然后通过 [ZIMMessageSendConfig](@-ZIMMessageSendConfig) 对象的 `pushConfig` 参数，配置离线消息的相关配置等。
 
-    ```javascript
+    ```typescript
     var sendConfig = {
         priority: 2,
         pushConfig: pushConfig
@@ -216,7 +208,7 @@ ZIM 支持在发送单聊消息、群组消息和呼叫邀请时使用离线推�
 
 3. 发送方调用 [sendMessage](@sendMessage)，传入 “sentConfig”，向群组内的所有用户发送消息。
 
-    ```javascript
+    ```typescript
     var toGroupID = '';
     var messageTextObj = { type: 1, message: '文本消息内容' };
     zim.sendMessage(messageTextObj, toGroupID, 2, sendConfig)
@@ -235,7 +227,7 @@ ZIM 支持在发送单聊消息、群组消息和呼叫邀请时使用离线推�
 
 1. 开发者通过 [ZIMPushConfig](@-ZIMPushConfig) 对象，设置离线推送标题、内容、以及其他自定义属性。
 
-    ```javascript
+    ```typescript
     var pushConfig = {
         title = "离线推送标题";
         content = "离线推送内容";
@@ -245,7 +237,7 @@ ZIM 支持在发送单聊消息、群组消息和呼叫邀请时使用离线推�
     ```
 2. 然后通过 [ZIMCallInviteConfig](@-ZIMCallInviteConfig) 对象的 `pushConfig` 参数，配置离线消息的相关配置等。
 
-    ```javascript
+    ```typescript
     var callInviteConfig = {
         timeout: 90,
         pushConfig: pushConfig
@@ -254,7 +246,7 @@ ZIM 支持在发送单聊消息、群组消息和呼叫邀请时使用离线推�
 
 3. 发送方调用 [callInvite](@callInvite)，传入 “callInviteConfig”，发起呼叫邀请。
 
-    ```javascript
+    ```typescript
     var invitees = ['xxxx'];  // 被邀请人ID列表
     zim.callInvite(invitees, callInviteConfig)
         .then(function({ callID, timeout, errorInvitees }){
@@ -271,10 +263,10 @@ ZIM 支持在发送单聊消息、群组消息和呼叫邀请时使用离线推�
 
 若开发者希望某台设备不再接收离线推送，可通过调用 [unRegisterPush](@unRegisterPush) 接口注销。注销后，发送弹窗推送、静默推送也将不再生效。
 
-```js
+```typescript
 ZPNs.getInstance().unregisterPush();
 ```
 
 ## 在线调试
 
-集成 ZPNs SDK 和获取 Push ID 后，您可以在 [ZEGO 控制台](https://console.zego.im/) 在线调试 ZIM 离线推送功能，详情请参考控制台的 [ZIM 离线推送调试](https://doc-zh.zego.im/article/17949)。
+集成 ZPNs SDK 和获取 PushID 后，您可以在 [ZEGO 控制台](https://console.zego.im/) 在线调试 ZIM 离线推送功能，详情请参考控制台的 [ZIM 离线推送调试](https://doc-zh.zego.im/article/17949)。
