@@ -1,0 +1,428 @@
+# 快速开始
+
+--- 
+
+## 准备环境
+
+在开始使用 AI Agent 之前，请确保您的开发环境满足以下要求：
+
+- Windows 或 macOS 开发电脑已经连接到 Internet。
+- 满足 ZEGO Express Web SDK 兼容性的浏览器（具体请参考 [浏览器兼容性和已知问题](https://doc-zh.zego.im/article/12047)），推荐使用最新版本的 Google Chrome 浏览器。
+- 安装 [Node.js](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm/)，推荐使用 14.18.1 或以上版本。
+
+## 前提条件
+
+- 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppId 和 Server，详细请参考[控制台 - 项目信息](https://doc-zh.zego.im/article/12107)。
+- 联系 ZEGO 商务人员开通 AI Agent 相关服务。
+- 已经集成了 [ZEGO Express Web SDK](https://doc-zh.zego.im/article/6839)。
+
+
+## 初始化项目并集成 SDK
+
+<Steps>
+<Step title="新建项目（已有项目，可跳过此步骤）">
+
+<Accordion title="此处以vue3项目为例" defaultOpen="false">
+
+```bash
+npm create vue@latest
+```
+选择默认选项即可
+```bash
+> npx
+> create-vue
+Vue.js - The Progressive JavaScript Framework
+✔ 请输入项目名称： … ai_agent_web_demo
+✔ 是否使用 TypeScript 语法？ … [否] / 是
+✔ 是否启用 JSX 支持？ … [否] / 是
+✔ 是否引入 Vue Router 进行单页面应用开发？ … [否] / 是
+✔ 是否引入 Pinia 用于状态管理？ … [否] / 是
+✔ 是否引入 Vitest 用于单元测试？ … [否] / 是
+✔ 是否要引入一款端到端（End to End）测试工具？ › 不需要
+✔ 是否引入 ESLint 用于代码质量检测？ › 否
+正在初始化项目 /xxx/ai_agent_web_demo...
+项目初始化完成，可执行以下命令：
+ cd ai_agent_web_demo
+ npm install
+ npm run dev
+
+```
+
+</Accordion>
+
+</Step>
+<Step title="通过包管理器安装 AI Agent SDK。">
+```bash
+npm install zego-ai-agent-web
+```
+<Warning title="注意">
+    - 安装的依赖包支持 typescript 语言。
+    - 如果在 macOS 或 Linux 系统中执行安装命令失败，提示 “permission denied”，请在SDK安装命令前加上 sudo 重新执行即可。
+</Warning>
+
+</Step>
+
+<Step title="在项目中引入 ZEGO Express Web SDK 和 AI Agent SDK">
+
+在项目中（例如：app.vue ）引入 [ZEGO Express Web SDK](https://doc-zh.zego.im/article/199) 和 AI Agent SDK，示例代码如下；
+
+```html
+<script setup>
+import { ZegoExpressEngine } from "zego-express-engine-webrtc"
+import { ZegoAIAgent } from "zego-ai-agent-web";
+</script>
+<template>
+ <div>
+   <h1>Zego AI Agent Demo</h1>
+ </div>
+</template>
+
+```
+</Step>
+</Steps>
+
+
+
+## 核心能力实现
+
+
+### 初始化用户信息和 AI Agent SDK 参数
+
+<Warning title="注意">
+在实现 AI Agent 的功能之前，请确保已经完成了 [ZEGO Express Web SDK 初始化](https://doc-zh.zego.im/article/9540)。
+</Warning>
+
+**引入SDK并获取实例：**
+
+1. 引入 AI Agent SDK ，通过 [getInstance](../Client%20API/API%20reference.mdx#getinstance) 方法获取单例。
+
+```typescript
+import { ZegoAIAgent } from 'zego-ai-agent-web';
+
+const AIAgent = ZegoAIAgent.getInstance();
+```
+
+2. 调用 [initSDK](../Client%20API/API%20reference.mdx#initsdk) 方法完成 AI Agent SDK 的初始化，需要传入认证信息（appId和token）以及用户信息（userId和userName）。
+```typescript
+
+// 配置认证信息
+const authData = {
+    appId: your_app_id,     // 项目唯一标识 AppID，Number 类型，请从 ZEGO 控制台获取
+    token: 'your_token'    // 您的认证Token
+};
+
+// 配置用户信息 
+const userProfile = {
+    userId: 'user123',     // 用户Id
+    userName: 'username'   // 用户名称
+};
+
+// 初始化 AI Agent SDK
+try {
+    const result = await AIAgent.initSDK(authData, userProfile);
+    if (result.code === 0) {
+        console.log('SDK初始化成功');
+    }
+} catch (error) {
+    console.error('SDK初始化失败:', error);
+}
+
+```
+
+### 创建会话
+
+使用 [createConversation](../Client%20API/API%20reference.mdx#createconversation) 创建会话，传入自定义的智能体配置，包括设置智能体模板 id、智能体名称、性别、系统角色、欢迎语、TTS 配置等。创建会话成功后，返回会话Id。 
+
+```typescript
+const customAgentConfig = {
+    agentTemplateId: "xiaozhi"// 智能体模版ID
+};
+
+// 创建会话
+try {
+    // 根据模版ID创建会话
+    const createResult = await AIAgent.createConversation(customAgentConfig);
+    if (createResult.code === 0 && createResult.conversation) {
+        const conversationId = createResult.conversation.conversationId;
+        console.log('会话创建成功，会话Id:', conversationId);
+    }
+} catch (error) {
+    console.error('会话创建失败:', error);
+}
+```
+
+### 实现 AI 语音互动
+
+
+1. 实现 AI 语音互动，用户需要先通过 [loginRoom](https://doc-zh.zego.im/article/api?doc=Express_Audio_SDK_API~javascript_web~class~ZegoExpressEngine#login-room) 登录房间
+
+```typescript
+
+let roomId = 'YOUR_ROOM_Id';//房间 ID，由开发者自己生成，最大长度为 128 字节的字符串。仅支持数字，英文字符 和 '~', '!', '@', '#', '$', '', '^', '&', '*', '(', ')', '_', '+', '=', '-', ', ';', '’', ',', '.', '<', '>', '/'。
+let token = 'YOUR_TOKEN';// 登录验证 token，是通过在即构控制台注册项目获得密钥，加上指定算法获得。测试阶段可以通过 ZEGO 提供的接口获取，正式环境一定要用户自己实现。
+let user = {
+    userId: 'your_user_id',// 用户 ID，由开发者自己生成，最大 64 字节的字符串。仅支持数字，英文字符 和 '~', '!', '@', '#', '$', '', '^', '&', '*', '(', ')', '_', '+', '=', '-', ', ';', '’', ',', '.
+    userName: 'your_user_name' // 用户名，由开发者自己生成，最大长度不超过 256 字节的字符串
+};
+
+
+// 用户需要登录房间
+await zg.loginRoom(roomId, token, user);
+
+// Token 过期时的处理
+zg.on('tokenWillExpire',(roomID: string)=>{
+    let token = await getToken(); // 重新请求开发者服务端获取 Token
+    zg.renewToken(token);// 更新 RTC token
+    AIAgent.renewToken(token); // 更新 AI Agent token
+});
+
+```
+
+<Warning title="注意">
+- ZEGO Express Web SDK 登录房间的 Token 和 AI Agent SDK 登录房间的 Token 是相同的，关于 Token 的获取可以参考 [Token 鉴权](./Authentication.mdx)
+- Token 过期可能导致推拉流异常等问题，关于 Token 的过期处理可以参考 [Token 过期时的处理方式](https://doc-zh.zego.im/article/14049#4_4)
+</Warning>
+
+
+2. 用户登录房间后，需要使用 [createZegoStream](https://doc-zh.zego.im/article/api?doc=Express_Audio_SDK_API~javascript_web~class~ZegoExpressEngine#create-zego-stream) 创建自己的音频流并使用 [startPublishingStream](https://doc-zh.zego.im/article/api?doc=Express_Audio_SDK_API~javascript_web~class~ZegoExpressEngine#start-publishing-stream) 推流。
+
+```typescript
+let publishStreamId = 'YOUR_PUBLISH_STREAM_Id';// 推流自己语音的流Id，长度不超过 256 的字符串，需要在整个 AppID 内全局唯一
+let pullStreamId = 'YOUR_PULL_STREAM_Id';// 需要拉流的流Id
+
+
+// 登录成功后，用户需要使用 RTC 推音频流
+const custom = {
+    camera: {
+        video: false,
+        audio: {
+            ANS: true,
+            AGC: true,
+            AEC: true,
+        },
+    },
+};
+
+const localAudioStream = await zg.createZegoStream(custom);
+zg.startPublishingStream(
+    publishStreamId,
+    localAudioStream
+);
+```
+
+3. 通过 [on](https://doc-zh.zego.im/article/api?doc=Express_Audio_SDK_API~javascript_web~class~ZegoExpressEngine#on) 监听流新增事件，拉取 AI Agent 的流。
+
+<Warning title="注意">
+用户需要自行监听 ZEGO Express Web SDK 的流新增回调，拉取 AI Agent 的流，实现语音聊天互动。
+</Warning>
+
+```typescript
+let pullStreamId = 'YOUR_PULL_STREAM_Id';// 需要拉流的流Id
+let roomId = 'YOUR_ROOM_Id';// 要登录的房间Id
+
+// 监听 RTC 流新增事件
+zg.on("roomStreamUpdate",  async (roomId, updateType, streamList) => {
+    if (updateType === "ADD") { 
+        // 遍历 streamList，只有当流 Id 匹配时才播放
+        for (const stream of streamList) {
+            if (stream.streamId === pullStreamId) {
+                // 播放流
+                playRemoteStream(pullStreamId);
+                break;
+            }
+        }
+    }
+});
+
+async playRemoteStream(streamId, isMetaHuman) {
+    try {
+        const remoteStream = await zg.startPlayingStream(streamId, {
+            jitterBufferTarget: 500, // 拉流音视频播放延迟，单位为毫秒，取值(0, 4000]ms。如果网络状况不佳，浏览器可能会增加播放延迟以减少卡顿。
+        });
+
+        if (!remoteStream) {
+            throw new Error("remoteStream is undefined");
+        }
+
+        const remoteView = zg.createRemoteStreamView(remoteStream);
+        remoteView.play(document.createElement("div"),{enableAutoplayDialog: true,}
+        );
+    } catch (error) {
+        console.error("Failed to play remote stream:", error);
+        throw error;
+    }
+}
+```
+
+4. 调用 [startChat](../Client%20API/API%20reference.mdx#startchat) 接口，开启 AI Agent 的语音互动功能。
+
+```typescript
+let publishStreamId = 'YOUR_PUBLISH_STREAM_Id';// 推流自己语音的流Id
+let pullStreamId = 'YOUR_PULL_STREAM_Id';// 需要拉流的流Id
+let conversationId = 'YOUR_CONVERSATION_Id';// 要启动的会话Id
+let roomId = 'YOUR_ROOM_Id';// 要登录的房间Id
+
+// 开始语音聊天
+const voiceChatOptions = {
+    conversationId: conversationId,  // 会话Id
+    roomId: roomId,                  // 房间Id
+    userStreamId: publishStreamId,   // 用户流Id
+    agentStreamId: pullStreamId,     // 智能体流Id
+    chatMode: 0                      // 聊天模式：语音
+};
+
+try {
+    const startResult = await AIAgent.startChat(voiceChatOptions);
+    if (startResult.code === 0) {
+        console.log('语音聊天开始成功');
+    }
+} catch (error) {
+    console.error('开始语音聊天失败:', error);
+}
+```
+
+<Accordion title="完整示例代码" defaultOpen="false">
+```typescript
+import { ZegoExpressEngine } from "zego-express-engine-webrtc"
+import { ZegoAIAgent } from "zego-ai-agent-web";
+
+
+let publishStreamId = 'YOUR_PUBLISH_STREAM_Id';// 推流自己语音的流Id
+let pullStreamId = 'YOUR_PULL_STREAM_Id';// 需要拉流的流Id
+let conversationId = 'YOUR_CONVERSATION_Id';// 要启动的会话Id
+let roomId = 'YOUR_ROOM_Id';// 要登录的房间Id
+let token = 'YOUR_TOKEN';// 登录房间的 Token
+let user = {
+    userId: 'your_user_id',
+    userName: 'your_user_name'
+};
+let appId = ; // 项目唯一标识 AppId，Number 类型，请从 ZEGO 控制台获取
+let server = "";// 接入服务器地址 Server，String 类型，请从 ZEGO 控制台获取（获取方式请参考上文“前提条件”）
+
+
+// 初始化 ZEGO Express Web SDK
+const zg = new ZegoExpressEngine(appId, server);
+
+// 配置认证信息
+const authData = {
+    appId: appId,
+    token: token   
+};
+
+// 配置用户信息 
+const userProfile = {
+    userId: user.userId, 
+    userName: user.userName
+};
+
+// 初始化 AI Agent SDK
+const AIAgent = ZegoAIAgent.getInstance();
+
+try {
+    const result = await AIAgent.initSDK(authData, userProfile);
+    if (result.code === 0) {
+        console.log('SDK初始化成功');
+    }
+} catch (error) {
+    console.error('SDK初始化失败:', error);
+}
+
+// 1. 用户需要登录房间
+await zg.loginRoom(roomId, token, user);
+
+// Token 过期时的处理
+zg.on('tokenWillExpire',(roomID: string)=>{
+    let token = await getToken(); // 重新请求开发者服务端获取 Token
+    zg.renewToken(token);// 更新 RTC token
+    AIAgent.renewToken(token); // 更新 AI Agent token
+});
+
+// 2. 登录成功后，用户需要使用RTC推音频流
+const custom = {
+    camera: {
+        video: false,
+        audio: {
+            ANS: true,
+            AGC: true,
+            AEC: true,
+        },
+    },
+};
+
+const localAudioStream = await zg.createZegoStream(custom);
+zg.startPublishingStream(
+    publishStreamId,
+    localAudioStream
+);
+// 3. 监听 RTC 流新增事件
+zg.on("roomStreamUpdate",  async (roomId, updateType, streamList) => {
+    if (updateType === "ADD") {
+        if (activeConversationId) {
+            // 遍历 streamList，只有当流 Id 匹配时才播放
+            for (const stream of streamList) {
+                if (stream.streamId === pullStreamId) {
+                    // 播放流
+                    playRemoteStream(pullStreamId);
+                    break;
+                }
+            }
+        }
+    }
+});
+
+async playRemoteStream(streamId, isMetaHuman) {
+    try {
+        const remoteStream = await zg.startPlayingStream(streamId, {
+            jitterBufferTarget: 500, //拉流音视频播放延迟，单位为毫秒，取值(0, 4000]ms。如果网络状况不佳，浏览器可能会增加播放延迟以减少卡顿。
+        });
+
+        if (!remoteStream) {
+            throw new Error("remoteStream is undefined");
+        }
+
+        const remoteView = zg.createRemoteStreamView(remoteStream);
+        remoteView.play(document.createElement("div"),{enableAutoplayDialog: true,}
+        );
+    } catch (error) {
+        console.error("Failed to play remote stream:", error);
+        throw error;
+    }
+}
+// 4. 开始语音聊天
+const voiceChatOptions = {
+    conversationId: conversationId,  // 会话Id
+    roomId: roomId,                  // 房间Id
+    userStreamId: publishStreamId,   // 用户流Id
+    agentStreamId: pullStreamId,     // 智能体流Id
+    chatMode: 0                      // 聊天模式：语音
+};
+
+try {
+    const startResult = await AIAgent.startChat(voiceChatOptions);
+    if (startResult.code === 0) {
+        console.log('语音聊天开始成功');
+    }
+} catch (error) {
+    console.error('开始语音聊天失败:', error);
+}
+
+```
+</Accordion>
+
+### 结束会话
+
+用户在结束语音互动时，需要调用 [stopChat](../Client%20API/API%20reference.mdx#stopchat) 接口结束语音互动，同时调用 [stopPlayingStream](https://doc-zh.zego.im/article/api?doc=Express_Audio_SDK_API~javascript_web~class~ZegoExpressEngine#stop-playing-stream) 和 [logoutRoom](https://doc-zh.zego.im/article/api?doc=Express_Audio_SDK_API~javascript_web~class~ZegoExpressEngine#logout-room) 停止拉流，退出房间。 
+```typescript
+try {
+    const stopResult = await AIAgent.stopChat(conversationId);
+    if (stopResult.code === 0) {
+        // 停止拉流
+        zg.stopPlayingStream(pullStreamId);
+        // 退出房间
+        zg.logoutRoom();
+    }
+} catch (error) {
+    console.error('结束聊天失败:', error);
+}
+
+```
