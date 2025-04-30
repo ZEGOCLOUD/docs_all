@@ -78,6 +78,14 @@ export const ReconnectingMap = {
   "RN,uniapp":`Reconnecting`,
   "Flutter":`reconnecting`,      
 }
+export const customStatusMap = {
+  'Android': <a href='@customStatus' target='_blank'>ZIMLoginConfig.customStatus</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMLoginConfig/customStatus.html' target='_blank'>ZIMLoginConfig.customStatus</a>,
+}
+export const updateUserCustomStatusMap = {
+  'Android': <a href='@updateUserCustomStatus' target='_blank'>updateUserCustomStatus</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/updateUserCustomStatus.html' target='_blank'>updateUserCustomStatus</a>,
+}
 
 # 用户状态管理
 
@@ -90,13 +98,131 @@ export const ReconnectingMap = {
 
 ## 功能简介
 
-用户在线状态（ {getPlatformData(props,ZIMUserOnlineStatusMap)} )，可分为在线、离线，和登出三种状态。
+:::if{props.platform="undefined|iOS|mac|window|RN|Flutter"}
 
+用户状态包含用户在线状态和自定义状态：
+<div>
+- 用户在线状态（ {getPlatformData(props,ZIMUserOnlineStatusMap)} )：可分为在线、离线，和登出三种状态，由 ZIM 定义，开发者无法修改。
+    - 在线：主动调用 `login` 接口登录并保持网络连接的条件下，用户的状态变更为在线状态。
+    - 登出：主动调用 `logout` 接口后，用户的状态变更为登出状态。
+    - 离线：调用 `login` 接口登录后，用户杀死 app、锁屏或退后台等行为导致网络断开，用户的状态变更为离线状态。 
+- 自定义状态：您可以按需自行定义的状态，例如，请勿打扰、忙碌等。
+</div>
+本文介绍如何设置用户的自定义状态、订阅和查询用户的在线状态、自定义状态。
+:::
+:::if{props.platform="uniapp"}
+用户在线状态（ {getPlatformData(props,ZIMUserOnlineStatusMap)} )，可分为在线、离线，和登出三种状态。
+<div>
 - 在线：主动调用 `login` 接口登录并保持网络连接的条件下，用户的状态变更为在线状态。
 - 登出：主动调用 `logout` 接口后，用户的状态变更为登出状态。
 - 离线：调用 `login` 接口登录后，用户杀死 app、锁屏或退后台等行为导致网络断开，用户的状态变更为离线状态。 
 
 本文介绍如何订阅、查询用户的在线状态。
+</div>
+:::
+
+## 设置自定义状态
+
+您可以使用以下任意方式设置自定义状态：
+- 登录时，传入 {getPlatformData(props,customStatusMap)} 参数。
+- 登录后，调用 {getPlatformData(props,updateUserCustomStatusMap)} 方法。
+
+<Note title="说明">
+- `customStatus` 长度上限为 64 字节，有效期为 1 天。
+- `updateUserCustomStatus` 接口限频为 1 次/秒
+</Note>
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="登录时设置" {2}
+ZIMLoginConfig config = new ZIMLoginConfig();
+conifg.customStatus = "忙碌" //默认为空字符串，如果为空字符串，登录时不修改当前用户的自定义状态
+```
+
+```java title="更新自定义状态" {1}
+ZIM.getInstance().updateUserCustomStatus("请勿打扰", new ZIMUserCustomStatusUpdatedCallback() {
+    public void onUserCustomStatusUpdated(String customStatus, ZIMError errorInfo) {
+        
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+```objc
+ZIMUserStatusSubscribeConfig *config = [[ZIMUserStatusSubscribeConfig alloc] init];
+config.subscriptionDuration = 60; // 订阅持续时间（以分钟为单位），有效范围为1到43200（30天）
+
+[zim subscribeUsersStatus:@[@"userIdA",@"userIdB"]
+                   config:config
+                 callback:^(NSArray<ZIMErrorUserInfo *> *_Nonnull errorUserList,
+                            ZIMError *_Nonnull errorInfo) {
+                for(ZIMErrorUserInfo *errorUserInfo in errorUserList){
+                    errorUserInfo.userID; // 订阅失败的用户ID
+                    errorUserInfo.reason; // 订阅失败的错误代码
+                }
+}];
+```
+:::
+:::if{props.platform="window"}
+```cpp
+ZIMUserStatusSubscribeConfig config;
+config.subscriptionDuration = 60; // 订阅持续时间（以分钟为单位），有效范围为1到43200（30天）
+
+std::vector<std::string> userIDs = {"userIdA", "userIdB"};
+
+zim_->subscribeUsersStatus(userIDs, config, [](const std::vector<ZIMErrorUserInfo> &errorUserList, const ZIMError &errorInfo) {
+    for (const ZIMErrorUserInfo &errorUserInfo : errorUserList) {
+        errorUserInfo.userID;   // 订阅失败的用户ID
+        errorUserInfo.reason;   // 失败原因
+    }
+});
+```
+:::
+:::if{props.platform="RN"}
+```javascript
+// 创建订阅配置
+const config = {
+    subscriptionDuration: 60, // 订阅时长为60分钟
+};
+
+// 订阅用户ID列表
+const userIDs = ['userIdA', 'userIdB'];
+
+try {
+    // 调用subscribeUsersStatus方法
+    const result = await zim.subscribeUsersStatus(userIDs, config);
+
+    // 检查订阅失败的用户
+    if (result.errorUserList.length > 0) {
+        result.errorUserList.forEach((errorUserInfo) => {
+            console.log('订阅失败的用户ID：', errorUserInfo.userID);
+            console.log('订阅失败的错误代码：', errorUserInfo.reason);
+        });
+    } else {
+        console.log('所有用户订阅成功！');
+    }
+} catch (error) {
+    // 捕获异常并处理错误代码
+    console.error('订阅时发生错误：', error);
+}
+```
+:::
+:::if{props.platform="Flutter"}
+```dart
+ZIMUserStatusSubscribeConfig config = ZIMUserStatusSubscribeConfig();
+config.subscriptionDuration = 60; // 订阅有效时间，单位分钟，可填入的有效时间范围为 1 ～ 43200（即 30 天）
+
+ZIM.getInstance()?.subscribeUsersStatus(["userIdA","userIdB"], config).then((ZIMUsersStatusSubscribedResult result) {
+    for(ZIMErrorUserInfo errorUserInfo in result.errorUserList){
+        errorUserInfo.userID; // 订阅失败的用户 ID
+        errorUserInfo.reason; // 订阅失败的错误码
+    }
+}).catchError((onError){
+
+});
+```
+:::
 
 ## 订阅用户状态
 
