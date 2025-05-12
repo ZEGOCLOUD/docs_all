@@ -20,7 +20,7 @@ ZEGOCLOUD supports request access from the following geographical regions:
 </thead>
 <tbody>
   <tr>
-    <td>Mainland China (Shanghai)</td>
+    <td>Chinese Mainland (Shanghai)</td>
     <td>${PRODUCT}-api-sha.zego.im</td>
   </tr>
   <tr>

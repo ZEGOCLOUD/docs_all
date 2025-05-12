@@ -78,6 +78,14 @@ export const ReconnectingMap = {
   "RN,uniapp":`Reconnecting`,
   "Flutter":`reconnecting`,      
 }
+export const customStatusMap = {
+  'Android': <a href='@customStatus-ZIMLoginConfig' target='_blank'>ZIMLoginConfig.customStatus</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMLoginConfig/customStatus.html' target='_blank'>ZIMLoginConfig.customStatus</a>,
+}
+export const updateUserCustomStatusMap = {
+  'Android': <a href='@updateUserCustomStatus' target='_blank'>updateUserCustomStatus</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/updateUserCustomStatus.html' target='_blank'>updateUserCustomStatus</a>,
+}
 
 # 用户状态管理
 
@@ -90,43 +98,60 @@ export const ReconnectingMap = {
 
 ## 功能简介
 
-用户在线状态（ {getPlatformData(props,ZIMUserOnlineStatusMap)} )，可分为在线、离线，和登出三种状态。
+:::if{props.platform="undefined|iOS|mac|window|RN|Flutter"}
 
+用户状态包含用户在线状态和自定义状态：
+<div>
+- 用户在线状态（ {getPlatformData(props,ZIMUserOnlineStatusMap)} )：可分为在线、离线，和登出三种状态，由 ZIM 定义，开发者无法修改。
+    - 在线：主动调用 `login` 接口登录并保持网络连接的条件下，用户的状态变更为在线状态。
+    - 登出：主动调用 `logout` 接口后，用户的状态变更为登出状态。
+    - 离线：调用 `login` 接口登录后，用户杀死 app、锁屏或退后台等行为导致网络断开，用户的状态变更为离线状态。 
+- 自定义状态：您可以按需自行定义的状态，例如，请勿打扰、忙碌等。
+</div>
+
+<Frame width="auto" height="auto" >
+  <img src="https://media-resource.spreading.io/docuo/workspace740/af061ebc6eaf0f12ae9e7f72235bd04e/a8fa19c930.png" alt="1_用户状态_中文.png"/>
+</Frame>
+
+本文介绍如何设置用户的自定义状态、订阅和查询用户的在线状态、自定义状态。
+:::
+:::if{props.platform="uniapp"}
+用户在线状态（ {getPlatformData(props,ZIMUserOnlineStatusMap)} )，可分为在线、离线，和登出三种状态。
+<div>
 - 在线：主动调用 `login` 接口登录并保持网络连接的条件下，用户的状态变更为在线状态。
 - 登出：主动调用 `logout` 接口后，用户的状态变更为登出状态。
 - 离线：调用 `login` 接口登录后，用户杀死 app、锁屏或退后台等行为导致网络断开，用户的状态变更为离线状态。 
 
-自定义状态。根据您业务需要，自行定义的状态，例如请勿打扰、忙碌等。
+本文介绍如何订阅、查询用户的在线状态。
+</div>
+:::
 
-本文介绍如何订阅、查询用户的在线状态、自定义状态，以及如何设置自己的自定义状态。
+## 设置自定义状态
 
+您可以使用以下任意方式设置自定义状态：
+- 登录时，传入 {getPlatformData(props,customStatusMap)} 参数。
+- 登录后，调用 {getPlatformData(props,updateUserCustomStatusMap)} 方法。
 
-## 设置自己的自定义状态
-您可以在登录时通过设置 ZIMLoginConfig 中的 customStatus 参数来设置自己的自定义状态，或是在登录后调用接口 updateUserCustomStatus 设置 customStatus 字段来设置。
-
-customStatus 最大为 64 字节
-updateUserCustomStatus 接口限频为 1次/秒
+<Note title="说明">
+- `customStatus` 长度上限为 64 字节，有效期为 1 天。
+- `updateUserCustomStatus` 接口限频为 1 次/秒
+</Note>
 
 :::if{props.platform=undefined}
-```java
-ZIMUserStatusSubscribeConfig config = new ZIMUserStatusSubscribeConfig();
-config.subscriptionDuration = 60; // 订阅有效时间，单位为分钟，可填入的有效时间范围为 1 ～ 43200（即 30 天）
+<CodeGroup>
+```java title="登录时设置" {2}
+ZIMLoginConfig config = new ZIMLoginConfig();
+conifg.customStatus = "忙碌" //默认为空字符串，如果为空字符串，登录时不修改当前用户的自定义状态
+```
 
-ArrayList<String> userIDs = new ArrayList<>();
-userIDs.add("userIdA");
-userIDs.add("userIdB");
-
-zim.subscribeUsersStatus(userIDs, config, new ZIMUsersStatusSubscribedCallback() {
-    @Override
-    public void onUsersStatusSubscribed(ArrayList<ZIMErrorUserInfo> errorUserList, ZIMError errorInfo) {
-        // 处理订阅回调
-        for (ZIMErrorUserInfo errorUserInfo : errorUserList) {
-            System.out.println("订阅失败的用户 ID: " + errorUserInfo.userID);
-            System.out.println("订阅失败的错误码: " + errorUserInfo.reason);
-        }
+```java title="更新自定义状态" {1}
+ZIM.getInstance().updateUserCustomStatus("请勿打扰", new ZIMUserCustomStatusUpdatedCallback() {
+    public void onUserCustomStatusUpdated(String customStatus, ZIMError errorInfo) {
+        
     }
 });
 ```
+</CodeGroup>
 :::
 :::if{props.platform="iOS|mac"}
 ```objc
@@ -206,7 +231,7 @@ ZIM.getInstance()?.subscribeUsersStatus(["userIdA","userIdB"], config).then((ZIM
 
 ## 订阅用户状态
 
-如需持续关注某些人的在线状态时（包括普通状态和自定义状态），可以调用 {getPlatformData(props,subscribeUsersStatusMap)} 接口，向参数 `userIDs` 批量传入目标用户 ID（至多 100 名已注册用户，不得包含订阅者自身），在 config 中传入 `subscriptionDuration`（订阅有效时长，在此时段内会持续关注目标用户的在线状态变更），进而添加目标用户在线状态的订阅到当前用户的在线状态订阅表中。
+如需持续关注某些人的在线状态时，可以调用 {getPlatformData(props,subscribeUsersStatusMap)} 接口，向参数 `userIDs` 批量传入目标用户 ID（至多 100 名已注册用户，不得包含订阅者自身），在 config 中传入 `subscriptionDuration`（订阅有效时长，在此时段内会持续关注目标用户的在线状态变更），进而添加目标用户在线状态的订阅到当前用户的在线状态订阅表中。
 
 <Note title="说明">
 
