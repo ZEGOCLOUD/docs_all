@@ -1,0 +1,278 @@
+import MediaMsgBodyDescriptionZh from '/core_products/zim/zh/snippets/MediaMsgBodyDescriptionZh.mdx'
+import MultiMsgBodyDescriptionZh from '/core_products/zim/zh/snippets/MultiMsgBodyDescriptionZh.mdx'
+
+<Warning title="警告">服务端 API 板块于4月16日至5月15日升级维护，期间暂停信息更新，如有任何疑问，请联系 ZEGO 技术支持。</Warning>
+# 单聊机器人发送消息后回调
+
+- - -
+
+## 描述
+
+机器人发送单聊消息成功或失败后，业务后台可以接收 ZIM 服务端的发送消息回调，将机器人发送的消息实时同步至业务服务器，并存储于业务服务器。
+
+<Warning title="注意">
+
+此回调支持的消息类型为文本消息、图片消息、文件消息、音频消息、视频消息、自定义消息，不支持信令消息、弹幕消息。 
+</Warning>
+
+
+## 回调说明
+
+- 请求方法：POST。
+  <Note title="说明">
+  回调数据格式为 JSON，您需要对其进行 UrlDecode 解码。
+  </Note>
+- 请求地址：请在 [ZEGO 控制台](https://console.zego.im/) 上配置回调地址，配置流程请参考控制台文档 [ZIM 相关回调配置](https://doc-zh.zego.im/article/17223)。
+- 传输协议：HTTPS/HTTP，建议使用 HTTPS。
+
+## 回调参数
+
+<table class="collapsible-table" >
+<tbody><tr data-row-level="1">
+<th>公共参数</th>
+<th>类型</th>
+<th>描述</th>
+</tr>
+<tr data-row-level="2">
+<td>appid</td>
+<td>String</td>
+<td>App 的唯一标识。</td>
+</tr>
+<tr data-row-level="3">
+<td>event</td>
+<td>String</td>
+<td>回调事件，此回调返回值为 `bot_msg`。</td>
+</tr>
+<tr data-row-level="4">
+<td>nonce</td>
+<td>String</td>
+<td>随机数，用于计算 signature。</td>
+</tr>
+<tr data-row-level="5">
+<td>signature</td>
+<td>String</td>
+<td>检验串，详情见 [检验说明](./Authenticating%20server-to-server%20callbacks.mdx)。</td>
+</tr>
+<tr data-row-level="6">
+<td>timestamp</td>
+<td>Int</td>
+<td>服务器当前时间，Unix 时间戳，单位为秒（s），用于计算 signature。</td>
+</tr>
+<tr data-row-level="7">
+<th>业务参数</th>
+<th>类型</th>
+<th>描述</th>
+</tr>
+<tr data-row-level="8">
+<td>from_user_id</td>
+<td>String</td>
+<td>消息发送者 ID。</td>
+</tr>
+<tr data-row-level="9">
+<td>conv_type</td>
+<td>Int</td>
+<td>目标会话类型：<ul><li>0：单聊。</li></ul></td>
+</tr>
+<tr data-row-level="10">
+<td>conv_id</td>
+<td>String</td>
+<td>
+目标会话 ID。
+<Note title="说明">
+当开发者使用服务端发送单聊消息时，此字段为空，“user_list”有值。
+</Note>
+</td>
+</tr>
+<tr data-row-level="11">
+<td>msg_type</td>
+<td>Int</td>
+<td>消息类型：<ul><li>1：文本。</li><li>10：组合。</li><li>11：图片。</li><li>12：文档。</li><li>13：音频。</li><li>14：视频。</li><li>200：自定义。</li></ul></td>
+</tr>
+<tr data-row-level="12">
+<td>sub_msg_type</td>
+<td>Int</td>
+<td>具体的自定义类型。值由用户发送自定义消息时填写，取值范围为 [0,200]。只有当 msg_type 为 200（自定义类型）时，此参数才有意义。</td>
+</tr>
+<tr data-row-level="13">
+<td>msg_body</td>
+<td>String</td>
+<td>消息内容<ul><li>消息由客户端发送时：<ul><li>当 msg_type 为 1（文本类型）或 200（自定义类型），msg_body 为发送消息时传入的消息内容，开发者可直接阅读消息内容。</li><li>当 msg_type 为下列类型时，msg_body 为 JSON 字符串。请使用 URLDecode 对此 JSON 字符串解码，并按照对应结构获取消息中各字段数据：<ul><li>当 msg_type 为 11、12、13、14（多媒体消息）：<a href="#多媒体消息">msg_body JSON 字符串解析结果参数说明 - 多媒体消息</a>。</li><li>当 msg_type 为 10（组合消息）：<a href="#组合消息">msg_body JSON 字符串解析结果参数说明 - 组合消息</a>。</li></ul></li></ul></li><li>消息由服务端发送时，不论消息类型，本回调会直接透传发送消息时传入的内容。</li></ul></td>
+</tr>
+<tr data-row-level="14">
+<td>msg_id</td>
+<td>String</td>
+<td>消息 ID，可借此确定消息的唯一性。<Warning title="注意"><p>通过服务端 API <strong>批量</strong>发送单聊消息时，此字段为空。此时如需获取消息 ID，请从“user_list”获取。</p></Warning></td>
+</tr>
+<tr data-row-level="15">
+<td>msg_seq</td>
+<td>Int</td>
+<td>消息 Seq，可用于撤回消息。<Warning title="注意"><p>通过服务端 API <strong>批量</strong>发送单聊消息时，此字段为空。此时如需获取消息 Seq，请从“user_list”获取。</p></Warning></td>
+</tr>
+<tr data-row-level="16">
+<td>payload</td>
+<td>String</td>
+<td>消息扩展字段。</td>
+</tr>
+<tr data-row-level="17">
+<td>msg_time</td>
+<td>Int</td>
+<td>服务端收到消息的时间，Unix 时间戳，单位为毫秒（ms）。</td>
+</tr>
+<tr data-row-level="18">
+<td>send_result</td>
+<td>Int</td>
+<td>消息发送结果。0 表示发送成功，其他整数为具体错误码，表示发送失败，您可参考 <a href="./../Return%20codes.mdx">全局返回码</a> 了解原因。</td>
+</tr>
+<tr data-row-level="19" data-row-child="true">
+<td>user_list</td>
+<td>Array of Object</td>
+<td>只有通过服务端发送单聊消息时，回调会包含此字段，用于批量返回消息接收用户信息。<Note title="说明">此字段有值时，“conv_id”为空。</Note></td>
+</tr>
+<tr data-row-level="19-1">
+<td>└UserId</td>
+<td>String</td>
+<td>消息接收用户。</td>
+</tr>
+<tr data-row-level="19-2">
+<td>└MsgId</td>
+<td>String</td>
+<td>消息 ID，可借此确定消息的唯一性。消息发送失败时，此字段为空。</td>
+</tr>
+<tr data-row-level="19-3">
+<td>└MsgSeq</td>
+<td>Int</td>
+<td>消息 Seq，可用于撤回消息。</td>
+</tr>
+</tbody></table>
+
+
+<Note title="说明">
+
+建议您将部分参数转换为 Int 进行逻辑处理，相关字段包括 `appid` 和 `nonce`。
+</Note>
+
+### msg_body JSON 字符串解析结果参数说明
+
+#### 多媒体消息
+
+<MediaMsgBodyDescriptionZh />
+
+#### 组合消息
+
+<MultiMsgBodyDescriptionZh />
+
+
+## 数据示例
+
+- POST/JSON
+
+```json
+{
+    "appid": "1",
+    "event": "bot_msg",
+    "nonce": "350176",
+    "signature": "signature",
+    "timestamp": 1679553625,
+    "from_user_id": "350176117361",
+    "conv_type": 0,
+    "conv_id": "",
+    "msg_type": 1,
+    "msg_body": "msg_body",
+    "msg_id": "857639062792568832",
+    "payload": "payload",
+    "msg_time": 1679554146000,
+    "send_result": 0,
+    "sub_msg_type": 0,
+    "user_list":[
+        {"UserId":"userid1","MsgId": "857639062792568822",},
+        {"UserId":"userid2","MsgId": "857639062792568833",}
+    ]
+}
+```
+
+## 返回响应
+
+收到回调后，如果您的服务器返回的 HTTP status code 为 2XX （例如 200），表示成功；返回其他，表示失败。
+
+## 回调重试策略
+
+如果 ZEGO 服务器没有收到响应，或收到的 HTTP status code 不为 2XX（例如 200），都会尝试重试，**最多进行 5 次重试**。每次重试请求与**上一次请求**的间隔时间分别为 2s、4s、8s、16s、32s。若第 5 次重试后仍然失败，将不再重试，该回调丢失。
+
+## send_result 说明
+
+以下仅列出了回调相关的返回码，完整返回码请参考 [全局返回码](../Return%20codes.mdx)。
+
+<table>
+<tbody><tr>
+<th>返回码</th>
+<th>描述</th>
+<th>可能原因</th>
+<th>处理建议</th>
+</tr>
+<tr>
+<td>660000002</td>
+<td>输入参数错误。</td>
+<td>输入的参数缺失或不合法。</td>
+<td>请检查输入的参数。</td>
+</tr>
+<tr>
+<td>660500002</td>
+<td>用户未注册。</td>
+<td>消息发送者未登录过 SDK。</td>
+<td>请用户先登录后再发送消息。</td>
+</tr>
+<tr>
+<td>660500004</td>
+<td>文本审核请求出错。</td>
+<td>文本审核请求出错。</td>
+<td>请联系 ZEGO 技术支持。</td>
+</tr>
+<tr>
+<td>660500005</td>
+<td>发送的文本消息没有通过审核。</td>
+<td>发送的文本消息没有通过审核。</td>
+<td>请勿发送该消息。</td>
+</tr>
+<tr>
+<td>660500006</td>
+<td>图片审核请求出错。</td>
+<td>图片审核请求出错。</td>
+<td>请联系 ZEGO 技术支持。</td>
+</tr>
+<tr>
+<td>660500007</td>
+<td>发送的图片消息没有通过审核。</td>
+<td>发送的图片消息没有通过审核。</td>
+<td>请勿发送该消息。</td>
+</tr>
+<tr>
+<td>660500009</td>
+<td>您的业务后台判断此消息应当“静默发送”。</td>
+<td>收到“消息发送前回调”后，您的业务后台返回了 `2`，此消息被静默发送。</td>
+<td>无需处理。</td>
+</tr>
+<tr>
+<td>660500010</td>
+<td>您的业务后台判断此消息应当“不发送”。</td>
+<td>收到“消息发送前回调”后，您的业务后台返回了 `3`，此消息被拒绝发送。</td>
+<td>无需处理。</td>
+</tr>
+<tr>
+<td>660600021</td>
+<td>发送消息参数错误。</td>
+<td>发送消息参数错误。</td>
+<td>请检查参数。</td>
+</tr>
+<tr>
+<td>660600022</td>
+<td>发送多媒体消息，获取重定向地址失败。</td>
+<td>发送多媒体消息，获取重定向地址失败。</td>
+<td>请联系 ZEGO 技术支持处理。</td>
+</tr>
+<tr>
+<td>660600023</td>
+<td>消息长度超过限制。</td>
+<td>消息长度超过限制。</td>
+<td>请缩小消息长度。</td>
+</tr>
+</tbody></table>
