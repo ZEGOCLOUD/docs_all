@@ -1,0 +1,218 @@
+## Signing the requests
+
+
+To ensure secure API calls, the ZEGOCLOUD server authenticates every API request, which means a request signature must be included in every API request.
+
+<Warning title="Warning">
+A new signature needs to be generated for every API request.  
+</Warning>
+
+### Get the AppId and Server Secret Key
+
+To generate a request signature, you will need to use the **AppId** and **ServerSecret** assigned to your project by ZEGOCLOUD. The **AppId** is used as the identifier of the request sender, and **ServerSecret** is the secret key to generate the signature string on the request sender side and verify the signature on the ZEGOCLOUD server. To ensure system security, please keep this information strictly confidential.
+
+You can find the **AppId** and **ServerSecret** of your project in the [ZEGOCLOUD Admin Console](https://console.zegocloud.com).
+
+### Generate a signature
+
+#### Parameters required to generate a signature
+
+| Parameter | Description |
+| :-- | :-- | 
+| AppId | Application ID. |
+| SignatureNonce | A random string. |
+| ServerSecret | Server secret key. |
+| Timestamp | Unix timestamp of the current time, in seconds. A maximum error of 10 minutes is allowed. |
+
+
+<Note title="Note">
+The values of the `SignatureNonce` and `Timestamp` parameters used to generate the signature must be consistent with those of the public parameters.
+</Note>
+
+#### Signature algorithm
+
+Signature = md5(AppId + SignatureNonce + ServerSecret + Timestamp)
+
+#### Format of the Signature string
+
+The Signature is a hex string of 32 characters in lower case.
+
+
+### Signature sample code
+
+ZEGOCLOUD provides sample code in various programming languages for generating the signature.
+
+<CodeGroup>
+```go title="Go"
+import (
+   "crypto/md5"
+   "crypto/rand"
+   "encoding/hex"
+   "fmt"
+   "log"
+   "time"
+)
+// Signature=md5(AppId + SignatureNonce + ServerSecret + Timestamp)
+func GenerateSignature(appId uint32, signatureNonce string, serverSecret string, timestamp int64) (Signature string){
+   data := fmt.Sprintf("%d%s%s%d", appId, signatureNonce, serverSecret, timestamp)
+   h := md5.New()
+   h.Write([]byte(data))
+   return hex.EncodeToString(h.Sum(nil))
+}
+func main() {
+   /* Generate a 16-character random hexadecimal string (16 bits) */
+   nonceByte := make([]byte, 8)
+   rand.Read(nonceByte)
+   signatureNonce := hex.EncodeToString(nonceByte)
+   log.Printf(signatureNonce)
+   appId := 12345       // Use your appId and serverSecret
+   serverSecret := "9193cc662a4c0ec135ec71fb57194b38"
+   timestamp := time.Now().Unix()
+   /* appId:12345
+      signatureNonce:4fd24687296dd9f3
+      serverSecret:9193cc662a4c0ec135ec71fb57194b38
+      timestamp:1615186943      2021/03/08 15:02:23
+      signature:43e5cfcca828314675f91b001390566a
+    */
+   log.Printf("signature:%v", GenerateSignature(uint32(appId), signatureNonce, serverSecret, timestamp))
+}
+```
+
+```python title="Python"
+# -*- coding: UTF-8 -*-
+import secrets
+import string
+import hashlib
+import time
+#Signature=md5(AppId + SignatureNonce + ServerSecret + Timestamp)
+def GenerateSignature(appId, signatureNonce, serverSecret, timestamp):
+    str1 = str(appId) + signatureNonce + serverSecret + str(timestamp)
+    hash = hashlib.md5()
+    hash.update(str1.encode("utf8"))
+    signature = hash.hexdigest()
+    return signature
+
+def main():
+    # Generate a 16-character hexadecimal random string (16 bits)
+    signatureNonce = secrets.token_hex(8)
+
+    # Use your appId and serverSecret
+    appId = 12345
+    serverSecret = "9193cc662a4c0ec135ec71fb57194b38"
+    # Get a 10-digit Unix timestamp
+    timestamp = int(time.time())
+    print(GenerateSignature(appId,signatureNonce,serverSecret,timestamp))
+
+if __name__ == '__main__':
+    main()
+```
+
+```java title="Java"
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+
+public class Md5 {
+    /**
+     * Convert byte array to hexadecimal
+     * @param bytes The byte array to be converted
+     * @return The converted Hex string
+     */
+    public static String bytesToHex(byte[] bytes) {
+        StringBuffer md5str = new StringBuffer();
+        // Convert each byte in the array to a hexadecimal and concatenate into an MD5 string
+        int digital;
+        for (int i = 0; i < bytes.length; i++) {
+            digital = bytes[i];
+            if (digital < 0) {
+                digital += 256;
+            }
+            if (digital < 16) {
+                md5str.append("0");
+            }
+            md5str.append(Integer.toHexString(digital));
+        }
+        return md5str.toString();
+    }
+
+    // Signature=md5(AppId + SignatureNonce + ServerSecret + Timestamp)
+    public static String GenerateSignature(long appId, String signatureNonce, String serverSecret, long timestamp){
+        String str = String.valueOf(appId) + signatureNonce + serverSecret + String.valueOf(timestamp);
+        String signature = "";
+        try{
+            // Create an object that provides a message digest algorithm, initialized as an MD5 algorithm object
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            // Compute and obtain the byte array
+            byte[] bytes = md.digest(str.getBytes("utf-8"));
+            // Convert each byte in the array to hexadecimal and concatenate into an MD5 string
+            signature = bytesToHex(bytes);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return signature;
+    }
+
+    public static void main(String[] args){
+        // Generate a 16-character random hexadecimal string (16 characters)
+        byte[] bytes = new byte[8];
+
+        // Use SecureRandom to get a high-strength secure random number generator
+        SecureRandom sr = new SecureRandom();
+
+        sr.nextBytes(bytes);
+        String signatureNonce = bytesToHex(bytes);
+        long appId = 12345L;       // Use your appId and serverSecret, add uppercase L or lowercase l after numbers to indicate long type
+        String serverSecret = "9193cc662a4c0ec135ec71fb57194b38";
+        long timestamp = System.currentTimeMillis() / 1000L;
+        System.out.println(GenerateSignature(appId,signatureNonce,serverSecret,timestamp));
+    }
+}
+```
+
+```php title="PHP"
+<?php
+function GenerateSignature($appId, $signatureNonce, $serverSecret, $timestamp)
+{
+    $str = $appId.$signatureNonce.$serverSecret.$timestamp;
+    $signature = md5($str);
+    return $signature;
+}
+
+// Generate a 16-bit hexadecimal random string
+$signatureNonce = bin2hex(random_bytes(8));
+// Use your appId and serverSecret
+$appId = 12345;
+$serverSecret = "9193cc662a4c0ec135ec71fb57194b38";
+$timestamp = time();
+$signature = GenerateSignature($appId, $signatureNonce, $serverSecret, $timestamp);
+echo $signature;
+?>
+```
+```javascript title="Node.js"
+const crypto = require('crypto'); 
+//Signature=md5(AppId + SignatureNonce + ServerSecret + Timestamp)
+function GenerateUASignature(appId, signatureNonce, serverSecret, timeStamp){
+    const hash = crypto.createHash('md5'); // Specifies the use of the MD5 algorithm in hash functions
+    var str = appId + signatureNonce + serverSecret + timeStamp;
+    hash.update(str);
+    // hash.digest('hex') indicates that the output format is hexadecimal
+    return hash.digest('hex');
+}
+
+var signatureNonce = crypto.randomBytes(8).toString('hex');
+// Use your appId and serverSecret
+var appId = 12345;
+var serverSecret = "9193cc662a4c0ec135ec71fb57194b38";
+var timeStamp = Math.round(Date.now()/1000);
+console.log(GenerateUASignature(appId, signatureNonce, serverSecret, timeStamp));
+```
+
+</CodeGroup>
+
+### Signing failures
+
+When a signature verification fails, an error code will be returned.
+
+| return code | description |
+| --- | --- |
+| 100000004 | Signature expired. |
+| 100000005 | Invalid signature. |

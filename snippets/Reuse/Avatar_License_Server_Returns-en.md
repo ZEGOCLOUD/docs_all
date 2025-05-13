@@ -43,7 +43,7 @@
 <tr data-row-level="4" data-row-child="true">
 <td>Data</td>
 <td>object</td>
-<td colspan="2">“Code” 为 0 时，返回鉴权文件的内容；“Code ”返回其它值时，表示获取鉴权失败，Data 为空。</td>
+<td colspan="2">“Code” 为 0 时，返回鉴权文件的内容；“Code ”返回其他值时，表示获取鉴权失败，Data 为空。</td>
 </tr>
 <tr data-row-level="4-1">
 <td>License</td>

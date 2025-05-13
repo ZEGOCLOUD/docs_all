@@ -4,7 +4,7 @@
 
 | 参数 | 类型 | 描述 |
 | --- | ---- | --- |
-| tips | Object Array | 搜索提示列表。 |
+| tips | Array of Object | 搜索提示列表。 |
 
 ### 回调示例
 ```json

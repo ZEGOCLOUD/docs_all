@@ -131,7 +131,7 @@ ZegoAccurateSync.roomExtraInfoUpdated(roomID, roomExtraInfoList);
 <div class="mk-warning">
 
 - 加载视频前，请确认是否收到 [onRoomStateChanged](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~java_android~class~IZegoEventHandler#on-room-state-changed) 指示指示 [登录房间](!Audience2_Implementation_Third_Party_Video_Resource_Solution#4_4) 成功，否则可能会导致加载视频失败。
-- 播放器支持的格式有：MP3、MP4、FLV、WAV、AAC、M3U8 和 MKV，如需支持其它格式，请联系 ZEGO 技术支持。
+- 播放器支持的格式有：MP3、MP4、FLV、WAV、AAC、M3U8 和 MKV，如需支持其他格式，请联系 ZEGO 技术支持。
 </div>
 
 ``` java

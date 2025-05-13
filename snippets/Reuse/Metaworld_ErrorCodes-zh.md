@@ -108,7 +108,7 @@
 </tr>
 <tr>
 <td>6000105</td>
-<td>设备的摄像头被其它应用占用，启动摄像头预览失败。</td>
+<td>设备的摄像头被其他应用占用，启动摄像头预览失败。</td>
 <td>请先 <a href="/faq/MetaWorld_log?product=Metaworld" target="_blank">获取日志</a>，并联系 ZEGO 技术支持处理。</td>
 </tr>
 <tr>

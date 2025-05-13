@@ -140,7 +140,7 @@ ZegoRoomConfig *roomConfig = [[ZegoRoomConfig alloc] init];
     <div class="mk-warning">
 
     - 加载视频前，请确认是否收到 [onRoomStateChanged](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~objective-c_ios~protocol~ZegoEventHandler#on-room-state-changed-error-code-extended-data-room-id) 指示 <a href="#4_4">登录房间</a> 成功，否则可能会导致加载视频失败。
-    - 播放器支持的格式有：MP3、MP4、FLV、WAV、AAC、M3U8 和 MKV，如需支持其它格式，请联系 ZEGO 技术支持。
+    - 播放器支持的格式有：MP3、MP4、FLV、WAV、AAC、M3U8 和 MKV，如需支持其他格式，请联系 ZEGO 技术支持。
     </div>
 
     ```objc

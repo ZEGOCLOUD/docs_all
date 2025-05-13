@@ -2,6 +2,242 @@
 articleID: 13933
 ---
 
-import Content from "/core_products/zim/en/docs_zim_ios/Send and receive messages.mdx"
+import MarkMessageType from '/core_products/zim/en/snippets/MessageTypeEn.mdx'
+import MarkSendMessageEvent from '/core_products/zim/en/snippets/SendMessageEventEN.mdx'
 
-<Content />
+# Send and receive messages
+
+---
+
+This document describes how to use the ZIM SDK (In-app Chat) to send and receive messages.
+
+## Prerequisites
+
+Before you begin, make sure:
+
+- The development environment meets the following requirements:  
+  - Xcode 5.0 or later.  
+  - macOS 10.13 or later, with a Mac device that supports audio and video features.
+- Go to [ZEGOCLOUD Admin Console](https://console.zegocloud.com), and do the following:
+  - Create a project, get the **AppID** and **AppSign**.
+  - Activate the **In-app Chat** service (as shown in the following figure).
+
+    <Frame>
+    <img src="https://storage.zego.im/sdk-doc/Pics/InappChat/ActivateZIMinConsole2.png" />
+    </Frame>  
+
+
+## Integrate the SDK
+
+### Optional: Create a project
+
+Skip this step if a project already exists.
+
+<Accordion title="Create a new project" defaultOpen="false">
+
+1. Open Xcode, and in the **Welcome to Xcode** window, click **Create a new Xcode project** or select **File > New > Project**. In the dialog that appears, select the **macOS** tab, then select **App** in the **Application** section.
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/QuickStart/NewProject_4.png" /></Frame>
+
+2. Fill in items or choose options for the new project, click **Next** after configuration is completed.
+
+    **Product Name** and **Organization Identifier** are required, which will be used for creating the App UID - **Bundle Identifier**.
+    <Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/QuickStart/NewProject_2.png" /></Frame>
+
+3. Choose a particular directory to restore the project to be created, and click **Create** to create a project.
+
+    <Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/QuickStart/NewProject_3.png" /></Frame>
+
+</Accordion>
+
+### Import the SDK
+
+1. Please refer to [SDK Downloads](./Client%20SDKs/SDK%20downloads.mdx) to download the latest version of the SDK.
+
+2. Unzip the SDK package to your project directory, for example, under the "libs" folder.  
+<Frame width="512" height="auto" caption="">
+  <img src="https://storage.zego.im/sdk-doc/Pics/ZIM/macOS/directory.png" />
+</Frame>
+
+3. Select the "TARGETS > General > Frameworks, Libraries, and Embedded Content" menu, and add "ZIM.xcframework". Set the "Embed" option to "Embed & Sign".  
+<Frame width="512" height="auto" caption="">
+  <img src="https://storage.zego.im/sdk-doc/Pics/ZIM/iOS/embed_and_Sign.png" />
+</Frame>
+
+4. Select the "TARGETS > Signing & Capabilities > App Sandbox" menu, and check the two options shown in the image below to enable network permissions for the project.  
+<Frame width="512" height="auto" caption="">
+  <img src="https://storage.zego.im/sdk-doc/Pics/ZIM/macOS/target_network.png" />
+</Frame>
+
+
+## Implementation steps
+
+### Import the header file
+
+Import the header file `ZIM.h`.
+
+```objc
+#import "ZIM/ZIM.h"
+```
+
+### Create a ZIM SDK instance
+
+Creating a ZIM instance is the very first step, an instance corresponds to a user logging in to the system as a client.
+
+So, let's suppose we have two clients now, client A and client B. To send and receive messages to each other, both of them will need to call the [createWithAppConfig](@createWithAppConfig) method with the AppID and AppSign you get in the [Prerequisites](#prerequisites) to create a ZIM SDK instance of their own:
+
+```objc
+// Call the createWithAppConfig method to create a ZIM SDK object and pass your AppID and AppSign.
+ZIMAppConfig *appConfig = [[ZIMAppConfig alloc] init];
+appConfig.appID = 123456; // Pass in your appID
+appConfig.appSign = @""; // Pass in your appSign
+ZIM * zim = [ZIM createWithAppConfig:appConfig];
+```
+
+Since most developers only need to instantiate ZIM once throughout the entire process, We recommends using the [getInstance](@getInstance) method to obtain the created instance object.
+
+```objc
+// After successfully calling the createWithAppConfig method to create an instance, you can obtain the zim object via the getInstance method.
+// Calling the getInstance method before calling the createWithAppConfig method or after calling the destroy method to destroy the instance will return nil.
+ZIM *zim = [ZIM getInstance];
+```
+
+
+### Conform to the EventHandler protocol
+
+Before a client user's login, you will need to call the [setEventHandler](@setEventHandler) method to implement an event handler object that conforms to the `ZIMEventHandler` protocol (for example, `self`), and implement the methods involved in the protocol to receive callbacks (you can customize the event callbacks, such as you can receive callback notifications when SDK errors occur or receive message related callback notifications).
+
+The following is the sample code for setting the event callback when connection status changes in the ViewContorller file:
+<Frame>
+  <img src="https://storage.zego.im/sdk-doc/Pics/ZIM/iOS/viewcontorller_h.png" />
+</Frame>
+
+<Frame>
+  <img src="https://storage.zego.im/sdk-doc/Pics/ZIM/iOS/viewcontorller_m.png" />
+</Frame>
+
+```objc
+[zim setEventHandler:self];
+
+- (void)zim:(ZIM *)zim errorInfo:(ZIMError *)errorInfo{
+    // The callback for receiving error codes. This callback will be triggered when SDK returns error codes.
+}
+
+- (void)zim:(ZIM *)zim tokenWillExpire:(unsigned int)second{
+    // The callback for Token expires. This callback will be triggered when the Token is about to expire, and you can customize a UI for this event.
+}
+
+- (void)zim:(ZIM *)zim connectionStateChanged:(ZIMConnectionState)state event:(ZIMConnectionEvent)event extendedData:(NSDictionary *)extendedData {
+    // The callback for connection status changes. This callback will be triggered when the connection status changes, and you can customize a UI for this event.
+}
+
+- (void)zim:(ZIM *)zim
+    peerMessageReceived:(NSArray<ZIMMessage *> *)messageList
+                   info:(ZIMMessageReceivedInfo *)info
+             fromUserID:(NSString *)fromUserID {
+    // The callback for receiving one-to-one messages.
+}
+```
+
+For a detailed introduction to the interfaces, please refer to [tokenWillExpire](https://docs.zegocloud.com/article/api?doc=zim_API~objective-c_ios~protocol~ZIMEventHandler#zim-token-will-expire), [connectionStateChanged](https://docs.zegocloud.com/article/api?doc=zim_API~objective-c_ios~protocol~ZIMEventHandler#zim-connection-state-changed-event-extended-data), and [peerMessageReceived](https://docs.zegocloud.com/article/api?doc=zim_API~objective-c_ios~protocol~ZIMEventHandler#zim-peer-message-received-info-from-user-id).
+
+### Log in to the ZIM SDK
+
+For client A and client B to send and receive messages after creating the ZIM SDK instance, they will need to log in to the ZIM SDK.
+
+To log in, both Clients A and B need to create a user-specific login configuration ([ZIMLoginConfig](@-ZIMLoginConfig) object). Once created, call the [loginWithUserID](https://docs.zegocloud.com/article/api?doc=zim_API~objective-c_macos~protocol~ZIM#login-with-user-id-config-callback-2) interface and pass in the above object to log in to ZIM.
+
+<Note title="Note">
+
+- The “userID” and “userName” support custom rules defined by you. It is recommended that you set the “userID” to a meaningful value to associate it with your own account system.
+- For SDK version `2.3.0` or later, the default authentication method is AppSign authentication. When logging in to ZIM, you can pass an empty string for the token.
+- If you are using "Token Authentication", please refer to the [Using Token Authentication](./Guides/Users/Authentication.mdx) document. After obtaining the Token, pass it during the ZIM login process. Only after successful authentication can you log in successfully.
+</Note>
+
+
+```objc
+// userID must be within 32 bytes, and can only contain letters, numbers, and the following special characters: '~', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '=', '-', '`', ';', '’', ',', '.', '<', '>', '/', '\'.
+// userName must be within 256 bytes, no special characters limited.
+ZIMLoginConfig *config = [[ZIMLoginConfig alloc]init];
+config.userName = @"";
+
+// When logging in: 
+// If you are using the Token-based authentication mode, you will need to fill in the Token which you generated by referring to the [Authentication] doc.
+// If you are using the AppSign mode for authentication (the default auth mode for v2.3.0 or later), leave the Token parameter blank. 
+config.token = @"";
+
+[zim loginWithUserID:userID config:config callback:^(ZIMError * _Nonnull errorInfo) {
+    
+}];
+```
+
+### Send messages
+
+Client A can send messages to client B after logging in successfully.
+
+Currently, the ZIM SDK supports the following message types:
+
+<MarkMessageType />
+
+To send one-to-one messages, for example, client A wants to send a message to client B, then client A needs to call the [sendMessage](@sendMessage) method with client B's userID, message content, and other info.
+And client A can be notified whether the message is delivered successfully through the callback [ZIMMessageSentCallback](@ZIMMessageSentCallback).
+
+Moreover, the [onMessageAttached](@onMessageAttached-ZIMMediaMessageSendNotification) callback can be received. The callback on the message not sent yet. Before the message is sent, you can get a temporary [ZIMMessage](@-ZIMMessage) message for you to implement your business logic as needed. For example, you can get the ID of the message before sending it. Or when sending a message with large content, such as a video, you can get the localMessageID of the message before the message is uploaded to implement a Loading UI effect.
+
+```objc
+// The following shows how to send one-to-one message, the [conversationType] needs to be set to [ZIMConversationTypePeer].
+ZIMTextMessage *zimMessage = [[ZIMTextMessage alloc]init];
+zimMessage.message = @"Message content";
+ZIMMediaMessageSendNotification *notification = [[ZIMMediaMessageSendNotification alloc] init];
+notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
+    // The callback on the message not sent yet. You can get a temporary object here and this object must be the same as that created zimMessage object. You can make your own business logic using this as needed, for example, display a UI ahead of time.
+};
+ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+config.priority = ZIMMessagePriorityMedium;  // Set priority for the message. 1: Low (by default). 2: Medium. 3: High.
+
+// In 1-on-1 chats, the conversationID is the peer user ID. In group chats, the conversationID is the groupID. In the chat room, the conversationID is the roomID.
+[zim sendMessage:zimMessage toConversationID:conversationID conversationType:ZIMConversationTypePeer config:config notification:notification callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+    // Implement the event callback on message sent.
+    // toUserID refers to the userID of the message receiver.
+}];
+```
+
+
+#### Receive messages
+
+After client B logs in, he will receive client A's message through the callback [peerMessageReceived](https://www.zegocloud.com/article/api?doc=zim_API~objective-c_ios~protocol~ZIMEventHandler#zim-peer-message-received-info-from-user-id) which is already set in the [setEventHandler](@setEventHandler) method.
+
+<Warning title="Warning">
+
+When a message is received, you need to determine the message is a Text message or a Command message because these two message types are based on the basic message. You need to convert the basic message class to a concrete message type and then retrieve the message content from the `Message` field.
+</Warning>
+
+```objc 
+- (void)zim:(ZIM *)zim
+    peerMessageReceived:(NSArray<ZIMMessage *> *)messageList
+                   info:(ZIMMessageReceivedInfo *)info
+             fromUserID:(NSString *)fromUserID{
+          for(ZIMMessage *message in messageList){
+        if (message.type == ZIMMessageTypeText){
+            ZIMTextMessage *textMessage = (ZIMTextMessage *)message;
+        }
+        else if (message.type == ZIMMessageTypeCommand){
+            ZIMCommandMessage *commandMessage = (ZIMCommandMessage *)message;  
+        }       
+    }
+```
+
+### Log out
+
+For a client to log out, call the [logout](@logout) method.
+
+```objc
+[zim logout];
+```
+
+### Destroy the ZIM SDK instance
+
+To destroy the ZIM SDK instance, call the [destroy](@destroy) method.
+
+```objc
+[zim destroy];
+```

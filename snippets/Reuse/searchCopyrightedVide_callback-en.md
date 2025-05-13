@@ -5,7 +5,7 @@
 | 参数 | 类型 | 描述 |
 | --- | ---- | --- |
 | total_count| Int | 符合条件命中的查询结果总数。 |
-| videos | Object Array | 视频列表。 |
+| videos | Array of Object | 视频列表。 |
 | &nbsp;└ actors | String | 演员（多个以逗号分隔）。 |
 | &nbsp;└ country | String | 国家或地区（多个以逗号分隔）。 |
 | &nbsp;└ directors | String | 导演（多个以逗号分隔）。 |
@@ -23,7 +23,7 @@
 | &nbsp;└ score | String | 评分。 |
 | &nbsp;└ type | Int | 1：剧集（整部）； </br> 2：剧集（单集）； </br> 3：非剧集。 |
 | └ id | String | 视频 ID。 |
-| &nbsp;└ episodes | Object Array | 剧集子集。视频为剧集（整部）类型时，存在有效值。 |
+| &nbsp;└ episodes | Array of Object | 剧集子集。视频为剧集（整部）类型时，存在有效值。 |
 | &nbsp;&nbsp;└ video_id | string |  视频 ID。 |
 | &nbsp;&nbsp;└ ep_num | Int | 单集序号。视频为剧集（单集）类型时，存在有效值。 |
 

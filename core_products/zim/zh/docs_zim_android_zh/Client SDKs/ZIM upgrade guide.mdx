@@ -8,6 +8,301 @@ articleID: 20615
 
 本文介绍 ZIM Android 平台 SDK 版本升级时的一些说明和注意事项。
 
+## 2.19.0 升级指南
+
+<Warning title="注意">
+
+从 2.19.0 版本开始，以下接口有重大变更，因此在从旧版本升级到 2.19.0 版本时，请您阅读以下指南。
+</Warning>
+
+### downloadMediaFile 及相关回调
+
+废弃原接口 `downloadMediaFile`，请使用同名 [downloadMediaFile](@downloadMediaFile) 代替。新版本的 [downloadMediaFile](@downloadMediaFile) 新增了 `config` 参数，新增了 `config` 参数，可用于指定下载组合消息中的单个媒体内容。
+
+:::if{props.platform="undefined"}
+[ZIMMediaDownloadedCallback](@-ZIMMediaDownloadedCallback) 回调做出如下变更以适应组合消息使用，开发者需要根据 IDE 的编译错误提示修正调用：
+<div>
+- [onMediaDownloaded](@onMediaDownloaded) 的参数 `message` 类型从 `ZIMMediaMessage` 变更为 `ZIMMessage`。
+- [onMediaDownloadingProgress](@onMediaDownloadingProgress) 的参数 `message` 类型从 `ZIMMediaMessage` 变更为 `ZIMMessage`。
+</div>
+:::
+:::if{props.platform="window"}
+[ZIMMediaDownloadingProgress](@ZIMMediaDownloadingProgress) 以及 [ZIMMediaDownloadedCallback](@ZIMMediaDownloadedCallback) 中，参数 `message` 的类型从 `const std::shared_ptr<ZIMMediaMessage> &` 变更为 `const std::shared_ptr<ZIMMessage> &`，以适应组合消息使用，开发者需要根据 IDE 的编译错误提示修正调用。
+:::
+
+:::if{props.platform="undefined"}
+<CodeGroup>
+```java 2.19.0版本用法（下载组合消息指定媒体内容） {3-5,7,9,21}
+// 假设 multipleMessage.messageInfoList[0] 是文本消息，multipleMessage.messageInfoList[1] 是图片消息
+ZIMMultipleMessage multipleMessage = (ZIMMultipleMessage) message;
+ZIMMediaDownloadConfig config = new ZIMMediaDownloadConfig();
+// 指定下载图片消息
+config.messageInfoIndex = 1;
+
+zim.getInstance().downloadMediaFile(multipleMessage, ZIMMediaFileType.ORIGINAL_FILE, config, new ZIMMediaDownloadedCallback() {
+    @Override
+    public void onMediaDownloadingProgress(ZIMMessage message, long currentFileSize, long totalFileSize) {
+        // 下载进度
+        // 开发者需要判断 message 的类型并转换成对应类型的消息
+        if (message instanceof ZIMMultipleMessage) {
+            ZIMMultipleMessage multipleMessage = (ZIMMultipleMessage) message;
+            // 处理组合消息
+        }
+        // 其他类型消息的处理
+        ......
+    }
+
+    @Override
+    public void onMediaDownloaded(ZIMMessage message, ZIMError errorInfo) {
+        // 下载完成
+        // 开发者需要判断 message 的类型并转换成对应类型的消息
+        if (message instanceof ZIMMultipleMessage) {
+            ZIMMultipleMessage multipleMessage = (ZIMMultipleMessage) message;
+            // 处理组合消息
+        }
+        // 其他类型消息的处理
+        ......
+    }
+});
+```
+
+```java 2.19.0用法（下载多媒体消息） {2,4,6,18}
+ZIMImageMessage imageMessage = (ZIMImageMessage) message;
+ZIMMediaDownloadConfig config = new ZIMMediaDownloadConfig();
+
+zim.getInstance().downloadMediaFile(imageMessage, ZIMMediaFileType.ORIGINAL_FILE, config, new ZIMMediaDownloadedCallback() {
+    @Override
+    public void onMediaDownloadingProgress(ZIMMessage message, long currentFileSize, long totalFileSize) {
+        // 下载进度
+        // 开发者需要判断 message 的类型并转换成对应类型的消息
+        if (message instanceof ZIMImageMessage) {
+            ZIMImageMessage imageMessage = (ZIMImageMessage) message;
+            // 处理图片消息
+        }
+        // 其他类型消息的处理
+        ......
+    }
+
+    @Override
+    public void onMediaDownloaded(ZIMMessage message, ZIMError errorInfo) {
+        // 下载完成
+        // 开发者需要判断 message 的类型并转换成对应类型的消息
+        if (message instanceof ZIMImageMessage) {
+            ZIMImageMessage imageMessage = (ZIMImageMessage) message;
+            // 处理图片消息
+        }
+        // 其他类型消息的处理
+        ......
+    }
+});
+```
+
+```java 旧版本用法 {5,10}
+ZIMImageMessage imageMessage = (ZIMImageMessage) message;
+
+zim.getInstance().downloadMediaFile(imageMessage, ZIMMediaFileType.ORIGINAL_FILE, new ZIMMediaDownloadedCallback() {
+    @Override
+    public void onMediaDownloadingProgress(ZIMMediaMessage message, long currentFileSize, long totalFileSize) {
+        // 下载进度
+    }
+
+    @Override
+    public void onMediaDownloaded(ZIMMediaMessage message, ZIMError errorInfo) {
+        // 下载完成
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp 2.19.0版本用法（下载组合消息指定媒体内容） {3-5,9-10,20}
+// 假设 multipleMessage.messageInfoList[0] 是文本消息，multipleMessage.messageInfoList[1] 是图片消息
+auto multipleMessage = std::static_pointer_cast<ZIMMultipleMessage>(message);
+ZIMMediaDownloadConfig config;
+// 指定下载图片消息
+config.messageInfoIndex = 1;
+
+ZIM::getInstance()->downloadMediaFile(multipleMessage,
+                                     ZIMMediaFileType::ZIM_MEDIA_FILE_TYPE_ORIGINAL_FILE,
+                                     config,
+                                     [=](const std::shared_ptr<ZIMMessage> &message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+                                         // 下载进度
+                                         // 开发者需要判断 message 的类型并转换成对应类型的消息
+                                         if (message->getType() == ZIMMessageType::ZIM_MESSAGE_TYPE_MULTIPLE) {
+                                             auto multipleMessage = std::static_pointer_cast<ZIMMultipleMessage>(message);
+                                             // 处理组合消息
+                                         }
+                                         // 其他类型消息的处理
+                                         ......
+                                     },
+                                     [=](const std::shared_ptr<ZIMMessage> &message, const ZIMError &errorInfo) {
+                                         // 下载完成
+                                         // 开发者需要判断 message 的类型并转换成对应类型的消息
+                                         if (message->getType() == ZIMMessageType::ZIM_MESSAGE_TYPE_MULTIPLE) {
+                                             auto multipleMessage = std::static_pointer_cast<ZIMMultipleMessage>(message);
+                                             // 处理组合消息
+                                         }
+                                         // 其他类型消息的处理
+                                         ......
+                                     });
+```
+
+```cpp 2.19.0版本用法（下载多媒体消息） {2,6-7,17}
+auto imageMessage = std::static_pointer_cast<ZIMImageMessage>(message);
+ZIMMediaDownloadConfig config;
+
+ZIM::getInstance()->downloadMediaFile(imageMessage,
+                                     ZIMMediaFileType::ZIM_MEDIA_FILE_TYPE_ORIGINAL_FILE,
+                                     config,
+                                     [=](const std::shared_ptr<ZIMMessage> &message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+                                         // 下载进度
+                                         // 开发者需要判断 message 的类型并转换成对应类型的消息
+                                         if (message->getType() == ZIMMessageType::ZIM_MESSAGE_TYPE_IMAGE) {
+                                             auto imageMessage = std::static_pointer_cast<ZIMImageMessage>(message);
+                                             // 处理图片消息
+                                         }
+                                         // 其他类型消息的处理
+                                         ......
+                                     },
+                                     [=](const std::shared_ptr<ZIMMessage> &message, const ZIMError &errorInfo) {
+                                         // 下载完成
+                                         // 开发者需要判断 message 的类型并转换成对应类型的消息
+                                         if (message->getType() == ZIMMessageType::ZIM_MESSAGE_TYPE_IMAGE) {
+                                             auto imageMessage = std::static_pointer_cast<ZIMImageMessage>(message);
+                                             // 处理图片消息
+                                         }
+                                         // 其他类型消息的处理
+                                         ......
+                                     });
+```
+
+```cpp 旧版本用法 {5,8}
+auto imageMessage = std::static_pointer_cast<ZIMImageMessage>(message);
+
+ZIM::getInstance()->downloadMediaFile(imageMessage,
+                                     ZIMMediaFileType::ZIM_MEDIA_FILE_TYPE_ORIGINAL_FILE,
+                                     [=](const std::shared_ptr<ZIMMediaMessage> &message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+                                         // 下载进度
+                                     },
+                                     [=](const std::shared_ptr<ZIMMediaMessage> &message, const ZIMError &errorInfo) {
+                                         // 下载完成
+                                     });;
+```
+</CodeGroup>
+:::
+
+:::if{props.platform="undefined"}
+### sendMessage
+
+废弃 `sendMediaMessage` 和旧的 `sendMessage` 方法，新增支持发送任意消息类型的 [sendMessage](@sendMessage) 方法。
+
+[sendMessage](@sendMessage) 的回调与旧同名接口的回调不同，从 `ZIMMediaMessageSentCallback` 变更为 [ZIMMessageSentFullCallback](@-ZIMMessageSentFullCallback)。
+
+[ZIMMessageSentFullCallback](@-ZIMMessageSentFullCallback) 中的 [onMediaUploadingProgress](@onMediaUploadingProgress-ZIMMessageSentFullCallback) 参数 `message` 类型由 `ZIMMessage` 变更为 `ZIMMediaMessage`，以确保仅媒体消息会被回调通知，开发者需要根据 IDE 的编译错误提示修正调用。(目前仅使用了 [replyMessage](@replyMessage) 接口的开发者会受到需要解决编译报错的影响)
+:::
+
+
+:::if{props.platform="undefined"}
+<CodeGroup>
+```java 2.19.0版本用法 {3,10}
+ZIMImageMessage imageMessage = (ZIMImageMessage) message;
+
+zim.getInstance().sendMessage(imageMessage, "TO_CONVERSATION_ID", ZIMConversationType.PEER, new ZIMMessageSentFullCallback() {
+    @Override
+    public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {
+        // 消息发送结果
+    }
+
+    @Override
+    public void onMediaUploadingProgress(ZIMMediaMessage message, long currentFileSize, long totalFileSize) {
+        // 多媒体上传进度
+    }
+
+    @Override
+    public void onMessageAttached(ZIMMessage message) {
+        // 开发者可以监听这个回调执行消息发送前的业务逻辑
+    }
+});
+```
+
+```java 旧版本用法 {3,10}
+ZIMImageMessage imageMessage = (ZIMImageMessage) message;
+
+zim.getInstance().sendMediaMessage(imageMessage, "TO_CONVERSATION_ID", ZIMConversationType.PEER, new ZIMMediaMessageSentCallback() {
+    @Override
+    public void onMessageSent(ZIMMediaMessage message, ZIMError errorInfo) {
+        // 消息发送结果
+    }
+
+    @Override
+    public void onMediaUploadingProgress(ZIMMediaMessage message, long currentFileSize, long totalFileSize) {
+        // 多媒体上传进度
+    }
+
+    @Override
+    public void onMessageAttached(ZIMMediaMessage message) {
+        // 开发者可以监听这个回调执行消息发送前的业务逻辑
+    }
+
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+### sendMediaMessage
+
+自 2.19.0 版本后，发送多媒体消息需使用 [sendMessage](@sendMessage) 接口。`sendMediaMessage` 接口被废弃，以实现发送消息的统一性和便于后续的通用扩展。
+
+<CodeGroup>
+```cpp 2.19.0版本用法 {5,13}
+auto imageMessage = std::static_pointer_cast<ZIMImageMessage>(message);
+ZIMMessageSendConfig config;
+config.priority = ZIMMessagePriority::ZIM_MESSAGE_PRIORITY_MEDIUM;
+
+auto notification = std::make_shared<ZIMMessageSendNotification>();
+notification->onMessageAttached = [=](const std::shared_ptr<ZIMMessage> &message) {
+    // 开发者可以监听这个回调执行消息发送前的业务逻辑
+};
+notification->onMediaUploadingProgress = [=](const std::shared_ptr<ZIMMediaMessage> &message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+    // 多媒体上传进度
+};
+
+ZIM::getInstance()->sendMessage(imageMessage, 
+                               "TO_CONVERSATION_ID", 
+                               ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER, 
+                               config, 
+                               notification, 
+                               [=](const std::shared_ptr<ZIMMessage> &message, const ZIMError &errorInfo) {
+                                   // 消息发送结果
+                               });
+```
+
+```cpp 旧版本用法 {5,13}
+auto imageMessage = std::static_pointer_cast<ZIMImageMessage>(message);
+ZIMMessageSendConfig config;
+config.priority = ZIMMessagePriority::ZIM_MESSAGE_PRIORITY_MEDIUM;
+
+auto notification = std::make_shared<ZIMMediaMessageSendNotification>();
+notification->onMessageAttached = [=](const std::shared_ptr<ZIMMessage> &message) {
+    // 开发者可以监听这个回调执行消息发送前的业务逻辑
+};
+notification->onMediaUploadingProgress = [=](const std::shared_ptr<ZIMMediaMessage> &message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+    // 多媒体上传进度
+};
+
+ZIM::getInstance()->sendMediaMessage(imageMessage, 
+                                     "TO_CONVERSATION_ID", 
+                                     ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER, 
+                                     config, 
+                                     notification, 
+                                     [=](const std::shared_ptr<ZIMMessage> &message, const ZIMError &errorInfo) {
+                                         // 消息发送结果
+                                     });
+```
+</CodeGroup>
+:::
+
 ## 2.18.0 升级指南
 
 <Warning title="注意">

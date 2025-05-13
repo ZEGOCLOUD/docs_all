@@ -17,11 +17,461 @@ export const platformMap = {
 
 This article provides some instructions and considerations for upgrading the ZIM SDK for {getPlatformData(props,platformMap)} version.
 
+## 2.19.0 upgrade guide
+
+<Warning title="Warning">
+
+Starting from version 2.19.0, the following interfaces have undergone significant changes. Therefore, when upgrading from an older version to version 2.19.0, please read the following guidelines.
+</Warning>
+:::if{props.platform="undefined|window|RN"}
+### downloadMediaFile and related callbacks	
+
+
+The original `downloadMediaFile` API is deprecated. Please use the new [downloadMediaFile](@downloadMediaFile) instead. The updated [downloadMediaFile](@downloadMediaFile) introduces a new `config` parameter, which can be used to specify the download of individual media content in multi-item messages.
+:::
+:::if{props.platform="undefined"}
+The [ZIMMediaDownloadedCallback](@-ZIMMediaDownloadedCallback) callback has been updated to support multi-item messages. Developers need to fix the calls according to the IDE's compile error hints:
+
+<div>
+- The `message` parameter in [onMediaDownloaded](@onMediaDownloaded) has changed from `ZIMMediaMessage` to `ZIMMessage`.
+- The `message` parameter in [onMediaDownloadingProgress](@onMediaDownloadingProgress) has changed from `ZIMMediaMessage` to `ZIMMessage`.
+</div>
+:::
+:::if{props.platform="window"}
+In [ZIMMediaDownloadingProgress](@ZIMMediaDownloadingProgress) and [ZIMMediaDownloadedCallback](@ZIMMediaDownloadedCallback), the `message` parameter type has changed from `const std::shared_ptr<ZIMMediaMessage> &` to `const std::shared_ptr<ZIMMessage> &` to support multi-item messages. Developers need to fix the calls according to the IDE's compile error hints.
+:::
+:::if{props.platform="RN"}
+In [ZIMMediaDownloadingProgress](@ZIMMediaDownloadingProgress) and [ZIMMediaDownloadedResult](@ZIMMediaDownloadedResult), the parameter `message` type has changed from `ZIMMediaMessage` to `ZIMMessage` to support composite messages. TypeScript developers need to update their code based on the compilation error messages from their IDE.
+:::
+
+:::if{props.platform="undefined"}
+<CodeGroup>
+```java title="Usage in Version 2.19.0(For Multi-item Messages)" {3-5,7,9,21}
+// Assume multipleMessage.messageInfoList[0] is a text message, and multipleMessage.messageInfoList[1] is an image message
+ZIMMultipleMessage multipleMessage = (ZIMMultipleMessage) message;
+ZIMMediaDownloadConfig config = new ZIMMediaDownloadConfig();
+// Specify to download the image message
+config.messageInfoIndex = 1;
+
+zim.getInstance().downloadMediaFile(multipleMessage, ZIMMediaFileType.ORIGINAL_FILE, config, new ZIMMediaDownloadedCallback() {
+    @Override
+    public void onMediaDownloadingProgress(ZIMMessage message, long currentFileSize, long totalFileSize) {
+        // Download progress
+        // Developers need to check the type of the message and cast it to the corresponding message type
+        if (message instanceof ZIMMultipleMessage) {
+            ZIMMultipleMessage multipleMessage = (ZIMMultipleMessage) message;
+            // Handle multi-item messages
+        }
+        // Handle other types of messages
+        ......
+    }
+
+    @Override
+    public void onMediaDownloaded(ZIMMessage message, ZIMError errorInfo) {
+        // Download complete
+        // Developers need to check the type of the message and cast it to the corresponding message type
+        if (message instanceof ZIMMultipleMessage) {
+            ZIMMultipleMessage multipleMessage = (ZIMMultipleMessage) message;
+            // Handle multi-item messages
+        }
+        // Handle other types of messages
+        ......
+    }
+});
+```
+
+```java title="Usage in Version 2.19.0(For other Messages)" {2,4,6,18}
+ZIMImageMessage imageMessage = (ZIMImageMessage) message;
+ZIMMediaDownloadConfig config = new ZIMMediaDownloadConfig();
+
+zim.getInstance().downloadMediaFile(multipleMessage, ZIMMediaFileType.ORIGINAL_FILE, config, new ZIMMediaDownloadedCallback() {
+    @Override
+    public void onMediaDownloadingProgress(ZIMMessage message, long currentFileSize, long totalFileSize) {
+        // Download progress
+        // Developers need to check the type of the message and cast it to the corresponding message type
+        if (message instanceof ZIMMultipleMessage) {
+            ZIMMultipleMessage multipleMessage = (ZIMMultipleMessage) message;
+            // Handle multi-item messages
+        }
+        // Handle other types of messages
+        ......
+    }
+
+    @Override
+    public void onMediaDownloaded(ZIMMessage message, ZIMError errorInfo) {
+        // Download complete
+        // Developers need to check the type of the message and cast it to the corresponding message type
+        if (message instanceof ZIMMultipleMessage) {
+            ZIMMultipleMessage multipleMessage = (ZIMMultipleMessage) message;
+            // Handle multi-item messages
+        }
+        // Handle other types of messages
+        ......
+    }
+});
+```
+
+```java title="Old Usage" {5,10}
+ZIMImageMessage imageMessage = (ZIMImageMessage) message;
+
+zim.getInstance().downloadMediaFile(imageMessage, ZIMMediaFileType.ORIGINAL_FILE, new ZIMMediaDownloadedCallback() {
+    @Override
+    public void onMediaDownloadingProgress(ZIMMediaMessage message, long currentFileSize, long totalFileSize) {
+        // Download progress 
+    }
+
+    @Override
+    public void onMediaDownloaded(ZIMMediaMessage message, ZIMError errorInfo) {
+        // Download progress
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Usage in Version 2.19.0(For Multi-item Messages)" {3-5,9-10,20}
+// Assume multipleMessage.messageInfoList[0] is a text message, and multipleMessage.messageInfoList[1] is an image message
+auto multipleMessage = std::static_pointer_cast<ZIMMultipleMessage>(message);
+ZIMMediaDownloadConfig config;
+// Specify to download the image message
+config.messageInfoIndex = 1;
+
+ZIM::getInstance()->downloadMediaFile(multipleMessage,
+                                     ZIMMediaFileType::ZIM_MEDIA_FILE_TYPE_ORIGINAL_FILE,
+                                     config,
+                                     [=](const std::shared_ptr<ZIMMessage> &message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+                                         // Download Progress
+                                         // Developers need to check the type of the message and cast it to the corresponding message type
+                                         if (message->getType() == ZIMMessageType::ZIM_MESSAGE_TYPE_MULTIPLE) {
+                                             auto multipleMessage = std::static_pointer_cast<ZIMMultipleMessage>(message);
+                                             // Handle multi-item messages
+                                         }
+                                         // Handle other message types
+                                         ......
+                                     },
+                                     [=](const std::shared_ptr<ZIMMessage> &message, const ZIMError &errorInfo) {
+                                         // Download completed
+                                         // Developers need to check the type of the message and cast it to the corresponding message type
+                                         if (message->getType() == ZIMMessageType::ZIM_MESSAGE_TYPE_MULTIPLE) {
+                                             auto multipleMessage = std::static_pointer_cast<ZIMMultipleMessage>(message);
+                                             // Handle multi-item messages
+                                         }
+                                         // Handle other message types
+                                         ......
+                                     });
+```
+
+```cpp title="Usage in Version 2.19.0(For other Messages)" {2,6-7,17}
+auto imageMessage = std::static_pointer_cast<ZIMImageMessage>(message);
+ZIMMediaDownloadConfig config;
+
+ZIM::getInstance()->downloadMediaFile(imageMessage,
+                                     ZIMMediaFileType::ZIM_MEDIA_FILE_TYPE_ORIGINAL_FILE,
+                                     config,
+                                     [=](const std::shared_ptr<ZIMMessage> &message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+                                         // Download Progress
+                                         // Developers need to check the type of the message and cast it to the corresponding message type
+                                         if (message->getType() == ZIMMessageType::ZIM_MESSAGE_TYPE_IMAGE) {
+                                             auto imageMessage = std::static_pointer_cast<ZIMImageMessage>(message);
+                                             // Handle image messages
+                                         }
+                                         // Handle other message types
+                                         ......
+                                     },
+                                     [=](const std::shared_ptr<ZIMMessage> &message, const ZIMError &errorInfo) {
+                                         // Download completed
+                                         // Developers need to check the type of the message and cast it to the corresponding message type
+                                         if (message->getType() == ZIMMessageType::ZIM_MESSAGE_TYPE_IMAGE) {
+                                             auto imageMessage = std::static_pointer_cast<ZIMImageMessage>(message);
+                                             // Handle image messages
+                                         }
+                                         // Handle other message types
+                                         ......
+                                     });
+```
+
+```cpp title="Old Usage" {5,8}
+auto imageMessage = std::static_pointer_cast<ZIMImageMessage>(message);
+
+ZIM::getInstance()->downloadMediaFile(imageMessage,
+                                     ZIMMediaFileType::ZIM_MEDIA_FILE_TYPE_ORIGINAL_FILE,
+                                     [=](const std::shared_ptr<ZIMMediaMessage> &message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+                                         // Download Progress
+                                     },
+                                     [=](const std::shared_ptr<ZIMMediaMessage> &message, const ZIMError &errorInfo) {
+                                         // Download completed
+                                     });;
+```
+</CodeGroup>
+:::
+:::if{props.platform="RN"}
+<CodeGroup>
+```javascript title="Usage in Version 2.19.0(For Multi-item Messages) {14-17,19,29}
+// Assume multipleMessage.messageInfoList[0] is a text message, and multipleMessage.messageInfoList[1] is an image message
+const multipleMessage: ZIMMessageBase = {
+    type: ZIMMessageType.Multiple,
+    messageInfoList: [
+        new ZIMTextMessageLiteInfo({
+            text: "Hello, World!"
+        }),
+        new ZIMImageMessageLiteInfo({
+            fileLocalPath: file
+        })
+    ]
+}
+
+const config: ZIMMediaDownloadConfig = {
+    // Specify to download the image message
+    messageInfoIndex: 1
+}
+
+zim.downloadMediaFile(multipleMessage, ZIMMediaFileType.OriginalFile, config, (message: ZIMMessage, currentFileSize: number, totalFileSize: number) => {
+    // Download progress
+    // Developers need to check the type of the message and cast it to the corresponding message type
+    if (message.type === ZIMMessageType.Multiple) {
+        const multipleMessage: ZIMMultipleMessage = message as ZIMMultipleMessage
+        // Handle multi-item messages
+    }
+    // Handle other types of messages
+    ......
+
+}).then((message: ZIMMessage) => {
+    // Download complete
+    // Developers need to check the type of the message and cast it to the corresponding message type
+    if (message.type === ZIMMessageType.Multiple) {
+        const multipleMessage: ZIMMultipleMessage = message as ZIMMultipleMessage
+        // Handle multi-item messages
+    }
+    // Handle other types of messages
+    ......
+}).catch((errorInfo: ZIMError) => {
+    // Failed to download
+})
+```
+
+```javascript title="Usage in Version 2.19.0(For Multi-media Messages) {6,15}
+const imageMessage = new ZIMMessageBase({
+    type: ZIMMessageType.Image,
+    fileLocalPath: file
+})
+
+zim.downloadMediaFile(imageMessage, ZIMMediaFileType.OriginalFile, (message: ZIMMessage, currentFileSize: number, totalFileSize: number) => {
+    // Download progress
+    // Developers need to check the type of the message and cast it to the corresponding message type
+    if (message.type === ZIMMessageType.Image) {
+        const imageMessage = new ZIMImageMessage(message)
+        // Handler image messages
+    }
+    // Handle other types of messages
+    ......
+}).then((message: ZIMMessage) => {
+    // Download complete
+    // Developers need to check the type of the message and cast it to the corresponding message type
+    if (message.type === ZIMMessageType.Image) {
+        const imageMessage = new ZIMImageMessage(message)
+        // Handler image messages
+    }
+    // Handle other types of messages
+    ......
+}).catch((errorInfo: ZIMError) => {
+    // Failed to download
+})
+```
+
+```javascript title="Old Usage" {6,8}
+const imageMessage = new ZIMMessageBase({
+    type: ZIMMessageType.Image,
+    fileLocalPath: file
+})
+
+zim.downloadMediaFile(imageMessage, ZIMMediaFileType.OriginalFile, (message: ZIMMediaMessage, currentFileSize: number, totalFileSize: number) => {
+    // Download progress
+}).then((message: ZIMMediaMessage) => {
+    // Download complete
+}).catch((errorInfo: ZIMError) => {
+    // Failed to download
+})
+```
+</CodeGroup>
+:::
+
+:::if{props.platform="undefined"}
+### sendMessage
+
+The `sendMediaMessage` and the old `sendMessage` methods are deprecated. A new [sendMessage](@sendMessage) method is introduced, which supports sending any type of message.
+
+The callback for [sendMessage](@sendMessage) is different from the callback of the old method with the same name. It has changed from `ZIMMediaMessageSentCallback` to [ZIMMessageSentFullCallback](@-ZIMMessageSentFullCallback).
+
+In [ZIMMessageSentFullCallback](@-ZIMMessageSentFullCallback), the `message` parameter in [onMediaUploadingProgress](@onMediaUploadingProgress-ZIMMessageSentFullCallback) has changed from `ZIMMessage` to `ZIMMediaMessage` to ensure that only media messages are notified in the callback. Developers need to fix the calls according to the compile error hints from the IDE. (Currently, only developers using the [replyMessage](@replyMessage) interface will be affected by the need to resolve compile errors.)
+:::
+
+
+:::if{props.platform="undefined"}
+<CodeGroup>
+```java title="Usage in Version 2.19.0" {3,10}
+ZIMImageMessage imageMessage = (ZIMImageMessage) message;
+
+zim.getInstance().sendMessage(imageMessage, "TO_CONVERSATION_ID", ZIMConversationType.PEER, new ZIMMessageSentFullCallback() {
+    @Override
+    public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {
+        // Message send result
+    }
+
+    @Override
+    public void onMediaUploadingProgress(ZIMMediaMessage message, long currentFileSize, long totalFileSize) {
+        // Multimedia upload progress
+    }
+
+    @Override
+    public void onMessageAttached(ZIMMessage message) {
+        // Developers can listen to this callback to execute business logic before sending the message
+    }
+});
+```
+
+```java title="Old Usage" {3,10}
+ZIMImageMessage imageMessage = (ZIMImageMessage) message;
+
+zim.getInstance().sendMediaMessage(imageMessage, "TO_CONVERSATION_ID", ZIMConversationType.PEER, new ZIMMediaMessageSentCallback() {
+    @Override
+    public void onMessageSent(ZIMMediaMessage message, ZIMError errorInfo) {
+        // Message send result
+    }
+
+    @Override
+    public void onMediaUploadingProgress(ZIMMediaMessage message, long currentFileSize, long totalFileSize) {
+        // Multimedia upload progress
+    }
+
+    @Override
+    public void onMessageAttached(ZIMMediaMessage message) {
+        // Developers can listen to this callback to execute business logic before sending the message
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="window|Web"}
+### sendMediaMessage
+
+Since version 2.19.0, multimedia messages must be sent using the [sendMessage](@sendMessage) interface. The `sendMediaMessage` interface is deprecated to unify message sending and facilitate future general extensions.
+:::
+:::if{props.platform="Web|RN"}
+In [ZIMMessageSendNotification](@-ZIMMessageSendNotification), the `message` parameter type in the [onMediaUploadingProgress](@onMediaUploadingProgress-ZIMMessageSendNotification) callback method has changed from `ZIMMessage` to `ZIMMediaMessage` to ensure that only media messages are notified in the callback. TypeScript developers need to fix the calls based on the compile error hints from the IDE. (Currently, only developers using TypeScript and the [replyMessage](@replyMessage) interface will be affected by the need to resolve compile errors.)
+:::
+
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Usage in Version 2.19.0" {5,13}
+auto imageMessage = std::static_pointer_cast<ZIMImageMessage>(message);
+ZIMMessageSendConfig config;
+config.priority = ZIMMessagePriority::ZIM_MESSAGE_PRIORITY_MEDIUM;
+
+auto notification = std::make_shared<ZIMMessageSendNotification>();
+notification->onMessageAttached = [=](const std::shared_ptr<ZIMMessage> &message) {
+    // Developers can listen to this callback to execute business logic before sending the message
+};
+notification->onMediaUploadingProgress = [=](const std::shared_ptr<ZIMMediaMessage> &message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+    // Upload Progress
+};
+
+ZIM::getInstance()->sendMessage(imageMessage, 
+                               "TO_CONVERSATION_ID", 
+                               ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER, 
+                               config, 
+                               notification, 
+                               [=](const std::shared_ptr<ZIMMessage> &message, const ZIMError &errorInfo) {
+                                   // Message Send Result
+                               });
+```
+
+```cpp title="Old Usage" {5,13}
+auto imageMessage = std::static_pointer_cast<ZIMImageMessage>(message);
+ZIMMessageSendConfig config;
+config.priority = ZIMMessagePriority::ZIM_MESSAGE_PRIORITY_MEDIUM;
+
+auto notification = std::make_shared<ZIMMediaMessageSendNotification>();
+notification->onMessageAttached = [=](const std::shared_ptr<ZIMMessage> &message) {
+    // Developers can listen to this callback to execute business logic before sending the message
+};
+notification->onMediaUploadingProgress = [=](const std::shared_ptr<ZIMMediaMessage> &message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+    // Upload Progress
+};
+
+ZIM::getInstance()->sendMediaMessage(imageMessage, 
+                                     "TO_CONVERSATION_ID", 
+                                     ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER, 
+                                     config, 
+                                     notification, 
+                                     [=](const std::shared_ptr<ZIMMessage> &message, const ZIMError &errorInfo) {
+                                         // Message Send Result
+                                     });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|RN"}
+<CodeGroup>
+```javascript title="Usage in Version 2.19.0" {10,14,19}
+const imageMessage: ZIMMessageBase = {
+    type: ZIMMessageType.Image,
+    fileLocalPath: file
+}
+
+const config: ZIMMessageSendConfig = {
+    priority: ZIMMessagePriority.Medium
+}
+
+const notification: ZIMMessageSendNotification = {
+    onMessageAttached: (message: ZIMMessage) => {
+        // Developers can listen to this callback to execute business logic before sending the message
+    },
+    onMessageUploadingProgress: (message: ZIMMediaMessage, currentFileSize: number, totalFileSize: number) => {
+        // Multimedia upload progress
+    }
+}
+
+zim.sendMessage(imageMessage, "TO_CONVERSATION_ID", ZIMConversationType.Peer, config, notification).then((message: ZIMMessage) => {
+    // Message send result
+}).catch((errorInfo: ZIMError) => {
+    // Message send failed
+})
+```
+
+```javascript title="Old Usage" {10,14,19}
+const imageMessage: ZIMMessageBase = {
+    type: ZIMMessageType.Image,
+    fileLocalPath: file
+}
+
+const config: ZIMMessageSendConfig = {
+    priority: ZIMMessagePriority.Medium
+}
+
+const notification: ZIMMediaMessageSendNotification = {
+    onMessageAttached: (message: ZIMMediaMessage) => {
+        // Developers can listen to this callback to execute business logic before sending the message
+
+    },
+    onMessageUploadingProgress: (message: ZIMMediaMessage, currentFileSize: number, totalFileSize: number) => {
+        // Multimedia upload progress
+    }
+}
+
+zim.sendMediaMessage(imageMessage, "TO_CONVERSATION_ID", ZIMConversationType.Peer, config, notification).then((message: ZIMMessage) => {
+    // Message send result
+}).catch((errorInfo: ZIMError) => {
+    // Message send failed
+})
+```
+</CodeGroup>
+:::
+
 ## 2.18.0 upgrade guide
 
 <Warning title="Warning">
 
-Starting from version 2.18.0, the following interfaces have undergone significant changes. Therefore, when upgrading from an older version to version 2.16.0, please read the following guidelines.
+Starting from version 2.18.0, the following interfaces have undergone significant changes. Therefore, when upgrading from an older version to version 2.18.0, please read the following guidelines.
 </Warning>
 
 ### Callback on receiving one-to-one messages

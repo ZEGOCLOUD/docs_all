@@ -19,7 +19,7 @@
 </tr>
 <tr data-row-level="3" data-row-child="true">
 <td>videos</td>
-<td>Object Array</td>
+<td>Array of Object</td>
 <td>视频列表。</td>
 </tr>
 <tr data-row-level="3-1">
@@ -109,7 +109,7 @@
 </tr>
 <tr data-row-level="3-18" data-row-child="true">
 <td>episodes</td>
-<td>Object Array</td>
+<td>Array of Object</td>
 <td>剧集子集。视频为剧集（整部）类型时，存在有效值。</td>
 </tr>
 <tr data-row-level="3-18-1">

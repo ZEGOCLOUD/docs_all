@@ -40,6 +40,154 @@ export const groupMessageReceivedMap = {
 
 本文介绍 ZIM SDK for {getPlatformData(props,platformMap)} 版本升级时的一些说明和注意事项。
 
+## 2.19.0 升级指南
+
+<Warning title="注意">
+
+从 2.19.0 版本开始，以下接口有重大变更，因此在从旧版本升级到 2.19.0 版本时，请您阅读以下指南。
+</Warning>
+
+### downloadMediaFileWithMessage 及相关回调
+
+废弃原接口 `downloadMediaFileWithMessage`，请使用同名 [downloadMediaFileWithMessage](@downloadMediaFileWithMessage) 代替。新版本的 [downloadMediaFileWithMessage](@downloadMediaFileWithMessage) 新增了 `config` 参数，新增了 `config` 参数，可用于指定下载组合消息中的单个媒体内容。
+
+[ZIMMediaDownloadingProgress](@ZIMMediaDownloadingProgress) 和 [ZIMMediaDownloadedCallback](@ZIMMediaDownloadedCallback) 中 `message` 的参数类型由 `ZIMMediaMessage *` 变更为 `ZIMMessage *`，以适配组合消息，您需要根据 IDE 的编译错误提示修正调用。
+
+<CodeGroup>
+```objc 2.19.0版本用法（下载组合消息指定媒体内容） {3-5,9,10,20}
+// 假设 multipleMessage.messageInfoList[0] 是文本消息，multipleMessage.messageInfoList[1] 是图片消息
+ZIMMultipleMessage *multipleMessage = (ZIMMultipleMessage *)message;
+ZIMMediaDownloadConfig *config = [[ZIMMediaDownloadConfig alloc] init];
+// 指定下载图片消息
+config.messageInfoIndex = 1;
+
+[[ZIM getInstance] downloadMediaFileWithMessage:multipleMessage 
+                                       fileType:ZIMMediaFileTypeOriginalFile
+                                       config:config
+                                       progress:^(ZIMMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+                                            // 下载进度
+                                            // 开发者需要判断 message 的类型并转换成对应类型的消息
+                                            if ([message isKindOfClass:[ZIMMultipleMessage class]]) {
+                                                ZIMMultipleMessage *multipleMessage = (ZIMMultipleMessage *)message;
+                                                // 处理组合消息
+                                            }
+                                            // 其他类型消息的处理
+                                            ......
+                                       } 
+                                       callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+                                            // 下载完成
+                                            // 开发者需要判断 message 的类型并转换成对应类型的消息
+                                            if ([message isKindOfClass:[ZIMMultipleMessage class]]) {
+                                                ZIMMultipleMessage *multipleMessage = (ZIMMultipleMessage *)message;
+                                                // 处理组合消息
+                                            }
+                                            // 其他类型消息的处理
+                                            ......
+                                       }];
+```
+
+```objc 2.19.0用法（下载多媒体消息） {2,6-7,17}
+ZIMImageMessage *imageMessage = (ZIMImageMessage *)message;
+ZIMMediaDownloadConfig *config = [[ZIMMediaDownloadConfig alloc] init];
+
+[[ZIM getInstance] downloadMediaFileWithMessage:imageMessage 
+                                       fileType:ZIMMediaFileTypeOriginalFile
+                                       config:config
+                                       progress:^(ZIMMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+                                            // 下载进度
+                                            // 开发者需要判断 message 的类型并转换成对应类型的消息
+                                            if ([message isKindOfClass:[ZIMImageMessage class]]) {
+                                                ZIMImageMessage *imageMessage = (ZIMImageMessage *)message;
+                                                // 处理图片消息
+                                            }
+                                            // 其他类型消息的处理
+                                            ......
+                                       } 
+                                       callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+                                            // 下载完成
+                                            // 开发者需要判断 message 的类型并转换成对应类型的消息
+                                            if ([message isKindOfClass:[ZIMImageMessage class]]) {
+                                                ZIMImageMessage *imageMessage = (ZIMImageMessage *)message;
+                                                // 处理图片消息
+                                            }
+                                            // 其他类型消息的处理
+                                            ......
+                                       }];
+```
+
+```objc 旧版本用法 {4,7}
+ZIMImageMessage *imageMessage = (ZIMImageMessage *)message;
+[[ZIM getInstance] downloadMediaFileWithMessage:imageMessage 
+                                       fileType:ZIMMediaFileTypeOriginalFile
+                                       progress:^(ZIMMediaMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+                                            // 下载进度
+                                       } 
+                                       callback:^(ZIMMediaMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+                                            // 下载完成
+                                       }];
+```
+</CodeGroup>
+
+
+### sendMediaMessage
+
+自 2.19.0 版本后，发送多媒体消息需使用 [sendMessage](@sendMessage) 接口。`sendMediaMessage` 接口被废弃，以实现发送消息的统一性和便于后续的通用扩展。
+
+<CodeGroup>
+```objc 2.19.0版本用法 {6,16}
+ZIMImageMessage *imageMessage = (ZIMImageMessage *)message;
+
+ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+config.priority = ZIMMessagePriorityMedium;
+
+ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
+notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
+    // 开发者可以监听这个回调执行消息发送前的业务逻辑
+};
+
+notification.onMediaUploadingProgress = ^(ZIMMediaMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+    // 开发者可以监听这个回调获取多媒体上传的进度
+};
+
+
+[[ZIM getInstance] sendMessage:imageMessage 
+                       toConversationID:@"TO_CONVERSATION_ID" 
+                       conversationType:ZIMConversationTypePeer
+                                 config:config 
+                           notification:notification 
+                               callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo){
+                                        // 发送结果
+                                    }];
+```
+
+```objc 旧版本用法 {6,16}
+ZIMImageMessage *imageMessage = (ZIMImageMessage *)message;
+
+ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+config.priority = ZIMMessagePriorityMedium;
+
+ZIMMediaMessageSendNotification *notification = [[ZIMMediaMessageSendNotification alloc] init];
+notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
+    // 开发者可以监听这个回调执行消息发送前的业务逻辑
+};
+        
+notification.onMediaUploadingProgress = ^(ZIMMediaMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+    // 开发者可以监听这个回调获取多媒体上传的进度
+};
+
+
+[[ZIM getInstance] sendMediaMessage:imageMessage 
+                            toConversationID:@"TO_CONVERSATION_ID" 
+                            conversationType:ZIMConversationTypePeer
+                                      config:config 
+                                notification:notification 
+                                    callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo){
+                                        // 发送结果
+                                    }];
+```
+</CodeGroup>
+
+
 ## 2.18.0 升级指南
 
 <Warning title="注意">

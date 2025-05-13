@@ -13,8 +13,6 @@ articleID: 16370
 This document is applicable to the following platforms of Unity framework: iOS, Android, macOS, and Windows.
 </Note>
 
-
-
 ZEGOCLOUD's In-app Chat (the ZIM SDK) provides the capability of message management, allowing you to send and receive one-to-one, group, in-room messages, query message history, delete messages, and more. With the message management feature, you can meet different requirements of various scenarios such as social entertainment, online shopping, online education, interactive live streaming, and more. 
 
 This document describes how to send and receive messages with the ZIM SDK. 
@@ -24,62 +22,65 @@ This document describes how to send and receive messages with the ZIM SDK.
 Currently, the ZIM SDK supports the following message types:
 
 <table>
-<tbody><tr data-row-level="1">
-<th>Message type</th>
+<tbody>
+<tr data-row-level="1">
+<th>Message Type</th>
 <th>Description</th>
-<th>Details</th>
+<th>Features and Applicable Scenarios</th>
 </tr>
-<tr data-row-level="2">
-<td>ZIMTextMessage(1)</td>
-<td>Text message. Size limit: 32 KB. Rate limit: 10 requests/second.</td>
-<td>
-Enable messages to be more deliverable, and can be stored as message history. Suitable for one-on-one chat and group chat.
 
-Relevant method: [SendMessage](@SendMessage)
+<tr data-row-level="2">
+<td>ZIMCommandMessage(2)</td>
+<td>A signaling message with custom data content defined by the developer. The message size does not exceed 5 KB, and the sending frequency per client is limited to 10 times per second.</td>
+<td>
+<p>Non-storable, supports higher concurrency; generally used for signaling transmission within rooms such as "voice chat rooms" and "online classrooms," such as muting/unmuting, sending gifts, and transmitting online class materials.</p>
+<p>Higher concurrency is supported, but it's unreliable: it does not ensure message delivery and order.</p>
+
+Relevant interfaces: [SendMessage](@SendMessage)
 </td>
 </tr>
 <tr data-row-level="3">
-<td>ZIMCommandMessage(2)</td>
-<td>Customizable signaling message. Size limit: 5 KB. Rate limit: 10 requests/second.</td>
+<td>ZIMBarrageMessage(20)</td>
+<td>Bullet screen text message in a room. The message size does not exceed 5 KB, and there is no limit on the sending frequency per client.</td>
 <td>
-Supports massive concurrency. Suitable for live audio room, online classroom, the messages won't be stored after the room is destroyed.
+<p>Non-storable, specifically used for high-frequency, unreliable, and drop-allowable messages within rooms. It is generally used for sending "bullet screen messages" in scenarios.</p><p>A high concurrency is supported, but it's unreliable: it does not ensure message delivery.</p>
 
-Relevant method: [SendMessage](@SendMessage)
+Relevant interfaces: [SendMessage](@SendMessage)
 </td>
 </tr>
-<tr data-row-level="4">
-<td>ZIMBarrageMessage(20)</td>
-<td>In-room barrage message (bullet) screen message). Size limit: 5 KB. No specific rate limit.</td>
-<td>
-<p>The high-frequency messages that don't require 100% deliverability, this message type is often used to send bullet screen messages.</p><p>
-Supports massive concurrency, but the message deliverability can't be guaranteed.</p>
 
-Relevant method: [SendMessage](@SendMessage)
+<tr data-row-level="4">
+<td>ZIMTextMessage(1)</td>
+<td>Text message. The message size does not exceed 32 KB, and the sending frequency per client is limited to 10 times per second.</td>
+<td rowspan="6">
+Messages are reliable and ordered, and can be stored as historical messages (for storage duration, please refer to the "History Message Storage Duration" in [Pricing - Plan Differences](./../../Introduction/Pricing.mdx#plan-differences)).
+It can be used in instant messaging scenarios such as one-on-one chats, rooms, and group chats. After a room is dissolved, "room chat" messages are not stored.
+
+- Images, files, audio, video: Typically used for sending rich media file-type messages.
+- Custom messages: Typically used for sending messages like polls, chain messages, video cards, etc.
+
+Relevant interfaces: [SendMessage](@SendMessage), [SendMediaMessage](@SendMediaMessage)
 </td>
 </tr>
 <tr data-row-level="5">
 <td>ZIMImageMessage(11)</td>
-<td>Image message. Supports major image formats, including JPG, PNG, BMP, TIFF, and GIF, WebP. Size limit: 10 MB. Rate limit: 10 requests/second.</td>
-<td rowspan="4">
-Enable messages to be more deliverable, and can be stored as history messages (14 days by default). Suitable for one-on-one chat, room chat, and group chat.
-
-Relevant method: 
-[SendMediaMessage](@SendMediaMessage)
-</td>
+<td>Image message. Supports mainstream image formats, including JPG, PNG, BMP, TIFF, GIF, WebP. The size does not exceed 10 MB, and the sending frequency per client is limited to 10 times per second.</td>
 </tr>
 <tr data-row-level="6">
 <td>ZIMFileMessage(12)</td>
-<td>File message. Supports files in any format. Size limit: 100 MB. Rate limit: 10 requests/second.</td>
+<td>File message. The message content is a file with no format restrictions. The size does not exceed 100 MB, and the sending frequency per client is limited to 10 times per second.</td>
 </tr>
 <tr data-row-level="7">
 <td>ZIMAudioMessage(13)</td>
-<td>Voice message. Supports voice messages in MP3, M4A format within 300 seconds. Size limit: 6 MB. Rate limit: 10 requests/second.</td>
+<td>Audio message. Supports MP3 and M4A audio formats. The duration does not exceed 300 seconds, and the size does not exceed 6 MB. The sending frequency per client is limited to 10 times per second.</td>
 </tr>
 <tr data-row-level="8">
 <td>ZIMVideoMessage(14)</td>
-<td>
-Video message. Supports video messages in MP4 or MOV format. Size limit: 100 MB. Rate limit: 10 requests/second. Only video files encoded in H264 and H265 formats can obtain the width and height information of the first frame of the video after the message is sent successfully.
-</td>
+<td>Video message. Supports MP4 and MOV video formats. The size does not exceed 100 MB, and the sending frequency per client is limited to 10 times per second. **Only video files encoded with H264 or H265 video codecs support retrieving the width and height information of the first frame after successful message sending.**</td>
+</tr>
+<tr data-row-level="9">
+<td>ZIMCustomMessage(200)</td>
+<td>Custom message. Developers can define the type of custom message and handle message parsing. The ZIM SDK does not define or parse the specific content of custom messages.</td>
 </tr>
 </tbody>
 </table>
@@ -108,8 +109,10 @@ The following process shows how Client A sends messages to Client B:
 
 <Warning title="Warning">
 
-You can't send messages to yourself by calling the `sendMessage` method (when toConversationID = your ID). If you did so, the error code 6000001 will return. 
-
+Currently, the ZIM SDK has the following restrictions for the [SendMessage](@SendMessage) method:
+- Do not send messages to oneself: that is, `toConversationID` cannot be set to the caller's own user ID.
+- Do not sending blank messages: the message content cannot be empty or blank.
+When either of the above two cases occurs, the ZIM SDK will return error 6000001, indicating that the input parameters are incorrect.
 </Warning>
 
 

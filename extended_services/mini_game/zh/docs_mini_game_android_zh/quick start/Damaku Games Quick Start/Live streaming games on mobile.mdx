@@ -1,0 +1,288 @@
+---
+articleID : 17686
+---
+
+# 主播在移动端开播弹幕游戏
+
+- - -
+
+本文介绍，主播如何通过小游戏平台（ZEGO MiniGameEngine SDK）和实时音视频（ZEGO Express SDK）在 Android 端开播弹幕游戏。
+
+## 前提条件
+
+在实现主播直播弹幕游戏之前，请确保：
+
+- 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，获取项目的 AppID，详情请参考 [控制台 - 项目信息](https://doc-zh.zego.im/article/12107)。
+- 已联系 ZEGO 商务人员开通小游戏服务，不同类型的游戏权限需要分别开通，否则可能会导致无法体验。
+- 已在项目中集成 ZEGO MiniGameEngine SDK，详情请参考 [集成 SDK](https://doc-zh.zego.im/article/17682)。
+- 已在项目中集成 ZEGO Express SDK，详情请参考实时音视频的 [集成 SDK](https://doc-zh.zego.im/article/195)。
+
+## 示例源码
+
+ZEGO 提供了 [示例源码](https://doc-zh.zego.im/article/17678)，以供开发者进一步了解如何实现弹幕游戏。
+
+## 实现流程
+
+主播直播弹幕游戏的流程如下图所示：
+
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/MiniGames/Mobile_Game_LiveStreaming_1.png" /></Frame>
+
+实现流程中会使用到 ZEGO MiniGameEngine SDK 的两个主类，即 ZegoMiniGameEngine 和 ZegoCloudGameEngine。
+
+ZegoMiniGameEngine：用于实现初始化、以及获取游戏列表和游戏详情。
+
+ZegoCloudGameEngine：用于设置弹幕游戏的容器、开始/停止弹幕游戏。
+
+<a id="zego_server"></a>
+
+### 1 （服务端）接入 ZEGO 服务端并获取 Token
+
+#### 1.1 接入 ZEGO 服务端
+
+请参考 [服务端 API - 调用方式](/mini-game-server/making-api-requests#调用方式) 了解如何接入 ZEGO 小游戏产品的服务端，并在您的服务端上实现 [获取游戏启动码](/mini-game-server/bullet-comments-games-related/get-activation-code)，以便后续 <a href="#startCloudGame">主播启动弹幕游戏</a> 前获取游戏启动码。
+
+ZEGO 为您提供了[服务端示例源码](../../download.mdx)，可供参考。但为了您的数据安全，请勿将其直接用于线上生产环境。
+
+#### 1.2 获取 Token
+
+当您的用户在使用 ZEGO 小游戏服务时，ZEGO 服务端会根据用户初始化 SDK 时携带的 Token 参数判断用户是否有权限，避免因权限控制缺失或操作不当引发的风险问题。
+
+请参考 [使用 Token 鉴权](../Token%20Authenticaiton.mdx) 文档，在您的服务端生成 Token 并返回给向用户客户端。
+
+<Note title="说明">
+
+为便捷项目测试，您可以从 [ZEGO 控制台](https://console.zego.im/) 获取临时 Token，详情请参考控制台的 [项目信息 - 辅助工具](https://doc-zh.zego.im/article/12107#2_3)。但项目上线时，请从您的服务端生成 Token，以保障安全。
+</Note>
+
+### 2 （客户端）初始化
+
+#### 2.1 创建 ZegoExpressEngine 并登录 RTC 房间
+
+请参考实时音视频的 [实现视频通话 - 创建引擎](https://doc-zh.zego.im/article/7627#CreateEngine)，创建 ZegoExpressEngine。
+
+完成初始化之后，请参考 实时音视频的 [实现视频通话 - 登录房间](https://doc-zh.zego.im/article/7627#createroom)，登录 RTC 房间。
+
+<a id="initMiniGameEngine"></a>
+
+#### 2.2 初始化 ZEGO MiniGameEngine SDK  
+
+调用 [ZegoMiniGameEngine > getInstance](@getInstance-ZegoMiniGameEngine) 接口创建 ZegoMiniGameEngine 实例对象。调用 [init](@init) 接口，传入申请到的 AppID、您服务端生成的 Token、自定义的用户 ID 和用户名称、以及头像图片 URL 参数，初始化 ZEGO MiniGameEngine SDK。
+
+调用 [ZegoCloudGameEngine > getInstance](@getInstance-ZegoCloudGameEngine) 接口创建弹幕游戏引擎实例对象。
+
+示例代码如下：
+
+```java
+// 创建 ZEGO MiniGameEngine 实例对象。
+ZegoMiniGameEngine miniGameEngine = ZegoMiniGameEngine.getInstance();
+
+// 初始化 ZEGO MiniGameEngine SDK
+// appID 在 [ZEGO 控制台](https://console.zego.im/) 创建项目后获得，格式为：AppID + L，如：1234567890L，必填
+// 详情请参考文档 [控制台 - 项目信息](https://doc-zh.zego.im/article/12107)
+// appID 需已开通小游戏服务
+long appID = 您的 AppID;
+String token = "your token"; // 从您的服务器获取到的 Token，必填
+String userID = "your user ID"; // 自定义的用户 ID，必选，需要与生成 Token 的 userID 保持一致
+                              // 仅支持数字，英文字符和 '~', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '=', '-', '`', ';', '’', ',', '.', '<', '>', '/', '\'。
+                              // 请保证 userId 在相同的 appID 下全局唯一。
+String userName = "your user name"; // 自定义的用户名称，必填
+String userAvatar = "your user avatar"; // 用户头像 URL，传输协议需为 HTTPS，可选
+ZegoGameUserInfo userInfo = new ZegoGameUserInfo(userID, userName, userAvatar);
+miniGameEngine.init(appID, token, userInfo, (errorCode, object) -> {});
+
+// 创建弹幕游戏引擎实例对象
+ZegoCloudGameEngine cloudGameEngine = ZegoCloudGameEngine.getInstance();
+```
+
+<a id="setCloudGameContainer"></a>
+
+#### 2.3 设置游戏父容器并注册监听弹幕游戏事件
+
+调用 [setCloudGameContainer](@setCloudGameContainer) 设置游戏父容器，以便后续启动游戏。调用 [setCloudGameEngineHandler](@setCloudGameEngineHandler) 接口注册监听小游戏事件，相关事件在 [启动弹幕游戏](18351#startCloudGame) 后通过 [IZegoCloudGameEngineHandler](@-IZegoCloudGameEngineHandler) 回调返回。 
+
+示例代码如下：
+
+```java
+ViewGroup gameContainer = xxx;  // 需要在 UI 层设置一个常见的 ViewGroup，作为展示游戏的区域
+
+// 设置游戏容器
+cloudGameEngine.setCloudGameContainer(gameContainer);
+
+cloudGameEngine.setCloudGameEngineHandler(new IZegoCloudGameEngineHandler() {
+    @Override
+    public void onCloudGameError(int errorCode, String message) {
+        // 通知游戏错误信息
+    }
+
+    @Override
+    public void onCloudGameFirstFrame() {
+        // 弹幕游戏首帧渲染成功
+        // 在启动弹幕游戏到游戏成功加载的过程中，您可以播放自定义加载动画或实现其他业务逻辑
+        // 在收到本回调后，即可停止播放或其他业务逻辑
+    }
+});
+```
+
+### 3 （客户端）主播开始游戏
+
+<a id="getGameList"></a>
+
+#### 3.1 获取游戏列表
+
+调用 [getGameList](@getGameList) 接口，传入 `ZegoGameMode.ZegoGameModeCloudGame`，指定游戏模式为弹幕游戏模式，获取弹幕游戏列表，在列表中选择想玩的弹幕游戏 ID。
+
+如下代码展示如何获取弹幕游戏模式的游戏列表：
+
+```java
+// 获取弹幕游戏模式的游戏列表
+// 指定第 1 个参数（gameMode）为 ZegoGameMode.ZegoGameModeCloudGame，表示列表中的游戏的模式为弹幕游戏模式
+miniGameEngine.getGameList(ZegoGameMode.ZegoGameModeCloudGame, (errorCode, gameInfoList) -> {
+    // gameInfoList 为弹幕游戏的列表
+});
+```
+
+<a id="getGameCode"></a>
+
+#### 3.2 获取游戏启动码
+
+确定需要玩的游戏后，主播还需要获取相应的游戏启动码。以上场景的核心能力，您已在 <a href="#zego_server">接入 ZEGO 服务端</a> 实现了。此时，您需要自行实现如何在客户端向您的后台发起请求。
+
+<a id="startCloudGame"></a>
+
+#### 3.3 启动弹幕游戏
+
+调用 [startCloudGame](@startCloudGame) 接口，传入游戏房间 ID 和游戏 ID，启动游戏。
+
+<Note title="说明">
+
+（建议）如果在此步骤传入了游戏启动码，则在加载完成后，游戏会自动开始。   
+如果没有传入，则需要在加载完成后，在游戏内手动输入启动码。
+</Note>
+
+示例代码如下：
+
+```java
+String roomID = "your room id"; // 游戏房间 ID，建议与您的业务房间 ID 保持一致
+String gameID = "your game id"; // 弹幕游戏 ID 
+
+// 设置游戏的配置，选填
+HashMap<String, Object> gameConfig = new HashMap<>();
+// 此处可以传入游戏启动码和其他参数，参数格式视游戏而不同，请联系 ZEGO 技术支持。
+// （建议）如果此处输入游戏启动码，则在 startCloudGame 接口调用完成后，游戏自动开始。
+// 如果为空，则在 startCloudGame 接口调用完后，游戏内会要求用户输入游戏启动码。
+gameConfig.put(“runningParameters”, “启动参数”); // 启动参数需要根据不同游戏来定
+
+// 加载游戏
+cloudGameEngine.startCloudGame(gameID, roomID, gameConfig, (errorCode, object) -> {
+    // 运行结果回调
+});
+```
+
+<a id="startPublish"></a>
+
+#### 3.4 转推弹幕游戏视频至 RTC 房间
+
+游戏启动后，调用 [startPublishCloudGameStream](@startPublishCloudGameStream) 接口，将弹幕游戏视频流转推到 RTC 房间时。
+
+```java
+String roomID = "your room id"; // 游戏房间 ID，建议与您的业务房间 ID 保持一致
+String gameID = "your game id"; // 弹幕游戏 ID 
+String streamID = "your stream id"; // 流 ID，长度不超过 256 的字符串，由您自定义
+                                    // 仅支持数字，英文字符 和 '-', '_'。
+                                    // 在同一个 AppID 下，开发者需要保证“streamID” 全局唯一，如果不同用户各推了一条 “streamID” 相同的流，后推流的用户会推流失败。
+cloudGameEngine.startPublishCloudGameStream(gameID, roomID, streamID, (errorCode, object) -> {
+     // 推流结果回调
+});
+```
+
+<Note title="说明">
+
+- 开始转推后，如果游戏结束了，请及时 <a href="#stopPublish">停止转推</a>，否则将继续转推，画面可能为黑屏。推黑屏画面时间满 3 分钟后，将自动停止推流。
+- 开始转推后，如需更换弹幕游戏，请遵循以下步骤： 
+    1. <a href="#stopPublish">停止转推</a>。
+    2. <a href="#stopGame">停止当前弹幕游戏</a>。
+    3. <a href="#getGameCode">获取新的游戏启动码</a>。
+    4. <a href="#startCloudGame">启动新游戏</a>。
+    5. <a href="#startPublish">开始转推</a>。
+</Note>
+
+<a id="stop"></a>
+
+### 4 （客户端）主播停止游戏
+
+主播需要先停止转推，再停止弹幕游戏。
+
+<a id="stopPublish"></a>
+
+#### 4.1 停止转推
+
+当需要停止转推游戏视频流时，请调用 [stopPublishCloudGameStream](@stopPublishCloudGameStream) 接口。
+
+```java
+String roomID = "your room id"; // 游戏房间 ID，请与开始推流时的游戏房间 ID 保持一致
+String gameID = "your game id"; // 游戏 ID，请与开始推流时的游戏 ID 保持一致
+String streamID = "your stream id"; // 流ID，请与开始推流时的流 ID 保持一致
+cloudGameEngine.stopPublishCloudGameStream(gameID, roomID, streamID, (errorCode, object) -> {
+     // 停止转推流结果回调
+});
+```
+
+<a id="stopGame"></a>
+
+#### 4.2 停止弹幕游戏
+
+当需要停止游戏时，调用 [stopCloudGame](@stopCloudGame) 接口停止弹幕游戏。
+
+示例代码如下：
+
+```java
+String roomID = "your room id"; // 游戏房间 ID，建议与您的业务房间 ID 保持一致
+String gameID = "your game id"; // 游戏 ID 
+cloudGameEngine.stopCloudGame(gameID, roomID, (errorCode, object) -> {
+    // 停止弹幕游戏结果回调
+});
+```
+
+### 5（客户端）反初始化
+
+如果不再需要开播弹幕游戏，可以通过退出 RTC 房间、销毁 ZegoExpressEngine 以及反初始化 ZEGO MiniGameEngine SDK，以释放资源。
+
+#### 5.1 退出 RTC 房间
+
+请参考实时音视频的 [实现视频通话 - 退出房间](https://doc-zh.zego.im/article/7627#logoutRoom)，完成退出 RTC 房间。
+
+#### 5.2 销毁 ZegoExpressEngine
+
+请参考实时音视频的 [实现视频通话 - 销毁引擎](https://doc-zh.zego.im/article/7627#destroy)，完成销毁。
+
+<a id="unInit"></a>
+
+#### 5.3 反初始化 ZEGO MiniGameEngine SDK
+
+调用 [unInit](@unInit) 接口反初始化 ZEGO MiniGameEngine SDK。
+
+示例代码如下：
+
+```java
+miniGameEngine.unInit();
+```
+
+## 更多功能
+
+<a id="keyboardEvent"></a>
+
+### （客户端）主播发送键盘事件
+
+<Note title="说明">
+
+如果您接入的游戏已提供移动端键盘，且您满足该键盘的效果，无需自定义键盘，则可以跳过本步骤。
+</Note>
+
+主播在移动端开播弹幕游戏后，如果游戏内没有提供键盘，需要调用 [sendKeyboardEvent](@sendKeyboardEvent) 接口，传入 key（键盘的 code 码），实现键盘事件，如前进、调整视角等，以便正常玩游戏。如需了解键盘 code 码，请参考 <a href="https://www.toptal.com/developers/keycode" target="_blank" rel="noopener noreferrer">JavaScript Key Code Event Tool</a>。
+
+示例代码如下：
+
+```java
+int keyboardCode = 65;//（键盘上的“A”）
+cloudGameEngine.sendKeyboardEvent(keyboardCode);
+```

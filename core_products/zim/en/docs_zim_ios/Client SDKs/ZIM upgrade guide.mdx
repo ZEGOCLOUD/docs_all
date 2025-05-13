@@ -14,6 +14,156 @@ This article introduces some instructions and precautions when upgrading the In-
 This article introduces some instructions and precautions when upgrading the In-app Chat macOS SDK.
 :::
 
+
+## 2.19.0 upgrade guide
+
+<Warning title="Warning">
+
+Starting from version 2.19.0, the following interfaces have undergone significant changes. Therefore, when upgrading from an older version to version 2.19.0, please read the following guidelines.
+</Warning>
+
+### downloadMediaFileWithMessage and related callbacks
+
+The original `downloadMediaFile` API is deprecated. Please use the new [downloadMediaFileWithMessage](@downloadMediaFileWithMessage) instead. The updated [downloadMediaFileWithMessage](@downloadMediaFileWithMessage) introduces a new `config` parameter, which can be used to specify the download of individual media content in multi-item messages.
+
+In [ZIMMediaDownloadingProgress](@ZIMMediaDownloadingProgress) and [ZIMMediaDownloadedCallback](@ZIMMediaDownloadedCallback), the `message` parameter type has changed from `ZIMMediaMessage *` to `ZIMMessage *` to support multi-item messages. You need to fix the calls according to the compile error hints from the IDE.
+
+<CodeGroup>
+```objc title="Usage in Version 2.19.0(For Multi-item Messages)" {3-5,9,10,20}
+// Assume multipleMessage.messageInfoList[0] is a text message, and multipleMessage.messageInfoList[1] is an image message
+ZIMMultipleMessage *multipleMessage = (ZIMMultipleMessage *)message;
+ZIMMediaDownloadConfig *config = [[ZIMMediaDownloadConfig alloc] init];
+// Specify to download the image message
+config.messageInfoIndex = 1;
+
+[[ZIM getInstance] downloadMediaFileWithMessage:multipleMessage 
+                                       fileType:ZIMMediaFileTypeOriginalFile
+                                       config:config
+                                       progress:^(ZIMMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+                                            // Download progress
+                                            // Developers need to check the type of the message and cast it to the corresponding message type
+                                            if ([message isKindOfClass:[ZIMMultipleMessage class]]) {
+                                                ZIMMultipleMessage *multipleMessage = (ZIMMultipleMessage *)message;
+                                                // Handle multi-item messages
+                                            }
+                                            // Handle Other Message
+                                            ......
+                                       } 
+                                       callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+                                            // Download complete
+                                            // Developers need to check the type of the message and cast it to the corresponding message type
+                                            if ([message isKindOfClass:[ZIMMultipleMessage class]]) {
+                                                ZIMMultipleMessage *multipleMessage = (ZIMMultipleMessage *)message;
+                                                // Handle multi-item messages
+                                            }
+                                            // Handle Other Messages
+                                            ......
+                                       }];
+```
+
+```objc title="Usage in Version 2.19.0(For Multimedia Messages)" {2,6-7,17}
+ZIMImageMessage *imageMessage = (ZIMImageMessage *)message;
+ZIMMediaDownloadConfig *config = [[ZIMMediaDownloadConfig alloc] init];
+
+[[ZIM getInstance] downloadMediaFileWithMessage:imageMessage 
+                                       fileType:ZIMMediaFileTypeOriginalFile
+                                       config:config
+                                       progress:^(ZIMMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+                                            // Download progress
+                                            // Developers need to check the type of the message and cast it to the corresponding message type
+                                            if ([message isKindOfClass:[ZIMImageMessage class]]) {
+                                                ZIMImageMessage *imageMessage = (ZIMImageMessage *)message;
+                                                // Handle image messages
+                                            }
+                                            // Handle
+                                            ......
+                                       } 
+                                       callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+                                            // Download complete
+                                            // Developers need to check the type of the message and cast it to the corresponding message type
+                                            if ([message isKindOfClass:[ZIMImageMessage class]]) {
+                                                ZIMImageMessage *imageMessage = (ZIMImageMessage *)message;
+                                                // Handle image messages
+                                            }
+                                            // Handle Other
+                                            ......
+                                       }];
+```
+
+```objc title="Old Usage" {4,7}
+ZIMImageMessage *imageMessage = (ZIMImageMessage *)message;
+[[ZIM getInstance] downloadMediaFileWithMessage:imageMessage 
+                                       fileType:ZIMMediaFileTypeOriginalFile
+                                       progress:^(ZIMMediaMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+                                            // Download progress
+                                       } 
+                                       callback:^(ZIMMediaMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+                                            // Download complete
+                                       }];
+```
+</CodeGroup>
+
+
+### sendMediaMessage
+
+Since version 2.19.0, multimedia messages must be sent using the [sendMessage](@sendMessage) interface. The `sendMediaMessage` interface is deprecated to unify message sending and facilitate future general extensions.
+
+
+<CodeGroup>
+```objc title="Usage in Version 2.19.0" {6,16}
+ZIMImageMessage *imageMessage = (ZIMImageMessage *)message;
+
+ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+config.priority = ZIMMessagePriorityMedium;
+
+ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
+notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
+    // Developers can listen to this callback to execute business logic before sending the message
+};
+
+notification.onMediaUploadingProgress = ^(ZIMMediaMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+    // Developers can listen to this callback to get the multimedia upload progress
+};
+
+
+[[ZIM getInstance] sendMessage:imageMessage 
+                       toConversationID:@"TO_CONVERSATION_ID" 
+                       conversationType:ZIMConversationTypePeer
+                                 config:config 
+                           notification:notification 
+                               callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo){
+                                        // Message Send Result
+                                    }];
+```
+
+```objc title="Old Usage" {6,16}
+ZIMImageMessage *imageMessage = (ZIMImageMessage *)message;
+
+ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+config.priority = ZIMMessagePriorityMedium;
+
+ZIMMediaMessageSendNotification *notification = [[ZIMMediaMessageSendNotification alloc] init];
+notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
+    // // Developers can listen to this callback to execute business logic before sending the message
+};
+        
+notification.onMediaUploadingProgress = ^(ZIMMediaMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+    // Developers can listen to this callback to get the multimedia upload progress
+};
+
+
+[[ZIM getInstance] sendMediaMessage:imageMessage 
+                            toConversationID:@"TO_CONVERSATION_ID" 
+                            conversationType:ZIMConversationTypePeer
+                                      config:config 
+                                notification:notification 
+                                    callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo){
+                                        // Message Send Result
+                                    }];
+```
+</CodeGroup>
+
+
 ## 2.18.0 upgrade guide
 
 <Warning title="Warning">
