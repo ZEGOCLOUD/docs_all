@@ -32,17 +32,17 @@ export const expressSDKMap = {
 <CardGroup cols={2}>
 :::if{props.platform=undefined}
 <Card title="Android 客户端示例代码" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/android" target="_blank">
-Android 客户端示例代码。包含最基本的登录、推流、拉流、退出房间等能力。
+包含最基本的登录、推流、拉流、退出房间等能力。
 </Card>
 :::
 :::if{props.platform="iOS"}
 <Card title="iOS 客户端示例代码" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/ios" target="_blank">
-iOS 客户端示例代码。包含最基本的登录、推流、拉流、退出房间等能力。
+包含最基本的登录、推流、拉流、退出房间等能力。
 </Card>
 :::
 :::if{props.platform="Web"}
 <Card title="Web 客户端示例代码" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/web" target="_blank">
-Web 客户端示例代码。包含最基本的登录、推流、拉流、退出房间等能力。
+包含最基本的登录、推流、拉流、退出房间等能力。
 </Card>
 :::
 </CardGroup>
@@ -57,17 +57,21 @@ sequenceDiagram
     participant 业务后台
     participant AI Agent后台
     
-    客户端->>客户端: 初始化 ZEGO Express SDK
-    
+    业务后台->>业务后台: 注册智能体
+    业务后台->>AI Agent后台: 注册智能体
+    AI Agent后台-->>业务后台: 
+
     客户端->>业务后台: 通知业务后台开始通话
     业务后台->>AI Agent后台: 创建智能体实例
+    AI Agent后台->>AI Agent后台: 智能体登录房间并推流、拉用户流
     AI Agent后台-->>业务后台: 
     业务后台-->>客户端: 
     
-    客户端->>业务后台: 获取 Token
+    客户端->业务后台: 请求 Token
     业务后台-->>客户端: Token
     
-    客户端->>客户端: 用户使用 Token 登录房间并推流
+    客户端->>客户端: 初始化 ZEGO Express SDK 后登录房间并推流
+    
     
     客户端->>客户端: 用户拉智能体流
     
@@ -217,9 +221,12 @@ checkSystemRequirements()
 
 ### 通知业务后台开始通话
 
-建议客户端在真实用户进入房间前，通知业务后台开始通话。业务后台收到开始通话通知后，使用与客户端相同的 roomID 及关联的 userID 和 streamID 创建智能体实例，这样智能体就能与真实用户在同一个房间内进行相互推拉流实现语音互动。
+可在客户端真实用户进入房间后立即通知业务后台开始通话，异步调用可加降低通话接通时间。业务后台收到开始通话通知后，使用与客户端相同的 roomID 及关联的 userID 和 streamID 创建智能体实例，这样智能体就能与真实用户在同一个房间内进行相互推拉流实现语音互动。
 
 <Accordion title="通知业务后台的示例代码" defaultOpen="false">
+
+<Note title="说明">以下示例在通知业务后台开始通话时，并没有传递 roomID、userID、streamID 等参数，是因为本示例客户端与业务后台约定好了固定值。实际使用时，请根据业务需求传递对应的参数。</Note>
+
 :::if{props.platform=undefined}
 ```java
 // 通知业务后台开始通话
@@ -249,7 +256,6 @@ private void start() {
  * 
  * @param completion 完成回调，返回操作结果
  * @discussion 该方法会向服务器发送开始通话的请求，用于初始化AI智能体实例
- * @note 调用此方法前需要确保已经完成房间登录等前置操作
  */
 - (void)doStartCallWithCompletion:(void (^)(NSInteger code, NSString *message, NSDictionary *data))completion {
     // 构建请求URL
@@ -342,17 +348,17 @@ async function startCall() {
 :::
 </Accordion>
 
-### 用户进入房间并推拉流
+### 用户进入房间并推流
 
 真实用户登录房间后推流。
 
 :::if{props.platform="undefined|iOS"}
-<Note title="注意">
+<Note title="说明">
 在此场景下需要开启 AI 降噪和 AI 回声消除以获得更好的效果。
 </Note>
 :::
 :::if{props.platform="Web"}
-<Note title="注意">
+<Note title="说明">
 在此场景下需要开启 AI 降噪以获得更好的效果。
 </Note>
 :::
@@ -367,7 +373,6 @@ async function startCall() {
 </Note>
 
 :::if{props.platform=undefined}
-<CodeGroup>
 ```java 客户端登录房间并推流 {5,6,12-17,25,30}
 private void loginRoom(String agentId, String userId, String userName, String token,
     IZegoRoomLoginCallback callback) {
@@ -408,34 +413,8 @@ private void loginRoom(String agentId, String userId, String userName, String to
         });
 }
 ```
-
-```java 客户端拉智能体的流 {12-19}
-// 监听回调
-void setEventHandler() {
-        engine.setEventHandler(new IZegoEventHandler() {
-            @Override
-            // 房间内其他用户推流/停止推流时，我们会在这里收到相应用户的音视频流增减的通知
-            public void onRoomStreamUpdate(String roomID, ZegoUpdateType updateType, ArrayList<ZegoStream> streamList, JSONObject extendedData) {
-                super.onRoomStreamUpdate(roomID, updateType, streamList, extendedData);
-                //当 updateType 为 ZegoUpdateType.ADD 时，代表有音视频流新增，此时我们可以调用 startPlayingStream 接口拉取播放该音视频流
-                if (updateType == ZegoUpdateType.ADD) {
-                    // 开始拉流，设置远端拉流渲染视图，视图模式采用 SDK 默认的模式，等比缩放填充整个 View
-                    ZegoStream stream = streamList.get(0);
-                    // 判断是否是智能体流
-                    if (stream.streamID.equals(agentStreamID)) {
-                        // 如下 remoteUserView 为 UI 界面上的 TextureView.
-                        ZegoCanvas playCanvas = new ZegoCanvas(findViewById(R.id.remoteUserView));
-                        ZegoExpressEngine.getEngine().startPlayingStream(agentStreamID, playCanvas);
-                    }
-                }
-            }
-        });
-}
-```
-</CodeGroup>
 :::
 :::if{props.platform="iOS"}
-<CodeGroup>
 ```swift 客户端登录房间并推流 {9-11,17,20-24,35}
 // 记录智能体
 self.streamToPlay = [self getAgentStreamID];
@@ -455,12 +434,12 @@ engineConfig.advancedConfig = @{
 //如果其他选项，可能会走系统的回声消除，这在iphone手机上效果可能会更好，但如果在一些android机上效果可能不好
 [[ZegoExpressEngine sharedEngine] setAudioDeviceMode:ZegoAudioDeviceModeGeneral];
 
-//请注意：开启 AI 降噪和 AI 回声消除需要联系 ZEGO 技术支持获取对应的ZegoExpressionEngine.xcframework，具备该能力的版本还未发布
+//请注意：开启 AI 降噪和 AI 回声消除需要联系 ZEGO 技术支持获取对应的ZegoExpressionEngine.xcframework，具备该能力的版本还未发布官网
 [[ZegoExpressEngine sharedEngine] enableAGC:TRUE];
 [[ZegoExpressEngine sharedEngine] enableAEC:TRUE];
-[[ZegoExpressEngine sharedEngine] setAECMode:ZegoAECModeAIAggressive];
+[[ZegoExpressEngine sharedEngine] setAECMode:ZegoAECModeAIAggressive2];
 [[ZegoExpressEngine sharedEngine] enableANS:TRUE];
-[[ZegoExpressEngine sharedEngine] setANSMode:ZegoANSModeAIBalanced];
+[[ZegoExpressEngine sharedEngine] setANSMode:ZegoANSModeMedium];
 
 // 登录房间
 [self loginRoom:^(int errorCode, NSDictionary *extendedData) {
@@ -474,36 +453,9 @@ engineConfig.advancedConfig = @{
     [self startPushlishStream];
 }];
 ```
-
-```objectivec 客户端拉智能体的流 {12}
-//监听房间流信息更新状态，拉取智能体流播放
-- (void)onRoomStreamUpdate:(ZegoUpdateType)updateType
-                streamList:(NSArray<ZegoStream *> *)streamList
-              extendedData:(nullable NSDictionary *)extendedData
-                    roomID:(NSString *)roomID{    
-    if (updateType == ZegoUpdateTypeAdd) {
-        for (int i=0; i<streamList.count; i++) {
-            ZegoStream* item = [streamList objectAtIndex:i];
-            
-            if ([item.streamID isEqualToString: self.streamToPlay]) {
-                NSLog(@"匹配到目标流，准备播放: streamID=%@", self.streamToPlay);
-                [self startPlayStream:self.streamToPlay];
-                break;
-            }
-        }
-    } else if(updateType == ZegoUpdateTypeDelete) {
-        for (int i=0; i<streamList.count; i++) {
-            ZegoStream* item = [streamList objectAtIndex:i];
-            [[ZegoExpressEngine sharedEngine] stopPlayingStream:item.streamID];
-        }
-    }
-}
-```
-</CodeGroup>
-
 :::
 :::if{props.platform="Web"}
-<CodeGroup>
+
 ```javascript 客户端登录房间并推流 {22-25}
 const userId = "" // 登录 Express SDK房间用户ID
 const roomId = "" // RTC 房间 ID
@@ -541,6 +493,61 @@ async function enterRoom() {
 }
 enterRoom()
 ```
+:::
+
+### 拉智能体流
+
+默认只有一个真实用户及智能体在同一个房间内，所以拉流时默认新增的就是智能体流。
+
+:::if{props.platform=undefined}
+
+```java 客户端拉智能体的流 {9-16}
+// 监听回调
+void setEventHandler() {
+        engine.setEventHandler(new IZegoEventHandler() {
+            @Override
+            // 房间内其他用户推流/停止推流时，我们会在这里收到相应用户的音视频流增减的通知
+            public void onRoomStreamUpdate(String roomID, ZegoUpdateType updateType, ArrayList<ZegoStream> streamList, JSONObject extendedData) {
+                super.onRoomStreamUpdate(roomID, updateType, streamList, extendedData);
+                //当 updateType 为 ZegoUpdateType.ADD 时，代表有音视频流新增，此时我们可以调用 startPlayingStream 接口拉取播放该音视频流
+                if (updateType == ZegoUpdateType.ADD) {
+                    // 开始拉流，设置远端拉流渲染视图，视图模式采用 SDK 默认的模式，等比缩放填充整个 View
+                    ZegoStream stream = streamList.get(0);
+                    // 默认新增是智能体流，直接拉流
+                    // 如下 remoteUserView 为 UI 界面上的 TextureView.
+                    ZegoCanvas playCanvas = new ZegoCanvas(findViewById(R.id.remoteUserView));
+                    ZegoExpressEngine.getEngine().startPlayingStream(stream.streamID, playCanvas);
+                }
+            }
+        });
+}
+```
+:::
+:::if{props.platform="iOS"}
+
+```objectivec 客户端拉智能体的流 {6-13}
+//监听房间流信息更新状态，拉取智能体流播放
+- (void)onRoomStreamUpdate:(ZegoUpdateType)updateType
+                streamList:(NSArray<ZegoStream *> *)streamList
+              extendedData:(nullable NSDictionary *)extendedData
+                    roomID:(NSString *)roomID{    
+    if (updateType == ZegoUpdateTypeAdd) {
+        for (int i=0; i<streamList.count; i++) {
+            ZegoStream* item = [streamList objectAtIndex:i];
+            
+            [self startPlayStream:item.streamID];
+            break;
+        }
+    } else if(updateType == ZegoUpdateTypeDelete) {
+        for (int i=0; i<streamList.count; i++) {
+            ZegoStream* item = [streamList objectAtIndex:i];
+            [[ZegoExpressEngine sharedEngine] stopPlayingStream:item.streamID];
+        }
+    }
+}
+```
+:::
+:::if{props.platform="Web"}
 
 ```javascript 客户端拉智能体的流 {9}
 // 监听远端流更新事件
@@ -569,8 +576,8 @@ function setupEvent() {
   );
 }
 ```
-</CodeGroup>
 :::
+
 
 恭喜你🎉！完成这一步骤后，您已经成功创建了一个智能体实例，并可以与真实用户进行实时互动了。您可以用语音问智能体任何问题，智能体都会用语音回答您的问题！
 
@@ -579,8 +586,8 @@ function setupEvent() {
 客户端调用退出登录接口退出房间，并停止推拉流。同时通知业务后台本次通话结束。业务后台收到结束通话通知后会删除智能体实例，智能体实例会自动退出房间并停止推拉流。这样一次完整的互动就结束了。
 
 :::if{props.platform=undefined}
-```java
-// 退出房间
+```java {4,16}
+// 通知业务后台结束通话
 private void stop() {
     RequestBody body = RequestBody.create("", MediaType.parse("application/json; charset=utf-8"));
     Request request = new Request.Builder().url(YOUR_SERVER_URL + "/api/stop").post(body).build();
@@ -594,7 +601,8 @@ private void stop() {
         @Override
         public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
             if (response.isSuccessful()) {
-               ZegoExpressEngine.getEngine().logoutRoom();
+                // 退出房间
+                ZegoExpressEngine.getEngine().logoutRoom();
             }
         }
     });
@@ -603,15 +611,12 @@ private void stop() {
 ```
 :::
 :::if{props.platform="iOS"}
-```objectivec
-// 退出房间
-
+```objectivec {9,69}
 /**
- * 结束与AI智能体的通话
+ * 通知业务后台结束通话
  * 
  * @param completion 完成回调，返回操作结果
  * @discussion 该方法会向服务器发送结束通话的请求，用于释放AI智能体实例
- * @note 调用此方法前需要确保已经完成房间退出等前置操作
  */
 - (void)doStopCallWithCompletion:(void (^)(NSInteger code, NSString *message, NSDictionary *data))completion {
     // 构建请求URL
@@ -673,6 +678,9 @@ private void stop() {
             if (completion) {
                 completion(code, message, responseData);
             }
+
+            // 退出房间
+            [[ZegoExpressEngine sharedEngine] logoutRoom];
         });
     }];
     
@@ -681,7 +689,7 @@ private void stop() {
 ```
 :::
 :::if{props.platform="Web"}
-```javascript
+```javascript {4,21}
 // 退出房间
 async function stopCall() {
   try {
