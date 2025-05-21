@@ -1,4 +1,348 @@
 # Accessing Server APIs
+---
 
-- - -
+## Request structure
 
+
+### Service URL format
+
+Developers need to specify the corresponding access address based on the geographical region of their server when sending requests to the ZEGOCLOUD server.
+<Warning title="Warning">
+
+To ensure the quality of your business service access, please prioritize using the domain name of the geographical region where your server is located as the access address when sending requests to the ZEGOCLOUD server.
+
+</Warning>
+
+ZEGOCLOUD supports request access from the following geographical regions:
+
+| Region | API base URL |
+| :-- | :-- | 
+| Chinese Mainland (Shanghai) | $\{PRODUCT}-api-sha.zego.im |
+| Hong Kong, Macau and Taiwan (Hong Kong) | $\{PRODUCT}-api-hkg.zego.im |
+| Europe (Frankfurt) | $\{PRODUCT}-api-fra.zego.im |
+| Western United States (California) | $\{PRODUCT}-api-lax.zego.im |
+| Asia-Pacific (Mumbai) | $\{PRODUCT}-api-bom.zego.im |
+| Southeast Asia (Singapore) | $\{PRODUCT}-api-sgp.zego.im |
+| Unified access address (regardless of region) | $\{PRODUCT}-api.zego.im |
+
+
+
+The `${PRODUCT}` part in the URLs represents the ZEGO product:
+
+| Product                         | $\{PRODUCT} | API base URL           |
+| ------------------------------- | ---------- | ---------------------- |
+| Cloud Communication Service     | rtc        | rtc-api.zego.im        |
+| Collaborative Online Whiteboard | whiteboard | whiteboard-api.zego.im |
+| Cloud Recording| cloudrecord |cloudrecord-api.zego.im|
+
+
+### Communication protocol
+
+For secure communications, all the Server APIs must be accessed via HTTPS requests.
+
+### Request method
+
+The Server APIs support the following HTTP request methods:
+
+- GET
+- POST
+
+<Note title="Note">
+For a GET request, all request parameters (including public parameters and business-related parameters) should be placed in the Query. For a POST request,  special and complex parameters can be placed in the Request Body.
+</Note>
+
+
+## Public parameters
+
+### Public request parameters 
+
+Public request parameters are the parameters that are required for every API request. 
+
+| Parameter | Type | Required | Description |
+| :-- | :-- | :-- | :-- | 
+| AppId | Uint32 | Yes | The unique Application ID assigned to your project by ZEGO, which can be obtained from the <a target="_blank" href="https://console.zegocloud.com">ZEGOCLOUD Admin Console</a>. |
+| Signature | String | Yes | The API request signature. |
+| SignatureNonce | String | Yes | A random string. |
+| SignatureVersion | String | Yes | The version of the signature. Default value: 2.0. |
+| Timestamp | Int64 | Yes | Unix timestamp in seconds. A maximum error of 10 minutes is allowed. |
+
+Sample request: 
+
+
+<CodeGroup>
+```bash title="GET Request"
+https://${PRODUCT}-api.zego.im/?Action=xxx
+&AppId=1234567890
+&SignatureNonce=15215528852396
+&Timestamp=1234567890
+&Signature=Pc5WB8gokVn0xfeu%2FZV%2BiNM1dgI%3D
+&SignatureVersion=2.0
+&IsTest=false
+&<Non-public Request Parameters>
+```
+
+```bash title="POST Request"
+https://${PRODUCT}-api.zego.im/?Action=xxx
+&AppId=1234567890
+&SignatureNonce=15215528852396
+&Timestamp=1234567890
+&Signature=Pc5WB8gokVn0xfeu%2FZV%2BiNM1dgI%3D
+&SignatureVersion=2.0
+&IsTest=false
+```
+ 
+</CodeGroup>
+
+### Public response parameters
+
+All responses to API requests are returned in a unified format, with the returned data in JSON format.
+
+The following public response parameters will be included in the response to every request, regardless of whether the request is successful.
+
+| Parameter | Type | Description |
+| :-- | :-- | :-- | 
+| Code | Number | Return code. |
+| Message | String | Request result description. |
+| RequestId | String | Request ID. |
+| Data | - | Returned data. |
+
+
+
+Sample response: 
+
+```
+{
+    "Code":0,
+    "Data":{
+        "MessageId":"1_1611647493487_29"
+    },
+    "Message":"success",
+    "RequestId":"2237080460466033406"
+}
+```
+
+
+
+## Signing the requests
+
+
+To ensure secure API calls, the ZEGO server authenticates every API request, which means a request signature must be included in every API request.
+
+<Warning title="Warning">
+
+A new signature needs to be generated for every API request.  
+</Warning>
+
+### Get the AppId and Server Secret Key
+
+To generate a request signature, you will need to use the **AppId** and **ServerSecret** assigned to your project by ZEGO. The **AppId** is used as the identifier of the request sender, and **ServerSecret** is the secret key to generate the signature string on the request sender side and verify the signature on the ZEGO server. To ensure system security, please keep this information strictly confidential.
+
+You can find the **AppId** and **ServerSecret** of your project in the [ZEGOCLOUD Admin Console\|_blank](https://console.zegocloud.com/).
+
+### Generate a signature
+
+1. Parameters required to generate a signature
+
+| Parameter | Description |
+| :-- | :-- | 
+| AppId | Application ID. The AppId used to generate the signature for a request must be the same as the one included in the public request parameters of the request. |
+| SignatureNonce | A random string. The SignatureNonce used to generate the signature for a request must be the same as the one included in the public request parameters of the request. |
+| ServerSecret | Server secret key. |
+| Timestamp | Unix timestamp of the current time, in seconds. A maximum error of 10 minutes is allowed. |
+
+<Note title="Note">
+
+The values of the `SignatureNonce` and `Timestamp` parameters used to generate the signature must be consistent with those of the public parameters.
+</Note>
+
+2. Signature algorithm
+
+Signature = md5(AppId + SignatureNonce + ServerSecret + Timestamp)
+
+3. Format of the Signature string
+
+The Signature is a hex string of 32 characters in lower case.
+
+### Signature sample code
+
+ZEGO provides sample code in various programming languages for generating the signature.
+
+<CodeGroup>
+
+```go title="Go"
+import (
+   "crypto/md5"
+   "crypto/rand"
+   "encoding/hex"
+   "fmt"
+   "log"
+   "time"
+)
+// Signature=md5(AppId + SignatureNonce + ServerSecret + Timestamp)
+func GenerateSignature(appId uint32, signatureNonce string, serverSecret string, timestamp int64) (Signature string){
+   data := fmt.Sprintf("%d%s%s%d", appId, signatureNonce, serverSecret, timestamp)
+   h := md5.New()
+   h.Write([]byte(data))
+   return hex.EncodeToString(h.Sum(nil))
+}
+func main() {
+  /*Generate a random hex string of 16 hex digits*/
+   nonceByte := make([]byte, 8)
+   rand.Read(nonceByte)
+   signatureNonce := hex.EncodeToString(nonceByte)
+   log.Printf(signatureNonce)
+   appId := 12345       //Use the AppID and ServerSecret of your project.
+   serverSecret := "9193cc662a4c0ec135ec71fb57194b38"
+   timestamp := time.Now().Unix()
+   /* appId:12345
+      signatureNonce:4fd24687296dd9f3
+      serverSecret:9193cc662a4c0ec135ec71fb57194b38
+      timestamp:1615186943      2021/03/08 15:02:23
+      signature:43e5cfcca828314675f91b001390566a
+    */
+   log.Printf("signature:%v", GenerateSignature(uint32(appId), signatureNonce, serverSecret, timestamp))
+}
+```
+
+```python title="Python"
+# -*- coding: UTF-8 -*-
+import secrets
+import string
+import hashlib
+import time
+#Signature=md5(AppId + SignatureNonce + ServerSecret + Timestamp)
+def GenerateSignature(appId, signatureNonce, serverSecret, timestamp):
+    str1 = str(appId) + signatureNonce + serverSecret + str(timestamp)
+    hash = hashlib.md5()
+    hash.update(str1.encode("utf8"))
+    signature = hash.hexdigest()
+    return signature
+
+def main():
+    #Generate a random hex string of 16 hex digits.
+    signatureNonce = secrets.token_hex(8)
+
+    #Use the AppID and ServerSecret of your project.
+    appId = 12345
+    serverSecret = "9193cc662a4c0ec135ec71fb57194b38"
+    #Get a Unix timestampe of 10 digits.
+    timestamp = int(time.time())
+    print(GenerateSignature(appId,signatureNonce,serverSecret,timestamp))
+
+if __name__ == '__main__':
+    main()
+```
+
+
+```java title="Java"
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+public class md5{
+    /**
+     * Convert byte array to hex string.
+     * @param bytes: the byte array to be converted.
+     * @return: the result hex string.
+     */
+    public static String bytesToHex(byte[] bytes) {
+        StringBuffer md5str = new StringBuffer();
+        //Convert each byte of the array into a hex string and concatenate all the converted hex strings into an md5 string. 
+        int digital;
+        for (int i = 0; i < bytes.length; i++) {
+            digital = bytes[i];
+            if (digital < 0) {
+                digital += 256;
+            }
+            if (digital < 16) {
+                md5str.append("0");
+            }
+            md5str.append(Integer.toHexString(digital));
+        }
+        return md5str.toString();
+    }
+    // Signature=md5(AppId + SignatureNonce + ServerSecret + Timestamp)
+    public static String GenerateSignature(long appId, String signatureNonce, String serverSecret, long timestamp){
+        String str = String.valueOf(appId) + signatureNonce + serverSecret + String.valueOf(timestamp);
+        String signature = "";
+        try{
+            //Create a MD5 message digest instance.
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            //Generate a byte array.
+            byte[] bytes = md.digest(str.getBytes("utf-8"));
+            //Convert each byte of the array into a hex string and concatenate all the converted hex strings into an md5 string. 
+            signature = bytesToHex(bytes);
+        }catch (Exception e) {
+            e.printStackTrace();
+        }
+        return signature;
+    }
+
+
+    public static void main(String[] args){
+        //Generate a random hex string of 16 hex digits.
+        byte[] bytes = new byte[8];
+        SecureRandom sr = null;
+        //Create a cryptographically strong random number generator using the SecureRandom class. 
+        try{
+            sr = new SecureRandom();
+        }catch(Exception e){
+            e.printStackTrace();
+        }
+        sr.nextBytes(bytes);
+        String signatureNonce = bytesToHex(bytes);
+        long appId = 12345L;       //Append an "L" or "l" to the AppId value you get from the ZEGO Admin console to indicate that it is a value of long type. 
+        String serverSecret = "9193cc662a4c0ec135ec71fb57194b38";
+        long timestamp = System.currentTimeMillis() / 1000L;
+        System.out.println(GenerateSignature(appId,signatureNonce,serverSecret,timestamp));
+    }
+}
+```
+
+```php title="PHP"
+<?php
+function GenerateSignature($appId, $signatureNonce, $serverSecret, $timestamp)
+{
+    $str = $appId.$signatureNonce.$serverSecret.$timestamp;
+    $signature = md5($str);
+    return $signature;
+}
+
+//Generate a random hex string of 16 hex digits.
+$signatureNonce = bin2hex(random_bytes(8));
+//Use the AppID and ServerSecret of your project.
+$appId = 12345;
+$serverSecret = "9193cc662a4c0ec135ec71fb57194b38";
+$timestamp = time();
+$signature = GenerateSignature($appId, $signatureNonce, $serverSecret, $timestamp);
+echo $signature;
+?>
+```
+
+
+```javascript title="Node.js"
+const crypto = require('crypto'); 
+//Signature=md5(AppId + SignatureNonce + ServerSecret + Timestamp)
+function GenerateUASignature(appId, signatureNonce, serverSecret, timeStamp){
+    const hash = crypto.createHash('md5'); //Use the MD5 hashing algorithm.
+    var str = appId + signatureNonce + serverSecret + timeStamp;
+    hash.update(str);
+    //hash.digest('hex') indicates that the output is in hex format 
+    return hash.digest('hex');
+}
+
+var signatureNonce = crypto.randomBytes(8).toString('hex');
+//Use the AppID and ServerSecret of your project.
+var appId = 12345;
+var serverSecret = "9193cc662a4c0ec135ec71fb57194b38";
+var timeStamp = Math.round(Date.now()/1000);
+console.log(GenerateUASignature(appId, signatureNonce, serverSecret, timeStamp));
+```
+
+</CodeGroup>
+### Signature failures
+
+When a signature verification fails, an error code will be returned.
+
+| Return code | Description        |
+| ----------- | ------------------ |
+| 100000004   | Signature expired. |
+| 100000005   | Invalid signature. |
