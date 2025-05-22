@@ -1,0 +1,157 @@
+# Query the task list of a cloud player
+
+- - -
+
+## Overview
+
+Call this interface to query the task list of all cloud players under the specified AppID, including all statuses such as created, running, and destroyed; or query the task information of a specific cloud player.
+
+## Request method and endpoint
+
+- Request method: POST
+- Request URL: `https://cloud-player-api.zego.im/?Action=DescribePlayers`
+- Transmission protocol: HTTPS
+- Call frequency limit: 10 times/second
+
+## Request parameters
+
+The following list only lists the interface request parameters. For common parameters, please refer to [Accessing server APIs - Common request parameters](./Accessing%20Server%20APIs.mdx#common-parameters).
+
+<Warning title="Warning">
+- When neither RoomId nor PlayerId is filled in, calling this interface will return a list of all cloud player tasks under the AppId.
+- When RoomId is filled in and PlayerId is not filled in, calling this interface will return a list of all cloud player tasks within the specified RoomId under the AppId.
+- When PlayerId is filled in (RoomId can be filled in or not), calling this interface will return the cloud player task information corresponding to the PlayerId.
+</Warning>
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| RoomId | String | No | Specify the room ID to query, with a length of up to 128 bytes.<strong>If RoomId is filled in, please make sure that the RoomId already exists, otherwise the query result may be empty.</strong> |
+| PlayerId | String | No | Unique identifier ID of the cloud player, returned by [CreatePlayer](./Create%20Player.mdx).<strong>If PlayerId is filled in, please make sure that the PlayerId already exists, otherwise the query result may be empty.</strong> |
+| PageSize | Number | No | Pagination size, with a value range of (0, 50]. The default is 50 tasks per page, which indicates the maximum number of task lists returned by calling this interface at a time. <strong>To obtain task lists beyond the PageSize value, you need to use the NextPageToken (query task list pagination starting position) value returned in the previous call to this interface to call this interface again for query.</strong>For example, if there are currently 123 cloud player tasks and PageSize is set to 50, when calling this interface for query:<ol><li>For the first call to this interface, the input parameter PageToken is empty, and the player tasks from 1 to 50 are queried. The returned NextPageToken value is assumed to be "pagetoken1".</li><li>For the second call to this interface, the input parameter PageToken is set to "pagetoken1", and the player tasks from 51 to 100 are queried. The returned NextPageToken value is assumed to be "pagetoken2".</li><li>For the third call to this interface, the input parameter PageToken is set to "pagetoken2", and the player tasks from 101 to 123 are queried. The query is completed, and the returned NextPageToken is empty.</li></ol> |
+| PageToken | String | No | Query task list pagination starting position. <strong>If this parameter is not filled in, the first page task list found will be returned by default.</strong>Each time this interface is called, the NextPageToken will be returned in the response result. Developers need to determine whether the last page has been queried. |
+
+## Request example
+
+- Request URL
+    ```bash
+    https://cloud-player-api.zego.im/?Action=DescribePlayers
+    &AppId=1234567890
+    &SignatureNonce=15215528852396
+    &Timestamp=1234567890
+    &Signature=7a2c0f11145fb760d607a07b54825013
+    &SignatureVersion=2.0
+    &IsTest=false
+    ```
+
+- Request body  
+    ```json
+    {
+        "RoomId": "room_12",
+        "PlayerId": "",
+        "PageSize": 50,
+        "PageToken": "XXXXXXXXX"
+    }
+    ```
+
+## Response parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| Code | Number | Error code. |
+| Message | String | Error description. |
+| RequestId | String | Request ID. |
+| Data | Object | Specific information returned. |
+| └TotalSize | Number | Total number of cloud player tasks queried. |
+| └NextPageToken | String | Next page number for this query. When NextPageToken is empty, it means the last page has been queried. |
+| └Players | Array Of Object | Information of cloud player tasks queried. For details, see [Players](#players-).|
+
+### Players
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| PlayerId | String | Unique identifier of the cloud player. |
+| RoomId | String | Room ID. |
+| StreamId | String | Stream ID that is pushed to the specified room. |
+| CreateTime | Number | Player creation time, Unix timestamp in seconds. |
+| PlayTime | Number | Time when media resources start playing, Unix timestamp in seconds. |
+| PlayerName | String | Name of the cloud player. |
+| StreamUrl | String | URL of the media resource being played. |
+| Status | Number | Status of the cloud player.<ul><li>1: Creating.</li><li>2: Connecting to media resource.</li><li>3: Waiting to play.</li><li>4: Playing.</li><li>5: Paused.</li><li>6: Failed to connect to media resource.</li><li>7: Playback ended.</li><li>8: Destroyed.</li></ul> |
+| DestroyReason | Number | Reason for destroying the cloud player.<ul><li>1: Actively destroyed by calling the [DeletePlayer](./Delete%20Player.mdx) interface.</li><li>2: The idle time exceeded <code>MaxIdleTime</code>.</li><li>3: Media resource playback has ended.</li><li>4: Failed to push stream.</li><li>5: Failed to enter or was kicked out of the room.</li></ul> |
+
+## Response example
+```json
+{
+    "Code": 0,
+    "Message": "succeed",
+    "RequestId": "abcd123",
+    "Data": {
+        "TotalSize": 1,
+        "NextPageToken": "",
+        "Players": [
+            {
+                "PlayerId": "player_1",
+                "RoomId": "room_12",
+                "StreamId": "stream",
+                "CreateTime": 1681221508,
+                "PlayTime": 1681221508,
+                "PlayerName": "player_1",
+                "StreamUrl": "https://xxx.com/video/test.mp4",
+                "Status": 4,
+                "DestroyReason": 1
+            }
+        ]
+    }
+}
+```
+## Return codes
+
+The following are only the return codes related to the interface business logic. For the complete list of return codes, please refer to [Return Codes](./Return%20Codes.mdx).
+<table>
+  
+<tbody><tr>
+<th>Return Code</th>
+<th>Description</th>
+<th>Suggested Action</th>
+</tr>
+<tr>
+<td>0</td>
+<td>Success.</td>
+<td>-</td>
+</tr>
+<tr>
+<td>100000004</td>
+<td>Signature expired.</td>
+<td>Please regenerate the signature.</td>
+</tr>
+<tr>
+<td>100000005</td>
+<td>Signature error.</td>
+<td>Please confirm if the parameters used to generate the signature are correct.</td>
+</tr>
+<tr>
+<td>350006001</td>
+<td>API request frequency exceeded the limit.</td>
+<td>Please confirm the QPS limit for the corresponding API and reduce the request frequency.</td>
+</tr>
+<tr>
+<td>350006002</td>
+<td>Gateway verification failed.</td>
+<td>Please contact ZEGOCLOUD technical support for assistance.</td>
+</tr>
+<tr>
+<td>350006003</td>
+<td>Invalid input parameter.</td>
+<td>Please adjust the value of the corresponding parameter according to the message prompt.</td>
+</tr>
+<tr>
+<td>350006006</td>
+<td>Service not activated.</td>
+<td>Please contact ZEGOCLOUD technical support to activate the service.</td>
+</tr>
+<tr>
+<td>350010000</td>
+<td>System error.</td>
+<td>Please contact ZEGOCLOUD technical support for assistance.</td>
+</tr>
+</tbody></table>
