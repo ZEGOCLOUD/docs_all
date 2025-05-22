@@ -1,0 +1,151 @@
+# Create a cloud player
+
+- - -
+
+## Overview
+
+You can call this method to create a cloud player. After successful creation, the cloud player will automatically load the incoming media resources and stream them to the specified room for playback.
+
+<Warning title="Warning">
+
+Under the same AppID, up to 50 cloud players that are currently running (not destroyed) are allowed. If you need to increase the limit, please contact ZEGOCLOUD technical support for assistance.
+</Warning>
+
+## Request method and endpoint
+
+- Request method: POST
+- Request URL: `https://cloud-player-api.zego.im/?Action=CreatePlayer`
+- Transmission protocol: HTTPS
+- Call frequency limit: 20 times/second
+
+## Request parameters
+
+The following list only lists the interface request parameters. For common parameters, please refer to [Accessing server APIs - Common request parameters](./Accessing%20Server%20APIs.mdx#common-parameters).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| StreamUrl | String | Yes | The URL of the media resource. It must be a valid HTTP/HTTPS address and be within 1024 bytes in length. |
+| BackupStreamUrl | String | No | The backup URL of the media resource. It must be a valid HTTP/HTTPS address and be within 1024 bytes in length.When the address in the StreamUrl parameter fails to be accessed, the cloud player will attempt to access the backup address. |
+| RoomId | String | Yes | The ID of the specified room for streaming. It must be within 128 bytes in length.<strong>When calling this interface, if the RoomId does not exist, the room will be automatically created.</strong> |
+| StreamId | String | No | The stream ID of the specified room for the cloud player to stream to. It must be within 256 bytes in length and only supports numbers, English characters, '-', and '_'. <strong>Please note that within the same AppID, the StreamId must be unique. If this parameter is not filled in, ZEGOCLOUD server will assign an ID randomly.</strong> |
+| PlayerName | String | No | The name of the cloud player. It must be within 64 bytes in length and is empty by default.<ul><li><strong>Within the same AppId, there can be multiple cloud players with empty PlayerName, but multiple running cloud players with duplicate PlayerName are not allowed.</strong></li><li><strong>The name of a destroyed player (PlayerName) can be created and used again, but it is recommended that developers avoid creating players with the same PlayerName.</strong></li></ul> |
+| VideoOptions | Object | No | Video transcoding parameter configuration.<strong>Please note that when this parameter is not filled in, the fields it contains will use default values.</strong> |
+| └Width | Number | No | The width of the video. The value range is [1, 3000], and it must be a multiple of 2. The unit is px. The default value is the width of the original media resource.<strong>Please note that when either Width or Height is set to 1, it represents audio-only streaming.</strong> |
+| └Height | Number | No | The height of the video. The value range is [1, 3000], and it must be a multiple of 2. The unit is px. The default value is the height of the original media resource.<strong>Please note that when either Width or Height is set to 1, it represents audio-only streaming.</strong> |
+| └VideoBitrate | Number | No | The video bitrate. The value range is [1, 50000], and the unit is kbps. The default value is the recommended bitrate given by ZEGOCLOUD based on the resolution and frame rate. For details, please refer to the "Use default values" in <a href="https://www.zegocloud.com/docs/video-call/common-video-config?platform=android&language=java#4_1" target="blank">Set up common video config</a>.For example, when the input resolution is 360*640, the VideoBitrate of the output stream is set to 600 kbps. |
+| └VideoCodec | Number | No | The video encoding format.<ul><li>0: H264, default value.</li><li>2: VP8.</li><li>3: H265.</li></ul> |
+| └Fps | Number | No | Video frame rate, range is [1, 30], unit is fps, default value is 15. |
+| └RenderMode | Number | No | Video fill mode.<ul><li>0: Fill mode, video is scaled proportionally until it is fully displayed in the viewport, may have black borders, default value.</li><li>1: Crop mode, video is scaled proportionally to fill the entire viewport, may be partially cropped.</li></ul> |
+| AudioOptions | Object | No | Audio transcoding parameter configuration.<strong>Please note that when this parameter is not filled in, the fields included in it will use default values.</strong> |
+| └AudioCodec | Number | No | Audio codec and sampling rate.<ul><li>0: AAC-LC, sampling rate: 44100 kHz, default value.</li><li>1: HE-AAC, sampling rate: 44100 kHz.</li><li>6: OPUS, sampling rate: 48000 kHz.</li></ul> |
+| └AudioBitrate | Number | No | Audio bitrate, range is [1, 192], unit is kbps, default value is 48 kbps. |
+| └SoundChannel | Number | No | Number of audio channels.<ul><li>1: Mono, default value.</li><li>2: Stereo.</li></ul> |
+| └Volume | Number | No | Volume value, range is [0, 200], default value is 100, representing the original volume of the audio. |
+| PlayTime | Number | No | Unix timestamp (in seconds) when starting to play the online media stream. <strong>Range is [CreateTime - 86400, CreateTime + 1800] (CreateTime is the creation time of the cloud player, which will be returned after a successful call to this interface. To increase the limit, please contact ZEGOCLOUD technical support)</strong>, default value is 0, indicating that the online player will automatically start playing the online media stream when it is created successfully.<ul><li>When PlayTime = CreateTime, the cloud player will automatically start playing when it is created successfully.</li><li>When PlayTime &gt; CreateTime, the cloud player will start loading media resources after it is created successfully, and start playing at the set PlayTime, achieving the effect of scheduled playback.</li><li>When PlayTime &lt; CreateTime, the cloud player will start playing from the position corresponding to <code>CreateTime - PlayTime</code>. For example, when cloud player A encounters an exception during operation, you can create a new cloud player B and set B's PlayTime to the Unix timestamp when A starts playing. When B is created successfully, it can start playing directly from the current progress of A.</li></ul>For example, if CreateTime is 20:00 in the evening, when PlayTime is 20:00, the cloud player will start playing directly after it is created successfully; when PlayTime is 20:10 (CreateTime + 600), the cloud player will start loading resources after it is created successfully, and start playing at 20:10; when PlayTime is 19:55 (CreateTime - 300), the cloud player will start playing directly from the 6th minute of the media stream. |
+| RepeatTimes | Number | No | Number of times to play.<ul><li>1: Play the media stream once, default value.</li><li>-1: Auto loop play.</li><li>n: Custom number of times to play the media stream, must be greater than 0.</li></ul> |
+| SeekTo | Number | No | Specify the playback progress (in seconds), default value is 0, indicating starting from the beginning. |
+| MaxIdleTime | Number | No | Maximum duration of the cloud player in <strong>idle state (Status is 2 or 6, please refer to the return parameters of <a href="./cloud player query.mdx" target="blank"> Query the task list of a cloud player </a>)</strong>, i.e., the maximum duration when the media stream is not playing. Range is [5, 600], unit is seconds, default value is 300 seconds.<ul><li>After the idle state exceeds the set MaxIdleTime, the player will be automatically destroyed.</li><li>If MaxIdleTime is less than 5, ZEGOCLOUD server will automatically adjust it to 5; if MaxIdleTime is greater than 600, ZEGOCLOUD server will automatically adjust it to 600.</li></ul> |
+| StreamData | Object | No | Data configuration carried by real-time media stream (such as playback progress information). This data will be transmitted as SEI information along with video frames, and can be obtained by the pulling party through listening to the <a href="/article/api?doc=Express_Video_SDK_API~java_android~class~IZegoEventHandler#on-player-sync-recv-sei" target="blank">onPlayerSyncRecvSEI</a> callback of the client.The SEI information transmitted by this parameter is in JSON format by default, and developers can parse it according to the JSON format. For example, if the SEI content is <code>null</code>, where CloudPlayerPlayingProgress represents the current playback progress of the video frame, and 1000 represents the current playback progress is 1000ms. |
+| └Enable | Number | No | Whether to enable StreamData configuration.<ul><li>0: Disable, default value.</li><li>1: Enable.</li></ul> |
+| └Interval | Number | No | Set the SEI information sending frequency (in milliseconds) for transmitting StreamData data, default value is 1000, indicating that a SEI information carrying StreamData data will be sent every 1 second. |
+| ExtensionParams | Array of Object | No | Extension parameters, set in the form of <code>Key-Value</code>.This parameter is generally used for unconventional special parameters or some technical previews. Please fill in according to the actual situation. Conventional cloud player tasks can be ignored. |
+| └Key | String | No | Key value. |
+| └Value | String | No | Value value. |
+| └RoomUserUpdate | Number | No | When a room is automatically created because the RoomId does not exist while you are creating a cloud player, will the clients of other users in the room be notified by the onRoomUserUpdate callback when users enter or leave the room: <ul><li>0: No (default).</li><li>1: Yes.</li></ul><Note title="Note">If the RoomId exists, this parameter is invalid.</Note> |
+
+## Request example
+
+- Request URL
+
+    ```bash
+    https://cloud-player-api.zego.im/?Action=CreatePlayer
+    &AppId=1234567890
+    &SignatureNonce=15215528852396
+    &Timestamp=1234567890
+    &Signature=7a2c0f11145fb760d607a07b54825013
+    &SignatureVersion=2.0
+    &IsTest=false
+    ```
+
+- Request body
+
+    ```json
+    {
+        "StreamUrl": "https://xxx.com/video/test.mp4",
+        "BackupStreamUrl": "",
+        "RoomId": "room_12",
+        "StreamId": "stream",
+        "PlayerName": "player_1",
+        "VideoOptions": {
+            "Width": 360,
+            "Height": 640,
+            "VideoBitrate": 600,
+            "VideoCodec": 0,
+            "Fps": 15,
+            "RenderMode": 1
+        },
+        "AudioOptions": {
+            "AudioCodec": 1,
+            "AudioBitrate": 48,
+            "SoundChannel": 1,
+            "Volume": 100
+        },
+        "PlayTime": 0,
+        "RepeatTimes": 1,
+        "SeekTo": 0,
+        "MaxIdleTime": 30,
+        "StreamData": {
+            "Enable": 1,
+            "Interval": 1000
+        }
+    }
+    ```
+
+## Response parameters
+
+<table class="collapsible-table">
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| Code | Number | Error code. |
+| Message | String | Error description. |
+| RequestId | String | Request ID. |
+| Data | Object | Specific information returned. |
+| └PlayerId | String | Unique identifier of the player. |
+| └RoomId | String | Room ID. |
+| └StreamId | String | Stream ID. |
+| └CreateTime | Number | Player creation time, Unix timestamp in seconds. |
+
+</table>
+
+## Response example
+```json
+{
+    "Code": 0,
+    "Message": "succeed",
+    "RequestId": "abcd123",
+    "Data": {
+        "PlayerId": "XXXXXXXXXXXX",
+        "RoomId": "room_12",
+        "StreamId": "stream",
+        "CreateTime": 1681221508
+    }
+}
+```
+
+## Return codes
+
+The following are only the return codes related to the interface business logic. For the complete list of return codes, please refer to [Return Codes](./Return%20Codes.mdx).
+
+| Return Code | Description | Suggested Action |
+|-------------|-------------|------------------|
+| 0 | Success. | - |
+| 100000004 | Signature expired. | Please regenerate the signature. |
+| 100000005 | Signature error. | Please confirm if the parameters used to generate the signature are correct. |
+| 350006001 | Interface request frequency exceeds the limit. | Please confirm the QPS limit for the corresponding interface and reduce the request frequency. |
+| 350006002 | Gateway verification failed. | Please contact ZEGOCLOUD technical support for assistance. |
+| 350006003 | Invalid input parameters. | Please adjust the values of the corresponding parameters according to the Message prompt. |
+| 350006006 | Service not activated. | Please contact ZEGOCLOUD technical support to activate the service. |
+| 350006007 | Concurrent number of cloud players has reached the limit. | Please confirm if the number of cloud players created currently exceeds the limit. The default limit is 50. |
+| 350006008 | There is already a running cloud player with the same name. | Please confirm if there is already a cloud player with the same PlayerName that is currently running. |
+| 350010000 | System error. | Please contact ZEGOCLOUD technical support for assistance. |

@@ -1,0 +1,341 @@
+# Start recording
+
+---
+
+## Description
+
+You can call this method to start a cloud recording task.
+
+After you successfully call the `StartRecord` method, the Cloud Recording will record the audio and video streams and whiteboards in the room based on the specified recording parameters. 
+
+<Warning title="Warning">
+- Each recording task may last up to 24 hours. When the recording duration reaches the maximum, the recording task automatically ends.
+- ZEGOCLOUD recommends that each of your recording tasks call the [Stop recording](./Stop%20Recording.mdx) method to stop recording to avoid additional costs for continued recording.
+</Warning>
+
+## Request method and endpoint
+
+- Request method: POST
+- Request URL: `https://cloudrecord-api.zego.im/?Action=StartRecord`
+- Transmission protocol: HTTPS
+- Rate limit: 50 requests/second
+
+## Request parameters
+
+Listed below are the parameters specific to this request. For the list of common request parameters, see [Accessing Server APIs - Common parameters](./Accessing%20Server%20APIs.mdx#common-parameters).
+
+| Parameter | Type | Required | Description |
+| :-------- | :--- | :------- | :---------- |
+| RoomId | String | Yes | Room ID. |
+| RecordInputParams | Object | Yes | Recording task input parameters.<br />For details, see <a href="#recordinputparams">RecordInputParams member parameters</a>. |
+| RecordOutputParams | Object | No | Recording task output parameters.<br />For details, see <a href="#recordoutputparams">RecordOutputParams member parameters</a>. |
+| StorageParams | Object | Yes | Recording task storage parameters.<br />For details, see <a href="#storageparams">StorageParams member parameters</a>. |
+
+### RecordInputParams
+
+| Parameter | Type | Required | Description |
+| :-------- | :--- | :------- | :---------- |
+| RecordMode | Int | Yes | Recording mode.<ul><li>1: single-stream recording</li><li> 2: mixed-stream recording</li></ul> |
+| StreamType | Int | No | Recording type of a media stream. This parameter is valid only for audio or video streams. For whiteboards, only video files will be recorded.<ul><li>1: only audio files</li><li>2: only video files</li><li>3 (default value): combined audio and video files</li><li>4: separate audio and video files</li></ul> |
+| RecordStreamList | Array of Object | No | List of streams to be recorded. This parameter is valid only in single-stream recording mode.<br />For details, see <a href="#recordstreamlist">RecordStreamList member parameters</a>.<br />If the parameter is not specified or set to an empty list, all streams in the room will be recorded by default. |
+| <p id="FillBlank">FillBlank</p> | Bool | No | <p>Whether to automatically fill in the gap when the stream is interrupted, the default value is false, which means no filling.</p><ul><li>true: When the user's streaming is interrupted, it will be automatically filled in. The effect of automatic filling depends on the recording mode.<ul><li><strong>Single-stream recording</strong>: It only works for audio streaming.<Note title="Note"><p>If the streaming end only publishs a video stream, or the recording media type is only recording video, automatic filling will not be possible.</p></Note>During the interruption, the ZEGOCLOUD server will add silent frames to the audio until the same stream ID is used to publish the stream in the room again. In the end, the same recording file will retain the normal streaming content and silent frames.</li><li><strong>Mixed-stream recording</strong>: During the interruption, the video will pause at the last frame (by default) or display the background image of the stream. In addition, if there is no audio content in the mix-stream, the server will add silent frames until the same stream ID is used to push the stream in the room again. In the end, the same recording file will retain the normal streaming content, filled-in frames, and silent frames (if any).If you need to use the stream's background image as the filling, please refer to the parameter descriptions of <a href="#DefaultMixStreamBackgroundImage">DefaultMixStreamBackgroundImage</a> and <a href="#BackgroundImage">BackgroundImage</a>. The setting of the stream's background image will only take effect when performing mix-stream recording (i.e., when the value of RecordMode is 2).</li></ul></li><li>false (default value): no. When the user resumes the streaming, a new recording file is generated.</li></ul><p>There are two possible timing for the filling during interruption:</p><ul><li>Automatic stop of cloud recording due to the timeout of the room without a stream, see the definition of MaxIdleTime.</li><li>Manually stop the cloud recording.</li></ul> |
+| FillFrame | Object | No | Settings for filling in screens after the camera is turned off while the audio streaming continues. This parameter is valid only in mixed-stream recording mode.<br />For details, see <a href="#fillframe">FillFrame member parameters</a>. |
+| RecordMuteAudio | Int | No | Whether to record audio frames in mute mode. This parameter is valid only in the following scenarios: a single stream is recorded; only audio files are recorded and they are stored in MP3 format.<ul><li>1 (default value): yes</li><li>2: no</li></ul> |
+| RecordMuteAudioSplitThreshold | Int | No | Mute time threshold for automatically split recording files, in seconds.<br />When the mute duration of a stream reaches this threshold during the recording, a new recording file will be generated.<br />This parameter is valid only in the following scenarios: a single stream is recorded; only audio files are recorded; the recording file is stored in MP3 mode and `RecordMuteAudio` is set to `2`.<br />If this parameter is set to 0, a separate recording file is generated immediately when a stream is muted. If this parameter is set to 0 or a negative value, the recording file will not be split. |
+| HasWhiteboard | Bool | No | Whether to record a whiteboard.<ul><li>true: yes </li><li>false (default value): no</li></ul>If this parameter is set to `true`, the `Whiteboard` parameter is required. |
+| Whiteboard | Array of Object | No | Whiteboard parameter, which is required when `HasWhiteboard` is set to `true`.<br />For details, see <a href="#whiteboard">Whiteboard member parameters</a>. |
+| <p id="MaxIdleTime">MaxIdleTime</p> | Int | No | Maximum duration with no stream or whiteboard after which cloud recording automatically stops, in seconds. The default value is `30`. The value must be greater or equal to 5, and less than or equal to 86400 (24 hours).<br /><b>Note: This parameter is valid only when there is no stream or whiteboard in the room.</b><br/> |
+| <p id="MaxRecordTime">MaxRecordTime</p> | Int | No | Maximum duration of a recording task. Recording automatically stops when the duration reaches the maximum, in seconds. The default value is `86400`. The value must be greater or equal to 300 and less than or equal to 86400 (24 hours). |
+| MixConfig | Object | No | Mixed-stream settings. This parameter is required when `RecordMode` is set to `2`.<br />For details, see <a href="#mixconfig">MixConfig member parameters</a>. |
+
+<Warning title="Warning">
+- `FillBlank` and `MaxIdleTime` have different application scopes.
+  - `FillBlank`: applies to the stream. Assume that `FillBlank` is set to `true`. When the streaming is interrupted, the system supplements blank screens as long as the recording task is still ongoing. In this case, the interrupted streaming status will not affect the judgment of whether there is a stream in the room.
+  - `MaxIdleTime`: applies to the recording task. When the duration with no stream in a room exceeds the maximum specified by `MaxIdleTime`, the recording task ends.
+- In mixed-stream recording mode, when `StreamType` is `1`, only audio files are recorded and the whiteboards are not.
+</Warning>
+
+### RecordStreamList
+
+| Parameter | Type | Required | Description |
+| :-------- | :--- | :------- | :---------- |
+| StreamId | String | Yes | ID of a stream to be recorded. |
+
+### FillFrame
+
+| Parameter | Type | Required | Description |
+| :-------- | :--- | :------- | :---------- |
+| FrameFillMode | Int | No | Screen filling mode.<ul><li>1 (default value): Fill in the last frame.</li><li>2: Fill in a frame of the specified color.</li><li>3: Do not fill in any frame.</li></ul> |
+| FrameFillColor | Int | No | Color of the frame to be filled in. This parameter is valid only when `FrameFillMode` is set to `2`. The default color is black. The first three bytes specify the RGB color code and the fourth byte is fixed at 0, that is, 0xRRGGBB00. |
+
+
+<Note title="Note">
+For web projects, `FrameFillMode` can only be set to `2` and the color of the frame to be filled in can only be black.
+</Note>
+
+### Whiteboard
+
+| Parameter | Type | Required | Description |
+| :-------- | :--- | :------- | :---------- |
+| HorizontalRatio | Int | Yes | Width of the original whiteboard. |
+| VerticalRatio | Int | Yes | Height of the original whiteboard. |
+| Width | Int | No | Resolution width of the output whiteboard video in single-recording mode. The default value is `1280`. |
+| Height | Int | No | Resolution height of the output whiteboard video in single-recording mode. The default value is `720`. |
+| WhiteboardId | String | No | Whiteboard ID.<ul><li>If a whiteboard must be recorded immediately after the start of recording, this parameter is required.</li><li>If no whiteboard needs to be recorded immediately after the start of recording, this parameter is not required and the whiteboard ID can be specified later when necessary by calling the <a href="./Whiteboard Update.mdx" target="blank">Update the whiteboard</a> method.</li></ul> |
+| BackgroundColor | Int | No | Whiteboard background color, default is white. The first three bytes represent the RGB color value, and the fourth byte is fixed as 0, i.e. 0xRRGGBB00. |
+| IsPPTAnimation | Bool | No | Whether to record dynamic PowerPoint presentations, default is false.<ul><li>true：Recording of dynamic PowerPoint presentations, supports recording of animation effects and videos in PPT.</li><li>false：Do not record dynamic PowerPoint presentations, animation effects and videos in PPT will not be recorded.</li></ul> |
+| PPTAnimationFps | Int | No | The frame rate for recording dynamic PowerPoint presentations, default is 15, valid range is [1,30]. |
+
+### MixConfig
+
+| Parameter | Type | Required | Description |
+| :-------- | :--- | :------- | :---------- |
+| MixMode | Int | No | Layout.<ul><li>1: customized layout. In this layout, `MixInputList` is required.</li><li>2 (default value): grid layout</li><li>3: horizontal layout</li><li>4: vertical layout</li><li>5: floating layout</li></ul> |
+| MixInputList | Array of Object | No | Customized layout parameters.<br />For details, see <a href="#mixinputlist">MixInputList member parameters</a>. |
+| FillMode | Int | No | <strong>(Used when `MixConfig`'s `MixMode` is not `1`.)</strong><br />Filling mode when the aspect ratio of a video stream is different from that of the screen.<ul><li>1 (default value): cropping. In this mode, the video stream is scaled equally to fully fill in the screen and the content outside the screen will be cropped.</li><li>2: scaling. In this mode, the video screen is scaled equally to fill in the screen and black borders will be filled in along all sides.</li></ul> |
+| MixOutputStreamId | String | Yes | Stream ID in mixed-stream recording mode, which will be used as a part of `OutputFileRule`. |
+| MixOutputVideoConfig | Object | No | Output video parameters. When `StreamType` is `2`, `3`, or `4`, this parameter is required.<br />For details, see <a href="#mixoutputvideoconfig">MixOutputVideoConfig member parameters</a>. |
+| MixOutputAudioConfig | Object | No | Output audio parameters.<br />For details, see <a href="#mixoutputaudioconfig">MixOutputAudioConfig member parameters</a>. |
+| MixOutputBackgroundColor | Int | No | Recording background color, which is black by default. The first three bytes specify the RGB color code and the fourth byte is fixed at `0`, that is, 0xRRGGBB00. |
+| MixOutputBackgroundImage | String | No | URL of the background image of a video canvas.<ul><li>We recommend that the resolution of the background image be the same as the output video resolution. If the resolutions are different, the background image will be stretched or compressed to fully fill in the screen.</li><li>The background image can be in JPG or PNG format. The maximum image size is 5 MB. If the background image download fails, the setting will be invalid.</li><li>HTTP and HTTPS URLs are supported.</li></ul> |
+| MixMaxResolutionStreamId | String | No | Stream ID of the large screen when `MixMode` is set to `3`, `4`, or `5`. |
+| MixOutputWatermarkImage | String | No | URL of the watermark image.<ul><li>It is recommended that the size of the watermark image be consistent with the config of the watermark image. If they are not the same, the watermark image will be stretched to fill the watermark layout.</li><li>The watermark image can be in JPG and PNG. The maximum image size is 5 MB. If the watermark image downloading fails, the setting will be invalid.</li><li>HTTP and HTTPS URLs are supported.</li></ul> |
+| MixOutputWatermarkImageConfig | Object | No | Watermark layout configuration. <br />See <a href="#mixoutputwatermarkimageconfig">MixOutputWatermarkImageConfig member list</a>. |
+| <p id="DefaultMixStreamBackgroundImage">DefaultMixStreamBackgroundImage</p> | String | No | URL of the default background image of a stream. Assume that <a href="#FillBlank">FillBlank</a> is `true`. When the specified stream does not exist or the streaming is interrupted and the recording mode is mixed-stream recording, the background image specified by this parameter will be displayed.<ul><li>For a customized layout, if <a href="#BackgroundImage">BackgroundImage</a> is specified for a stream ID, the specified background image will be displayed preferentially.</li><li>It is suggested that the size of the background image should match the size of the stream. If they are not consistent, the background image will be stretched or compressed to fill the stream.</li><li>The background image can be in JPG or PNG format. The maximum image size is 5 MB. If the background image downloading fails, the setting will be invalid.</li><li>HTTP and HTTPS URLs are supported.</li></ul> |
+| <p id="IsAlwaysMix">IsAlwaysMix</p> | Bool | No | Whether to start recording immediately after the start of the recording task. The default value is false, which means that recording starts after the stream publishing in the room has started.<ul><li>true：Start recording immediately after the start of the recording task.</li><li>false：Start recording after stream publishing in the room has started.</li></ul> |
+| MixOutputWatermarkTimestampConfig | Object | No | Time watermark configuration. After configuration, the time watermark will be displayed in the upper right corner of the video in the format of yyyy-MM-dd HH:mm:ss. <br />See <a href="#mixoutputwatermarktimestampconfig">MixOutputWatermarkTimestampConfig member list</a> for details. |
+| RecordSoundWave | Bool | No | Whether to record sound wave information after the recording task starts. The default value is false.<ul><li>true: After the recording task starts, the sound wave information of all streams is recorded every 1 second.</li><li>false: After the recording task starts, no sound wave information is recorded.</li></ul><p>The sound wave information will be written to a separate file in JSON format. The file name is the same as the recording file name with the .sw extension. After the recording task ends, it will be uploaded to the specified cloud storage location together with the recording file.</p> |
+| SoundWaveType | Int | No | Sound wave information type. <strong>Note: This parameter only takes effect when `RecordSoundWave` is set to `true`.</strong><ul><li>0: Record stream ID information (default value). Example: `{"time":10, "sound_wave":[{"stream_id":"s1", "volume":0}]}`</li><li>1: Record user ID information. Example: `{"time":10, "sound_wave":[{"user_id":"u1", "volume":0}]}`</li></ul> |
+| StreamConfigList | Array of Object | No | Custom stream configurations.<br />See <a href="#streamconfiglist">StreamConfigList member parameters</a> for details. |
+| ClearInputStreamTimeout | Int | No | The timeout for waiting for the input stream, in milliseconds. During this time, the ZEGOCLOUD server will wait to receive the input stream before starting the mixing process. If the timeout is reached and the input stream is still not received, the mixing will start automatically. |
+
+### MixInputList
+
+| Parameter | Type | Required | Description |
+| :-------- | :--- | :------- | :---------- |
+| <p id="StreamId">StreamId</p> | String | No | <p>ID of the stream to be recorded.</p><p>If this parameter is not set, streams will be recorded based on the time order of the stream-publishing in the room.</p> |
+| ViewType | Int | No | Type of content to be displayed on a screen.<ul><li>1 (default value): audio and video</li><li>2: whiteboard</li></ul>The value `2` is valid only when whiteboard recording is enabled. This parameter can be set to `2` for only one screen. Otherwise, an error will be returned. |
+| Top | Int | Yes | Y-axis coordinate of the upper left corner of a screen on the canvas. The value ranges from 0 to 1920 and can't exceed the value of `Bottom` or the canvas height. |
+| Left | Int | Yes | X-axis coordinate of the upper left corner of a screen on the canvas. The value ranges from 0 to 1920 and can't exceed the value of `Right` or the canvas width. |
+| Bottom | Int | Yes | Y-axis coordinate of the lower right corner of a screen on the canvas. The value ranges from 0 to 1920 and can't exceed the canvas height. |
+| Right | Int | Yes | X-axis coordinate of the lower right corner of a screen on the canvas. The value ranges from 0 to 1920 and can't exceed the canvas width. |
+| Layer | Int | Yes | Layer priority of a screen. When an overlap occurs between two screens, the one with a larger value of `Layer` will be displayed on top. |
+| FillMode | Int | No | <strong>(Used when `MixConfig`'s `MixMode` is `1`.)</strong><br />Filling mode when the aspect ratio of a video stream is different from that of the screen.<ul><li>1 (default value): cropping. In this mode, the video stream is scaled equally to fully fill in the screen and the content outside the screen will be cropped.</li><li>2: scaling. In this mode, the video screen is scaled equally to fill in the screen and black borders will be filled in along all sides.</li></ul> |
+| <p id="BackgroundImage">BackgroundImage</p> | String | No | URL of the background image of a stream. This parameter is valid only when <a href="#StreamId">StreamId</a> is set.<br />When the specified stream specified for a customized layout does not exist or the streaming is interrupted, the background image specified by this parameter is displayed.<ul><li>It is suggested that the size of the background image should match the size of the set stream screen. If they are not consistent, the background image will be stretched or compressed to fill the entire screen.</li><li>The background image can be in JPG or PNG format. The maximum image size is 5 MB. If the background image download fails, the setting will be invalid.</li><li>HTTP and HTTPS URLs are supported.</li></ul> |
+
+### MixOutputVideoConfig
+
+| Parameter | Type | Required | Description |
+| :-------- | :--- | :------- | :---------- |
+| Width | Int | Yes | Resolution width of the output video, in pixels.<br />The value must be less than or equal to 1920 and the product of the values of  `Width` and `Height` can't exceed 1920 x 1080. Otherwise, an error message will be returned. |
+| Height | Int | Yes | Resolution height of the output video, in pixels.<br />The value must be less than or equal to 1920 and the product of the values of  `Width` and `Height` can't exceed 1920 x 1080. Otherwise, an error message will be returned. |
+| Fps | Int | Yes | Frame rate of the output video. The value ranges from 5 to 30 and the default value is `15`. |
+| Bitrate | Int | Yes | Bit rate of the output video, in bps. If you want to set the bit rate to 1.5 Mbps, this parameter must be set to `1500000`, that is, 1500 x 1000. |
+
+### MixOutputAudioConfig
+
+| Parameter | Type | Required | Description |
+| :-------- | :--- | :------- | :---------- |
+| Bitrate | Int | No | Audio bit rate, which is 48000 bps by default. |
+
+### MixOutputWatermarkImageConfig
+
+| Parameter | Type | Required | Description |
+| :-------- | :--- | :------- | :---------- |
+| Left | Int | Yes | The x-axis coordinate of the upper left corner of the screen on the canvas, the value range is [0, 1920], which cannot exceed the value of Right and the width of the canvas. |
+| Top | Int | Yes | The y-axis coordinate of the upper left corner of the screen on the canvas, the value range is [0, 1920], which cannot exceed the value of Bottom and the height of the canvas. |
+| Right | Int | Yes | The x-axis coordinate of the lower right corner of the screen on the canvas, the value range is [0, 1920], which cannot exceed the width of the canvas. |
+| Bottom | Int | Yes | The y-axis coordinate of the lower right corner of the screen on the canvas, the value range is [0, 1920], and cannot exceed the height of the canvas. |
+
+Please refer to [Set mixed-stream layout - Customize the video layout](/cloud-recording/common-features/set-the-mixed-flow-layout#customize-the-video-layout) for information related to the coordinate system.
+
+### StreamConfigList
+
+| Parameter | Type | Required | Description |
+| :-------- | :--- | :------- | :---------- |
+| StreamId | String | No | Stream ID. |
+| StreamType | Int | No | The stream recording type. This parameter only takes effect when the StreamType of RecordInputParams is 3 or 4.<ul><li>0: Default type.</li><li>1: Audio.</li><li>2: Video.</li><li>3: Audio and Video.</li></ul> |
+
+If the StreamId in the StreamConfigList is empty, it indicates that the default value for the parameters is set. Other streams not appearing in the StreamConfigList will use the default value.
+
+### MixOutputWatermarkTimestampConfig
+
+| Parameter | Type | Required | Description |
+| :-------- | :--- | :------- | :---------- |
+| FontSize | Int | Yes | Font size, range of values [12, 100], unit: px. |
+
+### RecordOutputParams
+
+| Parameter | Type | Required | Description |
+| :-------- | :--- | :------- | :---------- |
+| <p id="OutputFileFormat">OutputFileFormat</p> | String | No | Format of an output recording file. The options are `mp4`, `flv`, `hls`, `jpg`, and `mp3`, and the default value is `mp4`. If this parameter is set to `mp4` or `flv` and `StreamType` is set as `4`, an audio file in AAC format will be generated. |
+| OutputFolder | String | No | Output directory of a recording file stored on a third-party cloud storage platform. The root directory is used by default. |
+| <p id="OutputFileRule">OutputFileRule</p> | Int | No | Naming rule of a recording file. The default value and the only value that is supported currently is `1`. That is, the naming rules for different recording modes are as follows:<ul><li>Single-stream recording mode: TaskId_RoomId_UserId_StreamId_Type_UTC</li><li>Mixed-stream recording mode: Taskid_RoomId_MixOutputStreamId_Type_UTC</li><li>Single-stream recording with whiteboard: Taskid_Roomid_<b>whiteboard</b>_Type_UTC</li></ul>The meanings of file name fields are as follows: <ul><li>Type: file type, which can be `V` (video), `A` (audio), and `VA` (video and audio).</li><li>UTC: UTC time when recording starts for the file. The time zone is UTC+0 and the time is composed of year, month, day, hour, minute, second, and millisecond.</li><li>MixOutputStreamId: same as that specified in `MixConfig`.</li><li>whiteboard: fixed part in the file name</li></ul> |
+| SnapshotInterval | Int | No | Screen capture interval, in seconds. This parameter is valid when the recording file is generated in JPG format. The value ranges from 5 to 3600 and the default value is `10`. |
+| CallbackUrl | String | No | Customized callback URL. The callback URL configured when the service is enabled will be used if this parameter is not set. HTTP and HTTPS URLs are supported. |
+| FragmentSeconds | Int | No | Duration of each video segment in seconds. The value should be between 2 and 60, with a default value of 15.<br /><strong>Note: This parameter only takes effect when `OutputFileFormat` is set to "hls".</strong> |
+| RealtimeUploadFragment | Bool | No | Duration of each video segment in seconds. The value should be between 2 and 60, with a default value of 15.<br /><strong>Note: This parameter only takes effect when `OutputFileFormat` is set to "hls".</strong> |
+| ShortFragmentPath | Bool | No | Whether the .m3u8 file saves only the filenames of video segment files (e.g., .ts files), instead of the paths to the video segments.<br /><strong>Note: This parameter only takes effect when `RealtimeUploadFragment` is set to "true".</strong> |
+
+### StorageParams
+
+| Parameter | Type | Required | Description |
+| :-------- | :--- | :------- | :---------- |
+| Vendor | Int | Yes | Recording file storage service provider. Currently, the following service providers are supported: <ul><li>1: Amazon S3 </li><li>2: Alibaba Cloud OSS</li><li>3: Tencent Cloud COS</li><li>4: Qiniu Cloud KODO </li><li>5: Alibaba Cloud VOD </li><li>6: Tencent Cloud VOD</li><li>7: Huawei Cloud OBS </li><li>8: Google Cloud Storage</li><li>9: China Mobile Cloud EOS</li><li>10: Storage service provider using S3 protocol, you need to fill in the `StorageParams` member parameter `EndPoint`.</li></ul> |
+| Region | String | No | Region. |
+| Bucket | String | No | Bucket. |
+| AccessKeyId | String | No | Access key. We recommend that you provide an access key with the write-only permission. |
+| AccessKeySecret | String | No | Secret key. |
+| AlibabaCloudVodParams | Object | No | Storage information when Alibaba Cloud VOD is used.<br />For details, see <a href="#alibabacloudvodparams">AlibabaCloudVodParams member parameters</a>. |
+| TencentCloudVodParams | Object | No | Storage information when Tencent Cloud VOD is used.<br />For details, see <a href="#tencentcloudvodparams">TencentCloudVodParams member parameters</a>. |
+| EndPoint | String | No | When `Vendor` is set to 10, fill in the address of the storage service that uses the S3 protocol. |
+
+
+<Warning title="Warning">
+- When `Vendor` is set to `1`, `2`, `3`, `4 `,`7`, `9`, and `10`, `Region`, `Bucket`, `AccessKeyId`, and `AccessKeySecret` are required.
+- When `Vendor` is set to `5`, `AlibabaCloudVodParams` is required. Currently, only MP4 and FLV files can be uploaded.
+- When `Vendor` is set to `6`, `TencentCloudVodParams` is required. Currently, only MP4, FLV, JPG and MP3 files can be uploaded.
+- <strong>When `Vendor` is set to `8`, recording files will be stored in Google Cloud Storage, and you need to configure the following parameters</strong>:
+    - `Bucket`: the bucket name. You can create a bucket as instructed in [Create buckets](https://cloud.google.com/storage/docs/creating-buckets).
+    - `AccessKeyId`: the ID of the hash-based message authentication code (HMAC) key of Google Cloud Storage.
+    - `AccessKeySecret`: the secret of the HMAC key of Google Cloud Storage. Create and obtain your key as instructed in [Manage HMAC keys for service accounts](https://cloud.google.com/storage/docs/authentication/managing-hmackeys).
+    <Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/CloudRecording/7724_1.jpeg" /></Frame>
+- When `Vendor` is set to `10`, `Bucket` and `EndPoint` are required.
+</Warning>
+
+### AlibabaCloudVodParams
+
+| Parameter | Type | Required | Description |
+| :-------- | :--- | :------- | :---------- |
+| Region | String | Yes | Region, such as cn-shanghai. |
+| AccessKeyId | String | Yes | Access key. |
+| AccessKeySecret | String | Yes | Secret key. We recommend that you provide an access key with the write-only permission. |
+| Title | String | Yes | Video name. |
+| StorageLocation | String | Yes | Fixed parameter. |
+
+### TencentCloudVodParams
+
+| Parameter | Type | Required | Description |
+| :-------- | :--- | :------- | :---------- |
+| SecretId | String | Yes | Access key. |
+| SecretKey | String | Yes | Secret key. We recommend that you provide an access key with the write-only permission. |
+| Region | String | Yes | Region, such as ap-shanghai. |
+| SubAppId | Int64 | No | Sub-application ID. |
+
+## Sample request
+
+- Request URL  
+    ```
+    https://cloudrecord-api.zego.im/?Action=StartRecord
+    &AppId=1234567890
+    &SignatureNonce=15215528852396
+    &Timestamp=1234567890
+    &Signature=7a2c0f11145fb760d607a07b54825013
+    &SignatureVersion=2.0
+    &IsTest=false
+    ```
+- Request message body:
+    <Accordion title="For Amazon S3, Alibaba Cloud OSS, Tencent Cloud COS, Qiniu Cloud KODO, Huawei Cloud OBS, or China Mobile Cloud EOS" defaultOpen="false">
+    ```json
+    {
+        "RoomId": "xxxx",
+        "RecordInputParams": {
+            "RecordMode": 1,
+            "StreamType": 3,
+            "MaxIdleTime": 60
+        },
+        "RecordOutputParams": {
+            "OutputFileFormat": "mp4",
+            "OutputFolder": "record/"
+        },
+        "StorageParams": {
+            "Vendor": 2,
+            "Region": "oss-xxxx",
+            "Bucket": "xxxx",
+            "AccessKeyId": "xxxx",
+            "AccessKeySecret": "xxxx"
+        }
+    }
+    ```
+    </Accordion>
+
+    <Accordion title="For Alibaba Cloud VOD" defaultOpen="false">
+    ```json
+    {
+        "RoomId": "xxxx",
+        "RecordInputParams": {
+            "RecordMode": 1,
+            "StreamType": 3,
+            "MaxIdleTime": 60
+        },
+        "RecordOutputParams": {
+            "OutputFileFormat": "mp4",
+            "OutputFolder": "record/"
+        },
+        "StorageParams": {
+            "Vendor": 5,
+            "Region": "",
+            "Bucket": "",
+            "AccessKeyId": "",
+            "AccessKeySecret": "",
+            "AlibabaCloudVodParams":{
+                "Region": "cn-xxxxx",
+                "AccessKeyId": "xxxx",
+                "AccessKeySecret": "xxxx",
+                "Title": "xxxx",
+                "StorageLocation": "xxxx.oss-cn-xxxx.aliyuncs.com",
+                }
+        }
+    }
+    ```
+    </Accordion>
+
+    <Accordion title="For S3 protocol storage service providers" defaultOpen="false">
+    ```json title=""
+    {
+        "RoomId": "xxxx",
+        "RecordInputParams": {
+            "RecordMode": 1,
+            "StreamType": 3,
+            "MaxIdleTime": 60
+        },
+        "RecordOutputParams": {
+            "OutputFileFormat": "mp4",
+            "OutputFolder": "record/"
+        },
+        "StorageParams": {
+            "Vendor": 10,
+            "Region": "oss-xxxx",
+            "Bucket": "xxxx",
+            "AccessKeyId": "xxxx",
+            "AccessKeySecret": "xxxx",
+            "EndPoint": "xxxx"
+        }
+    }
+    ```
+    </Accordion>
+
+## Response parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| Code | Int64 | Return code. |
+| Message | String | Description of the request execution result. |
+| RequestId | String | Request ID. |
+| Data | Object | Response object. |
+| └TaskId | String | Task ID assigned by the cloud recording service. The value is a 16-byte character string. The task ID is the unique identifier of a recording lifecycle and becomes meaningless after the recording ends. |
+
+
+## Sample response
+
+The following is a response example of the `StartRecord` method:
+```json
+{
+    "Code": 0,
+    "Message": "succeed",
+    "RequestId": "abcd123",
+    "Data": {
+        "TaskId": "XXXXXXXXXXXX"
+    }
+}
+```
