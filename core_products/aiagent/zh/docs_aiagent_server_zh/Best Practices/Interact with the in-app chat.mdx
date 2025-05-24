@@ -1,113 +1,214 @@
-# 如何实现IM互动以及与RTC互动联动
+# 实现与 AI 进行 IM 聊天并发起语音通话
 
-本文档旨在指导开发者如何利用 ZIM (ZEGO In-app Messaging) 的实时通讯能力与大模型的自然语言处理能力，构建一个强大且智能的文字互动解决方案，从而提升应用的交互体验。
+本文档旨在指导开发者如何利用 [ZIM (ZEGO Instant Messaging)](https://doc-zh.zego.im/zim-server/overview) 的实时通讯能力与 LLM 的自然语言处理能力，实现与 AI 进行 IM 聊天并结合 AI Agent的功能发起语音通话。
 
 ## 核心概念
 
 在深入实现细节之前，我们先明确几个核心概念：
 
--   **ZIM (ZEGO In-app Messaging)**: ZEGO 提供的应用内即时通讯服务。它支持文本、图片、文件等多种消息类型，并具备房间管理、用户状态通知等功能，为应用内互动提供坚实基础。
--   **大模型 (Large Language Model, LLM)**: 经过海量文本数据训练的深度学习模型。LLM 能够理解和生成自然语言文本，广泛应用于问答系统、智能对话、文本创作等多种场景。
--   **文字互动**: 指用户在集成 ZIM 服务通过输入文字与大模型进行交互。大模型需能准确理解用户意图，并给出相关的文字回复，实现流畅的对话体验。
+- **ZIM (ZEGO Instant Messaging)**: ZEGO 提供的应用内即时通讯服务。它支持文本、图片、文件等多种消息类型，并具备房间管理、用户状态通知等功能，为应用内互动提供坚实基础。
+- **大语言模型 (LLM)**: 经过海量文本数据训练的深度学习模型。LLM 能够理解和生成自然语言文本，广泛应用于问答系统、智能对话、文本创作等多种场景。
+- **IM 聊天**: 指用户通过 ZIM 服务，输入文字与 LLM 进行交互。
+- **语音通话**: 指用户通过 AI Agent 服务进入 RTC 房间，与 AI 进行语音通话。
 
-## 解决方案架构
+## IM 聊天与语音通话的实现架构
 
-典型的 ZIM 与大模型结合的文字互动解决方案架构如下所示：
+这是在一个 APP 里同时实现与 AI 进行 IM 聊天和语音通话的架构。
 
-```mermaid
-graph TD
-    A[客户端 App] -- ZIM SDK --> B(ZIM 服务端)
-    B -- 消息回调/API请求 --> C(业务服务端)
-    C -- API 调用 --> D(大模型服务)
-    D -- 结果返回 --> C
-    C -- ZIM Server API/自有信令 --> B
-    B -- ZIM SDK --> A
-```
+<Frame width="auto" height="512" caption="">
+  <img src="https://media-resource.spreading.io/docuo/workspace741/896bc39e2e65b82d5670b01b7c131c30/de20e70f45.png" alt="im_with_agent.png"/>
+</Frame>
 
-**数据流说明:**
+### IM 聊天
+    - **客户端 APP**: 集成 ZIM SDK 实现文本收发与聊天记录持久化存储。
+    - **ZIM 后台**: 接收并处理来自客户端的消息。通过消息回调的方式，将用户消息安全、可靠地传递给业务后台。
+    - **业务后台**: 作为核心处理中暑，负责：
+        * 调用 ZIM 后台接口注册机器人。该机器人的 `UserId` 会用作语音通话时加载历史消息用的 `RobotId`。
+        * 接收 ZIM 收到的用户消息，对消息进行必要的预处理，如敏感词过滤、意图初步识别等。
+        * 调用 LLM 服务，将处理后的用户消息发送给 LLM 进行深度分析和内容生成。
+        * 收到 LLM 返回的回复内容后，对回复内容进行必要的后处理，如格式化输出、内容安全二次校验等。
+        * 调用 ZIM 后台接口以机器人身份，将回复通过 ZIM 发送回客户端。
+### 语音通话
+    - **客户端 APP**: 集成 ZEGO Express SDK 实现语音通话功能。
+    - **业务后台**：调用创建智能体实例接口，并将机器人的 `UserId` 作为 `RobotId` 参数传入 AI Agent 服务中。
+    - **AI Agent 后台**: 根据业务后台传入的 `RobotId`，从 ZIM 后台加载历史消息，作为智能体的输入上下文。智能体配置的 LLM 会以这些上下文作为聊天记录与用户进行语音通话交互，回答用户问题。
 
-1.  **客户端 App**: 用户在应用内通过集成的 ZIM SDK 发送文字消息。
-2.  **ZIM 服务端**: 接收并处理来自客户端的消息。随后，通过消息回调或 API 请求的方式，将用户消息安全、可靠地传递给业务服务端。
-3.  **业务服务端**: 作为核心处理中枢，负责：
-    *   接收 ZIM 服务端传递的用户消息。
-    *   对消息进行必要的预处理，如敏感词过滤、意图初步识别等。
-    *   调用选定的大模型服务接口，将处理后的用户消息发送给大模型进行深度分析和内容生成。
-    *   接收大模型返回的处理结果。
-    *   对大模型结果进行后处理，如格式化输出、内容安全二次校验等。
-    *   通过 ZIM Server API 或其他自定义信令通道，将最终的回复消息发送回 ZIM 服务端，再由 ZIM 服务端推送给目标客户端。
-4.  **大模型服务**: 接收业务服务端的请求，利用其强大的自然语言处理能力生成恰当的回复内容。
+## 示例代码
 
-## 快速实现指南
+以下是集成 ZIM SDK 实现 IM 聊天的客户端示例代码以及接入 ZIM 和实时互动 AI Agent API 的业务后台示例代码，您可以参考示例代码来实现自己的业务逻辑。
 
-以下步骤将引导您快速搭建一个基础的文字互动解决方案：
+<Note title="说明">以下示例请使用 im_and_voice 分支代码。</Note>
 
-### 1. 集成 ZIM SDK 到客户端
+<CardGroup cols={2}>
+<Card title="Android 客户端示例代码" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/im_and_voice/android" target="_blank">
+包含最基本的登录、收发文本消息、推流、拉流、退出房间等能力。
+</Card>
+<Card title="iOS 客户端示例代码" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/im_and_voice/ios" target="_blank">
+包含最基本的登录、收发文本消息、推流、拉流、退出房间等能力。
+</Card>
+<Card title="Web 客户端示例代码" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/im_and_voice/web" target="_blank">
+包含最基本的登录、收发文本消息、推流、拉流、退出房间等能力。
+</Card>
+<Card title="业务后台示例代码"  href="https://github.com/ZEGOCLOUD/ai_agent_quick_start_server/tree/im_and_voice" target="_blank">
+包含最基本的获取 ZEGO Token、注册 ZIM 机器人、注册智能体、创建智能体实例、删除智能体实例等能力。
+</Card>
+</CardGroup>
 
-首先，在您的客户端应用中集成 ZIM SDK。请根据您的目标平台选择相应的官方文档进行集成：
 
--   [ZIM Android SDK 集成](https://doc-zh.zego.im/article/13591)
--   [ZIM iOS SDK 集成](https://doc-zh.zego.im/article/13592)
--   [ZIM Web SDK 集成](https://doc-zh.zego.im/zim-web/send-and-receive-messages)
+## 快速实现与 AI 进行 IM 聊天
 
-### 2. 搭建业务服务端
+### 1. 搭建业务后台
 
-业务服务端是连接 ZIM 和大模型的桥梁。您可以使用 Node.js, Python, Java, Go 等任何您熟悉的后端技术栈进行搭建。
+业务后台是连接 ZIM 和 LLM 的桥梁。您可以使用 Node.js, Python, Java, Go 等任何您熟悉的后端技术栈进行搭建。
 
-#### 2.1 接收 ZIM 消息回调
+#### 1.1 注册 ZIM 机器人
 
-配置 ZIM 服务端，使其能够将消息事件通过回调机制通知到您的业务服务端。详细配置方法请参考：
+AI Agent 服务需要通过 ZIM 机器人来接收和发送消息。因此，您需要在 ZIM 后台注册一个机器人，并获取其 `UserId`。
 
--   [ZIM 服务端回调](https://doc-zh.zego.im/article/13600)
+详细注册方法请参考 [ZIM 机器人注册说明](https://doc-zh.zego.im/zim-server/bot/register-bots)。
 
-您的业务服务端需要实现一个 HTTP 接口来接收这些回调。例如，用户发送单聊消息时的回调数据结构可能如下：
+#### 1.1 设置 ZIM 回调接收用户消息
+
+配置 ZIM 后台，使其能够将消息事件通过回调机制通知到您的业务后台。详细配置方法请参考 [ZIM 回调配置说明](https://doc-zh.zego.im/zim-server/callbacks/callback-configuration-instructions)。
+
+您的业务后台需要实现一个 HTTP 接口来监听[消息发送后回调](https://doc-zh.zego.im/zim-server/callbacks/message-sent)。以下是该回调的示例数据：
 
 ```json title="ZIM 消息回调示例 (单聊文本消息)"
 {
-    "app_id": 12345,
-    "event": "zim_send_peer_message", // 事件类型
-    "nonce": "abcdefg",
-    "signature": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", // 安全签名
-    "timestamp": 1678886400,
-    "message_id": "unique_message_id", // 消息唯一ID
-    "from_user_id": "user_A", // 发送方用户ID
-    "to_user_id": "user_B",   // 接收方用户ID (或群组ID)
-    "type": 1, // 消息类型，1 通常表示文本消息
-    "message": "你好，大模型！", // 消息内容
-    "extended_data": "" // 扩展数据字段
+    "appid": "1",
+    "event": "send_msg",
+    "nonce": "350176",
+    "signature": "signature",
+    "timestamp": 1679553625,
+    "from_user_id": "user_id_1",
+    "conv_type": 0,
+    "conv_id": "@RBT#AIAgentExample1",
+    "msg_type": 1,
+    "msg_body": "msg_body",
+    "msg_id": "857639062792568832",
+    "payload": "payload",
+    "msg_time": 1679554146000,
+    "send_result": 0,
+    "sub_msg_type": 0,
+    "user_list":[
+    ]
 }
 ```
 
-#### 2.2 调用大模型服务
+#### 1.2 调用 LLM 服务生成 AI 回复
 
-收到用户消息后，业务服务端需调用您选定的大模型服务。市面上有多种选择，如 OpenAI (GPT 系列), Anthropic (Claude 系列), Google (Gemini 系列)，或自部署的开源模型。
+从回调收到用户消息后，业务后台需调用您设置的 LLM 服务以生成 AI 回复。您可以使用如 DeepSeek、火山方舟（豆包）、MiniMax、火山引擎、阿里云、阶跃星辰、 OpenAI (GPT 系列)或自己部署的 LLM 服务。
 
-调用通常通过 HTTP API 完成。请务必查阅相应大模型提供商的 API 文档，了解请求构造、认证方式及响应解析。
+调用通常通过 HTTP API 完成。请务必查阅相应 LLM 提供商的 API 文档，了解请求构造、认证方式及响应解析。
 
-以下是使用 Node.js 调用 xxx 系列模型的伪代码示例：
+以下是使用 Node.js 调用 DeepSeek 模型的示例代码：
 
-```javascript title="Node.js 调用 xxx大模型 API 示例"
+```javascript title="Node.js 调用 DeepSeek 示例"
+async function generateLLMResponse(messages: MessageItem[]): Promise<string> {
+    try {
+        console.log('准备生成LLM回复，消息上下文:', messages); 
+        // 从环境变量获取LLM配置
+        const apiKey = process.env.LLM_API_KEY;
+        const baseURL = process.env.LLM_BASE_URL;
+        const model = process.env.LLM_MODEL || 'deepseek-v3-250324';
+        if (!apiKey || !baseURL) {
+            console.error('缺少LLM配置，请检查环境变量');
+            return "抱歉，我暂时无法回复您的消息，请稍后再试。";
+        }
+
+        // 转换消息格式
+        const formattedMessages = messages.map(msg => ({
+            role: msg.role as "user" | "assistant" | "system",
+            content: msg.content
+        }));
+
+        // 添加系统提示
+        formattedMessages.unshift({
+            role: "system",
+            content: "你是一个有帮助的助手，请简洁明了地回答用户问题。"
+        });
+
+        // 使用fetch API调用LLM服务。注意使用非流式响应。
+        const response = await fetch(baseURL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                messages: formattedMessages,
+                model: model
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`LLM API请求失败: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        // 获取回复内容
+        const reply = data.choices?.[0]?.message?.content || "抱歉，我无法生成回复。";
+        return reply;
+    } catch (error) {
+        console.error('生成LLM回复时出错:', error);
+        return "抱歉，处理您的请求时出现了问题，请稍后再试。";
+    }
+}
 ```
 
-**重要提示**: 严禁将 API Key 硬编码到客户端代码或提交到公开代码仓库。推荐使用环境变量或安全的密钥管理服务。
+#### 1.3 将 AI 回复通过 ZIM 发送回客户端
 
-#### 2.3 将回复通过 ZIM 发送回客户端
+获取到 LLM 的回复后，业务后台需使用 ZIM Server API 将此回复内容以 AI 身份发送给真实用户。
 
-获取到大模型的回复后，业务服务端需使用 ZIM Server API 将此回复消息发送给原始用户。
+具体接口使用请参考 ZIM Server API 文档中的 [发送单聊消息](https://doc-zh.zego.im/zim-server/messaging/send-a-one-to-one-message)接口。
 
-具体接口使用请参考 ZIM Server API 文档中的“发送单聊消息”或“发送群组消息”部分：
-
--   [ZIM Server API 文档](https://doc-zh.zego.im/article/13601)
-
-以下是使用 Node.js 和 `axios` 通过 ZIM Server API 发送消息的示例：
+以下是使用 Node.js 通过 ZIM Server API 发送消息的示例：
 
 ```javascript title="Node.js"
+async function sendReplyMessage(fromUserId: string, toUserId: string, message: string) {
+    try {
+        // 构建消息体
+        const messageBody = {
+            Message: message, // LLM 回复内容
+            ExtendedData: ''
+        };
+
+        // 发送消息
+        const result = await ZegoZIM.getInstance().sendPeerMessage(
+            fromUserId,                  // 发送者ID（机器人ID）
+            [toUserId],                  // 接收者ID数组（真实用户ID）
+            ZegoMessageType.Text,        // 消息类型：文本
+            messageBody,                 // 消息内容
+            ZegoMessagePriority.Medium   // 消息优先级：中
+        );
+
+        console.log('发送回复消息结果:', result);
+        return result;
+    } catch (error) {
+        console.error('发送回复消息时出错:', error);
+        throw error;
+    }
+}
 ```
 
-### 3. 客户端处理逻辑
+### 2. 客户端处理逻辑
 
-客户端的 ZIM SDK 会监听并接收来自业务服务端（经由 ZIM 服务端转发）的 AI 回复消息。您需要在客户端实现消息接收逻辑，并将内容展示在用户界面上。
+客户端的 ZIM SDK 会监听并接收来自业务后台（经由 ZIM 后台转发）的 AI 回复消息。您需要在客户端实现消息接收逻辑，并将内容展示在用户界面上。
 
-#### 3.1 获取历史消息
+#### 前提条件
+
+请在您的客户端 APP 中集成 ZIM SDK。可参考各平台的集成说明：
+
+- [ZIM Android SDK 集成](https://doc-zh.zego.im/zim-android/send-and-receive-messages)
+- [ZIM iOS SDK 集成](https://doc-zh.zego.im/zim-ios/send-and-receive-messages)
+- [ZIM Web SDK 集成](https://doc-zh.zego.im/zim-web/send-and-receive-messages)
+
+#### 2.1 获取与 AI 对话的历史消息
+
+在进入 AI 聊天页面时，需要从 ZIM 服务获取历史消息。以下是各平台实现获取历史消息的示例代码：
+
+<CodeGroup>
 ```java title="Android"
 ZIMMessageQueryConfig queryConfig = new ZIMMessageQueryConfig();
 queryConfig.count = 100;     // 查询条数
@@ -179,8 +280,14 @@ zim.queryHistoryMessage(conversationID, conversationType, config)
 
 @end
 ```
+</CodeGroup>
 
-#### 3.2 发送消息
+
+#### 2.2 给 AI 发送消息
+
+用户在客户端输入消息后，可以使用 ZIM SDK 将消息发送给 AI。以下是各平台实现发送消息的示例代码：
+
+<CodeGroup>
 ```java title="Android"
 String text ; // 聊天文本
 String conversationId ;
@@ -279,8 +386,13 @@ zim.sendMessage(messageTextObj, toConversationID, conversationType, config)
 
 @end
 ```
+</CodeGroup>
 
-#### 3.3 接收消息
+#### 2.3 接收 AI 回复的消息
+
+AI 回复的消息会通过 ZIM 服务发送到客户端。您需要在客户端实现消息接收逻辑，并将内容展示在用户界面上。以下是各平台实现接收消息的示例代码：
+
+<CodeGroup>
 ```java title="Android"
 ZIM.getInstance().setEventHandler(new ZIMEventHandler() {
     @Override
@@ -328,37 +440,26 @@ zim.on("peerMessageReceived", (zim, { messageList }) => {
 
 @end
 ```
+</CodeGroup>
 
-## 进阶功能与优化
+#### 异步处理与用户反馈
 
-构建基础的文字互动功能后，您可以考虑以下进阶功能和优化点，以提升用户体验：
-
-### 如何在语音互动中保持文字互动的上下文连续性
-
-在实际应用场景中，用户可能会在文字互动和语音互动之间切换。为了保持对话的连贯性和上下文的完整性，您可以通过以下方式将文字互动的上下文关联到语音互动中：
-
--   **实现方法**:
-    1. 在创建智能体实例并开始语音互动时，配置 MessageHistory 参数：
-       - 将 `MessageHistory.SyncMode`（消息同步模式）设置为 `0`，表示从 ZIM 同步历史消息
-       - 在 `MessageHistory.ZIM` 中补充完整的 ZIM 相关信息，包括：
-         - `RobotId`：即调用 ZIM 注册机器人接口对应的UserInfo.UserId
-         - `LoadMessageCount`：创建智能体实例时，从 ZIM 服务获取多少条消息作为上下文。默认为 WindowSize 的值（取值上限）。
-    2. 完成以上配置后，创建的智能体实例在语音互动中将自动继承文字互动的上下文
-    3. 也可以传入自定义消息列表，通过 `MessageHistory.Messages` 参数：
-       - 支持传入自定义的历史消息列表
-       - 消息需要按时间顺序排列
-       - 每条消息需要包含消息发送者角色和消息内容
-
--   **注意事项**：
-    - 如果使用自定义消息列表，注意消息的时序性和完整性
-
--   **API 参考**：
-    - 详细的参数配置请参考 [创建智能体实例 API](https://doc-zh.zego.im/aiagent-server/api-reference/agent-instance-management/create-agent-instance)
-
-### 异步处理与用户反馈
-
--   **目的**: 避免因大模型处理耗时较长导致的用户界面卡顿或无响应。
+-   **目的**: 避免因 LLM 处理耗时较长导致的用户界面卡顿或无响应。
 -   **方法**:
     -   客户端发送消息后，可立即在界面上显示“AI 正在思考中…”或类似的等待提示。
-    -   业务服务端接收到用户消息后，先快速响应客户端已收到，然后异步调用大模型服务。待大模型返回结果后，再通过 ZIM 将实际回复推送给客户端更新界面。
+    -   业务后台接收到用户消息后，先快速响应客户端已收到，然后异步调用 LLM 服务。待 LLM 返回结果后，再通过 ZIM 将实际回复推送给客户端更新界面。
+
+
+## 快速实现与 AI 进行语音通话
+
+在实际应用场景中，用户可能会在文字互动和语音互动之间切换。为了保持对话的连贯性和上下文的完整性，您可以通过以下方式将 IM 聊天的上下文关联到语音互动中：
+
+1. 在[创建智能体实例](https://doc-zh.zego.im/aiagent-server/api-reference/agent-instance-management/create-agent-instance)并开始语音互动时，配置 MessageHistory 参数：
+   - 将 `MessageHistory.SyncMode`（消息同步模式）设置为 `0`，表示从 ZIM 同步历史消息
+   - 在 `MessageHistory.ZIM` 中补充完整的 ZIM 相关信息，包括：
+     - `RobotId`：即调用 ZIM 注册机器人接口对应的UserInfo.UserId
+     - `LoadMessageCount`：创建智能体实例时，从 ZIM 服务获取多少条消息作为上下文。默认为 WindowSize 的值（取值上限）。
+2. 完成以上配置后，创建的智能体实例在语音互动中将自动获取 IM 聊天的上下文作为 LLM 的历史消息输入。
+
+详细步骤请参考[快速开始](./../Quick%20start.mdx)文档实现与 AI 进行语音通话功能。
 
