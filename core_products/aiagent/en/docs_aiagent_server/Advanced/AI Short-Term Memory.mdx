@@ -1,43 +1,43 @@
-import MessagesStructure from '/snippets/Reuse/MessagesStructureforAIAgentCN.mdx'
+import MessagesStructure from '/snippets/Reuse/MessagesStructureforAIAgentEN.mdx'
 
-# AI短期记忆（智能体上下文）管理
+# AI Short-Term Memory (Agent Context) Management
 
-在创建智能体实例并实现角色扮演等对话时，智能体能够记住最近一段时间互动聊天的具体内容（通常被称为短期记忆），其实现的原理为 LLM （大语言模型）的上下文。
-在语音对话的过程中，其记忆有以下阶段：
-- 初始记忆：在创建实例时，是否需要聊天记录。
-  - 可关联 [ZIM](https://doc-zh.zego.im/zim-android/introduction/overview) 的会话历史记录，作为初始记忆；
-  - 可自定义外部上下文，作为初始记忆。若置空，则不携带任何记忆。
-- 语音通话过程中记忆：语音通话过程中产生的对话历史，会缓存在 AI Agent 服务端。
-  - 若希望获取实时的记忆，可参考[获取智能体实例上下文列表](#获取智能体实例上下文列表)章节。
-  - 若希望清空当前记忆，可参考[重置智能体实例上下文列表](#重置智能体实例上下文列表)章节。
-- 语音通话结束，记忆归档
-  - 可归档在 ZIM 中。可参考[语音通话结束后归档记忆](#语音通话结束后归档记忆)章节。
+When creating an agent instance and implementing role-playing conversations, the agent can remember recent chat interactions (commonly known as short-term memory), which is implemented through the context of LLM (Large Language Model).
+During voice conversations, memory has the following stages:
+- Initial Memory: Whether chat history is needed when creating an instance.
+  - Can be linked to [ZIM](https://doc-zh.zego.im/zim-android/introduction/overview) session history as initial memory;
+  - Can use custom external context as initial memory. If empty, no memory will be carried.
+- Memory During Voice Call: Chat history generated during voice calls is cached on the AI Agent server.
+  - To get real-time memory, refer to the [Get Agent Instance Context List](#get-agent-instance-context-list) section.
+  - To clear current memory, refer to the [Reset Agent Instance Context List](#reset-agent-instance-context-list) section.
+- Memory Archival After Voice Call
+  - Can be archived in ZIM. Refer to the [Archive Memory After Voice Call](#archive-memory-after-voice-call) section.
 
-<Warning title="注意">
+<Warning title="Warning">
 
-- **上下文长度限制：** 通常 LLM 有最大长度限制，超出这个限制则会报错。例如“doubao-1.5-pro-32k”，其上下文长度为 32k token 长度。
+- **Context Length Limit:** LLMs typically have a maximum length limit, exceeding which will result in an error. For example, "doubao-1.5-pro-32k" has a context length of 32k tokens.
 
-- **上下文长度与推理耗时：** 通常上下文越长，则 LLM 输出的速度越慢。
+- **Context Length vs. Inference Time:** Generally, longer context results in slower LLM output.
 
-- **上下文长度与价格：** 通常 LLM 等计费根据上下文的长度进行输入计费，长度越长，价格越高。
+- **Context Length vs. Cost:** LLM pricing is usually based on context length for input billing - longer length means higher cost.
 </Warning>
 
-## 使用步骤
+## Implementation Steps
 
-### 设置初始记忆
+### Set Initial Memory
 
-在[创建智能体实例](./../API%20reference/Agent%20Instance%20Management/Create%20Agent%20instance.mdx)时可设置智能体实例的初始记忆（即智能体初始上下文）。记忆来源可分为“ZIM 的会话历史记录”和“自定义外部上下文”，
-可通过创建智能体实例接口的 [MessageHistory](./../API%20reference/Agent%20Instance%20Management/Create%20Agent%20instance.mdx#messagehistory) 参数控制。相关参数详细结构如下：
+When [creating an agent instance](./../API%20reference/Agent%20Instance%20Management/Create%20Agent%20instance.mdx), you can set the initial memory (initial context) for the agent instance. Memory sources can be either "ZIM session history" or "custom external context",
+controlled through the [MessageHistory](./../API%20reference/Agent%20Instance%20Management/Create%20Agent%20instance.mdx#messagehistory) parameter of the create agent instance API. The detailed parameter structure is as follows:
 
 <Tabs>
 <Tab title="MessageHistory">
 
-| 参数          | 类型      | 是否必选 | 描述                                                                                     |
+| Parameter    | Type      | Required | Description                                                                               |
 |---------------|-----------|----------|------------------------------------------------------------------------------------------|
-| SyncMode      | Number       | 否       | 消息同步模式：<ul><li>0：从 ZIM 同步。<Note title="说明"><ul><li>使用此模式前，请确认您的项目已开通 ZIM 服务。</li><li>若该 UserID 未通过 ZIM 客户端登录服务或未在 ZIM 服务端完成注册，实时互动 AI Agent 后台将自动为其执行 ZIM 服务注册流程。</li><li>建议您提前注册该用户，以便完善用户信息设置并提升智能体实例的创建效率。</li></ul></Note></li><li>1：通过下列 `Messages` 参数同步。</li></ul> |
-| Messages      | Array of Object  | 否       | 消息列表。                                                                                        |
-| WindowSize    | Number       | 否       | 每次调用 LLM 服务时，以最近多少条历史消息作为上下文。默认 20 条，最大 100 条。取值范围为 [0, 100]。                                                    |
-| ZIM    | Object    | 否  | ZIM 相关信息。<Note title="说明">仅当 `SyncMode` 为 0 时有效。</Note> |
+| SyncMode      | Number    | No       | Message sync mode: <ul><li>0: Sync from ZIM. <Note title="Note"><ul><li>Before using this mode, ensure your project has ZIM service enabled.</li><li>If the UserID hasn't logged in via ZIM client or isn't registered on ZIM server, the Real-Time AI Agent backend will automatically register it with ZIM service.</li><li>It's recommended to register the user in advance to complete user information settings and improve agent instance creation efficiency.</li></ul></Note></li><li>1: Sync through the following `Messages` parameter.</li></ul> |
+| Messages      | Array of Object | No  | Message list.                                                                           |
+| WindowSize    | Number    | No       | Number of recent historical messages to use as context when calling LLM service. Default is 20, maximum is 100. Valid range is [0, 100].                                    |
+| ZIM           | Object    | No       | ZIM-related information. <Note title="Note">Only valid when `SyncMode` is 0.</Note>     |
 
 </Tab>
 <Tab title="MessageHistory.Messages">
@@ -47,20 +47,20 @@ import MessagesStructure from '/snippets/Reuse/MessagesStructureforAIAgentCN.mdx
 </Tab>
 <Tab title="MessageHistory.ZIM">
 
-| 参数     | 类型   | 是否必选 | 描述                                                                 |
-|----------|--------|----------|----------------------------------------------------------------------|
-| RobotId    | String | 否  | 即调用 ZIM [注册机器人](https://doc-zh.zego.im/zim-server/bot/register-bots#请求参数)接口对应的`UserInfo.UserId`。用于加载用户与该 ZIM 机器人的聊天上下文，并将对话过程中产生的消息同步至 ZIM。如果此参数为空，实时互动 AI Agent 后台将随机生成。 |
-| LoadMessageCount | Number | 否  | 创建智能体实例时，从 ZIM 服务获取多少条消息作为上下文。默认为 `WindowSize` 的值（取值上限）。 |
+| Parameter  | Type   | Required | Description                                                           |
+|------------|--------|----------|-----------------------------------------------------------------------|
+| RobotId    | String | No       | The `UserInfo.UserId` corresponding to the ZIM [register bot](https://doc-zh.zego.im/zim-server/bot/register-bots#request-parameters) API call. Used to load chat context between users and this ZIM bot, and synchronize messages generated during conversations to ZIM. If empty, the Real-Time AI Agent backend will generate one randomly. |
+| LoadMessageCount | Number | No  | Number of messages to fetch from ZIM service as context when creating agent instance. Defaults to `WindowSize` value (upper limit). |
 
 </Tab>
 </Tabs>
 
-#### 从 ZIM 的会话历史记录加载初始记忆
+#### Load Initial Memory from ZIM Session History
 
-1. 确保APP已开通 [ZIM](https://doc-zh.zego.im/zim-android/introduction/overview) 服务
-2. 在[创建智能体实例](./../API%20reference/Agent%20Instance%20Management/Create%20Agent%20instance.mdx)时，将设置 `SyncMode` 为 0 ，并且填写对应的 `ZIM` 参数。示例如下：
+1. Ensure your app has [ZIM](https://doc-zh.zego.im/zim-android/introduction/overview) service enabled
+2. When [creating an agent instance](./../API%20reference/Agent%20Instance%20Management/Create%20Agent%20instance.mdx), set `SyncMode` to 0 and fill in the corresponding `ZIM` parameters. Example:
 
-<Note title="说明">`ZIM.RobotId`即调用 ZIM [注册机器人](https://doc-zh.zego.im/zim-server/bot/register-bots#请求参数)接口对应的`UserInfo.UserId`。</Note>
+<Note title="Note">`ZIM.RobotId` is the `UserInfo.UserId` corresponding to the ZIM [register bot](https://doc-zh.zego.im/zim-server/bot/register-bots#request-parameters) API call.</Note>
 
 ```json
  "MessageHistory": {
@@ -72,10 +72,10 @@ import MessagesStructure from '/snippets/Reuse/MessagesStructureforAIAgentCN.mdx
  }
 ```
 
-#### 从自定义外部上下文加载初始记忆
+#### Load Initial Memory from Custom External Context
 
-1. 业务需要自己存储上下文信息。
-2. 在[创建智能体实例](./../API%20reference/Agent%20Instance%20Management/Create%20Agent%20instance.mdx)时，将设置 `SyncMode` 为 1 ，并且填写对应的 `Messages` 参数。示例如下：
+1. Business needs to store context information itself.
+2. When [creating an agent instance](./../API%20reference/Agent%20Instance%20Management/Create%20Agent%20instance.mdx), set `SyncMode` to 1 and fill in the corresponding `Messages` parameter. Example:
 
 ```json
  "MessageHistory":{
@@ -83,31 +83,31 @@ import MessagesStructure from '/snippets/Reuse/MessagesStructureforAIAgentCN.mdx
     "Messages": [
         {
             "Role": "user",
-            "Content": "你叫什么名字？"
+            "Content": "What's your name?"
         },
         {
             "Role": "assistant",
-            "Content": "我叫豆包呀。"
+            "Content": "My name is Doubao."
         },
         {
             "Role": "user",
-            "Content": "给我讲故事。"
+            "Content": "Tell me a story."
         },
         {
             "Role": "assistant",
-            "Content": "好呀，我给你讲一个《三只小猪》的故事吧。"
+            "Content": "Sure, let me tell you the story of 'The Three Little Pigs'."
         }
     ]
 }
 ```
 
-### 管理语音通话过程中的记忆
+### Managing Memory During Voice Call
 
-管理语音通话过程中的记忆即管理智能体实例上下文。可以获取上下文列表也可以清空上下文。
+Managing memory during voice calls means managing the agent instance context. You can get the context list or clear it.
 
-#### 获取智能体实例上下文列表
+#### Get Agent Instance Context List
 
-调用获取智能体实例上下文列表接口（[GetAgentInstanceMsgList](./../API%20reference/Agent%20Instance%20Control/Get%20Agent%20Instance%20Msg%20List.mdx)），传入创建智能体实例接口返回的 `AgentInstanceId` ，服务端将返回该实例的上下文列表，消息按照聊天的时间升序返回，示例如下：
+Call the Get Agent Instance Context List API ([GetAgentInstanceMsgList](./../API%20reference/Agent%20Instance%20Control/Get%20Agent%20Instance%20Msg%20List.mdx)) with the `AgentInstanceId` returned from the create agent instance API. The server will return the context list for that instance, with messages sorted by chat time in ascending order. Example:
 
 ```json
 {
@@ -119,34 +119,34 @@ import MessagesStructure from '/snippets/Reuse/MessagesStructureforAIAgentCN.mdx
         "MessageList": [
             {
                 "Role": "user",
-                "Content": "你叫什么名字？"
+                "Content": "What's your name?"
             },
             {
                 "Role": "assistant",
-                "Content": "我叫豆包呀。"
+                "Content": "My name is Doubao."
             },
             {
                 "Role": "user",
-                "Content": "给我讲故事。"
+                "Content": "Tell me a story."
             },
             {
                 "Role": "assistant",
-                "Content": "好呀，我给你讲一个《三只小猪》的故事吧。"
+                "Content": "Sure, let me tell you the story of 'The Three Little Pigs'."
             }
         ]
     }
 }
 ```
 
-#### 重置智能体实例上下文列表
+#### Reset Agent Instance Context List
 
-调用重置智能体实例上下文列表接口（[ResetAgentInstanceMsgList](./../API%20reference/Agent%20Instance%20Control/Reset%20Agent%20Instance%20Msg%20List.mdx)），传入创建智能体实例接口返回的 `AgentInstanceId`，服务端将重置当前实例的上下文列表。
+Call the Reset Agent Instance Context List API ([ResetAgentInstanceMsgList](./../API%20reference/Agent%20Instance%20Control/Reset%20Agent%20Instance%20Msg%20List.mdx)) with the `AgentInstanceId` returned from the create agent instance API. The server will reset the context list for the current instance.
 
-### 语音通话结束后归档记忆
+### Archive Memory After Voice Call
 
-您只需要在创建智能体实例时，将 `SyncMode` 设置为 `0` 且 `ZIM.RobotId` 为一个有效的 ZIM 机器人 ID，那么语音通话对话记录将存储到 ZIM 服务。这些已储存的历史聊天消息，可以用于后续对话的初始记忆。可参考[从 ZIM 的会话历史记录加载初始记忆](#从-zim-的会话历史记录加载初始记忆)章节。您也可以按业务需求用其他方式自行维护历史记忆归档。
+Simply set `SyncMode` to `0` and provide a valid ZIM bot ID as `ZIM.RobotId` when creating an agent instance, and the voice call conversation records will be stored in the ZIM service. These stored chat history messages can be used as initial memory for subsequent conversations. Refer to the [Load Initial Memory from ZIM Session History](#load-initial-memory-from-zim-session-history) section. You can also maintain historical memory archives in other ways according to your business needs.
 
-设置示例如下：
+Configuration example:
 ```json
  "MessageHistory": {
     "SyncMode": 0,
