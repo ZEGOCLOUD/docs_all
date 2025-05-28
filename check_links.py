@@ -375,8 +375,10 @@ def main():
             # vscode终端可点击跳转格式: "file_path":line (用引号包围路径以支持空格)
             link_type = item.get('link_type', 'unknown')
             type_display = f"[{link_type}]" if link_type != 'unknown' else ""
-            print(f'  "{item["file"]}":{item["line"]}  {type_display} {item["url"]}')
+            print(f'  "{item["file"]}":{item["line"]}')
+            print(f'    {type_display} {item["url"]}')
             print(f'    {item["line_content"]}')
+            print('\n')
 
 if __name__ == '__main__':
     main()
