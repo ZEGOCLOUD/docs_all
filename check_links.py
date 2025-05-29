@@ -64,6 +64,13 @@ def choose_language():
         else:
             print('输入无效，请重新输入。')
 
+def choose_check_remote():
+    print('\n是否检查外链？')
+    print('1. 是（耗时较长）')
+    print('2. 否（仅检查内部链接）')
+    choice = input('输入数字选择(1/2)，直接回车默认不检查: ').strip()
+    return choice == '1'
+
 def load_config(language):
     config_file = f'docuo.config.{language}.json'
     if not os.path.exists(config_file):
@@ -74,21 +81,50 @@ def load_config(language):
     return config
 
 def choose_instance(instances):
-    sorted_instances = sorted(instances, key=lambda x: x.get('label', ''))
-    print('请选择要检查的实例:')
-    for idx, inst in enumerate(sorted_instances):
-        # 显示label和platform信息，让用户更容易识别
+    # 按组分类实例
+    groups = {}
+    for inst in instances:
+        group_id = inst.get("navigationInfo", {}).get("group", {}).get("id", "未分组")
+        group_name = inst.get("navigationInfo", {}).get("group", {}).get("name", "未分组")
+        if group_id not in groups:
+            groups[group_id] = {
+                "name": group_name,
+                "instances": []
+            }
+        groups[group_id]["instances"].append(inst)
+
+    # 显示组列表
+    print('请选择要检查的组:')
+    sorted_groups = sorted(groups.items(), key=lambda x: x[1]["name"])
+    for idx, (group_id, group_info) in enumerate(sorted_groups, 1):
+        print(f'{idx}. {group_info["name"]}')
+
+    # 选择组
+    while True:
+        group_choice = input('输入数字选择组: ').strip()
+        if group_choice.isdigit() and 1 <= int(group_choice) <= len(sorted_groups):
+            selected_group = sorted_groups[int(group_choice)-1][1]
+            break
+        else:
+            print('输入无效，请重新输入。')
+
+    # 显示选中组下的实例列表
+    print(f'\n请选择 {selected_group["name"]} 下的实例:')
+    sorted_instances = sorted(selected_group["instances"], key=lambda x: x.get("label", ""))
+    for idx, inst in enumerate(sorted_instances, 1):
         label = inst.get("label", "(无名实例)")
         platform = inst.get("navigationInfo", {}).get("platform", "")
         if platform:
             display_name = f"{label} ({platform})"
         else:
             display_name = label
-        print(f'{idx+1}. {display_name}')
+        print(f'{idx}. {display_name}')
+
+    # 选择实例
     while True:
-        choice = input('输入数字选择: ').strip()
-        if choice.isdigit() and 1 <= int(choice) <= len(sorted_instances):
-            return sorted_instances[int(choice)-1]
+        instance_choice = input('输入数字选择实例: ').strip()
+        if instance_choice.isdigit() and 1 <= int(instance_choice) <= len(sorted_instances):
+            return sorted_instances[int(instance_choice)-1]
         else:
             print('输入无效，请重新输入。')
 
@@ -106,6 +142,8 @@ def extract_links_from_file(file_path):
     markdown_pattern = re.compile(r'\[[^\]]*\]\(([^)]+)\)')
     # 2. 纯文本链接: http://xxx 或 https://xxx
     url_pattern = re.compile(r'https?://[^\s\'"<>()]+')
+    # 3. MDX导入语句: import xxx from 'path' 或 import xxx from "path" 或 import { xxx } from 'path'
+    mdx_import_pattern = re.compile(r'import\s+(?:{[^}]+}|\w+)\s+from\s+[\'"]([^\'"]+)[\'"]')
 
     links = []
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -123,7 +161,6 @@ def extract_links_from_file(file_path):
                 })
 
             # 检查纯文本链接（排除已经在markdown链接中的）
-            # 先移除所有markdown链接部分，然后在剩余文本中查找纯文本链接
             line_without_markdown = markdown_pattern.sub('', line)
             for match in url_pattern.finditer(line_without_markdown):
                 url = match.group(0).strip()
@@ -134,6 +171,19 @@ def extract_links_from_file(file_path):
                     'line': idx,
                     'line_content': line_content,
                     'type': 'plain_text'
+                })
+
+            # 检查MDX导入语句
+            for match in mdx_import_pattern.finditer(line):
+                import_path = match.group(1).strip()
+                # 移除开头的斜杠（如果有）
+                if import_path.startswith('/'):
+                    import_path = import_path[1:]
+                links.append({
+                    'url': import_path,
+                    'line': idx,
+                    'line_content': line_content,
+                    'type': 'mdx_import'
                 })
 
     return links
@@ -289,8 +339,31 @@ def check_remote_link(link):
     except Exception:
         return False
 
+def check_mdx_import(import_path, base_file_path):
+    """检查MDX导入路径是否有效"""
+    # 只检查.mdx文件
+    if not import_path.lower().endswith('.mdx'):
+        return None
+
+    # 从项目根目录开始计算路径
+    root_path = os.path.abspath(os.path.dirname(base_file_path))
+    while os.path.basename(root_path) != 'docs_en':
+        root_path = os.path.dirname(root_path)
+        if root_path == '/':
+            return False
+
+    # 构建完整的文件路径
+    full_path = os.path.join(root_path, import_path)
+    
+    # 检查文件是否存在
+    if not os.path.exists(full_path):
+        return False
+
+    return True
+
 def main():
     language = choose_language()
+    check_remote = choose_check_remote()
     config = load_config(language)
     instances = config.get('instances', [])
     if not instances:
@@ -317,6 +390,20 @@ def main():
             line = link_info['line']
             line_content = link_info['line_content']
             link_type = link_info['type']
+
+            # 检查MDX导入
+            if link_type == 'mdx_import':
+                mdx_result = check_mdx_import(url, file_path)
+                if mdx_result is False:
+                    problems['MDX导入路径无效'].append({
+                        'file': file_path,
+                        'line': line,
+                        'url': url,
+                        'line_content': line_content,
+                        'link_type': link_type
+                    })
+                continue
+
             # 1. 检查中英文链接混用
             if check_mixed_language(url, language):
                 problems['中英文链接混用'].append({
@@ -353,17 +440,18 @@ def main():
                 continue
             elif root_result is True:
                 continue
-            # 4. 检查远端链接
-            remote_result = check_remote_link(url)
-            if remote_result is False:
-                problems['远端链接无效'].append({
-                    'file': file_path,
-                    'line': line,
-                    'url': url,
-                    'line_content': line_content,
-                    'link_type': link_type
-                })
-                continue
+            # 4. 检查远端链接（如果用户选择检查）
+            if check_remote:
+                remote_result = check_remote_link(url)
+                if remote_result is False:
+                    problems['远端链接无效'].append({
+                        'file': file_path,
+                        'line': line,
+                        'url': url,
+                        'line_content': line_content,
+                        'link_type': link_type
+                    })
+                    continue
     # 输出总结
     print('\n检查结果总结:')
     if not problems:
