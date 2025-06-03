@@ -128,7 +128,7 @@ requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);
 <Step title="创建并初始化 ZegoExpressEngine">
 ```java {3}
 ZegoEngineProfile zegoEngineProfile = new ZegoEngineProfile();
-zegoEngineProfile.appID = KeyCenter.appID;
+zegoEngineProfile.appID = ; // 从即构控制台获取的 appId
 zegoEngineProfile.scenario = ZegoScenario.HIGH_QUALITY_CHATROOM;
 zegoEngineProfile.application = getApplication();
 ZegoExpressEngine.createEngine(zegoEngineProfile, null);
@@ -383,7 +383,7 @@ async function startCall() {
 
 :::if{props.platform=undefined}
 ```java 客户端登录房间并推流 {5,6,12-17,25,30}
-private void loginRoom(String agentId, String userId, String userName, String token,
+private void loginRoom(String userId, String userName, String userName, String token,
     IZegoRoomLoginCallback callback) {
     ZegoEngineConfig config = new ZegoEngineConfig();
     HashMap<String, String> advanceConfig = new HashMap<String, String>();
@@ -394,8 +394,8 @@ private void loginRoom(String agentId, String userId, String userName, String to
     ZegoExpressEngine.getEngine().setRoomScenario(ZegoScenario.HIGH_QUALITY_CHATROOM);
     ZegoExpressEngine.getEngine().setAudioDeviceMode(ZegoAudioDeviceMode.GENERAL);
 
-    // 开启 AI 回声消除
     ZegoExpressEngine.getEngine().enableAEC(true);
+    //请注意：开启 AI 回声消除需要联系 ZEGO 技术支持获取对应版本的 ZEGOExpress SDK
     ZegoExpressEngine.getEngine().setAECMode(ZegoAECMode.AI_AGGRESSIVE2);
     ZegoExpressEngine.getEngine().enableAGC(true);
     ZegoExpressEngine.getEngine().enableANS(true);
@@ -403,16 +403,18 @@ private void loginRoom(String agentId, String userId, String userName, String to
 
     ZegoRoomConfig roomConfig = new ZegoRoomConfig();
     roomConfig.isUserStatusNotify = true;
-    roomConfig.token = token;
+    roomConfig.token = token;  // 需要 token 鉴权，从您的业务后台获取，生成方式请参考ZEGO官网文档
 
-    String roomId = generateRoomID(agentId);
+    String roomId ;   // 自定义用来登录的房间的Id，格式请参考说明
+    String userSteamID // 自定义用于推流的流Id，格式请参考说明
     ZegoExpressEngine.getEngine()
         .loginRoom(roomId, new ZegoUser(userId, userName), roomConfig, (errorCode, extendedData) -> {
             Timber.d(
                 "loginRoom() called with: errorCode = [" + errorCode + "], extendedData = [" + extendedData + "]");
             if (errorCode == 0) {
-                String userSteamID = generateUserStreamID(agentId, userId);
+                // 登录成功以后进行推流
                 ZegoExpressEngine.getEngine().startPublishingStream(userSteamID);
+                // 设置麦克风静音状态，false 表示不静音，true 表示静音
                 ZegoExpressEngine.getEngine().muteMicrophone(false);
             }
             if (callback != null) {
@@ -430,10 +432,6 @@ self.streamToPlay = [self getAgentStreamID];
 
 ZegoEngineConfig* engineConfig = [[ZegoEngineConfig alloc] init];
 engineConfig.advancedConfig = @{
-    @"set_audio_dump_mode":@1,//取消录制文件大小限制
-    @"notify_remote_device_unknown_status": @"true",
-    @"notify_remote_device_init_status":@"true",
-    @"enforce_audio_loopback_in_sync": @"true", /**该配置用来做应答延迟优化的，需要集成对应版本的ZegoExpressEngine sdk，请联系即构同学**/
     @"set_audio_volume_ducking_mode":@1,/**该配置是用来做音量闪避的**/
     @"enable_rnd_volume_adaptive":@"true",/**该配置是用来做播放音量自适用**/
 };
@@ -513,22 +511,19 @@ enterRoom()
 ```java 客户端拉智能体的流 {9-16}
 // 监听回调
 void setEventHandler() {
-        engine.setEventHandler(new IZegoEventHandler() {
-            @Override
-            // 房间内其他用户推流/停止推流时，我们会在这里收到相应用户的音视频流增减的通知
-            public void onRoomStreamUpdate(String roomID, ZegoUpdateType updateType, ArrayList<ZegoStream> streamList, JSONObject extendedData) {
-                super.onRoomStreamUpdate(roomID, updateType, streamList, extendedData);
-                //当 updateType 为 ZegoUpdateType.ADD 时，代表有音视频流新增，此时我们可以调用 startPlayingStream 接口拉取播放该音视频流
-                if (updateType == ZegoUpdateType.ADD) {
-                    // 开始拉流，设置远端拉流渲染视图，视图模式采用 SDK 默认的模式，等比缩放填充整个 View
-                    ZegoStream stream = streamList.get(0);
-                    // 默认新增是智能体流，直接拉流
-                    // 如下 remoteUserView 为 UI 界面上的 TextureView.
-                    ZegoCanvas playCanvas = new ZegoCanvas(findViewById(R.id.remoteUserView));
-                    ZegoExpressEngine.getEngine().startPlayingStream(stream.streamID, playCanvas);
-                }
+    ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
+        @Override
+        // 房间内其他用户推流/停止推流时，我们会在这里收到相应用户的音视频流增减的通知
+        public void onRoomStreamUpdate(String roomID, ZegoUpdateType updateType, ArrayList<ZegoStream> streamList, JSONObject extendedData) {
+            super.onRoomStreamUpdate(roomID, updateType, streamList, extendedData);
+            //当 updateType 为 ZegoUpdateType.ADD 时，代表有音视频流新增，此时我们可以调用 startPlayingStream 接口拉取该音视频流
+            if (updateType == ZegoUpdateType.ADD) {
+                ZegoStream stream = streamList.get(0);
+                // 默认新增是智能体流，直接拉流
+                ZegoExpressEngine.getEngine().startPlayingStream(stream.streamID);
             }
-        });
+        }
+    });
 }
 ```
 :::

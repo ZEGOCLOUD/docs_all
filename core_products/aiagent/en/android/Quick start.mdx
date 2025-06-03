@@ -130,7 +130,7 @@ requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);
 <Step title="Create and Initialize ZegoExpressEngine">
 ```java {3}
 ZegoEngineProfile zegoEngineProfile = new ZegoEngineProfile();
-zegoEngineProfile.appID = KeyCenter.appID;
+zegoEngineProfile.appID = ; // Obtain from ZEGOCLOUD Console
 zegoEngineProfile.scenario = ZegoScenario.HIGH_QUALITY_CHATROOM; // Setting this scenario can avoid requesting camera permissions, and the integrator should set specific values according to their own business scenarios
 zegoEngineProfile.application = getApplication();
 ZegoExpressEngine.createEngine(zegoEngineProfile, null);
@@ -382,8 +382,8 @@ Please ensure that the roomID, userID, and streamID are unique under one ZEGOCLO
 </Note>
 
 :::if{props.platform=undefined}
-```java title="Client request to login to room and publish a stream" {5,6,12-17,25,30}
-private void loginRoom(String agentId, String userId, String userName, String token,
+```java title="Client login to room and publish a stream" {5,6,12-17,25,30}
+private void loginRoom(String userId, String userName, String userName, String token,
     IZegoRoomLoginCallback callback) {
     ZegoEngineConfig config = new ZegoEngineConfig();
     HashMap<String, String> advanceConfig = new HashMap<String, String>();
@@ -394,8 +394,8 @@ private void loginRoom(String agentId, String userId, String userName, String to
     ZegoExpressEngine.getEngine().setRoomScenario(ZegoScenario.HIGH_QUALITY_CHATROOM);
     ZegoExpressEngine.getEngine().setAudioDeviceMode(ZegoAudioDeviceMode.GENERAL);
 
-    // Enable AI echo cancellation
     ZegoExpressEngine.getEngine().enableAEC(true);
+    // Please note: To enable AI echo cancellation, please contact ZEGOCLOUD technical support to obtain the corresponding version of ZEGOExpress SDK
     ZegoExpressEngine.getEngine().setAECMode(ZegoAECMode.AI_AGGRESSIVE2);
     ZegoExpressEngine.getEngine().enableAGC(true);
     ZegoExpressEngine.getEngine().enableANS(true);
@@ -403,16 +403,18 @@ private void loginRoom(String agentId, String userId, String userName, String to
 
     ZegoRoomConfig roomConfig = new ZegoRoomConfig();
     roomConfig.isUserStatusNotify = true;
-    roomConfig.token = token;
+    roomConfig.token = token;  // Token authentication is required, obtain it from your server, and refer to ZEGOCLOUD documentation for generation method
 
-    String roomId = generateRoomID(agentId);
+    String roomId ;   // Custom room ID for login, please refer to the format description
+    String userSteamID // Custom stream ID for publishing, please refer to the format description
     ZegoExpressEngine.getEngine()
         .loginRoom(roomId, new ZegoUser(userId, userName), roomConfig, (errorCode, extendedData) -> {
             Timber.d(
                 "loginRoom() called with: errorCode = [" + errorCode + "], extendedData = [" + extendedData + "]");
             if (errorCode == 0) {
-                String userSteamID = generateUserStreamID(agentId, userId);
+                // Start publishing stream after successful login
                 ZegoExpressEngine.getEngine().startPublishingStream(userSteamID);
+                // Set microphone mute status, false means unmuted, true means muted
                 ZegoExpressEngine.getEngine().muteMicrophone(false);
             }
             if (callback != null) {
@@ -430,10 +432,6 @@ self.streamToPlay = [self getAgentStreamID];
 
 ZegoEngineConfig* engineConfig = [[ZegoEngineConfig alloc] init];
 engineConfig.advancedConfig = @{
-    @"set_audio_dump_mode":@1,// Cancel the file size limit for recording
-    @"notify_remote_device_unknown_status": @"true",
-    @"notify_remote_device_init_status":@"true",
-    @"enforce_audio_loopback_in_sync": @"true", /** This configuration is used for response delay optimization and requires the corresponding version of ZegoExpressEngine SDK. Please contact ZEGOCLOUD support **/
     @"set_audio_volume_ducking_mode":@1,/** This configuration is used for volume ducking **/
     @"enable_rnd_volume_adaptive":@"true",/** This configuration is used for adaptive playback volume **/
 };
@@ -513,22 +511,19 @@ By default, there is only one real user and one AI agent in the same room, so an
 ```java title="Client request to play the AI agent stream" {9-16}
 // Set up the event handler
 void setEventHandler() {
-        engine.setEventHandler(new IZegoEventHandler() {
-            @Override
-            // When other users in the room start/stop publishing streams, you can receive notifications about the corresponding user's audio/video stream changes here
-            public void onRoomStreamUpdate(String roomID, ZegoUpdateType updateType, ArrayList<ZegoStream> streamList, JSONObject extendedData) {
-                super.onRoomStreamUpdate(roomID, updateType, streamList, extendedData);
-                // When updateType is ZegoUpdateType.ADD, it means there is a new audio/video stream, at this time you can call the startPlayingStream interface to play this audio/video stream
-                if (updateType == ZegoUpdateType.ADD) {
-                    // Start playing the stream, set the remote stream rendering view, using the SDK's default view mode, proportionally scaled to fill the entire View
-                    ZegoStream stream = streamList.get(0);
-                    // By default, new streams are from the AI agent, so play directly
-                    // remoteUserView below is the TextureView on the UI interface
-                    ZegoCanvas playCanvas = new ZegoCanvas(findViewById(R.id.remoteUserView));
-                    ZegoExpressEngine.getEngine().startPlayingStream(stream.streamID, playCanvas);
-                }
+    ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
+        @Override
+        // When other users in the room start/stop publishing streams, you can receive notifications about the corresponding user's audio/video stream changes here
+        public void onRoomStreamUpdate(String roomID, ZegoUpdateType updateType, ArrayList<ZegoStream> streamList, JSONObject extendedData) {
+            super.onRoomStreamUpdate(roomID, updateType, streamList, extendedData);
+            // When updateType is ZegoUpdateType.ADD, it means there is a new audio/video stream, at this time we can call the startPlayingStream interface to pull this audio/video stream
+            if (updateType == ZegoUpdateType.ADD) {
+                ZegoStream stream = streamList.get(0);
+                // By default, new streams are from the AI agent, so play directly
+                ZegoExpressEngine.getEngine().startPlayingStream(stream.streamID);
             }
-        });
+        }
+    });
 }
 ```
 :::
