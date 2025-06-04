@@ -345,13 +345,9 @@ def check_mdx_import(import_path, base_file_path):
     if not import_path.lower().endswith('.mdx'):
         return None
 
-    # 从项目根目录开始计算路径
-    root_path = os.path.abspath(os.path.dirname(base_file_path))
-    while os.path.basename(root_path) != 'docs_en':
-        root_path = os.path.dirname(root_path)
-        if root_path == '/':
-            return False
-
+    # 使用当前目录作为根目录
+    root_path = os.getcwd()
+    
     # 构建完整的文件路径
     full_path = os.path.join(root_path, import_path)
     
