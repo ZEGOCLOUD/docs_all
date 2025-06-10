@@ -103,7 +103,7 @@ sequenceDiagram
 <div>
 <Steps>
 <Step title="添加权限声明">
-进入 “app/src/main” 目录，打开 “AndroidManifest.xml” 文件，添加权限。
+进入 "app/src/main" 目录，打开 "AndroidManifest.xml" 文件，添加权限。
 ```xml AndroidManifest.xml
 <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 <uses-permission android:name="android.permission.INTERNET" />
@@ -723,12 +723,125 @@ zg.logoutRoom();
 
 ## ZEGO Express SDK 最佳配置实践
 
-:::if{props.platform=undefined}
+为了获得最佳的音频通话体验，建议按照以下最佳实践配置 ZEGO Express SDK。这些配置可以显著提升智能体语音交互的质量。
 
+:::if{props.platform=undefined}
+进房间前设置：
+1. 开启传统音频 3A 处理（回声消除AEC、自动增益控制AGC、噪声抑制ANS）
+2. 设置房间的使用场景为高品质语聊房场景，SDK 会针对不同的场景采取不同的优化策略
+3. 设置音频设备模式为默认模式
+4. 开启 AI 回声消除，提高回声消除效果
+5. 配置音量闪避，避免声音冲突
+6. 启用播放音量自适应，提升用户体验
+7. 启用 AI 降噪，设置适当的噪声抑制级别
+
+```java
+ZegoEngineConfig config = new ZegoEngineConfig();
+HashMap<String, String> advanceConfig = new HashMap<String, String>();
+// 音量闪避
+advanceConfig.put("set_audio_volume_ducking_mode", "1");
+// 播放音量自适应
+advanceConfig.put("enable_rnd_volume_adaptive", "true");
+config.advancedConfig = advanceConfig;
+ZegoExpressEngine.setEngineConfig(config);
+//设置房间的使用场景为高品质语聊房场景
+ZegoExpressEngine.getEngine().setRoomScenario(ZegoScenario.HIGH_QUALITY_CHATROOM);
+// 设置音频设备模式  默认模式
+ZegoExpressEngine.getEngine().setAudioDeviceMode(ZegoAudioDeviceMode.GENERAL);
+// 开启传统音频 3A 处理
+ZegoExpressEngine.getEngine().enableAEC(true);
+ZegoExpressEngine.getEngine().enableAGC(true);
+ZegoExpressEngine.getEngine().enableANS(true);
+// 开启 AI 回声消除
+ZegoExpressEngine.getEngine().setAECMode(ZegoAECMode.AI_AGGRESSIVE2);
+// 开启 AI 降噪，适度的噪声抑制
+ZegoExpressEngine.getEngine().setANSMode(ZegoANSMode.MEDIUM);
+```
 :::
+
 :::if{props.platform="iOS"}
 
+进房间前设置：
+1. 开启传统音频 3A 处理（回声消除AEC、自动增益控制AGC、噪声抑制ANS）
+2. 设置房间的使用场景为高品质语聊房场景，SDK 会针对不同的场景采取不同的优化策略
+3. 设置音频设备模式为默认模式
+4. 开启 AI 回声消除，提高回声消除效果
+5. 配置音量闪避，避免声音冲突
+6. 启用播放音量自适应，提升用户体验
+7. 启用 AI 降噪，设置适当的噪声抑制级别
+
+```objectivec
+ZegoEngineProfile* profile = [[ZegoEngineProfile alloc]init];
+profile.appID = kZegoAppId;
+profile.scenario = ZegoScenarioHighQualityChatroom; //高品质语聊房场景，设置该场景可以避免申请相机权限，接入方应按自己的业务场景设置具体值
+ZegoEngineConfig* engineConfig = [[ZegoEngineConfig alloc] init];
+engineConfig.advancedConfig = @{
+    @"set_audio_volume_ducking_mode":@1,/**该配置是用来做音量闪避的**/
+    @"enable_rnd_volume_adaptive":@"true",/**该配置是用来做播放音量自适用**/
+};
+[ZegoExpressEngine setEngineConfig:engineConfig];
+[ZegoExpressEngine createEngineWithProfile:profile eventHandler:self];
+// 开启传统音频 3A 处理
+[[ZegoExpressEngine sharedEngine] enableAGC:TRUE];
+[[ZegoExpressEngine sharedEngine] enableAEC:TRUE];
+[[ZegoExpressEngine sharedEngine] enableANS:TRUE];
+// 开启 AI 回声消除
+[[ZegoExpressEngine sharedEngine] setAECMode:ZegoAECModeAIAggressive2];
+// 开启 AI 降噪，适度的噪声抑制
+[[ZegoExpressEngine sharedEngine] setANSMode:ZegoANSModeMedium];
+
+```
 :::
+
 :::if{props.platform="Web"}
 
+1. 检查系统要求和麦克风权限
+2. 加载 AI 降噪模块，设置均衡模式模式 https://doc-zh.zego.im/article/16459
+
+```javascript
+// 引入必要的模块
+import { ZegoExpressEngine } from "zego-express-engine-webrtc";
+import { VoiceChanger } from "zego-express-engine-webrtc/voice-changer";
+
+// 加载音频处理模块，需要在 new ZegoExpressEngine 前调用
+ZegoExpressEngine.use(VoiceChanger);
+
+// 实例化 ZegoExpressEngine
+const zg = new ZegoExpressEngine(appID, server);
+
+// 创建媒体流
+const localStream = await zg.createZegoStream();
+
+// 创建媒体流后开启 AI 降噪
+await zg.enableAiDenoise(localstream, true);
+// 开启 AI 降噪
+await zg.enableAiDenoise(localStream, true);
+
+// 检查系统要求
+async function checkSystemRequirements() {
+  // 检测是否支持WebRTC
+  const rtcSupport = await zg.checkSystemRequirements("webRTC");
+  if (!rtcSupport.result) {
+    console.error("浏览器不支持WebRTC");
+    return false;
+  }
+  
+  // 检测麦克风权限
+  const micSupport = await zg.checkSystemRequirements("microphone");
+  if (!micSupport.result) {
+    console.error("未获得麦克风权限");
+    return false;
+  }
+  
+  return true;
+}
+```
+
+### 其他优化建议
+
+1. **浏览器兼容性**：推荐使用 Chrome、Firefox、Safari 等现代浏览器的最新版本
+2. **网络环境**：确保网络连接稳定，建议使用有线网络或信号良好的Wi-Fi
+3. **音频设备**：使用质量较好的麦克风和扬声器
+4. **页面优化**：避免在同一页面运行过多JavaScript任务，可能会影响音频处理性能
+5. **HTTPS环境**：在生产环境中使用HTTPS协议，以确保获取麦克风权限
 :::
