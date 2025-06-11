@@ -7,11 +7,11 @@ import Content from '/snippets/Reuse/SignatureVerificationZH.mdx'
 <Warning title="注意">回调服务不能保证完全可靠，请慎重考虑使用回调方案构建核心业务流程的风险。</Warning>
 
 
-通过本回调，您可以监听用户与智能体对话过程中所发生的事件，包含 ASR 结果、LLM 结果、异常事件、智能体被打断事件、用户说话行为、智能体说话行为、用户说话音频数据。
+通过本回调，您可以监听用户与智能体对话过程中所发生的事件，包含 ASR 结果、LLM 结果、异常事件、智能体被打断事件、用户说话行为、智能体说话行为、用户说话音频数据、智能体实例创建成功、智能体实例删除成功。
 
 <Note title="说明">
 
-要接收不同类型的回调结果，请在[创建智能体实例](./../API%20reference/Agent%20Instance%20Management/Create%20Agent%20instance.mdx)时，配置相应的 [CallbackConfig](./../API%20reference/Agent%20Instance%20Management/Create%20Agent%20instance.mdx#callbackconfig) 参数为 `1`：
+如您需要接收以下类型的回调结果，请在[创建智能体实例](./../API%20reference/Agent%20Instance%20Management/Create%20Agent%20instance.mdx)时，配置相应的 [CallbackConfig](./../API%20reference/Agent%20Instance%20Management/Create%20Agent%20instance.mdx#callbackconfig) 参数为 `1`：
 - ASR 结果：`CallbackConfig.ASRResult`。
 - LLM 结果：`CallbackConfig.LLMResult`。
 - 智能体被打断事件：`CallbackConfig.Interrupted`。
@@ -34,7 +34,7 @@ import Content from '/snippets/Reuse/SignatureVerificationZH.mdx'
 | 参数 | 类型 | 描述 |
 |------|------|------|
 | AppId | Number | ZEGO 给开发者 APP 的唯一标识。 |
-| Event | String | 事件通知类型。<ul><li>ASRResult：ASR 结果。</li><li>LLMResult：LLM 结果。</li><li>Exception：异常事件。</li><li>Interrupted：智能体被打断。</li><li>UserSpeakAction：用户说话行为。</li><li>AgentSpeakAction：智能体说话行为。</li><li>UserAudioData：用户说话音频数据。</li></ul> |
+| Event | String | 事件通知类型。<ul><li>ASRResult：ASR 结果。</li><li>LLMResult：LLM 结果。</li><li>Exception：异常事件。</li><li>Interrupted：智能体被打断。</li><li>UserSpeakAction：用户说话行为。</li><li>AgentSpeakAction：智能体说话行为。</li><li>UserAudioData：用户说话音频数据。</li><li>AgentInstanceCreated：智能体实例创建成功。</li><li>AgentInstanceDeleted：智能体实例删除成功。</li></ul> |
 | Nonce | String | 随机数，用于检验串计算。 |
 | Timestamp | Number | 回调发送时的 Unix 时间戳（毫秒），用于检验串计算。 |
 | Signature | String | 检验串，验证回调发送方身份。 |
@@ -96,6 +96,25 @@ import Content from '/snippets/Reuse/SignatureVerificationZH.mdx'
 | SampleRate | Int | 声音数据采样率，默认为 16000 |
 | Format | String | 音频数据格式，默认为 "pcm" |
 | Audio | String | 音频 base64 编码后的数据，每轮对话最前面的 1～1.5s |
+</Tab>
+<Tab title="AgentInstanceCreated">
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| CreatedTimestamp | Int64 | 创建成功时间，毫秒级时间戳。 |
+</Tab>
+<Tab title="AgentInstanceDeleted">
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| Code | Int | 删除的原因：<ul><li>0：调用 DeleteAgentInstance 删除的实例。</li><li>1201：RTC 通用错误。</li><li>1202：RTC 房间空闲超过 120 秒。</li><li>1203：智能体实例被踢出 RTC 房间。</li><li>1204：智能体实例登录 RTC 房间失败。</li><li>1205：智能体实例与 RTC 房间断连。</li><li>1206：智能体实例推流失败。</li></ul> |
+| DeletedTimestamp | Int64 | 删除成功时间，毫秒级时间戳。 |
+| LatencyData | Object | 本次和智能体实例对话的延迟数据。 |
+LatencyData
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| LLMTTFT | Int | LLM 首 token 平均耗时（毫秒）。请求大语言模型～大语言模型返回首个非空 token 的耗时。 |
+| LLMTPS | Int | LLM 平均输出速度（tokens/秒）。大语言模型平均每秒输出的 token 数量 |
+| TTSAudioFirstFrameTime | Int | TTS 音频首帧耗时（毫秒）。<ul><li>单向流式：AI Agent 判断 LLM 输出组句成功～TTS 返回首个非静音音频帧的耗时。</li><li>双向流式：LLM 输出首 token 并开始发送 TTS～TTS 返回首个非静音音频帧的耗时。其中组句逻辑为 TTS 服务实现</li></ul> |
+| TotalCost | Int | 平均 AI Agent 服务端总耗时（毫秒）: AI Agent 服务端拉流并判断用户说话结束～TTS 返回首帧并开始推流的耗时，所有服务端产生的耗时，至少包含语音识别 ASR 耗时、大语言模型 LLM 相关耗时、文字转语音 TTS 相关耗时等。 |
 </Tab>
 </Tabs>
 
@@ -234,6 +253,49 @@ import Content from '/snippets/Reuse/SignatureVerificationZH.mdx'
         "Audio": "base64_encoded_audio_data"
     },
     "Event": "UserAudioData",
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1745502313000
+}
+```
+</Tab>
+<Tab title="AgentInstanceCreated">
+```json
+{
+    "AppId": 1234567,
+    "AgentInstanceId": "1912124734317838336",
+    "AgentUserId": "agent_user_1",
+    "RoomId": "room_1",
+    "Sequence": 1234567890,
+    "Data": {
+        "CreatedTimestamp": 1745502312982
+    },
+    "Event": "AgentInstanceCreated",
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1745502313000
+}
+```
+</Tab>
+<Tab title="AgentInstanceDeleted">
+```json
+{
+    "AppId": 1234567,
+    "AgentInstanceId": "1912124734317838336",
+    "AgentUserId": "agent_user_1",
+    "RoomId": "room_1",
+    "Sequence": 1234567890,
+    "Data": {
+        "Code": 0,
+        "DeletedTimestamp": 1745502345138,
+        "LatencyData": {
+            "LLMTTFT": 613,
+            "LLMTPS": 11.493,
+            "TTSAudioFirstFrameTime": 783,
+            "TotalCost": 1693
+        }
+    },
+    "Event": "AgentInstanceDeleted",
     "Nonce": "7450395512627324902",
     "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
     "Timestamp": 1745502313000
