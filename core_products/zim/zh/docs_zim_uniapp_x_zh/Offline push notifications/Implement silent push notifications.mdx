@@ -1,0 +1,77 @@
+# Implement silent push notifications
+
+
+## Introduction
+
+Silent push notifications are a special type of remote notification, mainly used for data synchronization between the App running in the background and the server. For example: when the App is not active and the data within the App is outdated, the server will send a silent push notification, and the App will update the data without any user awareness.
+
+<Warning title="注意">
+- Silent push notifications are primarily used for updating and synchronizing data, without any user awareness. Therefore, silent push notifications generally do not have content, sounds, or badge notifications.
+- When silent push notifications awaken the background App for download tasks, there is a maximum of 30 seconds to perform.
+- Notifications callbacks can be triggered when the App is running in the foreground/background, or when the background process is suspended (retaining the App's memory resources). Callbacks cannot be triggered after the App is closed.
+- Silent push requests are low priority tasks at APNs, and Apple does not guarantee the delivery rate of silent pushes.
+- Do not use silent push notifications to keep the App alive. If APNs detect a high frequency of silent push requests, it may terminate their transmission.
+</Warning>
+
+
+<Note title="说明">
+This documentation is applicable to the following platforms: iOS and Android (only smart devices that support Google services).
+</Note>
+
+## Prerequisites
+
+Before implementing silent push notifications, please make sure of the following:
+
+- Integrate ZPNs SDK version ZPNs SDK **2.3.3 or above** and implement offline push notifications. For more details, please refer to [Implement offline push notification](./Implement%20offline%20push%20notification.mdx).
+
+## Implementation steps
+
+### Send silent push notifications
+
+1. Contact ZEGOCLOUD technical support to configure the resourceID for carrying silent push strategies. There are two types of silent push strategies: iOS and FCM. Depending on your specific requirements, you can choose to only carry one type of silent push strategy's `resourceID`.
+2. In scenarios where offline push notifications need to be sent (such as [call invitation](./../Guides/Call%20invitation%20signaling.mdx), [offline push notification](./Implement%20offline%20push%20notification.mdx), etc.), fill in the resourceID field of [ZIMPushConfig](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMPushConfig-class.html) with the pre-configured value obtained from ZEGOCLOUD Technical Support. Additionally, fill in the payload field according to the specific business scenario.
+
+```dart
+pushConfig.resourcesID="Contact ZEGOCLOUD Technical Support to configure resourceID";
+pushConfig.payload = "Fill in the desired additional content";
+```
+
+3. Once the above steps are completed, you can send silent push notifications to others.
+
+### Receive silent push notifications
+
+#### App in the foreground
+
+To receive online silent push notifications, implement the [onThroughMessageReceived](https://pub.dev/documentation/zego_zpns/latest/zego_zpns/ZPNsEventHandler/onThroughMessageReceived.html) event.
+
+
+```dart
+ZPNsEventHandler.onThroughMessageReceived = (ZPNsMessage message) {
+    // Handle online silent push notifications
+    String payload = message.extras['payload'] as String;
+};
+```
+
+#### When the iOS or Android app is in the background or when the Android app is terminated:
+
+
+1. Implement a top-level non-anonymous function similar to the code block shown below. Please note that it should be a non-initializing class method.
+
+```dart    
+// Note: @pragma('vm:entry-point') must be placed on the function to indicate that it can be resolved, allocated, or called directly from native or VM code in AOT mode.
+@pragma('vm:entry-point')
+Future<void> _zpnsMessagingBackgroundHandler(ZPNsMessage message) async{
+    // The payload variable contains the content of the payload field filled during sending.
+    String payload = message.extras['payload'] as String;
+    // When the app is in the background and terminated, you can view the print output in logcat.
+    print(payload);
+}
+```
+
+2. Call the [setBackgroundMessageHandler](https://pub.dev/documentation/zego_zpns/latest/zego_zpns/ZPNs/setBackgroundMessageHandler.html) method as soon as possible when opening the app to pass the above function. This allows the Android app to trigger the above method and receive offline silent push notifications when it is terminated in the background.
+
+```dart
+ZPNs.setBackgroundMessageHandler(_zpnsMessagingBackgroundHandler);
+```
+
+By completing the above steps, you will be able to receive silent push notifications from others.
