@@ -426,7 +426,7 @@ private void loginRoom(String userId, String userName, String userName, String t
 ```
 :::
 :::if{props.platform="iOS"}
-```swift title="Client request to login to room and publish a stream" {9-11,17,20-24,35}
+```swift title="Client login to room and publish a stream" {4-9,13,16-20,23}
 // Record the agent
 self.streamToPlay = [self getAgentStreamID];
 
@@ -463,7 +463,7 @@ engineConfig.advancedConfig = @{
 :::
 :::if{props.platform="Web"}
 
-```javascript title="Client request to login to room and publish a stream" {22-25}
+```javascript title="Client login to room and publish a stream" {22-25}
 const userId = "" // User ID for logging into the Express SDK room
 const roomId = "" // RTC Room ID
 const userStreamId = "" // User stream push ID
@@ -529,7 +529,7 @@ void setEventHandler() {
 :::
 :::if{props.platform="iOS"}
 
-```objectivec title="Client request to play the AI agent stream" {6-13}
+```objectivec title="Client request to play the AI agent stream" {10}
 // Listen for room stream information update status, and play the AI agent stream
 - (void)onRoomStreamUpdate:(ZegoUpdateType)updateType
                 streamList:(NSArray<ZegoStream *> *)streamList
@@ -720,3 +720,135 @@ zg.logoutRoom();
 
 
 This is the complete core process for you to achieve real-time voice interaction with an AI agent.
+
+## Best Practices for ZEGO Express SDK Configuration
+
+To achieve the best audio call experience, it is recommended to configure the ZEGO Express SDK according to the following best practices. These configurations can significantly improve the quality of AI agent voice interactions.
+
+:::if{props.platform="undefined|iOS"}
+
+**Before join room Settings:**
+<div>
+- Enable traditional audio 3A processing (Acoustic Echo Cancellation AEC, Automatic Gain Control AGC, and Noise Suppression ANS)
+- Set the room usage scenario to High Quality Chatroom, as the SDK will adopt different optimization strategies for different scenarios
+- Set the audio device mode to default mode
+- Enable AI echo cancellation to improve echo cancellation effect (this feature requires contacting ZEGO technical support to obtain the corresponding version of ZEGOExpress SDK)
+- Configure volume ducking to avoid sound conflicts
+- Enable adaptive playback volume to enhance user experience
+- Enable AI noise reduction and set appropriate noise suppression level
+</div>
+:::
+
+:::if{props.platform=undefined}
+```java
+ZegoEngineConfig config = new ZegoEngineConfig();
+HashMap<String, String> advanceConfig = new HashMap<String, String>();
+// Configure volume ducking to avoid sound conflicts
+advanceConfig.put("set_audio_volume_ducking_mode", "1");
+// Enable adaptive playback volume
+advanceConfig.put("enable_rnd_volume_adaptive", "true");
+config.advancedConfig = advanceConfig;
+ZegoExpressEngine.setEngineConfig(config);
+// Set room usage scenario to High Quality Chatroom
+ZegoExpressEngine.getEngine().setRoomScenario(ZegoScenario.HIGH_QUALITY_CHATROOM);
+// Set audio device mode to default mode
+ZegoExpressEngine.getEngine().setAudioDeviceMode(ZegoAudioDeviceMode.GENERAL);
+// Enable traditional audio 3A processing
+ZegoExpressEngine.getEngine().enableAEC(true);
+ZegoExpressEngine.getEngine().enableAGC(true);
+ZegoExpressEngine.getEngine().enableANS(true);
+// Enable AI echo cancellation, please note: enabling AI echo cancellation requires contacting ZEGO technical support to obtain the corresponding version of ZEGOExpress SDK
+ZegoExpressEngine.getEngine().setAECMode(ZegoAECMode.AI_AGGRESSIVE2);
+// Enable AI noise reduction with moderate noise suppression
+ZegoExpressEngine.getEngine().setANSMode(ZegoANSMode.MEDIUM);
+```
+:::
+
+:::if{props.platform="iOS"}
+
+```objectivec
+ZegoEngineProfile* profile = [[ZegoEngineProfile alloc]init];
+profile.appID = kZegoAppId;
+profile.scenario = ZegoScenarioHighQualityChatroom; // High Quality Chatroom scenario, setting this scenario can avoid requesting camera permissions, integrators should set specific values according to their business scenarios
+ZegoEngineConfig* engineConfig = [[ZegoEngineConfig alloc] init];
+engineConfig.advancedConfig = @{
+    @"set_audio_volume_ducking_mode":@1,/** Configure volume ducking to avoid sound conflicts **/
+    @"enable_rnd_volume_adaptive":@"true",/** Enable adaptive playback volume **/
+};
+[ZegoExpressEngine setEngineConfig:engineConfig];
+[ZegoExpressEngine createEngineWithProfile:profile eventHandler:self];
+// Enable traditional audio 3A processing
+[[ZegoExpressEngine sharedEngine] enableAGC:TRUE];
+[[ZegoExpressEngine sharedEngine] enableAEC:TRUE];
+[[ZegoExpressEngine sharedEngine] enableANS:TRUE];
+// Enable AI echo cancellation, please note: enabling AI echo cancellation requires contacting ZEGO technical support to obtain the corresponding version of ZEGOExpress SDK
+[[ZegoExpressEngine sharedEngine] setAECMode:ZegoAECModeAIAggressive2];
+// Enable AI noise reduction with moderate noise suppression
+[[ZegoExpressEngine sharedEngine] setANSMode:ZegoANSModeMedium];
+```
+:::
+
+:::if{props.platform="Web"}
+
+<div>
+- Enable traditional audio 3A processing (Acoustic Echo Cancellation AEC, Automatic Gain Control AGC, and Noise Suppression ANS)
+- Set the room usage scenario to High Quality Chatroom, as the SDK will adopt different optimization strategies for different scenarios
+- Load the [AI Noise Reduction](https://doc-zh.zego.im/article/16459) module and set balanced mode (this feature requires contacting ZEGO technical support to obtain the corresponding version of ZEGOExpress SDK)
+- When pushing streams, configure the push parameters to automatically switch to available `videoCodec`
+</div>
+
+```javascript
+// Import necessary modules
+import { ZegoExpressEngine } from "zego-express-engine-webrtc";
+import { VoiceChanger } from "zego-express-engine-webrtc/voice-changer";
+
+// Load audio processing module, must be called before new ZegoExpressEngine
+ZegoExpressEngine.use(VoiceChanger);
+
+// Instantiate ZegoExpressEngine, set room usage scenario to High Quality Chatroom
+const zg = new ZegoExpressEngine(appid, server, { scenario: 7 })
+
+// Traditional audio 3A processing is enabled by default in SDK
+
+// Create local media stream
+const localStream = await zg.createZegoStream();
+
+// Enable AI noise reduction after creating local media stream
+await zg.enableAiDenoise(localstream, true);
+// Set to AIBalanced
+await zg.setAiDenoiseMode(localstream, 1);
+
+// Push local media stream, need to set automatic switching to available videoCodec
+await zg.startPublishingStream(userStreamId, localStream, {
+  enableAutoSwitchVideoCodec: true,
+});
+
+// Check system requirements
+async function checkSystemRequirements() {
+  // Check WebRTC support
+  const rtcSupport = await zg.checkSystemRequirements("webRTC");
+  if (!rtcSupport.result) {
+    console.error("Browser does not support WebRTC");
+    return false;
+  }
+  
+  // Check microphone permission
+  const micSupport = await zg.checkSystemRequirements("microphone");
+  if (!micSupport.result) {
+    console.error("Microphone permission not granted");
+    return false;
+  }
+  
+  return true;
+}
+```
+
+## Additional Optimization Recommendations
+<div>
+- **Browser Compatibility**: Recommended to use the latest versions of modern browsers such as Chrome, Firefox, Safari
+- **Network Environment**: Ensure stable network connection, recommend using wired network or Wi-Fi with good signal
+- **Audio Equipment**: Use high-quality microphones and speakers
+- **Page Optimization**: Avoid running too many JavaScript tasks on the same page, which may affect audio processing performance
+- **HTTPS Environment**: Use HTTPS protocol in production environment to ensure microphone permission access
+</div>
+:::
