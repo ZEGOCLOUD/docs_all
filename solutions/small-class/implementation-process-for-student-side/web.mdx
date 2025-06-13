@@ -1,0 +1,156 @@
+<style>
+table th:nth-of-type(1) { min-width: 120px; width: 30%; }
+table th:nth-of-type(2) { min-width: 120px; width: 70%; }
+table {width: 100%;}
+</style>
+
+# 学生端实现流程
+---
+
+## 1 基础流程图
+以下展示了小班课场景的重要流程，可根据流程实现教学生端相关功能。
+
+1. 学生端登录/登出流程
+
+![/Pics/Common/GoClass/studentLogin.png](/Pics/Common/GoClass/studentLogin.png)
+
+## 2 核心 API 时序图
+参考以下时序图，搭配Express Video SDK、ZegoWhiteboardView SDK、ZegoDocsView SDK、ZEGO GO课堂后台服务可实现小班课场景的相关功能，包括课堂管理、实时音视频通讯、互动白板、文件共享等基础功能。
+
+![/Pics/GoClass/UMLs/SmallClass_Web_zh.png](/Pics/GoClass/UMLs/SmallClass_Web_zh.png)
+
+## 3 GO课堂业务逻辑参考
+以下步骤介绍了GO课堂的基础实现流程，开发者可以据此理解GO课堂的实现方案。
+
+### 3.1 具体流程
+1. 填写 constants_data.js 中项目所需参数，运行项目。
+2. 调用业务后台登录接口 this.loginRoomBiz() 。
+3. 初始化 SDK this.initClient() 。
+4. 注册监听 SDK 回调方法 this.initLiveRoom() 。
+5. 调用 SDK 登录房间方法 this.loginRoom() 。
+6. GO课堂具体业务实现。
+
+
+<div class="mk-hint">
+ 
+以上方法名称均为GO课堂项目中的封装方法名。 
+</div>
+
+
+
+### 3.2 初始化
+
+根据环境不同，获取对应的 AppID 。然后各个 SDK 再进行相应初始化，包括以下两个 SDK：
+
+- ZegoDocsView SDK
+- ZegoWhiteboardView SDK
+
+### 3.3 学生端互动白板和文件共享实现流程
+
+1. 获取房间白板列表（[getViewList\|_blank](/article/api?doc=WhiteBoardView_API~javascript_web~class~ZegoExpressEngine#get-view-list)），在本地维护一个白板列表。
+
+2. 对端新增白板/文件操作：
+
+- 对端新增白板：
+
+  1. 对端新增白板，会触发 [viewAdd\|_blank](/article/api?doc=WhiteBoardView_API~javascript_web~interface~ZegoEvent#view-add) 回调方法，获得新增白板，更新本地白板列表。
+  2. 监听房间附加信息，获得白板 ID 。
+  3. 在白板列表中查询得到目标白板。
+  4. 通过互动白板 SDK 的 [attachView\|_blank](/article/api?doc=WhiteBoardView_API~javascript_web~class~ZegoExpressEngine#attach-view)(parent) 将目标白板渲染出来，其中 parent 是需要挂载的父容器 ID，如 `<div id="parent"></div>` 。
+
+- 对端新增文件：
+
+   1. 监听房间附加信息，获得白板 ID 。
+
+   2. 在白板列表中查询得到目标白板。
+
+   3. 通过互动白板 SDK 的 [getFileInfo()\|_blank](/article/api?doc=WhiteBoardView_API~javascript_web~interface~ZegoWhiteboardView#get-file-info) 判断该白板是否文件白板。
+
+   4. 文件共享 SDK 的 [createView\|_blank](/article/api?doc=DocsView_API~javascript_web~class~ZegoExpressDocs#create-view) 创建文件 view 。
+
+   5. 使用文件共享 SDK 的 [loadFile\|_blank](/article/api?doc=DocsView_API~javascript_web~interface~ZegoDocsView#load-file) 加载指定的文件。
+
+   6. 加载文件转码成功后在回调方法中创建与文件相匹配白板 onLoadFile。
+
+   7. 根据 [onLoadFile\|_blank](/article/api?doc=DocsView_API~javascript_web~interface~ZegoEvent#on-load-file) 回调返回的参数，使用互动白板 SDK 的 [createView\|_blank](/article/api?doc=WhiteBoardView_API~javascript_web~class~ZegoExpressEngine#create-view) 创建与文件相匹配的白板。
+
+   8. 使用互动白板 SDK 的 [attachView\|_blank](/article/api?doc=WhiteBoardView_API~javascript_web~class~ZegoExpressEngine#attach-view)(parent) 渲染白板，其中 parent 是 [onLoadFile\|_blank](/article/api?doc=DocsView_API~javascript_web~interface~ZegoEvent#on-load-file) 回调返回参数中的 viewID。      
+
+3. 对端切换白板/文件操作：
+
+- 对端切换白板：
+  1. 监听房间附加信息，获得切换的白板 ID。
+  2. 在白板列表中查询得到目标白板。
+  3. 通过互动白板 SDK 的 [attachView\|_blank](/article/api?doc=WhiteBoardView_API~javascript_web~class~ZegoExpressEngine#attach-view)(parent) 将目标白板渲染出来，其中 parent 是需要挂载的父容器 ID，如 `<div id="parent"></div>` 。
+- 对端切换文件：
+  1. 监听房间附加信息，获得切换的文件白板 ID。
+  2. 在白板列表中查询得到目标文件白板。
+  3. 根据文件白板上的文件信息(fileInfo)，通过文件转码 SDK 的 [createView\|_blank](/article/api?doc=WhiteBoardView_API~javascript_web~class~ZegoExpressEngine#create-view) 创建文件视图。
+  4. 使用文件共享 SDK 的 [loadFile\|_blank](/article/api?doc=DocsView_API~javascript_web~interface~ZegoDocsView#load-file) 加载指定的文件。
+  5. 通过互动白板 SDK 的 [attachView\|_blank](/article/api?doc=WhiteBoardView_API~javascript_web~class~ZegoExpressEngine#attach-view)(parent) 将目标文件白板渲染出来，其中 parent 是 [onLoadFile\|_blank](/article/api?doc=DocsView_API~javascript_web~interface~ZegoEvent#on-load-file) 回调返回参数中的 viewID。
+
+## 4 核心 API 参考
+
+### 4.1 ZEGO GO课堂后台服务
+ 
+|API|实现功能|
+|-|-|
+|[login_room \|_blank](#5904)| 登录教室。|
+|[leave_room \|_blank](#5910)|离开课堂。|
+|[end_teaching \|_blank](#5911)|结束教学。|
+|[get_attendee_list \|_blank](#5905)|获取在线成员列表。|
+|[get_join_live_list \|_blank](#5906)|获取连麦成员列表。|
+|[set_user_info \|_blank](#5908)|设置某个用户设备状态。|
+
+<div class="mk-hint">
+ 
+完整的 API 请参考 [GO 课堂后台服务说明\|_blank](#5370)。  
+</div>
+
+### 4.2 Express-Video SDK （含白板功能） 
+
+|API|实现功能|
+|-|-|
+|[ZegoExpressEngine \|_blank](/article/api?doc=Express_Video_SDK_API~javascript_web~class~ZegoExpressEngine)|new 初始化实例。|
+|[loginRoom \|_blank](/article/api?doc=Express_Video_SDK_API~javascript_web~class~ZegoExpressEngine#login-room)|登录房间，推拉流前必须登录房间。|
+|[startPublishingStream \|_blank](/article/api?doc=Express_Video_SDK_API~javascript_web~class~ZegoExpressEngine#start-publishing-stream)|用户将自己本地的音视频流推送到 ZEGO 实时音视频云。|
+|[stopPublishingStream \|_blank](/article/api?doc=Express_Video_SDK_API~javascript_web~class~ZegoExpressEngine#stop-publishing-stream)|用户停止发送本地的音视频流，结束通话。|
+|[startPlayingStream \|_blank](/article/api?doc=Express_Video_SDK_API~javascript_web~class~ZegoExpressEngine#start-playing-stream)|用户可以从 ZEGO 音视频云拉取远端用户的音视频流进行互通。|
+|[stopPlayingStream \|_blank](/article/api?doc=Express_Video_SDK_API~javascript_web~class~ZegoExpressEngine#stop-playing-stream)|用户停止拉取远端的音视频流。|
+
+<div class="mk-hint">
+ 
+完整的 API 请参考 [Express Video SDK API 文档 \|_blank](/zh/api?doc=Express_Video_SDK_API~javascript_web~class)。  
+</div>
+
+
+### 4.3 ZegoWhiteboardView SDK 
+
+|API|实现功能|
+|-|-|
+|[createView\|_blank](/zh/api?doc=WhiteBoardView_API~Javascript_web~class~ZegoExpressEngine&jumpType=route#create-view)|创建白板 view。|
+|[attachView\|_blank](/zh/api?doc=WhiteBoardView_API~Javascript_web~class~ZegoExpressEngine&jumpType=route#attach-view)|添加白板到视图（渲染）。|
+|[setToolType\|_blank](/article/api?doc=WhiteBoardView_API~javascript_web~interface~ZegoWhiteboardView#set-tool-type)|设置要使用的白板工具。|
+|[getViewList\|_blank](/zh/api?doc=WhiteBoardView_API~Javascript_web~class~ZegoExpressEngine&jumpType=route#get-view-list)|获取当前房间的所有白板。|
+|[scroll\|_blank](/article/api?doc=WhiteBoardView_API~javascript_web~interface~ZegoWhiteboardView#scroll)|跳转到指定位置，用百分比描述。|
+
+<div class="mk-hint">
+ 
+完整的 API 请参考 [互动白板 API 文档 \|_blank](/zh/api?doc=WhiteBoardView_API~javascript_web~class)。  
+</div>
+
+### 4.4 ZegoDocsView SDK 
+
+|API|实现功能|
+|-|-|
+|[createView\|_blank](/zh/api?doc=DocsView_API~Javascript_web~class~ZegoExpressDocs#create-view)| 创建 docsView 实例。|
+|[uploadFile\|_blank](/zh/api?doc=DocsView_API~Javascript_web~class~ZegoExpressDocs#upload-file)| 从客户端本地上传文件转码，并存储。|
+|[getFileID\|_blank](/article/api?doc=DocsView_API~javascript_web~interface~ZegoDocsView#get-file-id)| 获取当前视图对应的 fileID，与 loadFile 传入的 fileID 一致。|
+|[loadFile\|_blank](/article/api?doc=DocsView_API~javascript_web~interface~ZegoDocsView#load-file)|加载指定的文件，文件内容将被渲染到视图上。|
+|[scrollTo\|_blank](/article/api?doc=DocsView_API~javascript_web~interface~ZegoDocsView#scroll-to)|跳转到指定位置，用百分比描述。|
+|[setScaleFactor\|_blank](/article/api?doc=DocsView_API~javascript_web~interface~ZegoDocsView#set-scale-factor)|缩放。|
+
+<div class="mk-hint">
+ 
+完整的 API 请参考 [文件共享 API 文档 \|_blank](/article/api?doc=DocsView_API~javascript_web~class)。  
+</div>
