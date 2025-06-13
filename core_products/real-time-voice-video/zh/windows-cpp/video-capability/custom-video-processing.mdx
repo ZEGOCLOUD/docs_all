@@ -1,0 +1,109 @@
+<style>
+table th:nth-of-type(1) {width: 20%;}
+table {width: 100%;}
+</style>
+
+# 自定义视频前处理
+
+- - -
+
+## 功能简介
+
+@@@Express_Custom_Video_Pre-processing-function_Introduction@@@
+
+
+## 示例源码下载
+
+ZEGO 提供了一个通过 Effects SDK 实现美颜功能的示例源码，请参考 [实时音视频和 AI 美颜的搭配使用\|_blank](#11690)。
+
+## 前提条件
+
+在进行自定义视频前处理前，请确保：
+
+@@@Express-Video_Prerequisites@@@
+
+## 使用步骤
+
+自定义视频前处理的流程与接口调用，如下所示： 
+
+<img src="/Pics/Common/ZegoExpressEngine/custom_video_process_win_new.png">
+
+1. 初始化 Express SDK，登录房间。
+
+2. 调用 [enableCustomVideoProcessing\|_blank](@enableCustomVideoProcessing) 接口，[开启自定义视频前处理](10357#4_1) 功能。
+
+3. [获取原始视频数据，进行视频前处理](10357#4_2)。
+
+    1. 调用 [setCustomVideoProcessHandler\|_blank](@setCustomVideoProcessHandler) 接口，注册自定义视频前处理回调，并实现 [onCapturedUnprocessedRawData\|_blank](@onCapturedUnprocessedRawData) 等回调方法。
+    2. 开始预览，推流。
+    3. 通过 [onCapturedUnprocessedRawData\|_blank](@onCapturedUnprocessedRawData) 回调接口获取原始视频数据。开发者可以根据业务需要，进行相关处理：可以通过 Express SDK 自带的基础美颜、水印等功能处理；也可以与 Effects SDK 搭配实现更多处理效果。
+    4. 视频数据处理完成后，在 [onCapturedUnprocessedRawData\|_blank](@onCapturedUnprocessedRawData) 回调中，调用 [sendCustomVideoProcessedRawData\|_blank](@sendCustomVideoProcessedRawData) 接口，向 Express SDK 发送处理后的视频帧数据。
+
+4. 其他客户端可以拉取处理后的视频流。
+5. 结束后，停止预览、推流，退出房间，销毁引擎，释放资源。
+
+### 1 开启自定义视频前处理
+
+创建自定义视频前处理 [ZegoCustomVideoProcessConfig\|_blank](@-ZegoCustomVideoProcessConfig) 对象，设置 [bufferType\|_blank](@bufferType) 属性，用于提供视频帧数据类型。
+
+目前 Windows SDK 支持如下 1 种 [bufferType \|_blank](@-ZegoVideoBufferType) 数据类型，设置其他枚举值将无法正常使用：
+
+| Buffer 类型 |枚举值|说明 | 
+|-----|------|------|
+| RAWDATA | ZEGO_VIDEO_BUFFER_TYPE_RAW_DATA|表示 RAWDATA 类型的原始视频数据。|
+
+在开始预览和开始推流前，调用 [enableCustomVideoProcessing\|_blank](@enableCustomVideoProcessing) 接口，开启自定义视频前处理功能。
+
+```c++
+ZegoCustomVideoProcessConfig config;
+// 选择 RAWDATA 类型视频帧数据
+config.bufferType = ZEGO_VIDEO_BUFFER_TYPE_RAW_DATA;
+
+engine->enableCustomVideoProcessing(true,&config);
+```
+
+### 2 获取原始视频数据，进行视频前处理
+
+#### 2.1 注册自定义视频前处理回调
+
+1. 将 “CustomVideoProcessHandler” 作为自定义视频前处理回调对象，遵循 [IZegoCustomVideoProcessHandler \|_blank](@-IZegoCustomVideoProcessHandler) 协议。
+
+    ```c++
+    class CustomVideoProcessHandler : public IZegoCustomVideoProcessHandler
+    {    
+
+        ......
+
+    };
+    ```
+
+2. 调用 [setCustomVideoProcessHandler \|_blank](@setCustomVideoProcessHandler) 接口，设置自定义视频采集回调。
+
+    ```c++
+    engine->setCustomVideoProcessHandler(customVideoProcessHandler);
+    ```
+
+#### 2.2 获取原始视频，进行前处理
+
+1. 使用 “ZEGO_VIDEO_BUFFER_TYPE_RAW_DATA” 类型的视频前处理方式，需要实现 [onCapturedUnprocessedRawData\|_blank](@onCapturedUnprocessedRawData) 回调方法。当 SDK 获取到原始视频数据后，会通过 [onCapturedUnprocessedRawData\|_blank](@onCapturedUnprocessedRawData) 方法通知开发者。
+
+2. 然后，开发者可以使用 Express SDK 自带的基础美颜、水印等功能处理视频数据，详情请参考 [推流视频增强\|_blank](!Publish_Video_Enhanced)；也可以与 Effects SDK 搭配实现更多处理效果，详情请参考 [实时音视频和 AI 美颜的搭配使用\|_blank](#11690)。
+
+3. 处理完成后，调用 [sendCustomVideoProcessedRawData\|_blank](@sendCustomVideoProcessedRawData) 接口，将处理后的视频帧数据发送给 Express SDK，推流出去，其他客户端可以拉取到处理后的视频流。
+
+```c++
+void onCapturedUnprocessedRawData(const unsigned char** data, unsigned int* dataLength, ZegoVideoFrameParam param, unsigned long long referenceTimeMillisecond, ZegoPublishChannel channel) {
+    int width  = param.width;
+    int height = param.height;
+    int stride = param.strides[0];
+    QImage image(const_cast<unsigned char*>(data[0]),width,height,stride,QImage::Format_ARGB32);
+    zego_effects_video_frame_param frameParam;
+    frameParam.format = zego_effects_video_frame_format_bgra32;
+    frameParam.width  = image.width();
+    frameParam.height = image.height();
+    // 自定义前处理：此处使用 ZegoEffects SDK 进行视频处理
+    zego_effects_process_image_buffer_rgb(m_handle,image.bits(), image.bytesPerLine() * image.height(),frameParam);
+    // 将处理后的 buffer 发回 ZegoExpress-Video SDK 里
+    engine->sendCustomVideoProcessedRawData((const unsigned char**)data,dataLength,param,referenceTimeMillisecond);
+}
+```

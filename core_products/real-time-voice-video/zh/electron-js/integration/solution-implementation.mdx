@@ -1,0 +1,313 @@
+# 实现视频通话 
+
+---
+
+
+
+@@@Common_usage_introduction@@@
+
+## 2 前提条件  
+
+在实现基本的实时音视频功能之前，请确保：  
+
+@@@Express_Video_Implementation_Process_Prerequisites@@@
+
+
+
+
+## 3 使用步骤  
+
+@@@quick_start_base_intro@@@
+
+整个推拉流过程的 API 调用时序如下图： 
+
+<img src="/Pics/QuickStart/quickstart_uml.png" alt="时序图" width="80%">   
+
+
+<a id="createEngine"></a>
+
+### 3.1 创建引擎   
+
+**1. 创建界面（可选）**
+
+<details class="zg-primary">
+    <summary>添加界面元素</summary>
+
+在开始之前，推荐开发者添加以下界面元素，方便实现基本的实时音视频功能。
+
+- 本地预览窗口
+- 远端视频窗口
+- 结束按钮
+
+<img src="/Pics/QuickStart/UI_PC.jpg" alt="界面图" width="40%">
+
+</details>  
+
+**2. 初始化引擎**  
+
+使用 [createEngine\|_blank](@createEngine) 方法，将申请到的 AppID 和 AppSign 传入参数 “appID” 和 “appSign”。   
+
+<div class="mk-warning">
+
+SDK 同时也支持 Token 鉴权，若您对项目安全性有更高要求，建议您升级鉴权方式，可参考 [如何从 AppSign 鉴权升级为 Token 鉴权\|_blank](http://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo)。
+</div>
+
+```js
+// 引入 ZegoExpressEngine
+const zgEngine = window.require('zego-express-engine-electron/ZegoExpressEngine');
+const zgDefines = window.require('zego-express-engine-electron/ZegoExpressDefines');
+
+// 采用通用场景
+const profile = {
+appID : xxx,
+appSign : "xxx",
+scenario : zgDefines.ZegoScenario.Default
+};
+
+zgEngine.createEngine(profile)
+.then(() => {
+    console.log("init succeed")
+}).catch((e) => {
+    console.log("init failed", e)
+});
+```
+
+**3. 设置回调**
+
+
+关于回调的注册和取消，请参考 [设置回调\|_blank](!setting_callback) 
+
+<div class="mk-warning">
+
+为避免错过事件通知，建议在在创建引擎后立即注册回调
+</div>
+
+
+
+
+
+
+<a id="loginRoom"></a>
+
+### 3.2 登录房间
+
+**1. 登录**  
+
+调用 [loginRoom \|_blank](@loginRoom) 接口，传入房间 ID 参数 “roomID” 和用户参数 “user”，登录房间。如果房间不存在，调用该接口时会创建并登录此房间。
+
+- 同一个 AppID 内，需保证 “roomID” 信息的全局唯一。
+- 同一个 AppID 内，需保证 “userID” 全局唯一，建议开发者将其设置成一个有意义的值，可将 “userID” 与自己业务账号系统进行关联。
+- “userID” 不能为 “null”，否则会导致登录房间失败。
+
+
+```js
+zgEngine.loginRoom("TheRoomID",  { userID: "TheUserID", userName: "TheUserName"});
+```  
+
+
+**2. 监听登录房间后的事件回调**
+
+根据实际应用需要，在登录房间后监听想要关注的事件通知，比如房间状态更新、用户状态更新、流状态更新等。 
+
+- [onRoomStateUpdate\|_blank](!setting_callback#onRoomStateUpdate)：房间状态更新回调。登录房间后，当房间连接状态发生变更（如出现房间断开，登录认证失败等情况），SDK 会通过该回调通知。
+- [onRoomUserUpdate\|_blank](!setting_callback#onRoomUserUpdate)：用户状态更新回调。登录房间后，当房间内有用户新增或删除时，SDK 会通过该回调通知。
+
+    只有调用 [loginRoom\|_blank](@loginRoom) 接口登录房间时传入 [ZegoRoomConfig\|_blank](@-ZegoRoomConfig) 配置，且 “isUserStatusNotify” 参数取值为 “true” 时，用户才能收到 [onRoomUserUpdate\|_blank](!setting_callback#onRoomUserUpdate) 回调。
+
+
+- [onRoomStreamUpdate\|blank](!setting_callback#onRoomStreamUpdate)：流状态更新回调。登录房间后，当房间内有用户新推送或删除音视频流时，SDK 会通过该回调通知。 
+
+<div class="mk-warning">
+
+- 只有调用 [loginRoom\|_blank](@loginRoom) 接口登录房间时传入 [ZegoRoomConfig\|_blank](@-ZegoRoomConfig) 配置，且 “isUserStatusNotify” 参数取值为 “true” 时，用户才能收到 [onRoomUserUpdate\|_blank](!setting_callback#onRoomUserUpdate) 回调。
+- 通常情况下，如果某个用户想要播放其他用户推送的视频，可以在收到流状态更新（新增）的回调中，调用 [startPlayingStream\|_blank](/article/api?doc=express-video-sdk_API~javascript_electron~class~ZegoExpressEngine#start-playing-stream) 接口拉取远端推送的音视频流。
+</div>
+
+
+
+```js
+// 以下为常用的房间相关回调
+// 房间状态更新回调
+zgEngine.on("onRoomStateUpdate", (param)=>{
+    // 根据需要实现事件回调 
+});
+
+// 用户状态更新回调
+zgEngine.on("onRoomUserUpdate", (param)=>{
+    // 根据需要实现事件回调 
+});
+
+// 流状态更新回调
+zgEngine.on("onRoomStreamUpdate", (param)=>{
+    // 根据需要实现事件回调 
+});
+```  
+ 
+<a id="startPublishingStream"></a>
+
+### 3.3 推流  
+
+**1. 开始推流**  
+
+调用 [startPublishingStream\|_blank](@startPublishingStream) 接口，传入流 ID 参数 “streamID”，向远端用户发送本端的音视频流。  
+
+<div class = 'mk-warning'>  
+
+同一个 AppID 内，需保证 “streamID” 全局唯一。如果同一个 AppID 内，不同用户各推了一条 “streamID” 相同的流，会导致后推流的用户推流失败。</div>  
+
+```js
+// 开始推流
+zgEngine.startPublishingStream("streamID");
+```  
+
+**2. 启用本地预览（可选）**
+
+<details class="zg-primary">
+    <summary>设置预览视图并启动本地预览</summary> 
+
+如果希望看到本端的画面，可调用 [startPreview\|_blank](/article/api?doc=express-video-sdk_API~javascript_electron~class~ZegoExpressEngine#start-preview) 接口设置预览视图，并启动本地预览。  
+
+```js
+// 取一个canvas元素
+let localCanvas = document.getElementById("localCanvas");
+
+// 启动本地预览
+zgEngine.startPreview({
+    canvas: localCanvas,
+});
+``` 
+</details>  
+
+**3. 监听推流后的事件回调**
+
+根据实际应用需要，在推流后监听想要关注的事件通知，比如推流状态更新等。  
+ 
+[onPublisherStateUpdate\|_blank](!setting_callback#onPublisherStateUpdate)：推流状态更新回调。调用推流接口成功后，当推流状态发生变更（如出现网络中断导致推流异常等情况），SDK 在重试推流的同时，会通过该回调通知。  
+
+```js
+// 常用的推流相关回调
+// 推流状态更新回调
+zgEngine.on("onPublisherStateUpdate", (param)=>{
+    // 根据需要实现事件回调
+});
+```
+
+@@@Warning_How_to_switch_devices@@@ 
+
+### 3.4 拉流  
+
+**1. 开始拉流**  
+
+调用 [startPlayingStream\|_blank](/article/api?doc=express-video-sdk_API~javascript_electron~class~ZegoExpressEngine#start-playing-stream) 接口，根据传入的流 ID 参数 “streamID”，拉取远端推送的音视频流。    
+
+```js
+// 取一个canvas元素
+let remoteCanvas = document.getElementById("remoteCanvas");
+// 开始拉流
+zgEngine.startPlayingStream("streamID", {
+    canvas: remoteCanvas,
+});
+```		
+
+**2. 监听拉流后的事件回调**
+
+
+根据实际应用需要，在拉流后监听想要关注的事件通知，比如拉流状态更新等。 
+ 
+[onPlayerStateUpdate\|_blank](!setting_callback#onPlayerStateUpdate)：拉流状态更新回调。调用拉流接口成功后，当拉流状态发生变更（如出现网络中断导致推流异常等情况），SDK 在重试拉流的同时，会通过该回调通知。  
+
+```js
+// 常用的拉流相关回调
+// 拉流状态相关回调
+zgEngine.on("onPlayerStateUpdate", (param)=>{
+    // 根据需要实现事件回调
+});
+```
+
+### 3.5 在线测试推拉流功能
+
+@@@New_Experience_RTC_Functions@@@
+
+<a id="stopPublishingStream"></a>
+
+### 3.6 停止推拉流
+
+**1. 停止推流/预览**  
+
+调用 [stopPublishingStream\|_blank](@stopPublishingStream) 接口停止向远端用户发送本端的音视频流。    
+
+```js
+// 停止推流
+zgEngine.stopPublishingStream();
+```  
+
+如果启用了本地预览，调用 `stopPreview` 接口停止预览。  
+
+```js
+// 停止本地预览
+zgEngine.stopPreview();
+``` 
+
+**2. 停止拉流**
+
+调用 [stopPlayingStream\|_blank](@stopPlayingStream) 接口停止拉取远端推送的音视频流。  
+
+@@@Express_stopPlayingStream_time@@@
+
+```js
+// 停止拉流
+zgEngine.stopPlayingStream("streamID");
+``` 
+
+### 3.7 退出房间  
+
+调用 [logoutRoom\|_blank](@logoutRoom) 接口退出房间。 
+
+```js
+// 退出房间 
+zgEngine.logoutRoom("TheRoomID");   
+```  
+
+### 3.8 销毁引擎
+调用 [destroyEngine\|_blank](@destroyEngine) 接口销毁引擎，用于释放 SDK 使用的资源。 
+
+```js
+// 销毁引擎
+zgEngine.destroyEngine();
+```
+
+## 4 常见问题 
+
+1. **Electron 集成的最新版本谷歌内核显卡渲染加速，导致看不到本地预览和拉流画面，但是 CDN 拉流画面是正常的，该如何解决？** 
+  
+    目前解决该问题的方案主要有两个：    
+
+    - 禁用显卡加速：通过禁用显卡加速，不使用谷歌内核显卡渲染加速功能，可以正常观看到本地预览和拉流画面。    
+    - 更换旧版本 Electron：升级 Electron 版本，以适配最新版本谷歌内核显卡渲染加速功能。
+
+2. **当集成 SDK 并使用 Electron9-13 系列版本打包应用后，出现使用 DevTools 的 reload 导致界面 crash、或者出现收不到 SDK 回调的问题，该如何解决？** 
+ 
+    由于高版本的 Electron（Electron9 或以上版本），允许页面多次加载 Node modules，进而可能会导致 Node Addon module 的底层上下文被多次应用、而产生无法预知的问题。所以在 Electron9 ~ Electron14 之间的版本，可以通过以下方式处理：
+
+    在主进程 js 中，设置如下页面属性：`app.allowRendererProcessReuse = false`。（注意：这个属性在 Electron14 或以上版本被废弃，所以 Electron14 或以上版本仍然存在这个问题，暂时无法解决。）
+
+3. **macOS Monterey(12.2.1) 及以上版本运行 electron 应用导致摄像头、麦克风等设备不能使用或者 crash？**    
+
+    如何解决此问题，详情请参考 [FAQ\|_blank](http://doc-zh.zego.im/faq/macOS_Monterey_v12.2.1_access_solution?product=ExpressVideo&platform=electron)。
+
+4. **在 Linux 操作系统上集成 SDK，且使用 electron-builder 或其它打包工具打包后的应用，出现报错`sand-box`，该如何解决？** 
+
+    <div class="mk-warning">
+
+    如需使用 Linux 平台，请联系 ZEGO 技术支持。 
+    </div>
+
+    由于 Linux 系统下，Google Chrome 浏览器的安全性限制问题，需要通过以下方式处理该问题：
+
+    - **方式 1**: 在项目根目录下执行：`sudo chown root ./node_modules/electron/dist/chrome-sandbox && sudo chmod 4755 ./node_modules/electron/dist/chrome-sandbox`。
+    - **方式 2**：在 Linux 命令行启动 Electron 程序时，添加命令行参数`--no-sandbox`。
+    - **方式 3**：如果是在 Debian 系统下，通过以下方式处理 `sudo sysctl -w kernel.unprivileged_userns_clone=1`。
+
+5. **为什么 canvas 已经设置了宽、高，但最终的拉流画面却被放大了？**
+
+    由于不同的机型差异，设置 canvas 的宽、高后，拉流画面效果有一定的差异。此时，还需要设置 style 中的宽、高，即可保证拉流画面正常。

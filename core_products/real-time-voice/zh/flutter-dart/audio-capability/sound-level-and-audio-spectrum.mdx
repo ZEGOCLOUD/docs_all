@@ -1,0 +1,198 @@
+# 音频频谱与音量变化
+
+- - -
+
+## 1 功能简介
+
+- 音量变化：指某条流的音量大小，下文简称为“声浪”。
+ 
+    主要应用场景，在推拉流过程中，判断麦上的用户谁在说话，并做 UI 展示，例如：  
+    <img src="/Pics/Android/ZegoLiveRoom/SoundLevel.png">  
+
+- 音频频谱：即数字音频信号在各频点的能量值。
+
+    主要应用场景，在主播 K 歌场景中，已经推流或拉流的前提下，让主播或观众看到音调与音量变化的动画，例如：
+    <img src="/Pics/Android/ZegoLiveRoom/FrequencySpectrum.png">  
+  
+## 2 示例源码下载
+
+请参考 [下载示例源码\|_blank](!DownloadDemo/DownloadDemo) 获取源码。
+
+相关源码请查看 “lib/topics/AudioAdvanced/soundlevel_spectrum” 目录下的文件。
+
+
+## 3 前提条件
+
+在实现音频频谱与声浪功能之前，请确保：
+
+@@@Express-Video_Prerequisites@@@
+
+
+## 4 使用步骤
+
+### 4.1 监听声浪与音频频谱的回调接口
+
+- 接口原型
+
+    - 本地采集的声浪回调接口：
+
+        ```dart
+        class ZegoExpressEngine {
+
+        ...
+
+        /**
+         * 本地采集音频声浪回调
+         *
+         * 回调通知周期为 100 ms。
+         * @param soundLevel 本地采集的声浪值，取值范围为 0.0 ~ 100.0
+         */
+        static void Function(double soundLevel)? onCapturedSoundLevelUpdate;
+
+        ...
+    
+        }
+        ```
+
+    - 远端音频声浪回调接口：
+
+        ```dart
+        class ZegoExpressEngine {
+
+        ...
+
+        /**
+         * 远端拉流音频声浪回调
+         *
+         * 回调通知周期为 100 ms。
+         * @param soundLevels 远端的声浪键值对，key 为流 ID，value 为对应的流的声浪值，value 取值范围为 0.0 ~ 100.0
+         */
+        static void Function(Map<String, double> soundLevels)? onRemoteSoundLevelUpdate;
+
+        ...
+        
+        }
+        ```
+
+    - 本地采集的音频频谱回调接口：
+
+        ```dart
+        class ZegoExpressEngine {
+
+        ...
+
+        /**
+         * 本地采集音频频谱回调
+         *
+         * 回调通知周期为 100 ms。
+         * @param audioSpectrum 本地采集的音频频谱值数组，频谱值范围为 [0-2^30]
+         */
+        static void Function(List<double> audioSpectrum)? onCapturedAudioSpectrumUpdate;
+
+        ...
+
+        }
+        ```
+
+    - 远端拉流音频频谱回调接口：
+
+        ```dart
+        class ZegoExpressEngine {
+
+        ...
+
+        /**
+         * 远端拉流音频频谱回调
+         *
+         * 回调通知周期为 100 ms。
+         * @param audioSpectrums 远端音频频谱键值对，key 是流 ID，value 为对应的流的音频频谱值数组，频谱值范围为 [0-2^30]
+         */
+        static void Function(Map<String, List<double>> audioSpectrums)? onRemoteAudioSpectrumUpdate;
+
+        ...
+
+        }
+        ```
+
+- 调用示例
+
+    远端拉流声浪和远端音频频谱的回调给的是 Map，“key” 是当前房间内正在推流的其他用户的流 ID，“value” 是对应这条流的声浪/音频频谱数据。
+
+    可先通过 [onRoomStreamUpdate\|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomStreamUpdate.html) 回调方法获取到当前房间内存在的流列表并保存起来，然后通过保存的流列表来索引 Map 取得每条流对应的声浪/音频频谱数据。
+
+    以下示例将演示如何从回调方法中获取到声浪/音频频谱的数据并传递给 UI，具体上下文请参考示例源码中 “lib/topics/AudioAdvanced/soundlevel_spectrum” 目录下的文件。
+
+    ```dart
+    ZegoExpressEngine.onCapturedSoundLevelUpdate = (double soundLevel) {
+            // 开发者可以在这里进行获取本地声浪数据之后渲染到具体的 UI 控件上
+    }    
+    ZegoExpressEngine.onRemoteSoundLevelUpdate = (Map<String, double> soundLevels) {
+            // 开发者可以在这里进行获取远端声浪数据之后渲染到具体的 UI 控件上
+    }
+    ZegoExpressEngine.onCapturedAudioSpectrumUpdate = (List<double> audioSpectrum) {
+            // 开发者可以在这里进行获取本地音频频谱数据之后渲染到具体的 UI 控件上
+    }
+    ZegoExpressEngine.onRemoteAudioSpectrumUpdate = (Map<String, List<double>> audioSpectrums) {
+            // 开发者可以在这里进行获取远端音频频谱数据之后渲染到具体的 UI 控件上
+    }
+    ```
+
+### 4.2 启动监听音频频谱与声浪的回调的开关
+
+可分别针对音频频谱或声浪，调用启动监听对应回调的开关。  
+  
+- 启动声浪的监听：
+
+    ```dart
+    ZegoExpressEngine.instance.startSoundLevelMonitor();
+    ```
+
+    在调用上述接口之后，[onCapturedSoundLevelUpdate \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onCapturedSoundLevelUpdate.html) 会立刻触发，未推流时的回调值为 0；[onRemoteSoundLevelUpdate \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onRemoteSoundLevelUpdate.html) 需要在拉流 [startPlayingStream \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/startPlayingStream.html)之后，才会回调。  
+  
+- 启动频谱的监听： 
+
+    ```dart
+    ZegoExpressEngine.instance.startAudioSpectrumMonitor();
+    ```
+
+    在调用上述接口之后，[onCapturedAudioSpectrumUpdate \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onCapturedAudioSpectrumUpdate.html) 会立刻触发，未推流时的回调值为 0；[onRemoteAudioSpectrumUpdate \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onRemoteAudioSpectrumUpdate.html) 需要在拉流 [startPlayingStream \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/startPlayingStream.html) 之后，才会回调。  
+
+### 4.3 停止监听音频频谱与声浪的回调的开关
+
+可分别针对音频频谱或声浪，调用停止监听对应回调的开关。  
+
+- 停止声浪的监听：
+
+    ```dart
+    ZegoExpressEngine.instance.stopSoundLevelMonitor();
+    ```
+
+    在调用上述接口之后，[onCapturedSoundLevelUpdate \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onCapturedSoundLevelUpdate.html) 与 [onRemoteSoundLevelUpdate \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onRemoteSoundLevelUpdate.html) 不再回调。  
+  
+- 停止频谱的监听：
+
+    ```dart
+    ZegoExpressEngine.instance.stopAudioSpectrumMonitor();
+    ```
+
+    在调用上述接口之后，[onCapturedAudioSpectrumUpdate \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onCapturedAudioSpectrumUpdate.html) 与 [onRemoteAudioSpectrumUpdate \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onRemoteAudioSpectrumUpdate.html) 不再回调。
+
+## 5 API 参考列表
+
+| 方法 | 描述 |
+|-------|--------|
+| [startSoundLevelMonitor \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngineDevice/startSoundLevelMonitor.html) | 启动声浪监控 |
+| [stopSoundLevelMonitor \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngineDevice/stopSoundLevelMonitor.html) | 停止声浪监控 |
+| [startAudioSpectrumMonitor \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngineDevice/startAudioSpectrumMonitor.html) | 启动音频频谱监控 |
+| [stopAudioSpectrumMonitor \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngineDevice/stopAudioSpectrumMonitor.html) | 停止音频频谱监控 |
+| [onCapturedSoundLevelUpdate \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onCapturedSoundLevelUpdate.html) | 本地采集音频声浪回调 |
+| [onRemoteSoundLevelUpdate \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onRemoteSoundLevelUpdate.html) | 远端音频声浪回调接口 |
+| [onCapturedAudioSpectrumUpdate \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onCapturedAudioSpectrumUpdate.html) | 本地采集频谱回调 |
+| [onRemoteAudioSpectrumUpdate \|_blank](/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onRemoteAudioSpectrumUpdate.html) | 远端音频频谱回调接口 |
+
+
+## 相关文档
+
+- [媒体音量和通话音量有什么区别？\|_blank](https://doc-zh.zego.im/faq/system_volume)
+- [怎么处理无声问题？\|_blank](https://doc-zh.zego.im/faq/noaudio)
+- [怎么处理音量太小问题？\|_blank](https://doc-zh.zego.im/faq/audio_low)

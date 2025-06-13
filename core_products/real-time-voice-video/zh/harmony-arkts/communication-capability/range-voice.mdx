@@ -1,0 +1,412 @@
+# 游戏语音
+
+- - -
+
+## 1 功能简介
+
+@@@Express_Game_voice_info@@@
+
+
+## 2 示例源码下载
+
+请参考 [下载示例源码\|_blank](!ExpressVideoSDK-DownloadDemo/DownloadDemo) 获取源码。
+
+相关源码请查看 “/ZegoExpressExample/Examples/AdvancedAudioProcessing/RangeAudio” 目录下的文件。
+
+## 3 前提条件
+
+在实现范围语音之前，请确保：
+
+@@@Express-Video_Prerequisites@@@
+
+## 4 注意事项
+
+<div class="mk-warning">
+
+
+使用范围语音功能时请务必关注如下注意事项，以免影响接入。
+</div>
+
+如果您已经使用 ZEGO Express SDK 的实时音视频功能，需要注意以下事项：
+
+- 由于范围语音功能模块是基于 ZegoExpressEngine 的推拉流接口功能来实现的，使用时无需关注推拉流的概念。在范围语音场景下，推音频流的概念转变为“开启麦克风”，拉音频流的概念转变为“开启扬声器”。建议您不要在接入范围语音功能的同时再使用 [startPublishingStream\|_blank](@startPublishingStream)、[startPlayingStream\|_blank](@startPlayingStream) 接口做推拉流操作，避免效果冲突。
+- 范围语音功能模块中推拉流的相关回调（[onPublisherStateUpdate\|_blank](@onPublisherStateUpdate) 、[onPlayerStateUpdate\|_blank](@onPlayerStateUpdate)、[onPublisherQualityUpdate\|_blank](@onPublisherQualityUpdate) 和 [onPlayerQualityUpdate\|_blank](@onPlayerQualityUpdate)）不再生效。
+
+
+## 5 使用步骤
+
+![/Pics/Express/RangeVoice_android.png](//doc.oa.zego.im/Pics/Express/RangeVoice_android.png)
+
+上图仅展示了实现游戏语音功能的核心步骤与接口，开发者可以根据业务需要，参考下文文档的详细介绍，实现其他相关接口。
+
+### 5.1 创建引擎
+
+调用 [createEngine\|_blank](@createEngine) 接口，将申请到到 AppID 和 AppSign 传入参数 “appID” 和 “appSign”，创建引擎单例对象。引擎当前只支持同时创建一个实例，超出后将返回 null。
+
+```java
+/** 定义 SDK 引擎对象 */
+ZegoExpressEngine engine;
+
+ZegoEngineProfile profile = new ZegoEngineProfile();
+/** 请通过官网注册获取，格式为 123456789L */
+profile.appID = appID;
+/** 64个字符，请通过官网注册获取，格式为"0123456789012345678901234567890123456789012345678901234567890123" */
+profile.appSign = appSign;
+/** 通用场景接入，请根据实际情况选择合适的场景 */
+profile.scenario = ZegoScenario.DEFAULT;
+/** 设置app的application 对象 */
+profile.application = getApplication();
+/** 创建引擎 */
+engine = ZegoExpressEngine.createEngine(profile, null);
+```
+
+### 5.2 创建范围语音模块 
+
+调用的 [createRangeAudio \|_blank](@createRangeAudio) 方法创建范围语音实例。
+
+```java
+ZegoRangeAudio rangeAudio = engine.createRangeAudio();
+if (rangeAudio == null) {
+    printf("创建范围语音实例模块失败");
+}
+```
+
+### 5.3 监听范围语音事件回调 
+
+可以根据需要调用 [setEventHandler \|_blank](@setEventHandler-ZegoRangeAudio) 接口为麦克风设置事件回调，用于监听麦克风的开启状态 [onRangeAudioMicrophoneStateUpdate \|_blank](@onRangeAudioMicrophoneStateUpdate) 通知。
+
+```java
+// set range audio event handler
+rangeAudio.setEventHandler(new IZegoRangeAudioEventHandler() {
+    @Override
+    public void onRangeAudioMicrophoneStateUpdate(ZegoRangeAudio rangeAudio, ZegoRangeAudioMicrophoneState state, int errorCode) {
+        super.onRangeAudioMicrophoneStateUpdate(rangeAudio, state, errorCode);
+        AppLogger.getInstance().callApi("microphone state update. state: %s, errorCode: %d", state, errorCode);
+    }
+});
+```
+
+### 5.4 登录房间
+
+传入用户 ID 参数 userID 和 userName 创建 ZegoUser 用户对象后，调用 [loginRoom\|_blank](@loginRoom) 接口，传入房间 ID 参数 roomID 和用户参数 user，登录房间。  
+
+<div class="mk-warning">
+
+- 同一个 AppID 内，需保证 roomID 全局唯一。  
+- 同一个 AppID 内，需保证 userID 全局唯一，建议开发者将其设置成一个有意义的值，可将 userID 与自己业务账号系统进行关联。  
+- userID 不能为空，否则会导致登录房间失败。
+</div>
+
+```java
+/** 创建用户 */
+ZegoUser user = new ZegoUser("user1");
+
+/** 开始登录房间 */
+engine.loginRoom("room1", user);
+```
+
+@@@Express_Login_Fail@@@ 
+
+
+### 5.5 设置收听者的当前位置
+
+开发者可以通过调用 [updateSelfPosition\|_blank](@updateSelfPosition) 接口，设置听者自身的所在位置和方位，或者在自身方位发生变化时更新自己在世界坐标系中的位置和朝向。
+
+<div class="mk-hint">
+
+- 在调用 [enableSpeaker\|_blank](@enableSpeaker) 打开扬声器之前如果没有调用该接口设置位置信息，则无法接收除小队以外其他人的声音。
+- 自身坐标系三个轴的坐标值可以通过第三方 3D 引擎的旋转角度换算矩阵得到。
+</div>
+
+<table>
+  <colgroup>
+    <col width="20%">
+    <col width="80%">
+  </colgroup>
+  <tbody><tr>
+    <td>参数名</td>
+    <td>描述</td>
+  </tr>
+  <tr>
+    <td>position</td>
+    <td>自身在世界坐标系中的坐标，参数是长度为 3 的 float 数组，三个值依次表示前、右、上的坐标值。</td>
+  </tr>
+  <tr>
+    <td>axisForward</td>
+    <td>自身坐标系前轴的单位向量，参数是长度为 3 的 float 数组，三个值依次表示前、右、上的坐标值。</td>
+  </tr>
+  <tr>
+    <td>axisRight</td>
+    <td>自身坐标系右轴的单位向量，参数是长度为 3 的 float 数组，三个值依次表示前、右、上的坐标值。</td>
+  </tr>
+  <tr>
+    <td>axisUp</td>
+    <td>自身坐标系上轴的单位向量，参数是长度为 3 的 float 数组，三个值依次表示前、右、上的坐标值。</td>
+  </tr>
+</tbody></table>
+
+<img src="/Pics/Common/RangeAudio/Coordinate_System.png" width="60%"/>
+
+```java
+// 自身在世界坐标系中的坐标，顺序是前、右、上。
+float[] position = new float[]{100.0, 100.0, 100.0};
+// 自身坐标系前朝向的单位向量。
+float[] axisForward = new float[]{1.0,0.0,0.0};
+// 自身坐标系右朝向的单位向量。
+float[] axisRight = new float[]{0.0,1.0,0.0};
+// 自身坐标系上朝向的单位向量。
+float[] axisUp = new float[]{0.0,0.0,1.0};
+
+rangeAudio.updateSelfPosition(position, axisForward, axisRight, axisUp);
+``` 
+
+### 5.6 添加或更新发声者位置信息
+
+登录房间成功后，需要通过调用 [updateAudioSource\|_blank](@updateAudioSource) 接口，添加或更新发声者的位置信息。
+
+@@@Range_Voice_Role_Warning@@@
+
+- userID：为房间内其他发声用户的 ID。
+- position：发声者在世界坐标系中的坐标，参数是长度为 3 的 float 数组，三个值依次表示前、右、上的坐标值。
+
+```java
+// 用户在世界坐标系中的坐标，顺序是前、右、上。
+float[] position = new float[]{100.0, 100.0, 100.0};
+// 添加/更新用户位置
+rangeAudio.updateAudioSource("abc",position);
+``` 
+
+### 5.7 （可选）设置音频接收距离
+
+<details class="zg-primary">
+    <summary>请根据业务需要，选择是否设置音频接收距离。如果不设置，默认表示仅能接收本小队的成员声音。</summary>
+
+调用 [setAudioReceiveRange\|_blank](@setAudioReceiveRange) 接口设置听者接收音频距离的最大范围，即以自身为起点，3D 空间中以设置的距离为立体空间。设置该范围后，在开启 3D 音效的情况下，声音将会随距离的增加而衰减，直至超出所设置的范围，则不再有声音。
+
+```java
+// 设置音频接收距离的最大范围，超过该范围的音源声音会听不见
+rangeAudio.setAudioReceiveRange(1000);
+```
+
+同时您也可以通过 [setAudioReceiveRange\|_blank](@setAudioReceiveRange__1) 接口进一步控制衰减范围。距离小于 min 时，音量不会随着距离的增加而衰减；距离大于 max 时，将无法听到对方的声音。
+
+```java
+// 设置 3D 音效的衰减范围区间 [min, max] 
+ZegoReceiveRangeParam param = new ZegoReceiveRangeParam();
+param.min = reciveRangeMin;
+param.max = reciveRangeMax;
+rangeAudio.setAudioReceiveRange(param);
+```  
+
+<div class="mk-hint">
+
+如果不设置音频接收距离，则表示只能接收本小队内的成员声音，无法接收小队外的所有声音。设置后，小队内的语音，不会受到音频接收距离的限制，也不会有 3D 音效。
+</div>
+
+</details>
+
+### 5.8 （可选）实现 3D 音效
+
+<details class="zg-primary">
+    <summary>请根据业务需要，选择是否开启 3D 音效、以及是否设置本地播放器的 3D 音效。</summary>
+
+#### 5.8.1 开启 3D 音效
+
+调用 [enableSpatializer\|_blank](@enableSpatializer) 接口设置 3D 音效，enable 取值为 true 时表示开启 3D 音效，此时房间内非小队成员的音频，会随着发声者离自身的距离和方向的变化而产生空间感的变化，为 false 时表示关闭 3D 音效。（可随时开启或关闭）
+
+<div class="mk-warning">
+
+该功能只对小队以外的人生效。
+</div>
+
+```java
+rangeAudio.enableSpatializer(true);
+``` 
+
+#### 5.8.2 设置本地播放器的 3D 音效
+
+开发者可以将媒体播放器或音效播放器作为声源，并设置其在世界坐标系中的位置。该功能可应用于在虚拟世界场景中的指定位置播放背景音乐，使其拥有 3D 音效效果。
+
+1. 调用 [enableSpatializer\|_blank](@enableSpatializer) 接口开启 3D 音效。
+2. 设置本地播放器的 3D 音效
+    - 媒体播放器：
+    
+        <div class="mk-hint">
+
+        请参考 [媒体播放器\|_blank](!Other_Functions/MediaPlayer) 了解如何创建媒体播放器与加载媒体资源。
+        </div>
+
+        1. 调用 [createMediaPlayer\|_blank](@createMediaPlayer) 接口创建媒体播放器。
+        2. 调用 [ZegoMediaPlayer.updatePosition\|_blank](@updatePosition-ZegoMediaPlayer-class) 接口设置媒体播放器在世界坐标系中的位置。
+        3. 调用 [loadResourceWithConfig\|_blank](@loadResourceWithConfig) 接口加载媒体资源。
+    - 音效播放器：
+    
+        <div class="mk-hint">
+
+        请参考 [音效文件播放器\|_blank](!AudioAdvanced/Audio_Player) 了解如何创建音效播放器与加载音效资源。
+        </div>
+
+        1. 调用 [createAudioEffectPlayer\|_blank](@createAudioEffectPlayer) 接口创建音效播放器。
+        2. 调用 [ZegoAudioEffectPlayer.start\|_blank](@start-ZegoAudioEffectPlayer-class) 接口播放音效资源。
+        3. 在收到 [onAudioEffectPlayStateUpdate\|_blank](@onAudioEffectPlayStateUpdate) 回调状态为 `ZegoAudioEffectPlayState.Playing` 后，调用 [ZegoAudioEffectPlayer.updatePosition\|_blank](@updatePosition-ZegoAudioEffectPlayer-class) 接口设置正在播放的音效资源在世界坐标系中的位置。
+
+```java
+// 开启 3D 音效，此步骤为前置条件
+rangeAudio.enableSpatializer(true);
+
+// 设置本地播放器的位置
+// 媒体播放器
+// 1. 创建媒体播放器
+ZegoMediaPlayer mediaPlayer = engine.createMediaPlayer();
+// 2. 设置媒体播放器在世界坐标系中的位置
+float [] mediaPlayerPosition = new float[3];
+mediaPlayer.updatePosition(mediaPlayerPosition);
+// 3. 使用媒体播放器加载媒体资源
+ZegoMediaPlayerResource resource = new ZegoMediaPlayerResource();
+resource.loadType = ZegoMultimediaLoadType.FILE_PATH;
+resource.filePath = "path";
+mediaPlayer.loadResourceWithConfig(resource, new IZegoMediaPlayerLoadResourceCallback() {
+    @Override
+    public void onLoadResourceCallback(int errorCode) {
+        if (errorCode == 0)
+            mediaPlayer.start();
+    }
+});
+
+// 音效播放器
+// 1. 创建音效播放器
+ZegoAudioEffectPlayer audioEffectPlayer = engine.createAudioEffectPlayer();
+// 2. 开始播放音效资源
+int effectSoundID = 1;
+String path = "path";
+audioEffectPlayer.start(effectSoundID, path, null);
+// 3. 收到 [onAudioEffectPlayStateUpdate] 回调状态为 ZegoAudioEffectPlayState.Playing 后
+//    设置音效播放器在世界坐标系中的位置
+float [] audioEffectPlayerPosition = new float[3];
+audioEffectPlayer.updatePosition(effectSoundID, audioEffectPlayerPosition);
+```
+</details>
+
+
+### 5.9 开启麦克风、扬声器
+
+登录房间成功后：
+
+- 调用 [enableMicrophone\|_blank](@enableMicrophone) 接口，设置是否开启麦克风。当 enable 取值为 true 时表示开启，此时 SDK 将会自动使用主通道推音频流，为 false 时表示关闭。（可随时开启或关闭）
+    
+    开发者可以通过监听 [onRangeAudioMicrophoneStateUpdate\|_blank](@onRangeAudioMicrophoneStateUpdate) 事件回调，获取麦克风更新后的状态。
+
+- 调用 [enableSpeaker\|_blank](@enableSpeaker) 接口，设置是否开启扬声器。enable 取值为 true 时表示开启，此时将会自动拉取房间内的音频流，为 false 时表示关闭。（可随时开启或关闭）
+
+<div class="mk-warning">
+
+调用 [enableSpeaker\|_blank](@enableSpeaker) 接口后，当超过最大拉流数限制（目前为 20 路）时，会优先拉取小队内成员音频流（需设置小队模式），再拉取世界内距离自身范围最近的音频流。  
+</div>
+
+```java
+// 开启麦克风
+rangeAudio.enableMicrophone(true);
+// 开启扬声器
+rangeAudio.enableSpeaker(true);
+``` 
+
+### 5.10 （可选）加入小队、设置语音模式
+
+<details class="zg-primary">
+    <summary>请根据业务需要，选择是否实现游戏小队、小队语音等功能。</summary>
+
+#### 5.10.1 加入小队
+
+调用 [setTeamID\|_blank](@setTeamID) 接口可根据需要设置想要加入的小队 ID（可随时变更 ID），设置 ID 后即可直接加入。加入小队后，与同一小队内队员之间的交流不受范围语音和 3D 音效的限制。
+
+<p id="setRangeAudioMode"></p>
+
+```java
+rangeAudio.setTeamID("123");
+```  
+
+#### 5.10.2 设置通用语音模式
+
+调用 [setRangeAudioMode\|_blank](@setRangeAudioMode) 接口设置范围语音模式（可随时切换模式），mode 参数取值为 ZegoRangeAudioModeWorld 或 ZegoRangeAudioSecretTeam 时表示可以听到所有处于世界模式的人的声音，取值为 ZegoRangeAudioModeTeam 时表示只能听到同一小队内其他成员的声音。
+
+
+<table>
+  <colgroup>
+    <col width="20%">
+    <col width="30%">
+    <col width="50%">
+  </colgroup>
+<tbody><tr>
+<th>语音模式</th>
+<th>参数取值</th>
+<th>功能描述</th>
+</tr>
+<tr>
+<td>全世界</td>
+<td>WORLD</td>
+<td>设置该模式后，此用户能与小队成员互相通话，且能与范围内其他全世界模式的人互相通话。</td>
+</tr>
+<tr>
+<td>仅小队</td>
+<td>TEAM</td>
+<td>设置该模式后，此用户仅能与小队成员互相通话。</td>
+</tr>
+<tr>
+<td>隐秘小队</td>
+<td>SECRET_TEAM</td>
+<td>设置该模式后，此用户能与小队成员互相通话，且能单向接收范围内全世界模式的人的语音。</td>
+</tr>
+</tbody></table>
+
+```java
+rangeAudio.setRangeAudioMode(ZegoRangeAudioMode.WORLD);
+```
+
+@@@RangeVoice_Mode_Combination@@@
+
+#### 5.10.3 设置自定义语音模式
+
+@@@Express_Game_voice_Step511@@@
+
+```java
+rangeAudio.setRangeAudioCustomMode(ZegoRangeAudioSpeakMode.ALL, ZegoRangeAudioListenMode.ALL);
+```
+</details>
+
+
+### 5.11 销毁范围语音模块
+
+当不再使用范围语音模块时可调用 [destroyRangeAudio \|_blank](@destroyRangeAudio) 接口销毁，释放范围语音模块占用的资源。
+
+```java
+engine.destroyRangeAudio(rangeAudio);
+```
+
+### 5.12 退出房间 
+
+调用 [logoutRoom\|_blank](@logoutRoom) 接口退出房间，退出后将自动关闭麦克风和扬声器（即无法发送自己的音频，也无法收听别人的声音），并清空发声者信息列表。
+
+```java
+// 退出房间
+engine.logoutRoom("roomID");
+```
+
+
+## 6 常见问题
+
+
+1. **收听范围内的流最多支持同时拉多少路？**
+
+为保证语音清晰，附近超过 20 人发声时，只能听到离自己最近的 20 个发声者的声音。如果超过 20 人且距离一样，则按照调用 [updateAudioSource\|_blank](@updateAudioSource) 接口时，每个 userID 首次传入的先后顺序而定。
+
+2. **范围语音的“范围”指的是收听范围还是发声范围？**
+
+范围语音的“范围”指的是收听范围。
+
+3. **小队语音中的成员连麦有 3D 音效吗？**
+
+小队中的语音是普通连麦的效果，暂无 3D 音效。
+
+4. **若本身就在调用推流接口，此时需要使用范围语音会存在冲突吗？**
+
+范围语音当前使用主路发送音频，如果客户已经使用主路，则会存在冲突。

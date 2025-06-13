@@ -1,0 +1,261 @@
+# 万人范围音视频
+
+- - -
+
+## 功能简介
+
+@@@Express_Real_time_range_info@@@
+
+
+
+## 前提条件
+
+<div class="mk-warning">
+
+使用该服务会产生相应的费用，请联系 ZEGO 商务人员了解具体的费用情况。
+</div>
+
+在实现实时范围音视频前，请确保：
+- 已联系 ZEGO 技术支持进行特殊编包，并开通万人范围音视频服务。
+- 已在项目中集成 ZEGO Express SDK。
+- 已在 [ZEGO 控制台\|_blank](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目管理\|_blank](#1265)。
+
+
+## 实现流程
+
+下图为 API 接口调用时序图：
+
+<img src="/Pics/Express/rangeScene.png" width="80%" />
+
+下文详细介绍各 API 接口的对应实现步骤。
+
+### 1 创建引擎
+
+调用 [createEngine\|_blank](@createEngine) 接口，将申请到到 AppID 和 AppSign 传入参数 “appID” 和 “appSign”，创建引擎单例对象。引擎当前只支持同时创建一个实例，超出后将返回 null。
+
+```java
+/** 定义 SDK 引擎对象 */
+ZegoExpressEngine engine;
+
+ZegoEngineProfile profile = new ZegoEngineProfile();
+/** 请通过官网注册获取，格式为 123456789L */
+profile.appID = appID;
+/** 64个字符，请通过官网注册获取，格式为"0123456789012345678901234567890123456789012345678901234567890123" */
+profile.appSign = appSign;
+/** 通用场景接入 */
+profile.scenario = ZegoScenario.DEFAULT;
+/** 设置app的application 对象 */
+profile.application = getApplication();
+/** 创建引擎 */
+engine = ZegoExpressEngine.createEngine(profile, null);
+```
+
+
+### 2 创建范围场景模块
+
+调用 [createRangeScene\|_blank](@createRangeScene) 接口创建范围场景实例，当前只支持同时创建一个实例，超出后将返回 null。
+
+```java
+/** 定义范围场景对象 */
+ZegoRangeScene rangeScene;
+
+/** 创建范围场景 */
+rangeScene = engine.createRangeScene();
+```
+
+### 3 监听范围场景事件回调
+
+您可以根据需要调用 [ZegoRangeSceneStream.setEventHandler\|_blank](@setEventHandler-ZegoRangeSceneStream) 接口分别设置范围场景、范围场景流管理事件回调，用于监听范围场景、范围场景流管理事件回调。
+
+```java
+/** 设置范围场景事件回调 */
+rangeScene.setEventHandler(new IZegoRangeSceneEventHandler() {
+    @Override
+    public void onSceneStateUpdate(ZegoRangeScene rangeScene, ZegoSceneState state, int errorCode) {
+        super.onSceneStateUpdate(rangeScene, state, errorCode);
+    }
+
+    @Override
+    public void onEnterView(ZegoRangeScene rangeScene, ZegoUser user, ZegoPosition position) {
+        super.onEnterView(rangeScene, user, position);
+    }
+
+    @Override
+    public void onLeaveView(ZegoRangeScene rangeScene, String userID) {
+        super.onLeaveView(rangeScene, userID);
+    }
+
+    // 无需关注
+    @Override
+    public void onUserStatusUpdate(ZegoRangeScene rangeScene, String userID, ZegoPosition position, int channel, byte[] status) {
+        super.onUserStatusUpdate(rangeScene, userID, position, channel, status);
+    }
+
+    // 无需关注
+    @Override
+    public void onUserCommandUpdate(ZegoRangeScene rangeScene, String userID, ZegoPosition position, int channel, byte[] command) {
+        super.onUserCommandUpdate(rangeScene, userID, position, channel, command);
+    }
+
+    // 无需关注
+    @Override
+    public void onCustomCommandUpdate(ZegoRangeScene rangeScene, byte[] command) {
+        super.onCustomCommandUpdate(rangeScene, command);
+    }
+});
+
+/** 范围场景流管理事件回调 */
+rangeScene.getRangeSceneStream().setEventHandler(new IZegoRangeSceneStreamEventHandler() {
+    @Override
+    public void onUserStreamStateUpdate(ZegoRangeScene rangeScene, String userID, String streamID, ZegoStreamState state) {
+        super.onUserStreamStateUpdate(rangeScene, userID, streamID, state);
+    }
+
+    @Override
+    public void onUserMicUpdate(ZegoRangeScene rangeScene, String userID, ZegoDeviceState state) {
+        super.onUserMicUpdate(rangeScene, userID, state);
+    }
+
+    @Override
+    public void onUserCameraUpdate(ZegoRangeScene rangeScene, String userID, ZegoDeviceState state) {
+        super.onUserCameraUpdate(rangeScene, userID, state);
+    }
+
+    @Override
+    public void onUserSpeakerUpdate(ZegoRangeScene rangeScene, String userID, ZegoDeviceState state) {
+        super.onUserSpeakerUpdate(rangeScene, userID, state);
+    }
+});
+```
+
+### 4 设置范围场景流管理参数
+
+您可以根据需要调用 [setReceiveRange\|_blank](@setReceiveRange) 以及 [enableRangeSpatializer\|_blank](@enableRangeSpatializer) 接口设置范围场景参数，控制当前用户音视频的接收范围、设置 3D 音效距离的衰减范围区间 [min, max]、是否开启 3D 音效。
+
+<div class="mk-warning">
+
+当前用户实际拉流范围受“音视频的接收范围”和“AOI 范围”影响，当远端用户在当前用户的“AOI 范围”内时，假设二者“绝对距离”为 r，“音视频的接受范围”为 R，即当 r < R 时，ZEGO Express SDK 将会主动拉取远端用户的音视频流。
+
+</div>
+
+```java
+/** 设置拉流最大接收范围 */
+int errorCode = rangeScene.getRangeSceneStream().setReceiveRange(reciveRange);
+
+/** （可选）进一步设置 3D 音效的衰减范围区间 [min, max] */
+/** 距离小于 min 时，音量不会随着距离的增加而衰减；距离大于 max 时，将无法听到对方的声音 */
+ZegoReceiveRangeParam param = new ZegoReceiveRangeParam();
+param.min = reciveRangeMin;
+param.max = reciveRangeMax;
+int errorCode = rangeScene.getRangeSceneStream().setReceiveRange(param);
+
+/** 开启 3D 音效 */
+int error = rangeScene.getRangeSceneStream().enableRangeSpatializer(enable);
+```
+
+### 5 登录场景
+
+调用 [loginScene\|_blank](@loginScene) 接口，传入场景参数：`sceneID`、`user`、`position`、`broadcastMode`，即可登录场景。
+
+<div class="mk-warning">
+
+- 同一个 AppID 内，需保证 userID 全局唯一，建议开发者将其设置成一个有意义的值，可将 userID 与自己业务账号系统进行关联。  
+- userID 不能为空，否则会导致登录场景失败。
+</div>
+
+```java
+/** 登录场景参数 */
+ZegoSceneParam param = new ZegoSceneParam();
+/** 创建用户 */
+ZegoUser user = new ZegoUser(userID, userName);
+/** 设置用户的场景坐标、运动朝向、摄像机朝向 */
+ZegoPosition position = new ZegoPosition()
+for (int i = 0; i < 3; ++i) {
+    position.coordinate[i] = coordinate[i];
+    position.motionOrientation.axisForward[i] = rotateMatrixFront[i];
+    position.motionOrientation.axisRight[i] = rotateMatrixRight[i];
+    position.motionOrientation.axisUp[i] = rotateMatrixUp[i];
+    position.cameraOrientation.axisForward[i] = rotateMatrixFront[i];
+    position.cameraOrientation.axisRight[i] = rotateMatrixRight[i];
+    position.cameraOrientation.axisUp[i] = rotateMatrixUp[i];
+}
+/** 设置场景 ID */
+param.sceneID = sceneID;
+/** (可选)配置模版 ID，若不需要自定义模版，即使用默认的场景配置，无需传此参数*/
+param.templateID = templateID;
+param.user = user;
+param.position = position;
+/** 设置用户登录场景的广播模式 */
+param.broadcastMode = ZegoBroadcastMode.ALL;
+rangeScene.loginScene(param, new IZegoRangeSceneLoginSceneCallback() {
+    @Override
+    public void onLoginSceneCallback(int errorCode, ZegoSceneConfig config) {
+    }
+});
+```
+
+<div class="mk-warning">
+
+
+如果您需要自定义模板，详情请参考 [服务端 API - 场景模版配置\|_blank](#19659)。
+</div>
+
+### 6 推流到场景
+
+调用 [startPublishingStreamInScene\|_blank](@startPublishingStreamInScene) 接口，在场景内推流，如果当前用户在场景内其他用户的音视频的接受范围内，其他用户可以接收当前用户的音视频流。
+```java
+/** 创建推流到场景配置 */
+ZegoScenePublisherConfig scenePublisherConfig = new ZegoScenePublisherConfig();
+/** 推流到 rangeScene 登录的场景 */
+scenePublisherConfig.rangeSceneHandle = rangeScene.getRangeSceneHandle();
+engine.startPublishingStreamInScene(streamID, ZegoPublishChannel.MAIN, scenePublisherConfig);
+```
+
+### 7 更新用户位置
+
+调用 [updateUserPosition\|_blank](@updateUserPosition) 接口，更新当前用户的位置。
+
+```java
+/** 设置用户的场景坐标、运动朝向、摄像机朝向 */
+ZegoPosition position = new ZegoPosition()
+for (int i = 0; i < 3; ++i) {
+    position.coordinate[i] = coordinate[i];
+    position.motionOrientation.axisForward[i] = rotateMatrixFront[i];
+    position.motionOrientation.axisRight[i] = rotateMatrixRight[i];
+    position.motionOrientation.axisUp[i] = rotateMatrixUp[i];
+    position.cameraOrientation.axisForward[i] = rotateMatrixFront[i];
+    position.cameraOrientation.axisRight[i] = rotateMatrixRight[i];
+    position.cameraOrientation.axisUp[i] = rotateMatrixUp[i];
+}
+/** 更新用户位置 */
+int errorCode = rangeScene.updateUserPosition(position);
+```
+
+### 8 退出场景
+
+调用 [logoutScene\|_blank](@logoutScene) 接口退出场景。
+
+```java
+/** 退出场景 */
+rangeScene.logoutScene(new IZegoRangeSceneLogoutSceneCallback() {
+    @Override
+    public void onLogoutSceneCallback(int errorCode) {
+    }
+});
+```
+
+### 9 销毁范围场景模块
+
+当不再使用范围场景模块时，可以调用 [destroyRangeScene\|_blank](@destroyRangeScene) 接口销毁范围语音模块。
+
+```java
+engine.destroyRangeScene(rangeScene);
+```
+
+### 10 销毁引擎
+
+当不再使用 ZEGO Express SDK 时，可以调用 [destroyEngine\|_blank](@destroyEngine) 销毁引擎。
+
+```java
+ZegoExpressEngine.destroyEngine(null);
+```
