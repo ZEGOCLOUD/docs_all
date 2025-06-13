@@ -1,0 +1,352 @@
+# 实现视频通话
+
+---
+
+
+
+@@@Common_usage_introduction@@@
+
+## 2 前提条件
+
+在实现基本的实时音视频功能之前，请确保：
+
+@@@Express_Video_Implementation_Process_Prerequisites@@@
+
+@@@Java_base_code@@@
+
+<a id="process"></a>
+
+## 3 实现流程
+
+@@@quick_start_base_intro@@@
+
+<a id="initialization"> </a>
+
+### 3.1 初始化
+
+**1. 创建界面**
+
+根据场景需要，为你的项目创建视频通话的用户界面。我们推荐你在项目中添加如下元素：
+
+- 本地视频窗口
+- 远端视频窗口
+- 结束通话按钮
+
+![/Pics/QuickStart/express_quickstart_video_call.png](http://doc.oa.zego.im/Pics/QuickStart/express_quickstart_video_call.png)
+
+
+**2. 准备基础工作，导入 ZEGO Express SDK 的相关类和常量**
+
+<details class="zg-primary">
+    <summary>示例代码</summary>
+
+```java
+import im.zego.zegoexpress.ZegoExpressEngine;
+import im.zego.zegoexpress.callback.IZegoDestroyCompletionCallback;
+import im.zego.zegoexpress.callback.IZegoEventHandler;
+import im.zego.zegoexpress.constants.ZegoPlayerState;
+import im.zego.zegoexpress.constants.ZegoPublisherState;
+import im.zego.zegoexpress.constants.ZegoRoomStateChangedReason;
+import im.zego.zegoexpress.constants.ZegoScenario;
+import im.zego.zegoexpress.constants.ZegoStreamQualityLevel;
+import im.zego.zegoexpress.constants.ZegoUpdateType;
+import im.zego.zegoexpress.entity.ZegoCanvas;
+import im.zego.zegoexpress.entity.ZegoEngineProfile;
+import im.zego.zegoexpress.entity.ZegoRoomConfig;
+import im.zego.zegoexpress.entity.ZegoStream;
+import im.zego.zegoexpress.entity.ZegoUser;
+```
+
+```java
+ZegoExpressEngine engine;
+@Override
+protected void onCreate(Bundle savedInstanceState) {
+    super.onCreate(savedInstanceState);
+    setContentView(R.layout.activity_main);
+
+    // 在通话前需请求相应摄像头、录音权限
+    requestPermission();
+
+    // 开始通话按钮
+    findViewById(R.id.startButton).setOnClickListener(new View.OnClickListener() {
+        // 点击开始通话
+        @Override
+        public void onClick(View view) {
+            // 创建Express SDK 实例
+            createEngine();
+            // 监听常用事件
+            setEventHandler();
+            // 登录房间
+            loginRoom();
+            // 开始预览及推流
+            startPublish();
+        }
+    });
+
+    // 停止通话按钮
+    findViewById(R.id.stopButton).setOnClickListener(new View.OnClickListener() {
+        // 点击停止通话
+        @Override
+        public void onClick(View view) {
+            engine.logoutRoom();
+            ZegoExpressEngine.destroyEngine(new IZegoDestroyCompletionCallback() {
+                @Override
+                public void onDestroyCompletion() {
+                    //销毁成功
+                }
+            });
+
+        }
+    });
+}
+
+//请求摄像头、录音权限
+private void requestPermission() {
+    String[] permissionNeeded = {
+            "android.permission.CAMERA",
+            "android.permission.RECORD_AUDIO"};
+    if (ContextCompat.checkSelfPermission(getApplicationContext(), "android.permission.CAMERA") != PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(getApplicationContext(), "android.permission.RECORD_AUDIO") != PackageManager.PERMISSION_GRANTED) {
+        //101 为requestCode，可以是任何大于 0 的数字，会透传到权限请求结果回调 onRequestPermissionsResult
+        requestPermissions(permissionNeeded, 101);
+    }
+}
+```
+</details>
+
+<h1 id="CreateEngine"> </h1>
+
+**3. 创建引擎**
+
+调用 [createEngine \|_blank](@createEngine) 接口，将申请到的 AppID 和 AppSign 传入参数 “appID” 和 “appSign”。
+
+根据 App 实际的音视频业务选择一个合适的场景，请参考 [场景化音视频配置\|_blank](!video_proflie) 文档，把选择好的场景枚举传入参数 "scenario"。
+
+
+<div class="mk-warning">
+
+SDK 同时也支持 Token 鉴权，若您对项目安全性有更高要求，建议您升级鉴权方式，可参考 [如何从 AppSign 鉴权升级为 Token 鉴权\|_blank](http://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo)。
+</div>
+
+```Java
+// 创建 ZegoExpress 实例，监听常用事件
+void createEngine() {
+    ZegoEngineProfile profile = new ZegoEngineProfile();
+    profile.appID = appID;  // 请通过官网注册获取，格式为：1234567890L
+    profile.appSign = appSign; //请通过官网注册获取，格式为：@"0123456789012345678901234567890123456789012345678901234567890123"（共64个字符）
+    profile.scenario = ZegoScenario.BROADCAST;  // 指定使用直播场景 (请根据实际情况填写适合你业务的场景)
+    profile.application = getApplication();
+    engine = ZegoExpressEngine.createEngine(profile, null);
+}
+```
+
+**4. 设置回调**
+
+您可以通过实现 [IZegoEventHandler\|_blank](@-IZegoEventHandler) 接口中的特定方法（或者通过匿名内部类），以监听并处理所关注的事件回调。然后将接口实现类（或者匿名内部类）的对象作为`eventHandler`参数传递给 [createEngine \|_blank](@createEngine) 方法或者传递给 [setEventHandler\|_blank](@setEventHandler-ZegoExpressEngine) 注册回调。
+
+<div class="mk-warning">
+
+建议在创建引擎时或创建引擎后就立即注册回调，避免延后注册错过事件通知。
+</div>
+
+<details class="zg-primary">
+    <summary>常用通知回调</summary>
+
+@@@Express_Java_Common_Callback@@@
+</details>
+
+
+<a id="createroom"></a>
+
+### 3.2 登录房间
+
+你可以调用 [loginRoom \|_blank](@loginRoom) 接口登录房间。如果房间不存在，调用该接口时会创建并登录此房间。roomID 和 user 的参数由您本地生成，但是需要满足以下条件：
+
+- 同一个 AppID 内，需保证 “roomID” 全局唯一。  
+- 同一个 AppID 内，需保证 “userID” 全局唯一，建议开发者将 “userID” 与自己业务的账号系统进行关联。 
+
+```Java
+//登录房间
+void loginRoom() {
+    // ZegoUser 的构造方法 public ZegoUser(String userID) 会将 “userName” 设为与传的参数 “userID” 一样。“userID” 不能为 “null” 否则会导致登录房间失败。
+    ZegoUser user = new ZegoUser("user2");
+
+    ZegoRoomConfig roomConfig = new ZegoRoomConfig();
+    //如果您使用 appsign 的方式鉴权，token 参数不需填写；如果需要使用更加安全的 鉴权方式： token 鉴权，请参考[如何从 AppSign 鉴权升级为 Token 鉴权](https://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo&platform=all)
+    //roomConfig.token = ;
+    // 只有传入 “isUserStatusNotify” 参数取值为 “true” 的 ZegoRoomConfig，才能收到 onRoomUserUpdate 回调。
+    roomConfig.isUserStatusNotify = true;
+
+    // roomID 由您本地生成,需保证 “roomID” 全局唯一。不同用户要登录同一个房间才能进行通话
+    String roomID = "room1";
+
+    // 登录房间
+    engine.loginRoom(roomID, user, roomConfig, (int error, JSONObject extendedData)->{
+        // 登录房间结果，如果仅关注登录结果，关注此回调即可
+        if (error == 0) {
+            // 登录成功
+            Toast.makeText(this, "登录成功", Toast.LENGTH_LONG).show();
+        } else {
+            // 登录失败，请参考 errorCode 说明 https://doc-zh.zego.im/article/4378
+            Toast.makeText(this, "登录失败，请参考 errorCode 说明 https://doc-zh.zego.im/article/4378", Toast.LENGTH_LONG).show();
+        }
+    });
+}
+```
+
+
+
+#### 登录状态（房间连接状态）回调
+
+调用登录房间接口之后，您可通过监听 [onRoomStateChanged\|_blank](@onRoomStateChanged) 回调实时监控自己在本房间内的连接状态。
+
+<a id="publishingStream"></a>
+
+### 3.3 预览自己的画面，并推送到 ZEGO 音视频云
+
+**1. （可选）预览自己的画面**
+
+<div class="mk-hint">
+
+无论是否调用 [startPreview \|_blank](@startPreview) 预览，都可以将自己的音视频流推送到 ZEGO 音视频云。
+</div>
+
+如果希望看到本端的画面，可调用 [startPreview \|_blank](@startPreview) 接口设置预览视图，并启动本地预览。
+
+**2. 将自己的音视频流推送到 ZEGO 音视频云**
+
+在用户调用 [loginRoom \|_blank](@loginRoom) 接口后，可以直接调用 [startPublishingStream \|_blank](@startPublishingStream) 接口，传入 “streamID”，将自己的音视频流推送到 ZEGO 音视频云。您可通过监听 [onPublisherStateUpdate \|_blank](@onPublisherStateUpdate) 回调知晓推流是否成功。
+
+“streamID” 由您本地生成，但是需要保证：
+
+同一个 AppID 下，“streamID” 全局唯一。如果同一个 AppID 下，不同用户各推了一条 “streamID” 相同的流，后推流的用户推流失败。 
+
+```Java
+//预览并推流
+void startPublish() {
+    // 设置本地预览视图并启动预览，视图模式采用 SDK 默认的模式，等比缩放填充整个 View
+    ZegoCanvas previewCanvas = new ZegoCanvas(findViewById(R.id.preview));;
+    engine.startPreview(previewCanvas);
+
+    // 开始推流
+    // 用户调用 loginRoom 之后再调用此接口进行推流
+    // 在同一个 AppID 下，开发者需要保证“streamID” 全局唯一，如果不同用户各推了一条 “streamID” 相同的流，后推流的用户会推流失败。
+    engine.startPublishingStream("stream2");
+}
+```
+
+@@@Warning_How_to_switch_devices@@@
+
+<a id="PlayingStream"></a>
+
+### 3.4 拉取其他用户的音视频
+
+进行视频通话时，我们需要拉取到其他用户的音视频。
+
+在同一房间内的其他用户将音视频流推送到 ZEGO 音视频云时，我们会在 [onRoomStreamUpdate\|_blank](@onRoomStreamUpdate) 回调中收到音视频流新增的通知，并可以通过 ZegoStream 获取到某条流的 “streamID”。
+
+我们可以在该回调中，调用 [startPlayingStream\|_blank](@startPlayingStream__1)，传入 “streamID” 拉取播放该用户的音视频。您可通过监听 [onPlayerStateUpdate |_blank](@onPlayerStateUpdate) 回调知晓是否成功拉取音视频。
+
+```Java
+// 监听回调
+void setEventHandler() {
+        engine.setEventHandler(new IZegoEventHandler() {
+            @Override
+            // 房间内其他用户推流/停止推流时，我们会在这里收到相应用户的音视频流增减的通知
+            public void onRoomStreamUpdate(String roomID, ZegoUpdateType updateType, ArrayList<ZegoStream> streamList, JSONObject extendedData) {
+                super.onRoomStreamUpdate(roomID, updateType, streamList, extendedData);
+                //当 updateType 为 ZegoUpdateType.ADD 时，代表有音视频流新增，此时我们可以调用 startPlayingStream 接口拉取播放该音视频流
+                if (updateType == ZegoUpdateType.ADD) {
+                    // 开始拉流，设置远端拉流渲染视图，视图模式采用 SDK 默认的模式，等比缩放填充整个 View
+                    ZegoStream stream = streamList.get(0);
+                    String playStreamID = stream.streamID;
+                    // 如下 remoteUserView 为 UI 界面上的 TextureView.这里为了使示例代码更加简洁，我们只拉取新增的音视频流列表中第的第一条流，在实际的业务中，建议开发者循环遍历 streamList ，拉取每一条音视频流
+                    ZegoCanvas playCanvas = new ZegoCanvas(findViewById(R.id.remoteUserView));
+                    engine.startPlayingStream(playStreamID, playCanvas);
+                }
+            }
+        });
+}
+```
+
+#### 注意事项
+
+如果用户在音视频通话的过程中，遇到相关错误，可查询 [错误码\|_blank](!Error_Code/Error_Code)。
+
+### 3.5 在线测试推拉流功能
+
+@@@New_Experience_RTC_Functions@@@
+
+
+### 3.6 停止音视频通话
+
+<a id="stopPublishingStream"></a>
+
+#### 3.6.1 停止推送和拉取音视频流
+
+**1. 停止推流，停止预览**
+
+调用 [stopPublishingStream \|_blank](@stopPublishingStream) 接口停止向远端用户发送本端的音视频流。
+
+```Java
+// 停止推流
+engine.stopPublishingStream();
+```
+
+如果启用了本地预览，调用 [stopPreview \|_blank](@stopPreview) 接口停止预览。
+
+```Java
+// 停止本地预览
+engine.stopPreview();
+```
+
+<a id="stopPlaying"></a>
+
+**2. 停止拉流**
+
+调用 [stopPlayingStream \|_blank](@stopPlayingStream) 接口停止拉取远端推送的音视频流。
+
+@@@Express_stopPlayingStream_time@@@
+
+```Java
+// 停止拉流
+engine.stopPlayingStream("stream1");
+```
+
+<a id="logoutRoom"></a>
+
+#### 3.6.2 退出房间
+
+调用 [logoutRoom \|_blank](@logoutRoom) 接口退出房间。
+
+```Java
+// 退出房间
+engine.logoutRoom();
+```
+
+<a id="destroy"></a>
+
+#### 3.6.3 销毁引擎
+
+如果用户彻底不使用音视频功能时，可调用 [destroyEngine \|_blank](@destroyEngine) 接口销毁引擎，释放麦克风、摄像头、内存、CPU 等资源。
+
+- 如果需要监听回调，来确保设备硬件资源释放完成，可在销毁引擎时传入 “callback”。该回调只用于发送通知，开发者不可以在回调内释放与引擎相关的资源。
+
+- 如果不需要监听回调，可传入 “null”。
+
+```Java
+ZegoExpressEngine.destroyEngine(null);
+```
+
+## 4 视频通话 API 调用时序
+
+<img src="/Pics/QuickStart/quickstart_uml.png" alt="时序图">
+
+## 5 常见问题
+
+##### 1. 调用 [logoutRoom \|_blank](@logoutRoom) 登出房间时能否直接杀掉进程？
+调用 [logoutRoom \|_blank](@logoutRoom) 后直接杀掉进程，有一定概率会导致 [logoutRoom \|_blank](@logoutRoom) 信令没发出去，那么 ZEGO 服务端只能等心跳超时后才认为这个用户退出了房间，为了确保 [logoutRoom \|_blank](@logoutRoom) 信令发送出去，建议再调用 [destroyEngine \|_blank](@destroyEngine) 并收到回调后再杀进程。
+
+@@@relevant_quickstart@@@
+
+- [为什么 Android 9 应用锁屏或切后台后采集音视频无效\|_blank](https://doc-zh.zego.im/faq/android_background)

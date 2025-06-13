@@ -1,0 +1,392 @@
+# H.265
+
+- - -
+
+## 功能简介
+
+@@@H.265_function_introduction@@@
+
+## 服务开通
+
+@@@Express_H.265_Service_Opened@@@
+
+## 示例源码下载
+
+请参考 [下载示例源码\|_blank](!DownloadDemo/DownloadDemo) 获取源码。
+
+相关源码请查看 “/ZegoExpressExample/Examples/AdvancedStreaming/H265” 目录下的文件。
+
+## 前提条件
+
+在使用 H.265 编解码功能之前，请确保：
+
+@@@Express-Video_Prerequisites@@@
+
+## 实现方法
+
+### 检测 H.265 编解码能力
+
+@@@Express_Gets_H.265_Encoding_and_Decoding_Capabilities@@@
+
+### 连麦混流直播
+
+@@@Recommended_live_streaming@@@
+
+
+#### 混出不同格式的码流（推荐）
+
+@@@Mixed-stream_Live_Broadcast (different_formats)@@@
+
+- **主播端**
+
+  1. 通过构造函数 [ZegoMixerTask\|_blank](@-ZegoMixerTask) 新建一个混流任务对象，然后调用实例方法分别设置输入、输出等参数。
+  2. 通过混流任务对象 [ZegoMixerTask\|_blank](@-ZegoMixerTask) 中的 [setInputList\|_blank](@setInputList-ZegoMixerTask) 属性设置混流任务输入流列表（混流输入中流的编码格式支持 H.264 和 H.265 ），默认最多支持输入 9 路流，请自行处理流布局。
+  3. 通过混流任务对象 [ZegoMixerTask\|_blank](@-ZegoMixerTask) 中的 [setOutputList\|_blank](@setOutputList-ZegoMixerTask) 属性设置混流任务输出流列表。假设当前场景下，混流服务直接转码出一路 H.264 混流和一路 H.265混流，即混流输出视频编码格式为 H.264 和 H.265。
+  4. 调用 [startMixerTask\|_blank](@startMixerTask) 接口发起混流任务。
+  5. 开发者通知 App 的业务服务端流已新增。
+
+  ```java
+  // 调用 startMixerTask 发起混流
+  // 请输入 taskID
+  String taskID = "";
+  ZegoMixerTask task = new ZegoMixerTask(taskID);
+
+  // 请自行设置 videoConfig
+  ZegoMixerVideoConfig videoConfig = new ZegoMixerVideoConfig(720, 1280, 15, 1500);
+  task.setVideoConfig(videoConfig);
+
+  task.setAudioConfig(new ZegoMixerAudioConfig());
+
+  // 注意，混流输入中流的编码格式支持 H.264 和 H.265, 请自行处理流布局及输入
+  ArrayList<ZegoMixerInput> inputList = new ArrayList<>();
+  task.setInputList(inputList);
+
+  // 混流两路输出
+  // 注意: 输出 target 可以是 streamID 或 CDN 地址，二者在观众端处理方式不同，该场景推荐直接传入 stremaID
+  // 注意: ZegoMixerOutput 中的码率优先级高于 ZegoMixerVideoConfig 中的码率
+  // 请输入 h264StreamID
+  String h264StreamID = "";
+  // 请输入 h265StreamID
+  String h265StreamID = "";
+  // 请输入 h264 码率，此码率为当前分辨率帧率(720p, 15fps)的推荐码率
+  int h264Bitrate = 2244;
+  // 请输入 h265 码率，此码率为当前分辨率帧率(720p, 15fps)的推荐码率
+  int h265Bitrate = 1795; 
+  ArrayList<ZegoMixerOutput> outputList = new ArrayList<>();
+  ZegoMixerOutput outputH264 = new ZegoMixerOutput(h264StreamID);
+  ZegoMixerOutputVideoConfig outputH264VideoConfig = new ZegoMixerOutputVideoConfig 
+  (ZegoVideoCodecID.getZegoVideoCodecID(0), h264Bitrate);
+  outputH264.setVideoConfig(outputH264VideoConfig);
+  outputList.add(outputH264);
+  ZegoMixerOutput outputH265 = new ZegoMixerOutput(h265StreamID);
+  ZegoMixerOutputVideoConfig outputH265VideoConfig = new ZegoMixerOutputVideoConfig 
+  (ZegoVideoCodecID.getZegoVideoCodecID(3), h265Bitrate);
+  outputH265.setVideoConfig(outputH265VideoConfig);
+  outputList.add(outputH265);
+  task.setOutputList(outputList);
+
+  // 开始混流
+  engine.startMixerTask(task, new IZegoMixerStartCallback() {
+
+      @Override
+      public void onMixerStartResult(int errorCode, JSONObject var2) {
+          // 混流任务回调
+      }
+  });
+  // 开发者通知 App 的业务服务端流已新增
+  ```
+
+- **观众端**
+
+  1. 观众端从 App 的业务服务端收到流新增通知。
+  2. 调用 [isVideoDecoderSupported\|_blank](@isVideoDecoderSupported) 接口查询观众端自身设备是否支持 H.265 解码格式。
+      - 若支持，则调用 [startPlayingStream\|_blank](@startPlayingStream) 接口从 CDN 拉 H.265 码流。
+      - 若不支持，则调用 [startPlayingStream\|_blank](@startPlayingStream) 接口从 CDN 拉 H.264 码流。
+
+  ```java
+  // 从 App 的业务服务端收到流新增通知
+
+  boolean h265DecoderSupport = engine.isVideoDecoderSupported(ZegoVideoCodecID.getZegoVideoCodecID(3));
+  // h264StreamID
+  String h264StreamID = "";
+  // h265StreamID
+  String h265StreamID = ""; 
+  // 拉流需要渲染的 view
+  View view = playView;
+  ZegoCanvas playCanvas = new ZegoCanvas(view);
+
+  if (h265DecoderSupport) {
+      // 支持 H.265 解码
+      engine.startPlayingStream(h265StreamID, playCanvas);
+  }
+  else {
+      // 不支持 H.265 解码
+      engine.startPlayingStream(h264StreamID, playCanvas);
+  }
+  ```
+
+#### 混流后推 CDN 再转码
+
+@@@Mixed_Streaming_Push_CDN_Transcoding@@@
+
+- **主播端**
+
+  1. 通过构造函数 [ZegoMixerTask\|_blank](@-ZegoMixerTask) 新建一个混流任务对象，然后调用实例方法分别设置输入、输出等参数。
+  2. 通过混流任务对象 [ZegoMixerTask\|_blank](@-ZegoMixerTask) 中的 [setInputList\|_blank](@setInputList-ZegoMixerTask) 属性设置混流任务输入流列表（混流输入中流的编码格式支持 H.264 和 H.265 ），默认最多支持输入 9 路流，请自行处理流布局。
+  3. 通过混流任务对象 [ZegoMixerTask\|_blank](@-ZegoMixerTask) 中的 [setOutputList\|_blank](@setOutputList-ZegoMixerTask) 属性设置混流任务输出流列表。假设当前场景下，混流服务直接输出一路 H.265 混流，即混流输出视频编码格式为H.265。
+  4. 调用 [startMixerTask\|_blank](@startMixerTask) 接口发起混流任务。
+  5. 开发者通知 App 的业务服务端流已新增。
+
+  ```java
+  // 调用 startMixerTask 发起混流
+  // 请输入 taskID
+  String taskID = "";
+  ZegoMixerTask task = new ZegoMixerTask(taskID);
+
+  // 请自行设置 videoConfig
+  ZegoMixerVideoConfig videoConfig = new ZegoMixerVideoConfig(720, 1280, 15, 1500);
+  task.setVideoConfig(videoConfig);
+
+  task.setAudioConfig(new ZegoMixerAudioConfig());
+
+  // 注意，混流输入中流的编码格式支持 H.264 和 H.265, 请自行处理流布局及输入
+  ArrayList<ZegoMixerInput> inputList = new ArrayList<>();
+  task.setInputList(inputList);
+  // 请输入 CDN URL
+  String publishCdnUrl = "";
+  // 请输入 h265 码率，此码率为当前分辨率帧率(720p, 15fps)的推荐码率
+  int h265Bitrate = 1795;
+  // 注意，由于这里需要使用 CDN 转码， target 需要传入 CDN URL
+  ArrayList<ZegoMixerOutput> outputList = new ArrayList<>();
+
+  ZegoMixerOutput outputH265 = new ZegoMixerOutput(publishCdnUrl);
+  ZegoMixerOutputVideoConfig outputH265VideoConfig = new ZegoMixerOutputVideoConfig 
+  (ZegoVideoCodecID.getZegoVideoCodecID(3), h265Bitrate);
+  outputH265.setVideoConfig(outputH265VideoConfig);
+  outputList.add(outputH265);
+  task.setOutputList(outputList);
+
+  // 开始混流
+  engine.startMixerTask(task, new IZegoMixerStartCallback() {
+
+      @Override
+      public void onMixerStartResult(int errorCode, JSONObject var2) {
+          // 混流任务回调
+      }
+  });
+
+  // 开发者通知 App 的业务服务端流已新增
+  ```
+
+
+- **观众端**
+
+  1. 观众端从 App 的业务服务端收到流新增通知。
+  2. 调用 [isVideoDecoderSupported\|_blank](@isVideoDecoderSupported) 接口查询观众端自身设备是否支持 H.265 解码格式。
+      - 若支持，则调用 [startPlayingStream\|_blank](@startPlayingStream) 接口从 CDN 拉 H.265 码流。
+      - 若不支持，则调用 [startPlayingStream\|_blank](@startPlayingStream) 接口从 CDN 拉 H.264 码流。
+
+  ```java
+  // 从 App 的业务服务端收到流新增通知
+
+  boolean h265DecoderSupport = engine.isVideoDecoderSupported(ZegoVideoCodecID.getZegoVideoCodecID(3));
+
+  String playStreamID = "";
+  // 拉流需要渲染的 view
+  View view = playView;
+  ZegoCanvas playCanvas = new ZegoCanvas(view);
+
+  if (h265DecoderSupport) {
+      // 支持 H.265 解码
+      // 请填入 H.265 Url 地址
+      String h265Url = "";
+
+      // 注意: ZegoCDNConfig 和 ZegoPlayerConfig 中有其他的可配置项
+      ZegoCDNConfig cdnConfig = new ZegoCDNConfig();
+      // H.265 CDN 拉流地址
+      cdnConfig.url = h265Url;
+      ZegoPlayerConfig playerConfig = new ZegoPlayerConfig();
+      playerConfig.cdnConfig = cdnConfig;
+      engine.startPlayingStream(playStreamID, playCanvas, playerConfig);
+  }
+  else {
+      // 不支持 H.265 解码
+      // 请填入 H.264 Url 地址
+      String h264Url = "";
+
+      // 注意: ZegoCDNConfig 和 ZegoPlayerConfig 中有其他的可配置项
+      ZegoCDNConfig cdnConfig = new ZegoCDNConfig();
+      // H.264 CDN 拉流地址
+      cdnConfig.url = h264Url;
+      ZegoPlayerConfig playerConfig = new ZegoPlayerConfig();
+      playerConfig.cdnConfig = cdnConfig;
+      engine.startPlayingStream(playStreamID, playCanvas, playerConfig);
+  }
+  ```
+
+
+### 单主播直播
+
+#### 实时网络转推 CDN 直播
+
+@@@Express_real-time_network_retweet_CDN_features_and_processes@@@
+
+- **主播端**
+
+  1. 创建引擎后，调用 [enableHardwareEncoder\|_blank](@enableHardwareEncoder) 接口开启硬件编码（若推流后更改配置，需要等下一次推流才生效），开启后会使用 GPU 进行编码，降低 CPU 使用率。
+  2. 调用 [isVideoEncoderSupported\|_blank](@isVideoEncoderSupported) 接口查询主播端设备是否支持指定视频编码类型。
+
+  3. 推流前调用 [setVideoConfig\|_blank](@setVideoConfig-ZegoExpressEngine) 接口，通过 codecID 设置视频编码格式（若推流后更改配置，需要等下一次推流才生效）。如果设置了 H.265 编码，则：
+      1. 可以调用 [enableH265EncodeFallback\|_blank](@enableH265EncodeFallback) 接口开启 H.265 编码失败后自动降级到 H.264 编码（默认开启）。开启后，当不支持 H.265 编码或 H.265 编码失败时，SDK 内部会尝试降级使用 H.264 编码进行推流。关闭后，当不支持 H.265 编码或 H.265 编码失败时，直接推流失败。
+      2. 调用 [addPublishCdnUrl\|_blank](@addPublishCdnUrl) 接口添加 ZEGO 实时音视频云的音视频流转推至 CDN 的 URL 地址。
+      3. 调用 [startPublishingStream\|_blank](@startPublishingStream) 接口开始推流，当推流成功后，同房间内其他用户可通过监听 [onRoomStreamUpdate\|_blank](@onRoomStreamUpdate)  回调来获取流的新增情况。
+      4. 开发者通知 App 的业务服务端该条推流的编码格式，以便通知拉流端根据不同的推流编码格式做相应的处理。 
+
+  ```java
+  // 移动端使用 H.265 编码需要开启硬件编码
+  engine.enableHardwareEncoder(true);
+
+  // 查询是否支持 H.265 编码
+  boolean h265EncoderSupport = engine.isVideoEncoderSupported(ZegoVideoCodecID.getZegoVideoCodecID(3));
+
+  ZegoVideoConfig videoConfig = new ZegoVideoConfig();
+  if (h265EncoderSupport) {
+      // 支持 H.265 编码
+      videoConfig.codecID = ZegoVideoCodecID.getZegoVideoCodecID(3);
+  } else {
+      // 不支持 H.265 编码
+      videoConfig.codecID = ZegoVideoCodecID.getZegoVideoCodecID(0);
+  }
+  engine.setVideoConfig(videoConfig);
+
+  if (h265EncoderSupport) {
+      // 通过 enableH265EncodeFallback 选择是否开启 H.265 编码失败自动降级能力
+      engine.enableH265EncodeFallback(true);
+  }
+  // 请输入 streamID
+  String publishStreamID = "";
+  // 请输入 CdnUrl
+  String publishCdnUrl = "";
+  // 添加 CDN 转推地址
+  engine.addPublishCdnUrl(publishCdnUrl, publishStreamID, new IZegoPublisherUpdateCdnUrlCallback() {
+      @Override
+      public void onPublisherUpdateCdnUrlResult(int i) {
+          // 判断转推 CDN 地址是否添加成功
+      }
+  });
+  engine.startPublishingStream(publishStreamID);
+
+  // 开发者通知 App 的业务服务端该条推流的编码格式，以便通知拉流端根据不同的推流编码格式做相应的处理
+  ```
+
+- **观众端**
+
+  1. 主播推流后，观众端通过 [onRoomStreamUpdate\|_blank](@onRoomStreamUpdate) 接口收到流新增通知。
+  2. 观众端从 App 的业务服务端获取该条推流的编码格式。
+     - 如果是 H.264 格式，观众可以调用 [startPlayingStream\|_blank](@startPlayingStream) 接口从 CDN 直接拉主播端的流。
+     - 如果是 H.265 格式，需要先调用 [isVideoDecoderSupported\|_blank](@isVideoDecoderSupported) 接口查询观众端自身设备是否支持 H.265 解码格式。
+         - 若支持，则调用 [startPlayingStream\|_blank](@startPlayingStream) 接口从 CDN 拉 H.265 码流。
+         - 若不支持，则调用 [startPlayingStream\|_blank](@startPlayingStream) 接口从 CDN 拉 H.264 码流。
+
+  ```java
+  //收到流新增通知 onRoomStreamUpdate
+  @Override
+  public void onRoomStreamUpdate(String roomID, ZegoUpdateType updateType, ArrayList<ZegoStream> streamList, JSONObject extendedData) {
+      super.onRoomStreamUpdate(roomID, updateType, streamList, extendedData);
+      // 从 App 的业务服务端获取该条流的编码格式
+      int videoCodecID = 0;
+      // 请输入 streamID
+      String playStreamID = "";
+      // 拉流需要渲染的 view
+      View view = playView;
+      ZegoCanvas playCanvas = new ZegoCanvas(view);
+
+      if (videoCodecID == ZegoVideoCodecID.getZegoVideoCodecID(3).value()) {
+          // 编码格式为 H.265
+          boolean h265DecoderSupport = engine.isVideoDecoderSupported(ZegoVideoCodecID.getZegoVideoCodecID(3));
+
+          // 不支持解码则不拉流
+          if (h265DecoderSupport) {
+              // 支持 H.265 解码
+              // 请填入 H.265 Url 地址
+              String h265Url = "";
+
+              // 注意: ZegoCDNConfig 和 ZegoPlayerConfig 中有其他的可配置项
+              ZegoCDNConfig cdnConfig = new ZegoCDNConfig();
+              // H.265 CDN 拉流地址
+              cdnConfig.url = h265Url;
+              ZegoPlayerConfig playerConfig = new ZegoPlayerConfig();
+              playerConfig.cdnConfig = cdnConfig;
+              engine.startPlayingStream(playStreamID, playCanvas, playerConfig);
+          } else {
+              // 不支持 H.265 解码
+              // 请填入 H.264 Url 地址
+              String h264Url = "";
+
+              // 注意: ZegoCDNConfig 和 ZegoPlayerConfig 中有其他的可配置项
+              ZegoCDNConfig cdnConfig = new ZegoCDNConfig();
+              // H.264 CDN 拉流地址
+              cdnConfig.url = h264Url;
+              ZegoPlayerConfig playerConfig = new ZegoPlayerConfig();
+              playerConfig.cdnConfig = cdnConfig;
+              engine.startPlayingStream(playStreamID, playCanvas, playerConfig);
+          }
+      }
+      else if (videoCodecID == ZegoVideoCodecID.getZegoVideoCodecID(0).value()) {
+          // 编码格式为 H.264
+          engine.startPlayingStream(playStreamID, playCanvas);
+      }
+  }
+  ```
+
+
+- **连麦嘉宾端**
+
+  1. 主播推流后，连麦嘉宾通过 [onRoomStreamUpdate\|_blank](@onRoomStreamUpdate) 接口收到流的新增通知。
+  2. 连麦嘉宾从 App 的业务服务端获取该条推流的编码格式。
+     - 如果是 H.264 格式，连麦嘉宾可以调用 [startPlayingStream\|_blank](@startPlayingStream) 接口从 ZEGO 实时音视频云直接拉主播端的流。
+     - 如果是 H.265 格式，需要先调用 [isVideoDecoderSupported\|_blank](@isVideoDecoderSupported) 接口查询自身设备是否支持 H.265 解码格式。
+         - 若支持，则调用 [startPlayingStream\|_blank](@startPlayingStream) 接口从 ZEGO 实时音视频云 拉 H.265 码流。
+         - 若不支持，则提示本终端设备不支持拉该流。
+
+  ```java
+  //收到流新增通知 onRoomStreamUpdate
+  @Override
+  public void onRoomStreamUpdate(String roomID, ZegoUpdateType updateType, ArrayList<ZegoStream> streamList, JSONObject extendedData) {
+      super.onRoomStreamUpdate(roomID, updateType, streamList, extendedData);
+      // 从 App 的业务服务端获取该条流的编码格式
+      int videoCodecID = 0;
+      // 请输入 streamID
+      String playStreamID = "";
+      // 拉流需要渲染的 view
+      View view = playView; 
+      ZegoCanvas playCanvas = new ZegoCanvas(view);
+      ZegoPlayerConfig config = new ZegoPlayerConfig();
+      config.resourceMode = ZegoStreamResourceMode.ONLY_RTC; // 仅从 RTC 拉流
+
+      if (videoCodecID == ZegoVideoCodecID.getZegoVideoCodecID(3).value()) {
+          // 编码格式为 H.265
+          boolean h265DecoderSupport = engine.isVideoDecoderSupported(ZegoVideoCodecID.getZegoVideoCodecID(3));
+
+          // 不支持解码则不拉流
+          if (h265DecoderSupport) {
+              // 支持 H.265 解码
+              engine.startPlayingStream(playStreamID, playCanvas, config);
+          }
+      }
+      else if (videoCodecID == ZegoVideoCodecID.getZegoVideoCodecID(0).value()) {
+          // 编码格式为 H.264
+          engine.startPlayingStream(playStreamID, playCanvas, config);
+       }
+   }
+  ```
+
+
+### 录制
+
+@@@Express_H.265_Local_Media_Recording@@@
+
+
+## 常见问题
+
+@@@Express_H.265_FAQ@@@

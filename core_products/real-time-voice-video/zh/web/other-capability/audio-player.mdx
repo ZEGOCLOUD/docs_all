@@ -1,0 +1,151 @@
+# 音效文件播放器
+
+- - -
+
+## 功能简介
+
+音效，主要指为了增强真实感或者烘托场景氛围播放的简短效果音。例如：在直播期间，经常会有一些播放音效的场景，如掌声、礼物音效、提示音等。在游戏中，有时也需要播放子弹声、碰撞打击声等。 
+
+ZEGO Express SDK 提供的音效文件播放器（ZegoAudioEffectPlayer），统一管理媒体流上的音效，支持音效播放（可以多音效重叠播放）、播放控制（如暂停播放、音量调节、设置播放进度）、音效预加载等功能。
+
+### 支持格式
+
+音效文件播放器支持播放 MP3、M4A、AAC、WAV 或浏览器支持的其他音频格式的在线音频文件。
+
+<div class="mk-warning">
+
+在线音频文件的地址需要符合 [浏览器的同源策略\|_blank](https://developer.mozilla.org/zh-CN/docs/Web/Security/Same-origin_policy)。
+</div>
+
+
+## 前提条件
+
+在实现音效文件播放器功能之前，请确保：
+
+@@@Express_Video_Prerequisites_Web@@@
+
+## 使用步骤
+
+### 1 创建音效播放器
+
+调用 [ZegoExpressEngine\|_blank](@-ZegoExpressEngine) 的 [createAudioEffectPlayer\|_blank](@createAudioEffectPlayer) 方法创建音效播放器实例。
+
+<div class="mk-warning">
+
+每个媒体流对象只支持同时创建一个 [ZegoAudioEffectPlayer\|_blank](@-ZegoAudioEffectPlayer) 实例。  
+</div>
+
+```js
+// localStream 为通过 createZegoStream 创建的 ZegoLocalStream 实例对
+const audioEffectPlayer = zg.createAudioEffectPlayer(
+    localStream
+)
+```
+
+### 2 （可选）预加载资源
+
+在频繁播放相同音效的场景中，SDK 为了优化重复下载文件并解码的网络和性能浪费，提供了预加载音效文件到内存中的功能。使用预加载音效还可以提前把音效加载好，避免出现通过 [start\|_blank](@start) 接口播放音效时加载慢导致播放延迟的问题。
+
+调用 [ZegoExpressEngine\|_blank](@-ZegoExpressEngine) 的 [loadAudioEffect\|_blank](@loadAudioEffect) 接口加载音效资源，通过 Promise 获取异步加载结果。
+
+当加载的音效使用完成后，可以调用 [unloadAudioEffect\|_blank](@unloadAudioEffect) 接口卸载音效资源，以释放相关资源。
+
+<div class="mk-hint">
+
+预加载为非必须操作，为了提高性能或者需要反复播放某个特定的音效时推荐使用。   
+</div>
+
+```js
+const audioEffectID = "2";
+// 在线音频文件地址
+const path = "https//xxx.mp3";
+
+// 加载音效资源
+zg.loadAudioEffect(audioEffectID, path).then(res=>{
+    // 音效加载完成
+});
+
+// 加载完成后可释放音效资源
+zg.unloadAudioEffect(audioEffectID);
+```
+
+### 3 播放控制
+
+#### 3.1 开始播放
+
+调用 [start\|_blank](@start) 接口播放音效。 
+
+* “audioEffectID” 需要保持全局唯一，“options.path” 为 MP3、M4A、AAC、WAV 或浏览器支持的其他音频格式的在线音频文件地址。
+
+* 如果已通过 [loadAudioEffect\|_blank](@loadAudioEffect) 方法预先加载了音效，则只需要传入预加载时的 “audioEffectID”，“options.path”（音效资源的路径）字段传空即可。
+
+```js
+const audioEffectID = "1"
+const options = {
+    // 音效文件地址
+    path: "https://xxx.mp3"
+}
+audioEffectPlayer.start(
+    audioEffect.id,
+    options, 
+    () => {
+        // 音效播放开始回调
+    }, 
+    () => {
+        // 音效播放结束回调
+    }
+)
+```
+
+#### 3.2 暂停/恢复/停止播放
+
+1. 调用 [pause\|_blank](@pause) 接口可以暂停播放 “audioEffectID” 指定的音效， 不传 “audioEffectID” 则暂停所有正在播放的音效。
+
+```js
+// 暂停指定音效
+audioEffectPlayer.pause(audioEffectID);
+// 暂停所有音效
+audioEffectPlayer.pauseAll();
+```
+
+2. 音效暂停播放后，调用 [resume\|_blank](@resume-ZegoAudioEffectPlayer) 接口可以恢复播放 “audioEffectID” 指定的音效，不传 “audioEffectID” 则恢复所有已暂停音效。
+
+```js
+// 恢复指定音效
+audioEffectPlayer.resume(audioEffectID);
+// 恢复所有音效
+audioEffectPlayer.resume();
+``` 
+
+3. 调用 [stop\|_blank](@stop-ZegoAudioEffectPlayer) 接口可以停止播放 “audioEffectID” 指定的音效，不传 “audioEffectID” 则停止播放所有音效。
+
+```js
+// 停止指定音效
+audioEffectPlayer.stop(audioEffectID);
+// 停止所有音效
+audioEffectPlayer.stop();
+```
+
+#### 3.3 调节音量
+
+调用 [setVolume\|_blank](@setVolume-ZegoAudioEffectPlayer) 接口可以设置 “audioEffectID” 指定的音效音量，音量 “volume” 取值范围为 [0, 100]，默认值为 100。
+
+```js
+const volume = 70;
+audioEffectPlayer.setVolume(audioEffectID, volume);
+```
+
+#### 3.4 播放进度控制
+
+1. 调用 [getTotalDuration\|_blank](@getTotalDuration) 接口获取单个音效的总时长，单位为毫秒。
+2. 调用 [getCurrentProgress\|_blank](@getCurrentProgress) 接口获取音效当前播放进度。
+3. 调用 [seekTo\|_blank](@seekTo-ZegoAudioEffectPlayer) 接口可以根据需要设置播放进度。
+
+```js
+// 获取音效的总时长
+long totalDuration = audioEffectPlayer.getTotalDuration(audioEffectID);
+// 获取音效当前播放进度
+long progress = audioEffectPlayer.getCurrentProgress(audioEffectID);
+// 设置播放进度, 示例跳到音效进度中间位置
+audioEffectPlayer.seekTo(audioEffectID, totalDuration/2);
+```

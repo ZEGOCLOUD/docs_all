@@ -1,0 +1,139 @@
+# 音视频录制
+
+- - -
+
+## 简介
+
+@@@Express_recording_method@@@
+
+## 方案一：客户端本地录制
+
+@@@Express_recording_method_local@@@
+
+### 前提条件
+
+在实现录制功能之前，请确保：
+
+@@@Express_Audio_Prerequisites@@@
+
+
+### 实现步骤
+
+@@@Express_recording_method_local_process@@@
+
+#### 1 设置录制回调
+
+开发者需要调用 [setDataRecordEventHandler\|_blank](@setDataRecordEventHandler) 来设置录制功能的回调以接收录制过程中的录制信息。
+
+<div class = 'mk-warning'>
+
+在调用 [startRecordingCapturedData\|_blank](@startRecordingCapturedData) 开始录制之后才会收到所设置的录制回调信息。
+</div>
+
+```c++
+// 继承 IZegoDataRecordEventHandler 并重写相关方法
+class MyDataRecordEventHandler: public IZegoDataRecordEventHandler{
+public:
+    void onCapturedDataRecordStateUpdate(ZegoDataRecordState state, int errorCode, ZegoDataRecordConfig config, ZegoPublishChannel channel) override {
+        // 开发者可以在这里根据错误码或者录制状态处理录制过程状态变更的逻辑，例如在界面上进行 UI 的提示等
+    }
+
+    void onCapturedDataRecordProgressUpdate(ZegoDataRecordProgress progress, ZegoDataRecordConfig config, ZegoPublishChannel channel) override {
+        // 开发者可以在这里根据录制进度处理录制过程进度变更的逻辑，例如在界面上进行 UI 的提示等
+    }
+};
+
+// 设置录制回调
+engine->setDataRecordEventHandler(std::make_shared<MyDataRecordEventHandler>());
+```
+
+#### 2 开始录制
+
+开发者需要调用 [startRecordingCapturedData\|_blank](@startRecordingCapturedData) 以开始录制。
+
+- [ZegoPublishChannel \|_blank](@-ZegoPublishChannel) 指定录制的媒体通道，若只推一条流或只做本地预览预览应使用 “ZEGO_PUBLISH_CHANNEL_MAIN”。
+  
+- [ZegoDataRecordConfig \|blank](@-ZegoDataRecordConfig) 指定录制的配置，可以指定录制的路径以及录制的类型 [ZegoDataRecordType\|blank](@-ZegoDataRecordType)。  
+若希望录制音视频则应指定为 “ZEGO_DATA_RECORD_TYPE_AUDIO_AND_VIDEO”。
+
+若希望只录制音频则选择 “ZEGO_DATA_RECORD_TYPE_ONLY_AUDIO”，若只录制纯视频则选择 “ZEGO_DATA_RECORD_TYPE_ONLY_VIDEO”。
+
+<div class = 'mk-warning'>
+
+- 在 [ZegoDataRecordConfig\|blank](@-ZegoDataRecordConfig) 指定录制的配置中，文件路径的后缀名必须是 “.mp4”、“.flv” 或 “.aac” 结尾以指定录制文件的格式。
+- 录制的类型 [ZegoDataRecordType\|blank](@-ZegoDataRecordType) 与文件的后缀名无关。
+</div>
+
+
+```c++
+// 登录房间、开始推流、启动预览等接口调用
+...
+
+// 创建录制配置
+ZegoDataRecordConfig config;
+// 例如需要录制 mp4 格式
+config.filePath = "path.mp4";
+// 例如录制音视频
+config.recordType = ZEGO_DATA_RECORD_TYPE_AUDIO_AND_VIDEO;
+
+// 开始录制，使用主通道录制
+engine->startRecordingCapturedData(config, ZEGO_PUBLISH_CHANNEL_MAIN);
+```
+
+#### 3 停止录制
+
+开发者需要调用 [stopRecordingCapturedData\|_blank](@stopRecordingCapturedData) 来结束录制。
+
+<div class = 'mk-warning'>
+
+在录制过程中，若退出房间 [logoutRoom\|blank](@logoutRoom) SDK 内部会主动停止录制。
+</div>
+
+
+```c++
+engine->stopRecordingCapturedData(ZEGO_PUBLISH_CHANNEL_MAIN);
+```
+
+#### 4 录制文件的播放
+
+录制文件的播放，可选两种方式进行播放。
+
+1. 调用系统默认的播放器进行播放。
+2. 调用 ZegoExpressEngine 中的 ZegoMediaPlayer 组件进行播放，详情可参考 [媒体播放器\|_blank](!Other_Functions/MediaPlayer)。
+
+
+### 常见问题
+
+1. **本地音视频录制支持什么格式的打包文件？**
+
+  目前音视频已支持 FLV 和 MP4，纯音频已支持 AAC，通过文件路径的后缀名指定格式。其中 FLV 格式只支持 H.264 编码，MP4 格式支持 H.264 和 H.265 编码，不满足会导致没有画面或者没有音频。 
+
+2. **存储的路径有什么要求？**
+
+    存储的路径为应用有权限读写的文件路径即可，如果传入目录路径，则会在回调中返回写文件失败。
+
+3. **录制过程如何获取到录制文件的大小？**
+
+    录制进度回调 [onCapturedDataRecordProgressUpdate\|_blank](@onCapturedDataRecordProgressUpdate) 中可以获取得到录制时长和录制文件大小。
+
+4. **传递一个已存在文件的文件路径，SDK 如何处理？**
+
+    不会出错，但原文件内容将被清空后再写入。
+
+5. **使用外部采集时的录制需要注意什么？**
+
+    使用外部采集时，也需要在录制之前调用 SDK 的 [startPreview\|_blank](@startPreview) 方法来启动。
+
+6. **为什么我录制出来的视频会有绿边？**
+
+    使用者需要注意在开启录制的过程中不要修改视频编码分辨率，开启流量控制（开启时会依据网络环境动态调整编码分辨率）。
+
+7. **为什么我录制过程中结束推流，录制出的视频会在这时有一瞬间的卡顿？**
+
+    SDK 内部处理方式的问题，目前暂时无法解决，需要用户尽量避免出现这种操作的情况。
+
+8. **本地媒体录制支持录 “ZegoMediaPlayer/ZegoAudioPlayer/混音功能” 的声音吗？**
+
+    可以录制以上输入源的声音，但是只有混入推流中的声音才会被录制，如果仅本地播放，则不会被录制进文件。
+
+@@@Express_recording_method_other@@@

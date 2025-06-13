@@ -1,0 +1,309 @@
+# 主体分割
+
+- - -
+
+## 功能简介
+
+@@@Express_background_segment_info@@@
+
+## 示例源码
+
+请参考 [下载示例源码\|_blank](#3125) 获取源码。
+
+相关源码请查看 “/ZegoExpressExample/Examples/Others/VideoObjectSegmentation” 目录下的文件。
+
+## 前提条件
+
+在使用主体分割功能前，请确保：
+
+- 已联系 ZEGO 技术支持进行特殊编包。
+
+@@@Express-Video_Prerequisites@@@
+
+## 实现流程
+
+<div class = "mk-warning">
+
+- 开启主体分割功能会额外消耗系统资源，为了保证用户体验，目前仅支持对一路通道推流画面开启主体分割。
+- 如果有经过自定义前处理第三方滤镜，需要确保第三方滤镜支持 Alpha 通道透传功能。
+</div>
+
+<img src="/Pics/subject_segmentation/subject_segmentation_ios.png" width="80%">
+
+请注意，开发者可根据自己的业务场景需要，选择是否实现上图中的 **（可选）** 步骤。如需实现，请参考下文中的具体说明。
+
+### 1 初始化和登录房间
+
+初始化和登录房间的具体流程，请参考实现视频通话文档中的 “[3.1 创建引擎\|_blank](!Integration/Solution_Implementation#4_1)”及“[3.2 登录房间\|_blank](!Integration/Solution_Implementation#4_2)”。
+
+### 2 对 view 进行特殊设置
+
+在开启主体分割前，需要设置用于渲染的 view，即调用 [setBackgroundColor\|_blank](@setBackgroundColor) 将 `backgroundColor` 属性设置为 `clearColor`。
+
+```objc
+@property (weak, nonatomic) IBOutlet UIView *view;
+[self.view setBackgroundColor:UIColor.clearColor];
+```
+
+
+### 3 （可选）实现自定义渲染类
+
+<details class="zg-primary">
+    <summary>实现自定义渲染类</summary>
+
+开发者可根据实际情况进行自定义渲染，需要注意视频原始数据中包含 Alpha 通道，且原始数据没有经过 Alpha 预乘处理。以绘制 UIImage 方式渲染采集数据为例：
+
+<div class = 'mk-warning'>
+不能在回调中直接渲染，因为会阻塞回调线程，导致渲染异常。
+</div>
+
+```objc
+- (void)onCapturedVideoFrameRawData:(unsigned char * _Nonnull *)data dataLength:(unsigned int *)dataLength param:(ZegoVideoFrameParam *)param flipMode:(ZegoVideoFlipMode)flipMode channel:(ZegoPublishChannel)channel {
+    if (param.format == ZegoVideoFrameFormatBGRA32) {
+        CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+        CGDataProviderRef dataProvider = CGDataProviderCreateWithData(NULL, data[0], dataLength[0], NULL);
+
+        CGImageRef cgImageFromBytes = CGImageCreate((int)param.size.width, (int)param.size.height, 8, 32, param.strides[0], colorSpace, kCGImageByteOrder32Little|kCGImageAlphaFirst, dataProvider, NULL, NO, kCGRenderingIntentDefault);
+            
+        UIImage *image = [UIImage imageWithCGImage:cgImageFromBytes];
+        
+        // 将 image 绘制到渲染视图上
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.previewView.image = image;
+            CGImageRelease(cgImageFromBytes);
+        });
+    }
+}
+```
+</details>
+
+### 4 （可选）开启自定义渲染
+
+<details class="zg-primary">
+    <summary>开启自定义渲染</summary>
+
+调用 [enableCustomVideoRender\|_blank](@enableCustomVideoRender) 接口，设置引擎进阶配置并开启自定义渲染，同时调用 [setCustomVideoRenderHandler\|_blank](@setCustomVideoRenderHandler) 接口设置自定义视频渲染回调，详情请参考 [自定义视频渲染\|_blank](!VideoAdvanced/CustomVideoRender)。
+
+<div class="mk-warning">
+
+使用自定义渲染进行主体分割时，[bufferType|\_blank](@bufferType-ZegoCustomVideoRenderConfig) 仅支持 `ZegoVideoBufferType.RAW_DATA` 类型。
+</div>
+
+
+```objc
+ZegoCustomVideoRenderConfig *renderConfig = [[ZegoCustomVideoRenderConfig alloc] init];
+renderConfig.bufferType = ZegoVideoBufferTypeRawData;// 选择 RAW_DATA 类型视频帧数据
+renderConfig.frameFormatSeries = ZegoVideoFrameFormatSeriesRGB;// 选择 RGB 色系数据格式
+[[ZegoExpressEngine sharedEngine] enableCustomVideoRender:YES config:renderConfig];//开始自定义视频渲染
+[[ZegoExpressEngine sharedEngine] setCustomVideoRenderHandler:self];//设置自定义视频渲染回调
+```
+</details>
+
+### 5 监听主体分割状态回调
+
+调用 [onVideoObjectSegmentationStateChanged\|_blank](@onVideoObjectSegmentationStateChanged) 接口，监听主体分割状态回调。
+
+<div class = 'mk-warning'>
+
+主体分割的状态回调依赖于开启预览或者推流，即如需监听 [onVideoObjectSegmentationStateChanged\|_blank](@onVideoObjectSegmentationStateChanged) 回调，需要调用预览 [startPreview\|_blank](@startPreview) 或推流 [startPublishingStream\|_blank](@startPublishingStream)。
+</div>
+
+```objc
+-(void)onVideoObjectSegmentationStateChanged:(ZegoObjectSegmentationState)state channel:(ZegoPublishChannel)channel errorCode:(int)errorCode{
+    if(state == ZegoObjectSegmentationStateOn){
+        //主体分割开启
+    }else{
+        //主体分割关闭
+        //异常关闭，请查看错误码
+    }
+}
+```
+
+
+### 6 使用主体分割实现不同的业务功能
+
+<div class="mk-warning">
+
+开发者如需更新主体分割类型、背景处理类型，需要修改 [ZegoObjectSegmentationConfig\|_blank](@-ZegoObjectSegmentationConfig) 的配置，并再次调用 [enableVideoObjectSegmentation\|_blank](@enableVideoObjectSegmentation) 接口开启主体分割，即可更新主体分割效果；更新结果将通过 [onVideoObjectSegmentationStateChanged\|_blank](@onVideoObjectSegmentationStateChanged) 回调通知给开发者。 
+</div>
+
+#### 背景虚化
+
+<details class="zg-primary">
+    <summary>使用主体分割实现背景虚化</summary>
+
+调用 [enableVideoObjectSegmentation\|_blank](@enableVideoObjectSegmentation) 接口，开启主体分割，并设置背景处理类型为“虚化”。
+
+```objc
+ZegoObjectSegmentationConfig *config = [[ZegoObjectSegmentationConfig alloc]init];
+config.objectSegmentationType = ZegoObjectSegmentationTypeAnyBackground;//根据实际情况选择需要开启的主体分割类型
+config.backgroundConfig.processType = ZegoBackgroundProcessTypeBlur;//设置背景处理方式为虚化
+config.backgroundConfig.blurLevel = ZegoBackgroundBlurLevelMedium;//设置背景虚化级别为中
+[[ZegoExpressEngine sharedEngine]enableVideoObjectSegmentation:YES config:config channel:ZegoPublishChannelMain];//开启主体分割
+```
+</details>
+
+#### 虚拟背景
+
+<details class="zg-primary">
+    <summary>使用主体分割实现虚拟背景</summary>
+
+虚拟背景支持两种类型素材：
+
+- 图片。
+  当前支持 “PNG” 与 “JPEG” 两种图片格式，即 “.png”、“.jpg”、“.jpeg” 三种后缀的图片文件。
+- 视频，限制如下：
+    - 视频格式：MP4、FLV、MKV、AVI。
+    - 视频源：本地视频。
+    - 视频播放方式：循环播放。
+    - 分辨率：最大不超过 4096 px，推荐 1920 px 以内。
+    - 视频时长：最大不超过 30 秒，推荐 15 秒以内。
+    - 视频大小：最大不超过 50 MB，推荐 10 MB 以内。
+
+
+<div class="mk-warning">
+
+开发者在使用本功能时，请注意自定义图片、视频素材的宽高比，否则超出视图的部分会被裁减。
+</div>
+
+调用 [enableVideoObjectSegmentation\|_blank](@enableVideoObjectSegmentation) 接口，开启主体分割，并设置背景处理类型为“图片”或“视频”。
+
+```objc
+ZegoObjectSegmentationConfig *config = [[ZegoObjectSegmentationConfig alloc]init];
+config.objectSegmentationType = ZegoObjectSegmentationTypeAnyBackground;//根据实际情况选择需要开启的主体分割类型
+
+//设置背景处理方式为 图片
+config.backgroundConfig.processType = ZegoBackgroundProcessTypeImage;
+config.backgroundConfig.imageUrl= @"<image_path>";//设置背景图片路径
+[[ZegoExpressEngine sharedEngine]enableVideoObjectSegmentation:YES config:config channel:ZegoPublishChannelMain];//开启主体分割
+
+//设置背景处理方式为 视频
+config.backgroundConfig.processType = ZegoBackgroundProcessTypeVideo;
+config.backgroundConfig.videoURL= @"<video_path>";//设置背景视频路径
+[[ZegoExpressEngine sharedEngine]enableVideoObjectSegmentation:YES config:config channel:ZegoPublishChannelMain];//开启主体分割
+```
+</details>
+
+#### 透明背景
+
+<a name="enableAlphaChannelVideoEncoder"></a>
+
+<details class="zg-primary">
+    <summary>使用主体分割实现透明背景</summary>
+
+<div class="mk-warning">
+
+如果开发者需要实现类似“演讲模式”的业务功能，需要在业务侧将“主体画面”与“要混合的视频源内容”混为一条视频流。
+
+</div>
+
+调用 [enableVideoObjectSegmentation\|_blank](@enableVideoObjectSegmentation) 接口，开启主体分割，并设置背景处理类型为“透明”。
+
+```objc
+ZegoObjectSegmentationConfig *config = [[ZegoObjectSegmentationConfig alloc]init];
+config.objectSegmentationType = ZegoObjectSegmentationTypeAnyBackground;//根据实际情况选择需要开启的主体分割类型
+config.backgroundConfig.processType = ZegoBackgroundProcessTypeTransparent;//设置背景处理方式为透明
+[[ZegoExpressEngine sharedEngine]enableVideoObjectSegmentation:YES config:config channel:ZegoPublishChannelMain];//开启主体分割
+```
+</details>
+
+### 7 （可选）使用 Alpha 通道传输分割出的主体
+
+<details class="zg-primary">
+    <summary>使用 Alpha 通道传输分割出的主体</summary>
+
+如果推流端需要把分割后的主体画面通过 Alpha 通道传输到拉流端，在拉流端做主体渲染，需要先调用 [enableAlphaChannelVideoEncoder\|_blank](@enableAlphaChannelVideoEncoder) 接口，设置编码器支持透明通道，然后调用 [startPublishingStream\|_blank](@startPublishingStream) 接口推流，使其顺利传输至拉流端。
+
+<div class = 'mk-warning'>
+
+目前仅支持透明通道数据排列在 RGB 或 YUV 数据下方。
+</div>
+
+- 开启 Alpha 通道数据传输：
+
+    ```objc
+    ZegoAlphaLayoutType layoutType = ZegoAlphaLayoutTypeBottom; // 透明通道数据排列在 RGB 或 YUV 数据下方
+    [[ZegoExpressEngine sharedEngine]enableAlphaChannelVideoEncoder:YES alphaLayout:layoutType channel:ZegoPublishChannelMain]; // 设置编码器支持透明通道
+    ```
+
+- 关闭 Alpha 通道数据传输：
+
+    ```objc
+    ZegoAlphaLayoutType layoutType = ZegoAlphaLayoutTypeBottom; // 透明通道数据排列在 RGB 或 YUV 数据下方
+    [[ZegoExpressEngine sharedEngine]enableAlphaChannelVideoEncoder:NO alphaLayout:layoutType channel:ZegoPublishChannelMain]; // 设置编码器支持透明通道
+    ```
+</details>
+
+### 8 开始预览和推流
+
+通过 [enableVideoObjectSegmentation\|_blank](@enableVideoObjectSegmentation) 接口开启主体分割功能后，可以进行预览。
+
+<div class="mk-hint">
+
+开发者也可以先开启预览，再开启主体分割。本文以先开启主体分割，再进行预览为例进行介绍。
+</div>
+
+- **方式 1**：使用内部渲染
+    
+    若使用内部渲染，开启预览前，请设置 [alphaBlend\|_blank](@alphaBlend-ZegoCanvas) 为 YES。
+
+    ```objc
+    ZegoCanvas *previewCanvas = [ZegoCanvas canvasWithView:self.previewView];
+    previewCanvas.alphaBlend = YES;//开启内部渲染 Alpha 混合，开启后支持分割后的主体与背景图层进行 Alpha 混合
+    [[ZegoExpressEngine sharedEngine]startPreview:previewCanvas];
+    [[ZegoExpressEngine sharedEngine] startPublishingStream:streamID];
+    ```
+
+- **方式 2**：使用自定义渲染
+    
+    若使用自定义渲染，可直接进行预览和推流。
+    ```objc
+    [[ZegoExpressEngine sharedEngine] startPreview:nil];
+    [[ZegoExpressEngine sharedEngine] startPublishingStream:streamID];
+    ```
+
+### 9（可选）在拉流端设置 Alpha 通道渲染并拉流
+
+<details class="zg-primary">
+    <summary>在拉流端设置 Alpha 通道渲染，并开启拉流</summary>
+
+<div class="mk-warning">
+
+推流端开启了 Alpha 通道传输的情况下，才需要在拉流端开启 Alpha 通道渲染。
+</div>
+
+- **方式 1**：使用内部渲染
+
+    如果使用内部渲染，拉流端在调用 [startPlayingStream\|_blank](@startPlayingStream) 接口开启拉流前，需要将 [ZegoCanvas\|_blank](@-ZegoCanvas) 的 [alphaBlend\|_blank](@alphaBlend-ZegoCanvas) 属性设置为 YES。
+
+    ```objc
+    ZegoCanvas *playCanvas = [ZegoCanvas canvasWithView:self.playView1];
+    playCanvas.alphaBlend = YES;//开启内部渲染 Alpha 混合，开启后支持分割后的主体与背景图层进行 Alpha 混合
+    [[ZegoExpressEngine sharedEngine]startPlayingStream:streamID  canvas:playCanvas];
+    ```
+
+- **方式 2**：使用自定义渲染
+    
+    若使用自定义渲染，可直接进行拉流。
+    ```objc
+    [[ZegoExpressEngine sharedEngine]startPlayingStream:streamID canvas:nil];
+    ```
+
+</details>
+
+### 10 关闭主体分割
+
+调用 [enableVideoObjectSegmentation\|_blank](@enableVideoObjectSegmentation) 接口，关闭主体分割。
+
+```objc
+ZegoObjectSegmentationType objectType = ZegoObjectSegmentationTypeAnyBackground;//根据实际情况选择需要关闭的主体分割类型
+[[ZegoExpressEngine sharedEngine]enableVideoObjectSegmentation:NO type:objectType channel:ZegoPublishChannelMain];//关闭主体分割
+```
+
+### 11 销毁引擎
+
+调用 [destroyEngine\|_blank](@destroyEngine) 接口，销毁引擎。
+
+```objc
+[ZegoExpressEngine destroyEngine:nil];
+```

@@ -1,0 +1,215 @@
+# 用户权限控制
+
+---
+
+## 1 功能简介
+
+在用户登录房间或在房间内推流时，某些场景下开发者需要对每一个用户的权限进行控制。开发者可联系 ZEGO 技术支持，和服务端约定好 Token 的校验逻辑，判断用户是否有登录特定房间和房间内推流的权限，避免因权限控制缺失或操作不当引发的风险问题。
+
+### 1.1 应用场景
+
+默认情况下，开发者在初始化 SDK 时传入 Token 参数就可以登录房间和推流。
+
+如果开发者的业务上希望给房间加上进房限制或者上麦限制，即仅允许指定的用户登录房间或者在房间内推流，就可以开启用户权限控制功能。在如下场景中，ZEGO 推荐开启用户权限控制功能：
+
+- 业务房间有普通房间和会员房间的区别，需要控制非会员用户登录会员房间 。
+- 语聊房中，需要控制推流用户和麦上用户的一致，防止“幽灵麦”，即在房间里听到里不在麦位上的用户的声音。
+- 狼人杀等发言游戏，需要防止黑产破解应用后，使用其他用户 ID 登录相同房间感知游戏进程进而作弊，以保证正常用户的游戏体验。
+
+
+### 1.2 实现原理
+
+开启用户权限控制功能后，开发者服务端生成 Token，ZEGO 服务端会对带着 Token 的用户进行校验，根据 Token 中的权限位判断用户是否能登录特定房间和在房间内推流。
+
+ZEGO 服务端支持两种模式：
+
+1. 默认情况下，ZEGO 服务端不校验用户的权限。
+2. 开启用户权限控制功能后，ZEGO 服务端对用户的权限进行校验，支持校验用户的登录权限和推流的权限。
+
+## 2 前提条件
+
+1. 根据实际业务情况，联系 ZEGO 技术支持配置开启用户权限控制功能，约定 ZEGO 服务端的校验逻辑。
+2. 已在项目中集成 ZEGO Express SDK(【 LiveRoom 和 Express 要补充一下支持版本】，x.x.x 版本及以上)，实现基本的实时音视频功能，请参考 [快速开始 - 集成](!Integration/SDK_Integration) 和 [快速开始 - 实现流程](!Integration/Solution_Implementation_Integration)。——native
+
+
+## 3 使用步骤
+
+用户权限控制功能的使用流程如下图：
+
+![token_uml](/Pics/QuickStart/token_uml.png)
+
+1. 客户端发起申请 Token 的请求
+2. Token 在开发者的服务端上生成，并返回给客户端。
+3. 客户端携带申请到的 Token 和 userID、roomID 信息，登录对应的房间。
+4. ZEGO SDK 会自动将 Token 发送到 ZEGO 服务端进行校验。
+5. ZEGO 服务端会将校验的结果直接返回给客户端，没有权限客户端登录将失败。
+
+
+以下将介绍开发者的服务端如何生成 Token、如何使用 SDK 设置 Token 以及 Token 过期时的处理方式。
+
+### 3.1 生成 Token
+
+<div class="mk-warning">
+
+
+Token 的生成需要开发者自己实现，为保证安全，开发者一定要在自己的服务端生成 Token。 
+</div>
+
+
+
+#### 3.1.1 获取 AppID 和 ServerSecret
+
+生成 Token 需要开发者项目的唯一标识 AppID 和密钥 ServerSecret ，获取方式如下：
+
+在 [ZEGO 控制台\|_blank](https://console.zego.im/) 中，在“概览 > 我的项目”中，即可查看 AppID。
+
+![get_AppID.png](/Pics/QuickStart/get_AppID.png)
+
+在 [ZEGO 控制台\|_blank](https://console.zego.im/) 中，在“概览 > 我的项目”中，单击项目的“配置”信息，进入项目的“基本信息”页，单击项目的“后台相关密钥”，弹窗中的 “ServerSecret” 即生成 Token 需要使用的密钥。
+
+![get_ServerSecret.png](/Pics/QuickStart/get_ServerSecret.png)
+
+
+#### 3.1.2 开发者服务端生成 Token
+
+Token 需要在开发者的服务端生成，客户端发送请求申请 Token 时，开发者服务端会生成 Token 并将其返回给客户端。
+
+为方便开发者使用，ZEGO 在 GitHub 提供了一个开源的 [zego_server_assistant](https://github.com/zegoim/zego_server_assistant) 插件，支持使用 Go、C++、Java、Python、PHP、.NET、Node.js 等语言在开发者的服务端部署生成 Token。
+
+
+<table>
+  <colgroup>
+    <col>
+    <col>
+    <col>
+  </colgroup>
+  <tbody><tr>
+    <th>语言</th>
+    <th>关键函数</th>
+    <th>具体地址</th>
+  </tr>
+  <tr>
+    <td>Go</td>
+    <td><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/release/github/go/zegoserverassistant/token.go">GenerateToken</a></td>
+    <td><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/tree/release/github/go">GitHub</a></td>
+  </tr>
+  <tr>
+    <td>C++</td>
+    <td><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/release/github/c%2B%2B/kernel/impl/ZegoServerAssistant.cpp">GenerateToken</a></td>
+    <td><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/tree/release/github/c%2B%2B">GitHub</a></td>
+  </tr>
+  <tr>
+    <td>Java</td>
+    <td><a target="_blank" href=""></a></td>
+    <td><a target="_blank" href="">GitHub</a></td>
+  </tr>
+  <tr>
+    <td>Python</td>
+    <td><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/release/github/python/src/zego_server_assistant.py">generate_token</a></td>
+    <td><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/tree/release/github/python">GitHub</a></td>
+  </tr>
+  <tr>
+    <td>PHP</td>
+    <td><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/release/github/php/src/ZEGO/ZegoServerAssistant.php">generateToken</a></td>
+    <td><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/tree/release/github/php">GitHub</a></td>
+  </tr>
+  <tr>
+    <td>.NET</td>
+    <td><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/release/github/.net/src/ZegoServerAssistant/GenerateToken.cs">GenerateToken</a></td>
+    <td><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/tree/release/github/.net">GitHub</a></td>
+  </tr>
+  <tr>
+    <td>Node.js</td>
+    <td><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/tree/release/github/nodejs/server">GenerateToken</a></td>
+    <td><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/tree/release/github/nodejs">GitHub</a></td>
+  </tr>
+</tbody></table>
+
+
+
+
+以 Go 语言为例，开发者可参考以下步骤使用 zego_server_assistant 生成 Token：
+
+
+1. 将 “go/zegoserverassistant” 目录拷贝到开发者的服务端项目中。
+2. 使用命令 `import zsa "your-project-go-mod-path/zegoserverassistant"` 引入插件。
+3. 调用插件提供的 GenerateToken 方法生成 Token。
+
+
+
+
+```go
+const (
+	PrivilegeKeyLogin   = 1 // 登录
+	PrivilegeKeyPublish = 2 // 推流
+	PrivilegeEnable     = 1 // 开启
+	PrivilegeDisable    = 0 // 关闭
+)
+
+var appId uint32 = <Your appID>   // type: uint32
+roomId := <Your roomID>  // type: string
+userId := <Your userID>  // type: string
+secret := <ServerSecret>  // type: 32 byte length string
+var effectiveTimeInSeconds int64 = <Your token effectiveTime> //type: int64; unit: s
+privilege := make(map[int]int)
+privilege[zsa.PrivilegeKeyLogin] = zsa.PrivilegeEnable      // 登录权限
+privilege[zsa.PrivilegeKeyPublish] = zsa.PrivilegeDisable   // 推流权限
+
+token, err := zsa.GenerateToken(appId, roomId, userId, privilege, secret, effectiveTimeInSeconds)
+if err != nil {
+    fmt.Println(err)
+    return
+}
+fmt.Println(token)
+```
+
+
+### 3.2 设置 Token 
+
+【在这里补充实现步骤，需要有文字说明和示例代码，有啥其他注意事项也可以补上，比如调用时机之类的，可参考以下web端的】
+
+
+用户在登录房间时传入权限相关的 Token，设置对应的权限。
+
+```objc
+NSString *roomID = @"xxx"; //要登录的房间ID
+ZegoUser *user = [ZegoUser userWithUserID:@"xxxx"];
+ZegoRoomConfig *config = [[ZegoRoomConfig alloc] init];
+config.token = @"xxxxxxxx"; // 请求开发者服务端获取
+
+[[ZegoExpressEngine sharedEngine] loginRoom:roomID user:user config:config];
+```
+
+如果开发者需要在用户登录房间后修改用户的推流权限, 也可以调用 renewToken 接口更新权限, 更新后会影响下一次推流的权限, 之前已经成功推送的流不受影响。
+
+
+```objc
+NSString *token = [MyToken getToken]; // 重新请求开发者服务端获取 Token
+[[ZegoExpressEngine sharedEngine] renewToken:token roomID:roomID];
+```
+
+
+### 3.3 Token 过期时的处理方式
+
+【在这里补充token过期的回调，和建议的处理方式，可参考以下web端的】
+
+在 Token 过期前 30 秒，SDK 会通过 roomTokenWillExpire 回调发出通知。
+
+收到该回调后，开发者需要从自己的服务端获取新的有效 Token, 并调用 SDK 提供的 renewToken 接口更新 Token。
+
+```objc
+- (void)onRoomTokenWillExpire:(int)remainTimeInSecond roomID:(NSString *)roomID {
+    NSString *token = [MyToken getToken]; // 重新请求开发者服务端获取 Token
+    
+    [[ZegoExpressEngine sharedEngine] renewToken:token roomID:roomID];
+}
+```
+
+
+### 4 API 参考
+
+| 方法 | 描述 |
+|-------|--------|
+| [loginRoom\|_blank](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~javascript_web~class~ZegoExpressEngine#use-video-device) | 登录房间 |
+| [renewToken\|_blank](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~javascript_web~class~ZegoExpressEngine#renew-token) | 更新 Token |
+| [on\|_blank](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~javascript_web~interface~ZegoRTMEvent#room-extra-info-update) | Token 过期回调 |
