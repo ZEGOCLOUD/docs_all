@@ -1,0 +1,182 @@
+
+
+
+# 相关回调及校验说明
+
+- - -
+
+@@@Callback_Warning@@@
+
+## 描述
+
+视频合成后会以 POST 方式向`回调地址`发起 HTTP 请求，请求包体为 JSON 格式。
+
+<Warning title="Warning">
+
+回调地址请联系 ZEGO 技术支持进行配置。  
+</Warning>
+
+## 回调参数
+
+| 参数      | 类型   | 描述                                                         |
+| :-------- | :----- | :----------------------------------------------------------- |
+| AppId     | Int | ZEGO 给开发者分配的 AppID，唯一标识一个应用。                |
+| TaskId    | String | 任务 ID，[创建视频合成任务\|_blank](#18546) 或 [创建异步语音合成任务\|_blank](#18564) 后返回。 |
+| EventType | Int | 事件通知类型。<ul><li>1：视频合成状态。</li><li>2：异步语音合成状态。</li><li>3：数字人视频流任务状态。</li><li>4：数字人驱动状态。</li></ul> |
+| Nonce     | String | 随机数，用于检验串计算。                                     |
+| Timestamp | String | 回调发送时的 Unix 时间戳（秒），用于检验串计算。             |
+| Signature | String | 检验串，验证回调发送方身份。                                 |
+| EventTime | Int | 事件在 ZEGO 服务器上发生的 Unix 时间戳（毫秒），您可根据本字段判断回调顺序。 |
+| Detail    | Object | 事件详细信息，根据 `EventType` 不同，该参数的成员不同。      |
+
+- `EventType` 为 1 时 `Detail` 成员列表如下：
+
+  | 参数        | 类型   | 描述                                                         |
+  | :---------- | :----- | :----------------------------------------------------------- |
+  | Status      | Int    | 视频合成任务状态。<ul><li>1：TTS 处理中。</li><li>2：TTS 处理失败。</li><li>3：视频合成中。</li><li>4：视频合成失败。</li><li>5：视频合成成功。</li><li>6：字幕处理中。</li></ul> |
+  | VideoUrl    | String | 合成视频的 URL，访问有效期 24 小时。                         |
+  | AudioUrl    | String | 合成语音 URL，访问有效期 24 小时。                           |
+  | SubtitleUrl | String | 字幕文件的 URL，访问有效期 24 小时。                         |
+  | FailReason  | String | 合成失败原因。                                               |
+  | StartIndex  | Int    | 视频起始索引。<br />拼接两个视频时，需先 [查询数字人补帧包\|_blank](#18542)，参考相关视频的此参数，索引其中缺失的动作。<br />例如，视频 A 的 StartIndex 为 775，视频 B 的 StartIndex 为 1550，则可在补帧包文件夹中，找到文件名为 775-1550 的视频，以便用于视频 A 与视频 B 之间的动作衔接。          |
+  | Duration  | Int    | 视频时长，单位：秒。    |
+  | Deduction  | Int    | 抵扣时长，基于视频时长和抵扣系数所得。具体抵扣系数，请联系 ZEGO 商务人员获取。    |
+
+- `EventType` 为 2 时 `Detail` 成员列表如下：
+
+  | 参数     | 类型   | 描述                                                         |
+  | :------- | :----- | :----------------------------------------------------------- |
+  | Status   | Int    | 异步语音合成任务状态。<ul><li>0：TTS 处理中。</li><li>1：TTS 处理成功。</li><li>2：TTS 处理失败。</li></ul> |
+  | AudioUrl | String | 合成语音的 URL，访问有效期 24 小时。 |
+  | Duration  | Int    | 语音时长，单位：秒。    |
+  | Deduction  | Int    | 抵扣时长，基于语音时长和抵扣系数所得。具体抵扣系数，请联系 ZEGO 商务人员获取。    |
+
+- `EventType` 为 3 时 `Detail` 成员列表如下：
+
+  | 参数       | 类型   | 描述                                                         |
+  | :--------- | :----- | :----------------------------------------------------------- |
+  | RoomId     | String | 房间 ID。                                                    |
+  | StreamId   | String | 数字人视频流 ID。                                      |
+  | Status     | Int    | 推流状态。<ul><li>1：数字人视频流初始化中。</li><li>2：数字人视频流初始化失败。</li><li>3：推流中。</li><li>4：正在停止推流。</li><li>5：已停止推流。</ul></li> |
+  | FailReason | String | 失败原因。|
+  | Duration  | Int    | 直播时长，单位：秒。    |
+  | Deduction  | Int    | 抵扣时长，基于直播时长和抵扣系数所得。具体抵扣系数请联系 [aigc@zego.im](mailto:aigc@zego.im)。 |
+
+- `EventType` 为 4 时 `Detail` 成员列表如下：
+
+  | 参数         | 类型   | 描述                                                         |
+  | :----------- | :----- | :----------------------------------------------------------- |
+  | DriverTaskId | String | 驱动任务 ID。                                            |
+  | RoomId       | String | 房间 ID。                                                    |
+  | StreamId     | String | 数字人视频流 ID。                                    |
+  | Status       | Int    | 驱动任务状态。<ul><li>1：排队中。</li><li>2：驱动中。</li><li>3：驱动失败。</li><li>4：驱动结束。</li><li>6：音频生成结束。</li></ul> |
+  |Duration|Int|音频时长。| 
+
+## 回调示例
+
+以下是视频合成成功回调的请求示例。
+```json
+{
+    "AppId": 123456789,
+    "TaskId": "XXXXXX",
+    "EventType": 1,
+    "Nonce": "abcdd22113",
+    "Timestamp": "1681221510",
+    "Signature": "XXXXXXX",
+    "EventTime": 1681221510034,
+    "Detail": {
+        "Status": 5,
+        "VideoUrl": "XXXXXXXXXXXX"
+    }
+}
+```
+
+## 来源校验
+
+为提高数据安全性，当您在收到 ZEGO 服务端发出的回调时，请进行本地签名计算，并与 signature 进行对比，判断该请求是否合法。
+
+请参考以下方式，校验回调请求的发起来源是否为 ZEGO 数字人 PaaS 服务。
+
+### 校验方法
+
+通过比较自行计算的 signature 与回调请求中的 signature 是否一致，以此验证请求的发起方是否为 ZEGO 数字人 PaaS 服务。
+
+自行计算 signature 的流程如下图：
+
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/server/Callback/encryptVerifyProcess.png" /></Frame>
+
+* nonce：回调请求中的参数。
+* timestamp：回调请求中的参数。
+* callbacksecret：在 [ZEGO 控制台控制台 \|_blank](https://console.zego.im) 注册项目时生成，详情请参考控制台文档 [项目信息\|_blank](12107#2)。
+
+### 示例代码
+
+<div class="multiple-select-codes">
+    <div class="code-tabs hide-scrollbar">
+      <div class="scroll-box">
+        <span class="tab-item">
+          <span>PHP</span>
+        </span>
+        <span class="tab-item">
+          <span>Java</span>
+        </span>
+      </div>
+    </div>
+
+  <div class="code-list">
+  
+  ```PHP
+  $signature = $_POST["signature"];
+  $timestamp = $_POST["timestamp"];
+  $nonce = $_POST["nonce"];
+
+  $secret = callbacksecret;//后台获取的callbacksecret
+  $tmpArr = array($secret, $timestamp, $nonce);
+  sort($tmpArr, SORT_STRING);
+  $tmpStr = implode( $tmpArr );
+  $tmpStr = sha1( $tmpStr );
+
+  if( $tmpStr == $signature ){
+      return true;
+  } else {
+      return false;
+  }
+  ```
+
+  ```java
+  // 从请求参数中获取到 signature, timestamp, nonce
+  String signature = request.getParameter("signature");
+  long timestamp = request.getParameter("timestamp");
+  String nonce = request.getParameter("nonce");
+
+  // 后台获取的callbacksecret
+  String secret = callbacksecret;
+
+  String[] tempArr = {secret, ""+timestamp, nonce};
+  Arrays.sort(tempArr);
+        
+  String tmpStr = "";
+  for (int i = 0; i < tempArr.length; i++) {
+    tmpStr += tempArr[i];
+  }
+  tmpStr = org.apache.commons.codec.digest.DigestUtils.sha1Hex(tmpStr);
+
+  return tmpStr.equals(signature);
+  ```
+  </div>
+</div>
+
+### 输出示例
+
+```
+$timestamp = 1470820198;
+$nonce = 123412;
+$secret = 'secret';
+	
+排序拼接后需要加密的原始串为:1234121470820198secret
+加密的结果为:5bd59fd62953a8059fb7eaba95720f66d19e4517
+```
+
+## 返回响应
+
+收到回调后，如果返回 HTTP status code 为 2XX （例如 200），表示成功接收回调，其他响应都表示接收失败。
