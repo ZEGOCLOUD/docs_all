@@ -189,6 +189,53 @@ def create_directories_and_files(old_path, path_map):
             print(f"警告: 源文件不存在: {old_full_path}")
 
 
+def remove_heading_numbers(content):
+    """
+    去掉 Markdown 标题中的数字序号
+
+    Args:
+        content (str): 文件内容
+
+    Returns:
+        str: 处理后的内容
+    """
+    def replace_heading(match):
+        # 获取井号和标题内容
+        hashes = match.group(1)
+        title_content = match.group(2).strip()
+        
+        # 各种序号模式
+        patterns = [
+            # 数字序号：1, 2, 3, 1.1, 1.2.3, 等
+            r'^\d+(?:\.\d+)*\.?\s+',
+            # 中文数字序号：一、二、三、1、2、3、等
+            r'^[一二三四五六七八九十百千万]+[、．]\s*',
+            r'^[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]\s*',
+            # 括号数字：(1) (2) （1） （2） [1] [2] 等
+            r'^[\(\（\[]?\d+[\)\）\]]\s*',
+            # 字母序号：a) b) A) B) a. b. A. B. 等
+            r'^[a-zA-Z][\)\.]]\s*',
+            # 罗马数字：i) ii) I) II) 等
+            r'^[ivxlcdmIVXLCDM]+[\)\.]]\s*',
+        ]
+        
+        # 依次尝试匹配各种序号模式
+        for pattern in patterns:
+            title_content = re.sub(pattern, '', title_content)
+        
+        # 确保标题不为空
+        if not title_content.strip():
+            return match.group(0)  # 如果去掉序号后标题为空，返回原内容
+        
+        return f"{hashes} {title_content}"
+    
+    # 匹配 Markdown 标题（1-6级）
+    heading_pattern = r'^(#{1,6})\s+(.+)$'
+    content = re.sub(heading_pattern, replace_heading, content, flags=re.MULTILINE)
+    
+    return content
+
+
 def replace_content(file_path, language='zh'):
     """
     替换文件内容，将旧的 Markdown 语法转换为新的 MDX 语法
@@ -211,12 +258,20 @@ def replace_content(file_path, language='zh'):
         print(f"读取文件失败: {file_path}, 错误: {e}")
         return
 
+    # 根据语言设置标题
+    if language == 'zh':
+        note_title = "提示"
+        warning_title = "注意"
+    else:
+        note_title = "Note"
+        warning_title = "Warning"
+
     # 定义替换规则
     replacements = [
         # Note 标签 - 处理带空格的 class 属性和缩进
-        (r'(\s*)<div\s+class\s*=\s*"mk-hint">([\s\S]*?)\s*</div>', r'\1<Note title="Note">\n\2\n</Note>'),
+        (r'(\s*)<div\s+class\s*=\s*"mk-hint">([\s\S]*?)\s*</div>', rf'\1<Note title="{note_title}">\n\2\n</Note>'),
         # Warning 标签 - 处理带空格的 class 属性和缩进
-        (r'(\s*)<div\s+class\s*=\s*"mk-warning">([\s\S]*?)\s*</div>', r'\1<Warning title="Warning">\n\2\n</Warning>'),
+        (r'(\s*)<div\s+class\s*=\s*"mk-warning">([\s\S]*?)\s*</div>', rf'\1<Warning title="{warning_title}">\n\2\n</Warning>'),
         # 移除 style 标签
         (r'^[\s]*<style[^>]*>[\s\S]*?</style>', ''),
         # 移除 colgroup 标签
@@ -228,6 +283,9 @@ def replace_content(file_path, language='zh'):
     # 执行替换
     for pattern, replacement in replacements:
         content = re.sub(pattern, replacement, content, flags=re.MULTILINE | re.IGNORECASE)
+
+    # 处理标题序号去除
+    content = remove_heading_numbers(content)
 
     # 处理 HTML 表格转换为 Markdown 表格
     # content = convert_html_tables_to_markdown(content)
@@ -249,6 +307,9 @@ def replace_content(file_path, language='zh'):
 
     # 处理图片标签 - 改进版本
     content = convert_images_to_frames(content)
+
+    # 处理折叠内容转换
+    content = convert_details_to_accordion(content)
 
     # 处理特殊链接格式（处理 \|_blank 标记）
     content = re.sub(r'\[([^\]]+)\\\|_blank\]\(([^)]+)\)', r'[\1](\2)', content)
@@ -523,6 +584,54 @@ def convert_code_groups(content):
     # 由于代码组的 HTML 结构可能比较复杂，这里提供一个基础实现
     # 可能需要根据实际情况进一步调整
 
+    return content
+
+
+def convert_details_to_accordion(content):
+    """
+    将 HTML details/summary 标签转换为 Accordion 组件
+
+    Args:
+        content (str): 文件内容
+
+    Returns:
+        str: 转换后的内容
+    """
+    def details_replacer(match):
+        details_tag = match.group(0)
+        
+        # 检查是否有 open 属性
+        is_open = 'open' in details_tag
+        default_open = "true" if is_open else "false"
+        
+        # 提取 summary 内容
+        summary_match = re.search(r'<summary[^>]*>([\s\S]*?)</summary>', details_tag, re.IGNORECASE)
+        if summary_match:
+            title = summary_match.group(1).strip()
+            # 移除 HTML 标签
+            title = re.sub(r'<[^>]+>', '', title)
+        else:
+            title = "折叠内容"  # 默认标题
+        
+        # 提取 details 内容（除了 summary）
+        content_without_summary = re.sub(r'<summary[^>]*>[\s\S]*?</summary>', '', details_tag, flags=re.IGNORECASE)
+        # 移除外层的 details 标签
+        content_match = re.search(r'<details[^>]*>([\s\S]*?)</details>', content_without_summary, re.IGNORECASE)
+        if content_match:
+            accordion_content = content_match.group(1).strip()
+        else:
+            accordion_content = ""
+        
+        # 如果没有内容，添加占位符
+        if not accordion_content:
+            accordion_content = "内容"
+        
+        return f'<Accordion title="{title}" defaultOpen="{default_open}">\n{accordion_content}\n</Accordion>'
+    
+    # 匹配 details 标签
+    details_pattern = r'<details[^>]*>[\s\S]*?</details>'
+    content = re.sub(details_pattern, details_replacer, content, flags=re.IGNORECASE)
+    
     return content
 
 
