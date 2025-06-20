@@ -153,7 +153,7 @@ fi
 
 # 运行目录及文件名格式化脚本
 echo "🚀 启动目录及文件名格式化脚本..."
-python convert.py "$@"
+python3 convert.py "$@"
 
 # 检查执行结果
 if [ $? -eq 0 ]; then

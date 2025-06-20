@@ -764,7 +764,8 @@ def get_user_choice():
         print("2. 英文")
         print("=" * 60)
 
-        lang_choice = input("请输入选项 (1-2, 直接回车默认中文): ").strip()
+        lang_choice = input("请输入选项 (1-2, 直接回车默认中文): ")
+
 
         if lang_choice == '1' or lang_choice == '':
             language = 'zh'
@@ -987,15 +988,30 @@ def update_sidebars_json(source_dir):
                                 
                                 # 检查是否已有 frontmatter
                                 if not content.startswith('---'):
+                                    # 如果没有 frontmatter，添加新的
                                     content = f"---\narticleID: {article_id}\n---\n{content}"
                                 else:
-                                    # 更新现有的 frontmatter
-                                    content = re.sub(
-                                        r'^---\n(.*?)\n---',
-                                        f'---\n\\1\narticleID: {article_id}\n---',
-                                        content,
-                                        flags=re.DOTALL
-                                    )
+                                    # 提取现有的 frontmatter
+                                    frontmatter_match = re.match(r'^---(.*?)---', content, re.DOTALL)
+                                    if frontmatter_match:
+                                        frontmatter = frontmatter_match.group(1)
+                                        remaining_content = content[len(frontmatter_match.group(0)):]
+                                        
+                                        # 检查是否已存在 articleID
+                                        if re.search(r'^articleID:', frontmatter, re.MULTILINE):
+                                            # 更新现有的 articleID
+                                            updated_frontmatter = re.sub(
+                                                r'^articleID:.*$',
+                                                f'articleID: {article_id}',
+                                                frontmatter,
+                                                flags=re.MULTILINE
+                                            )
+                                        else:
+                                            # 添加新的 articleID
+                                            updated_frontmatter = frontmatter.rstrip() + f'\narticleID: {article_id}'
+                                        
+                                        # 重组内容
+                                        content = f"---{updated_frontmatter}---{remaining_content}"
                                 
                                 with open(mdx_path, 'w', encoding='utf-8') as f:
                                     f.write(content)
