@@ -16,86 +16,56 @@
 在合成实时流式视频前，请确保：
 - 在 [ZEGO 控制台\|_blank](https://console.zego.im) 创建项目，并申请有效的 AppID，详情请参考 [控制台 - 项目管理 - 项目信息\|_blank](#12107)。
 - 已联系 ZEGO 技术支持开通数字人 PaaS 服务和相关接口的权限。
-- 已获取数字人形象 ID 和音色 ID，详情请参考 [查看数字人资产\|_blank](#18584)。
+- 已获取数字人 ID 和音色 ID，详情请参考 [数字人列表\|_blank](../server-apis/digital-human-management/get-digital-human-list.mdx) [音色列表\|_blank](../server-apis/digital-human-management/get-timbre-list.mdx)。
 - 您的项目已 [集成实时音视频 SDK\|_blank](#195)。
 
 ## 实现流程
 
-<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/aigc_paas/create_live.png" /></Frame>
+```mermaid
+sequenceDiagram
+    participant 业务后台
+    participant 数字人后台
+    业务后台->>数字人后台: 获取可用的数字人列表
+    数字人后台-->>业务后台: 返回可用的数字人
+    业务后台->>数字人后台: 获取可用的音色列表
+    数字人后台-->>业务后台: 返回可用的音色列表
+    业务后台->>数字人后台: 创建数字人视频流任务
+    数字人后台->>数字人后台: 数字人进入房间并推流
+    数字人后台-->>业务后台: 返回数字人视频流任务 ID
+    业务后台->>数字人后台: 获取数字人视频流任务状态
+    数字人后台-->>业务后台: 返回数字人视频流任务状态
+    业务后台->>数字人后台: 文本或其他方式驱动数字人
+    数字人后台-->>业务后台: 返回驱动任务 ID。
+    数字人后台->>数字人后台: 文本转语音、使用音频进行推理，是数字人播报对应的文本
+    业务后台->>数字人后台: 停止数字人视频流任务
+    数字人后台-->>业务后台:
+    数字人后台->>数字人后台: 停止任务、退出房间
+```
 
 ### 1 生成签名
 
 根据 [调用方式\|_blank](#18534#5) 的签名机制生成签名，签名需设置在下文请求的公共参数中，ZEGO 服务端在收到请求后将对签名进行验证，以校验请求方的合法性。
 
-### 2 创建数字人视频任务
+### 2 获取可用的数字人列表
 
-调用 [CreateMetaHumanLive\|_blank](#18552) 接口创建数字人视频流任务，部分参数如下所示：
+调用 [数字人列表\|_blank](../server-apis/digital-human-management/get-digital-human-list.mdx) 获取可用的数字人。
 
-<table>
-  
-<tbody><tr>
-<th>参数</th>
-<th>说明</th>
-</tr>
-<tr>
-<td>RoomId</td>
-<td>房间 ID。</td>
-</tr>
-<tr>
-<td>StreamId</td>
-<td>音视频流 ID，App 维度下全局唯一。</td>
-</tr>
-<tr>
-<td>MetaHuman</td>
-<td>数字人形象配置，包含数字人形象 ID、数字人形象布局和起始帧。其中数字人形象 ID 可通过 [查询数字人模特详情|_blank](#18538) 获取。</td>
-</tr>
-<tr>
-<td>VideoOption</td>
-<td>视频的输出参数，包含输出视频的分辨率。</td>
-</tr>
-<tr>
-<td>MaxLiveTime</td>
-<td>数字人视频流任务最大时长。</td>
-</tr>
-</tbody></table>
+### 3 获取可用的音色列表
 
-创建成功后，ZEGO 服务端会返回数字人视频流任务的 TaskId（唯一标识）。若已配置回调地址，当视频流的状态发生改变时将收到相应的事件通知。
+调用 [音色列表\|_blank](../server-apis/digital-human-management/get-timbre-list.mdx) 获取音色。
 
-### 3 查询视频流任务状态
+### 4 创建数字人视频流任务
 
-开发者可以通过调用 [DescribeMetaHumanLive\|_blank](#18559) 接口，指定 TaskId，查询该视频流任务的状态。
+调用 [创建数字人视频流任务\|_blank](../server-apis/digital-human-streaming/create-digital-human-stream-task.mdx) 创建一个数字人视频流任务，生成数字人实时画面。
 
-### 4 驱动数字人
+### 5 获取数字人视频流任务状态
 
-调用 [DriveMetaHumanLive\|_blank](#18555) 接口驱动数字人说话，需设置如下参数：
+调用 [获取数字人视频流任务状态\|_blank](../server-apis/digital-human-streaming/get-digital-human-stream-task-status.mdx) 获取数字人视频流任务状态，如果状态为 `3：推流中` 则表示任务已经正在运行，客户端可以进入房间拉取到数字人的视频流。
 
-<Warning title="Warning">
+### 6 驱动数字人说话
 
-视频流任务创建后需要进行初始化，该过程可能耗时较长。当初始化完成后，视频流任务的状态切换为推流中后，才可驱动数字人。
-</Warning>
+调用 [文本驱动数字人\|_blank](../server-apis/digital-human-streaming/drive-by-text.mdx) 或者其他驱动接口，驱动数字人说话。
 
-<table>
-  
-<tbody><tr>
-<th>参数</th>
-<th>说明</th>
-</tr>
-<tr>
-<td>TaskId</td>
-<td>数字人视频流任务 ID，由 [创建数字人视频流任务\|_blank](!CreateMetaHumanLive) 返回。</td>
-</tr>
-<tr>
-<td>Driver</td>
-<td>驱动数字人说话的方式，分为文本驱动与音频驱动。<ul><li>文本驱动：需设置音色 ID 与文本，其中音色 ID 可通过 [查询音色列表\|_blank](#18540) 获取。</li><li>音频驱动：需设置音频文件链接。</li></ul></td>
-</tr>
-</tbody></table>
+### 7 停止数字人视频流任务
 
-驱动数字人成功后，ZEGO 服务端会返回驱动任务的 DriverTaskId（唯一标识）。如配置了回调地址，当驱动任务的状态发生改变时将收到相应的事件通知。
-
-### 5 查询驱动任务状态
-
-开发者可以通过调用 [DescribeMetaHumanLiveDriver\|_blank](#18561) 接口，指定 DriverTaskId 查询该驱动任务的状态。
-
-### 6 停止数字人视频流任务
-
-开发者可以通过调用 [StopMetaHumanLive\|_blank](#18557) 接口，指定 TaskId 停止该视频流任务。数字人视频流停止后，ZEGO RTC 内的推流将终止。
+调用 [停止数字人视频流任务\|_blank](../server-apis/digital-human-streaming/stop-digital-human-stream-task.mdx) 停止数字人视频流任务。
