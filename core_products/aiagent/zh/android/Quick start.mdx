@@ -108,7 +108,7 @@ sequenceDiagram
 <div>
 <Steps>
 <Step title="添加权限声明">
-进入 “app/src/main” 目录，打开 “AndroidManifest.xml” 文件，添加权限。
+进入 "app/src/main" 目录，打开 "AndroidManifest.xml" 文件，添加权限。
 ```xml AndroidManifest.xml
 <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 <uses-permission android:name="android.permission.INTERNET" />
@@ -692,7 +692,7 @@ void setEventHandler() {
 :::
 :::if{props.platform="iOS"}
 
-```objectivec 客户端拉智能体的流 {6-13}
+```objectivec 客户端拉智能体的流 {10}
 //监听房间流信息更新状态，拉取智能体流播放
 - (void)onRoomStreamUpdate:(ZegoUpdateType)updateType
                 streamList:(NSArray<ZegoStream *> *)streamList
@@ -942,3 +942,137 @@ zg.logoutRoom();
 
 
 以上就是您实现与智能体进行实时语音互动的完整核心流程。
+
+## ZEGO Express SDK 最佳配置实践
+
+为了获得最佳的音频通话体验，建议按照以下最佳实践配置 ZEGO Express SDK。这些配置可以显著提升智能体语音交互的质量。
+
+:::if{props.platform="undefined|iOS"}
+
+**进房间前设置：**
+<div>
+- 开启传统音频 3A 处理（回声消除AEC、自动增益控制AGC、噪声抑制ANS）
+- 设置房间的使用场景为高品质语聊房场景，SDK 会针对不同的场景采取不同的优化策略
+- 设置音频设备模式为默认模式
+- 开启 AI 回声消除，提高回声消除效果（该功能需要联系 ZEGO 技术支持获取对应版本的 ZEGOExpress SDK）
+- 配置音量闪避，避免声音冲突
+- 启用播放音量自适应，提升用户体验
+- 启用 AI 降噪，设置适当的噪声抑制级别
+</div>
+:::
+
+:::if{props.platform=undefined}
+
+```java
+ZegoEngineConfig config = new ZegoEngineConfig();
+HashMap<String, String> advanceConfig = new HashMap<String, String>();
+// 配置音量闪避，避免声音冲突
+advanceConfig.put("set_audio_volume_ducking_mode", "1");
+// 启用播放音量自适应
+advanceConfig.put("enable_rnd_volume_adaptive", "true");
+config.advancedConfig = advanceConfig;
+ZegoExpressEngine.setEngineConfig(config);
+//设置房间的使用场景为高品质语聊房场景
+ZegoExpressEngine.getEngine().setRoomScenario(ZegoScenario.HIGH_QUALITY_CHATROOM);
+// 设置音频设备模式  默认模式
+ZegoExpressEngine.getEngine().setAudioDeviceMode(ZegoAudioDeviceMode.GENERAL);
+// 开启传统音频 3A 处理
+ZegoExpressEngine.getEngine().enableAEC(true);
+ZegoExpressEngine.getEngine().enableAGC(true);
+ZegoExpressEngine.getEngine().enableANS(true);
+// 开启 AI 回声消除，请注意：开启 AI 回声消除需要联系 ZEGO 技术支持获取对应版本的 ZEGOExpress SDK
+ZegoExpressEngine.getEngine().setAECMode(ZegoAECMode.AI_AGGRESSIVE2);
+// 开启 AI 降噪，适度的噪声抑制
+ZegoExpressEngine.getEngine().setANSMode(ZegoANSMode.MEDIUM);
+```
+:::
+
+:::if{props.platform="iOS"}
+
+```objectivec
+ZegoEngineProfile* profile = [[ZegoEngineProfile alloc]init];
+profile.appID = kZegoAppId;
+profile.scenario = ZegoScenarioHighQualityChatroom; //高品质语聊房场景，设置该场景可以避免申请相机权限，接入方应按自己的业务场景设置具体值
+ZegoEngineConfig* engineConfig = [[ZegoEngineConfig alloc] init];
+engineConfig.advancedConfig = @{
+    @"set_audio_volume_ducking_mode":@1,/**配置音量闪避，避免声音冲突**/
+    @"enable_rnd_volume_adaptive":@"true",/**启用播放音量自适应**/
+};
+[ZegoExpressEngine setEngineConfig:engineConfig];
+[ZegoExpressEngine createEngineWithProfile:profile eventHandler:self];
+// 开启传统音频 3A 处理
+[[ZegoExpressEngine sharedEngine] enableAGC:TRUE];
+[[ZegoExpressEngine sharedEngine] enableAEC:TRUE];
+[[ZegoExpressEngine sharedEngine] enableANS:TRUE];
+// 开启 AI 回声消除，请注意：开启 AI 回声消除需要联系 ZEGO 技术支持获取对应版本的 ZEGOExpress SDK
+[[ZegoExpressEngine sharedEngine] setAECMode:ZegoAECModeAIAggressive2];
+// 开启 AI 降噪，适度的噪声抑制
+[[ZegoExpressEngine sharedEngine] setANSMode:ZegoANSModeMedium];
+
+```
+:::
+
+:::if{props.platform="Web"}
+
+<div>
+- 开启传统音频 3A 处理（回声消除AEC、自动增益控制AGC、噪声抑制ANS）
+- 设置房间的使用场景为高品质语聊房场景，SDK 会针对不同的场景采取不同的优化策略
+- 加载 [AI 降噪](https://doc-zh.zego.im/article/16459)模块，设置均衡模式模式（该功能需要联系 ZEGO 技术支持获取对应版本的 ZEGOExpress SDK）
+- 推流时，设置推流参数配置自动切换为可用的 `videoCodec`
+</div>
+
+```javascript
+// 引入必要的模块
+import { ZegoExpressEngine } from "zego-express-engine-webrtc";
+import { VoiceChanger } from "zego-express-engine-webrtc/voice-changer";
+
+// 加载音频处理模块，需要在 new ZegoExpressEngine 前调用
+ZegoExpressEngine.use(VoiceChanger);
+
+// 实例化 ZegoExpressEngine，设置房间的使用场景为高品质语聊房场景
+const zg = new ZegoExpressEngine(appid, server, { scenario: 7 })
+
+// 传统音频 3A 处理，SDK 默认开启
+
+// 创建本地媒体流
+const localStream = await zg.createZegoStream();
+
+// 创建本地媒体流后开启 AI 降噪
+await zg.enableAiDenoise(localstream, true);
+// 设置为AIBalanced
+await zg.setAiDenoiseMode(localstream, 1);
+
+// 推送本地媒体流，需要设置自动切换为可用的 videoCodec
+await zg.startPublishingStream(userStreamId, localStream, {
+  enableAutoSwitchVideoCodec: true,
+});
+
+// 检查系统要求
+async function checkSystemRequirements() {
+  // 检测是否支持WebRTC
+  const rtcSupport = await zg.checkSystemRequirements("webRTC");
+  if (!rtcSupport.result) {
+    console.error("浏览器不支持WebRTC");
+    return false;
+  }
+  
+  // 检测麦克风权限
+  const micSupport = await zg.checkSystemRequirements("microphone");
+  if (!micSupport.result) {
+    console.error("未获得麦克风权限");
+    return false;
+  }
+  
+  return true;
+}
+```
+
+## 其他优化建议
+<div>
+- **浏览器兼容性**：推荐使用 Chrome、Firefox、Safari 等现代浏览器的最新版本
+- **网络环境**：确保网络连接稳定，建议使用有线网络或信号良好的Wi-Fi
+- **音频设备**：使用质量较好的麦克风和扬声器
+- **页面优化**：避免在同一页面运行过多JavaScript任务，可能会影响音频处理性能
+- **HTTPS环境**：在生产环境中使用HTTPS协议，以确保获取麦克风权限
+</div>
+:::

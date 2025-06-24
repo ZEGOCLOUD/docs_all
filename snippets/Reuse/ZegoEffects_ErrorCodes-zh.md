@@ -46,7 +46,7 @@
 | 5000504    | License 不包含“小嘴”功能的授权，或 License 过期/无效。 |
 | 5000505    | License 不包含“长下巴”功能的授权，或 License 过期/无效。 |
 | 5000506    | License 不包含“瘦鼻”功能的授权，或 License 过期/无效。 |
-| 5000507    | License 不包含“白牙”功能的授权，或 License 过期/无效。 |
+| 5000507    | License 不包含“牙齿美白”功能的授权，或 License 过期/无效。 |
 | 5000508    | License 不包含“亮眼”功能的授权，或 License 过期/无效。 |
 | 5000509    | License 不包含“锐化”功能的授权，或 License 过期/无效。 |
 | 5000510    | License 不包含“红润”功能的授权，或 License 过期/无效。 |
