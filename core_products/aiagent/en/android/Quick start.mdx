@@ -43,6 +43,11 @@ Android client sample code. It includes basic capabilities such as logging into 
 iOS client sample code. It includes basic capabilities such as logging into and out of RTC rooms, and publishing and playing streams.
 </Card>
 :::
+:::if{props.platform="flutter"}
+<Card title="Flutter Client Sample Code" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/flutter" target="_blank">
+Flutter client sample code. It includes basic capabilities such as logging into and out of RTC rooms, and publishing and playing streams.
+</Card>
+:::
 :::if{props.platform="Web"}
 <Card title="Web Client Sample Code" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/web" target="_blank">
 Web client sample code. It includes basic capabilities such as logging into and out of RTC rooms, and publishing and playing streams.
@@ -193,6 +198,84 @@ Please refer to [Import the SDK > 2.2 > Method 3](https://www.zegocloud.com/docs
 
 :::
 
+:::if{props.platform="flutter"}
+
+Please refer to [Integrate the SDK > 2.2 > Method 1](https://www.zegocloud.com/docs/video-call/quickstart?platform=flutter&language=dart#2) to manually integrate the SDK. After integrating the SDK, follow these steps to initialize ZegoExpressEngine.
+> If including web platform, please refer to [Import the SDK for Flutter Web projects](https://www.zegocloud.com/docs/video-call/quickstart?platform=flutter&language=dart#4_3) to manually import JS files.
+
+<div>
+<Steps>
+<Step title="Go to android/app/src/main directory, open AndroidManifest.xml file, and add permissions">
+```xml AndroidManifest.xml
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.BLUETOOTH" />
+<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+```
+</Step>
+<Step title="Go to ios/Runner directory, open Info.plist file, and add permissions">
+```xml Info.plist
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    ...
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+    </array>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>需要访问麦克风以进行语音聊天</string>
+</dict>
+</plist>
+```
+</Step>
+<Step title="Go to ios directory, open Podfile file, and add permissions">
+```xml Podfile {5-12}
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+
+    # Start of the permission_handler configuration
+    target.build_configurations.each do |config|
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
+        'PERMISSION_MICROPHONE=1',
+      ]
+    end
+    # End of the permission_handler configuration
+  end
+end
+```
+</Step>
+<Step title="Request microphone permission at runtime">
+```dart
+import 'package:permission_handler/permission_handler.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  Permission.microphone.request().then((status) {
+    runApp(const MyApp());
+  });
+}
+```
+</Step>
+<Step title="Create and initialize ZegoExpressEngine">
+```dart {3}
+await ZegoExpressEngine.createEngineWithProfile(
+  /// 设置该场景可以避免申请相机权限，接入方应按自己的业务场景设置具体值
+  ZegoEngineProfile(ZegoKey.appId, ZegoScenario.HighQualityChatroom),
+);
+```
+</Step>
+</Steps>
+</div>
+
+:::
+
 :::if{props.platform="Web"}
 
 Please refer to [Import the SDK > Method 2](https://www.zegocloud.com/docs/video-call/sdk-integration?platform=web&language=javascript#2_1) to manually integrate the SDK. After integrating the SDK, follow these steps to initialize ZegoExpressEngine.
@@ -333,6 +416,27 @@ private void start() {
 }
 ```
 :::
+:::if{props.platform="flutter"}
+```dart
+// Notify your server to start call
+Future<Map<String, dynamic>> startCall() async {
+  try {
+    final response = await http.post(
+      Uri.parse('$_currentBaseUrl/api/start'),
+      headers: {'Content-Type': 'application/json'},
+    );
+    
+    if (response.statusCode == 200) { 
+      final json = jsonDecode(response.body);
+      return json;
+    }
+    return {'code': -1, 'message': 'Request failed'};
+  } catch (e) {
+    return {'code': -1, 'message': e.toString()};
+  }
+}
+```
+:::
 :::if{props.platform="Web"}
 ```javascript
 // Notify your server to start call
@@ -426,7 +530,7 @@ private void loginRoom(String userId, String userName, String userName, String t
 ```
 :::
 :::if{props.platform="iOS"}
-```swift title="Client login to room and publish a stream" {4-9,13,16-20,23}
+```objectivec title="Client request to login to room and publish a stream" {6-7,9,16-20,23}
 // Record the agent
 self.streamToPlay = [self getAgentStreamID];
 
@@ -461,6 +565,67 @@ engineConfig.advancedConfig = @{
 }];
 ```
 :::
+
+:::if{props.platform="flutter"}
+```dart title="Client request to login to room and publish a stream" {11-21,25-27,30-33,40}
+final String _userId = 'user_id_1';
+final String _roomId = 'room_id_1';
+final String _userStreamId = 'user_stream_id_1';
+
+/// Generate RTC Token [Reference Documentation]（https://www.zegocloud.com/docs/video-call/token?platform=flutter&language=dart）
+final token = await getToken();
+if (token.isEmpty) {
+  return false;
+}
+
+/// The following is used for answering delay optimization, you need to integrate the corresponding version of ZegoExpressEngine sdk, please contact ZEGOCLOUD technical support
+ZegoExpressEngine.setEngineConfig(
+  ZegoEngineConfig(
+    advancedConfig: {
+      /**This configuration is used for volume ducking**/
+      'set_audio_volume_ducking_mode': '1',
+      /**This configuration is used for adaptive playback volume**/
+      'enable_rnd_volume_adaptive': 'true'
+    },
+  ),
+);
+
+
+/// Enable 3A
+ZegoExpressEngine.instance.enableAGC(true);
+ZegoExpressEngine.instance.enableAEC(true);
+if (!kIsWeb) {
+  ZegoExpressEngine.instance.setAECMode(ZegoANSMode.AIAGGRESSIVE2);
+
+  /// This setting only affects AEC (echo cancellation). Here we set it to ModeGeneral, which uses our proprietary echo cancellation, which is more controllable.
+  /// If other options are selected, it might use the system's echo cancellation, which may work better on iPhones but could be less effective on some Android devices.
+  ZegoExpressEngine.instance.setAudioDeviceMode(
+    ZegoAudioDeviceMode.General,
+  );
+}
+ZegoExpressEngine.instance.enableANS(true);
+ZegoExpressEngine.instance.setANSMode(ZegoANSMode.Medium);
+
+/// Login to room
+final user = ZegoUser(_userId, _userId);
+final roomConfig = ZegoRoomConfig.defaultConfig()
+  ..isUserStatusNotify = true
+  ..token = token;
+final loginResult = await ZegoExpressEngine.instance.loginRoom(
+  _roomId,
+  user,
+  config: roomConfig,
+);
+if (0 != loginResult.errorCode && 1002001 != loginResult.errorCode) {
+  return false;
+}
+
+/// Start publishing stream (open microphone)
+await ZegoExpressEngine.instance.muteMicrophone(false);
+await ZegoExpressEngine.instance.startPublishingStream(_userStreamId);
+```
+:::
+
 :::if{props.platform="Web"}
 
 ```javascript title="Client login to room and publish a stream" {22-25}
@@ -540,7 +705,6 @@ void setEventHandler() {
             ZegoStream* item = [streamList objectAtIndex:i];
             
             [self startPlayStream:item.streamID];
-            break;
         }
     } else if(updateType == ZegoUpdateTypeDelete) {
         for (int i=0; i<streamList.count; i++) {
@@ -551,6 +715,30 @@ void setEventHandler() {
 }
 ```
 :::
+
+:::if{props.platform="flutter"}
+```dart title="Client request to play the AI agent stream"
+  ZegoExpressEngine.onRoomStreamUpdate = _onRoomStreamUpdate;
+
+  void _onRoomStreamUpdate(
+    String roomID,
+    ZegoUpdateType updateType,
+    List<ZegoStream> streamList,
+    Map<String, dynamic> extendedData,
+  ) {
+    if (updateType == ZegoUpdateType.Add) {
+      for (var stream in streamList) {
+        ZegoExpressEngine.instance.startPlayingStream(stream.streamID);
+      }
+    } else if (updateType == ZegoUpdateType.Delete) {
+      for (var stream in streamList) {
+        ZegoExpressEngine.instance.stopPlayingStream(stream.streamID);
+      }
+    }
+  }
+```
+:::
+
 :::if{props.platform="Web"}
 
 ```javascript title="Client request to play the AI agent stream" {9}
@@ -689,6 +877,44 @@ private void stop() {
     }];
     
     [task resume];
+}
+```
+:::
+:::if{props.platform="flutter"}
+```dart
+// Notify your server to end the call
+Future<Map<String, dynamic>> stopCall() async {
+  try {
+    final response = await http.post(
+      Uri.parse('$_currentBaseUrl/api/stop'),
+      headers: {'Content-Type': 'application/json'},
+    );
+    
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      return json;
+    }
+    return {'code': -1, 'message': 'Request failed'};
+  } catch (e) {
+    return {'code': -1, 'message': e.toString()};
+  }
+}
+
+/// Stop the conversation with the AI agent
+Future<bool> stop() async {
+  stopCall();
+
+  final String _roomId = 'room_id_1';
+
+  final engine = ZegoExpressEngine.instance;
+
+  /// Stop publishing stream
+  await engine.stopPublishingStream();
+
+  /// Log out of the room
+  await engine.logoutRoom(_roomId);
+
+  return true;
 }
 ```
 :::

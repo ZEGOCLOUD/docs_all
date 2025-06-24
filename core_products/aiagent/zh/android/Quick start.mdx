@@ -40,6 +40,11 @@ export const expressSDKMap = {
 包含最基本的登录、推流、拉流、退出房间等能力。
 </Card>
 :::
+:::if{props.platform="flutter"}
+<Card title="iOS 客户端示例代码" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/flutter" target="_blank">
+包含最基本的登录、推流、拉流、退出房间等能力。
+</Card>
+:::
 :::if{props.platform="Web"}
 <Card title="Web 客户端示例代码" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/web" target="_blank">
 包含最基本的登录、推流、拉流、退出房间等能力。
@@ -191,6 +196,84 @@ ZegoExpressEngine.createEngine(zegoEngineProfile, null);
 
 :::
 
+:::if{props.platform="flutter"}
+
+请参考 [集成 SDK > 2.2 > 方式一](https://doc-zh.zego.im/article/13196#2_2) 手动集成 SDK。集成 SDK 后按以下步骤初始化 ZegoExpressEngine。
+> 如果包含web平台,  请参考 [集成 SDK > 3.4](https://doc-zh.zego.im/article/13196#3_3) 手动引入 JS文件。
+
+<div>
+<Steps>
+<Step title="进入 android/app/src/main 目录，打开 AndroidManifest.xml 文件，添加权限">
+```xml AndroidManifest.xml
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.BLUETOOTH" />
+<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+```
+</Step>
+<Step title="进入 ios/Runner 目录，打开 Info.plist 文件，添加权限">
+```xml Info.plist
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    ...
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+    </array>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>需要访问麦克风以进行语音聊天</string>
+</dict>
+</plist>
+```
+</Step>
+<Step title="进入 ios 目录，打开 Podfile 文件，添加权限">
+```xml Podfile {5-12}
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+
+    # Start of the permission_handler configuration
+    target.build_configurations.each do |config|
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
+        'PERMISSION_MICROPHONE=1',
+      ]
+    end
+    # End of the permission_handler configuration
+  end
+end
+```
+</Step>
+<Step title="运行时申请麦克风权限">
+```dart
+import 'package:permission_handler/permission_handler.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  Permission.microphone.request().then((status) {
+    runApp(const MyApp());
+  });
+}
+```
+</Step>
+<Step title="创建并初始化 ZegoExpressEngine">
+```dart {3}
+await ZegoExpressEngine.createEngineWithProfile(
+  /// 设置该场景可以避免申请相机权限，接入方应按自己的业务场景设置具体值
+  ZegoEngineProfile(ZegoKey.appId, ZegoScenario.HighQualityChatroom),
+);
+```
+</Step>
+</Steps>
+</div>
+
+:::
+
 :::if{props.platform="Web"}
 
 请参考 [集成 SDK > 方式 2](https://doc-zh.zego.im/article/6839#2_2) 手动集成 SDK。集成 SDK 后按以下步骤初始化 ZegoExpressEngine。
@@ -333,6 +416,27 @@ private void start() {
 }
 ```
 :::
+:::if{props.platform="flutter"}
+```dart
+// 通知业务后台开始通话
+Future<Map<String, dynamic>> startCall() async {
+  try {
+    final response = await http.post(
+      Uri.parse('$_currentBaseUrl/api/start'),
+      headers: {'Content-Type': 'application/json'},
+    );
+    
+    if (response.statusCode == 200) { 
+      final json = jsonDecode(response.body);
+      return json;
+    }
+    return {'code': -1, 'message': '请求失败'};
+  } catch (e) {
+    return {'code': -1, 'message': e.toString()};
+  }
+}
+```
+:::
 :::if{props.platform="Web"}
 ```javascript
 // 通知业务后台开始通话
@@ -426,7 +530,7 @@ private void loginRoom(String userId, String userName, String userName, String t
 ```
 :::
 :::if{props.platform="iOS"}
-```objectivec 客户端登录房间并推流 {4-9,13,16-20,23}
+```objectivec 客户端登录房间并推流 {6-7,9,16-20,23}
 // 记录智能体
 self.streamToPlay = [self getAgentStreamID];
 
@@ -459,6 +563,65 @@ engineConfig.advancedConfig = @{
     //进房后开始推流
     [self startPushlishStream];
 }];
+```
+:::
+:::if{props.platform="flutter"}
+```dart 客户端登录房间并推流 {11-21,25-27,30-33,40}
+final String _userId = 'user_id_1';
+final String _roomId = 'room_id_1';
+final String _userStreamId = 'user_stream_id_1';
+
+/// 生成 RTC Token [参考文档]（https://doc-zh.zego.im/article/14350）
+final token = await getToken();
+if (token.isEmpty) {
+  return false;
+}
+
+/// 下面用来做应答延迟优化的，需要集成对应版本的ZegoExpressEngine sdk，请联系即构同学
+ZegoExpressEngine.setEngineConfig(
+  ZegoEngineConfig(
+    advancedConfig: {
+      /**该配置是用来做音量闪避的**/
+      'set_audio_volume_ducking_mode': '1',
+      /**该配置是用来做播放音量自适用**/
+      'enable_rnd_volume_adaptive': 'true'
+    },
+  ),
+);
+
+
+/// 启用3A
+ZegoExpressEngine.instance.enableAGC(true);
+ZegoExpressEngine.instance.enableAEC(true);
+if (!kIsWeb) {
+  ZegoExpressEngine.instance.setAECMode(ZegoANSMode.AIAGGRESSIVE2);
+
+  /// 这个设置只影响AEC（回声消除），我们这里设置为ModeGeneral，是会走我们自研的回声消除，这比较可控，
+  /// 如果其他选项，可能会走系统的回声消除，这在iphone手机上效果可能会更好，但如果在一些android机上效果可能不好
+  ZegoExpressEngine.instance.setAudioDeviceMode(
+    ZegoAudioDeviceMode.General,
+  );
+}
+ZegoExpressEngine.instance.enableANS(true);
+ZegoExpressEngine.instance.setANSMode(ZegoANSMode.Medium);
+
+/// 登录房间
+final user = ZegoUser(_userId, _userId);
+final roomConfig = ZegoRoomConfig.defaultConfig()
+  ..isUserStatusNotify = true
+  ..token = token;
+final loginResult = await ZegoExpressEngine.instance.loginRoom(
+  _roomId,
+  user,
+  config: roomConfig,
+);
+if (0 != loginResult.errorCode && 1002001 != loginResult.errorCode) {
+  return false;
+}
+
+/// 开始推流（打开麦克风）
+await ZegoExpressEngine.instance.muteMicrophone(false);
+await ZegoExpressEngine.instance.startPublishingStream(_userStreamId);
 ```
 :::
 :::if{props.platform="Web"}
@@ -540,7 +703,6 @@ void setEventHandler() {
             ZegoStream* item = [streamList objectAtIndex:i];
             
             [self startPlayStream:item.streamID];
-            break;
         }
     } else if(updateType == ZegoUpdateTypeDelete) {
         for (int i=0; i<streamList.count; i++) {
@@ -549,6 +711,28 @@ void setEventHandler() {
         }
     }
 }
+```
+:::
+:::if{props.platform="flutter"}
+```dart 客户端拉智能体的流
+  ZegoExpressEngine.onRoomStreamUpdate = _onRoomStreamUpdate;
+
+  void _onRoomStreamUpdate(
+    String roomID,
+    ZegoUpdateType updateType,
+    List<ZegoStream> streamList,
+    Map<String, dynamic> extendedData,
+  ) {
+    if (updateType == ZegoUpdateType.Add) {
+      for (var stream in streamList) {
+        ZegoExpressEngine.instance.startPlayingStream(stream.streamID);
+      }
+    } else if (updateType == ZegoUpdateType.Delete) {
+      for (var stream in streamList) {
+        ZegoExpressEngine.instance.stopPlayingStream(stream.streamID);
+      }
+    }
+  }
 ```
 :::
 :::if{props.platform="Web"}
@@ -689,6 +873,44 @@ private void stop() {
     }];
     
     [task resume];
+}
+```
+:::
+:::if{props.platform="flutter"}
+```dart
+// 通知业务后台结束通话
+Future<Map<String, dynamic>> stopCall() async {
+  try {
+    final response = await http.post(
+      Uri.parse('$_currentBaseUrl/api/stop'),
+      headers: {'Content-Type': 'application/json'},
+    );
+    
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      return json;
+    }
+    return {'code': -1, 'message': '请求失败'};
+  } catch (e) {
+    return {'code': -1, 'message': e.toString()};
+  }
+}
+
+/// 停止与AI智能体的会话
+Future<bool> stop() async {
+  stopCall();
+
+  final String _roomId = 'room_id_1';
+
+  final engine = ZegoExpressEngine.instance;
+
+  /// 停止推流
+  await engine.stopPublishingStream();
+
+  /// 登出房间
+  await engine.logoutRoom(_roomId);
+
+  return true;
 }
 ```
 :::
