@@ -40,6 +40,11 @@ export const expressSDKMap = {
 包含最基本的登录、推流、拉流、退出房间等能力。
 </Card>
 :::
+:::if{props.platform="flutter"}
+<Card title="iOS 客户端示例代码" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/flutter" target="_blank">
+包含最基本的登录、推流、拉流、退出房间等能力。
+</Card>
+:::
 :::if{props.platform="Web"}
 <Card title="Web 客户端示例代码" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/web" target="_blank">
 包含最基本的登录、推流、拉流、退出房间等能力。
@@ -103,7 +108,7 @@ sequenceDiagram
 <div>
 <Steps>
 <Step title="添加权限声明">
-进入 “app/src/main” 目录，打开 “AndroidManifest.xml” 文件，添加权限。
+进入 "app/src/main" 目录，打开 "AndroidManifest.xml" 文件，添加权限。
 ```xml AndroidManifest.xml
 <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 <uses-permission android:name="android.permission.INTERNET" />
@@ -184,6 +189,84 @@ ZegoExpressEngine.createEngine(zegoEngineProfile, null);
     
     [ZegoExpressEngine createEngineWithProfile:profile eventHandler:self];
 }
+```
+</Step>
+</Steps>
+</div>
+
+:::
+
+:::if{props.platform="flutter"}
+
+请参考 [集成 SDK > 2.2 > 方式一](https://doc-zh.zego.im/article/13196#2_2) 手动集成 SDK。集成 SDK 后按以下步骤初始化 ZegoExpressEngine。
+> 如果包含web平台,  请参考 [集成 SDK > 3.4](https://doc-zh.zego.im/article/13196#3_3) 手动引入 JS文件。
+
+<div>
+<Steps>
+<Step title="进入 android/app/src/main 目录，打开 AndroidManifest.xml 文件，添加权限">
+```xml AndroidManifest.xml
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.BLUETOOTH" />
+<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+```
+</Step>
+<Step title="进入 ios/Runner 目录，打开 Info.plist 文件，添加权限">
+```xml Info.plist
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    ...
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+    </array>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>需要访问麦克风以进行语音聊天</string>
+</dict>
+</plist>
+```
+</Step>
+<Step title="进入 ios 目录，打开 Podfile 文件，添加权限">
+```xml Podfile {5-12}
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+
+    # Start of the permission_handler configuration
+    target.build_configurations.each do |config|
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
+        'PERMISSION_MICROPHONE=1',
+      ]
+    end
+    # End of the permission_handler configuration
+  end
+end
+```
+</Step>
+<Step title="运行时申请麦克风权限">
+```dart
+import 'package:permission_handler/permission_handler.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  Permission.microphone.request().then((status) {
+    runApp(const MyApp());
+  });
+}
+```
+</Step>
+<Step title="创建并初始化 ZegoExpressEngine">
+```dart {3}
+await ZegoExpressEngine.createEngineWithProfile(
+  /// 设置该场景可以避免申请相机权限，接入方应按自己的业务场景设置具体值
+  ZegoEngineProfile(ZegoKey.appId, ZegoScenario.HighQualityChatroom),
+);
 ```
 </Step>
 </Steps>
@@ -333,6 +416,27 @@ private void start() {
 }
 ```
 :::
+:::if{props.platform="flutter"}
+```dart
+// 通知业务后台开始通话
+Future<Map<String, dynamic>> startCall() async {
+  try {
+    final response = await http.post(
+      Uri.parse('$_currentBaseUrl/api/start'),
+      headers: {'Content-Type': 'application/json'},
+    );
+    
+    if (response.statusCode == 200) { 
+      final json = jsonDecode(response.body);
+      return json;
+    }
+    return {'code': -1, 'message': '请求失败'};
+  } catch (e) {
+    return {'code': -1, 'message': e.toString()};
+  }
+}
+```
+:::
 :::if{props.platform="Web"}
 ```javascript
 // 通知业务后台开始通话
@@ -426,7 +530,7 @@ private void loginRoom(String userId, String userName, String userName, String t
 ```
 :::
 :::if{props.platform="iOS"}
-```swift 客户端登录房间并推流 {9-11,17,20-24,35}
+```objectivec 客户端登录房间并推流 {6-7,9,16-20,23}
 // 记录智能体
 self.streamToPlay = [self getAgentStreamID];
 
@@ -459,6 +563,65 @@ engineConfig.advancedConfig = @{
     //进房后开始推流
     [self startPushlishStream];
 }];
+```
+:::
+:::if{props.platform="flutter"}
+```dart 客户端登录房间并推流 {11-21,25-27,30-33,40}
+final String _userId = 'user_id_1';
+final String _roomId = 'room_id_1';
+final String _userStreamId = 'user_stream_id_1';
+
+/// 生成 RTC Token [参考文档]（https://doc-zh.zego.im/article/14350）
+final token = await getToken();
+if (token.isEmpty) {
+  return false;
+}
+
+/// 下面用来做应答延迟优化的，需要集成对应版本的ZegoExpressEngine sdk，请联系即构同学
+ZegoExpressEngine.setEngineConfig(
+  ZegoEngineConfig(
+    advancedConfig: {
+      /**该配置是用来做音量闪避的**/
+      'set_audio_volume_ducking_mode': '1',
+      /**该配置是用来做播放音量自适用**/
+      'enable_rnd_volume_adaptive': 'true'
+    },
+  ),
+);
+
+
+/// 启用3A
+ZegoExpressEngine.instance.enableAGC(true);
+ZegoExpressEngine.instance.enableAEC(true);
+if (!kIsWeb) {
+  ZegoExpressEngine.instance.setAECMode(ZegoANSMode.AIAGGRESSIVE2);
+
+  /// 这个设置只影响AEC（回声消除），我们这里设置为ModeGeneral，是会走我们自研的回声消除，这比较可控，
+  /// 如果其他选项，可能会走系统的回声消除，这在iphone手机上效果可能会更好，但如果在一些android机上效果可能不好
+  ZegoExpressEngine.instance.setAudioDeviceMode(
+    ZegoAudioDeviceMode.General,
+  );
+}
+ZegoExpressEngine.instance.enableANS(true);
+ZegoExpressEngine.instance.setANSMode(ZegoANSMode.Medium);
+
+/// 登录房间
+final user = ZegoUser(_userId, _userId);
+final roomConfig = ZegoRoomConfig.defaultConfig()
+  ..isUserStatusNotify = true
+  ..token = token;
+final loginResult = await ZegoExpressEngine.instance.loginRoom(
+  _roomId,
+  user,
+  config: roomConfig,
+);
+if (0 != loginResult.errorCode && 1002001 != loginResult.errorCode) {
+  return false;
+}
+
+/// 开始推流（打开麦克风）
+await ZegoExpressEngine.instance.muteMicrophone(false);
+await ZegoExpressEngine.instance.startPublishingStream(_userStreamId);
 ```
 :::
 :::if{props.platform="Web"}
@@ -529,7 +692,7 @@ void setEventHandler() {
 :::
 :::if{props.platform="iOS"}
 
-```objectivec 客户端拉智能体的流 {6-13}
+```objectivec 客户端拉智能体的流 {10}
 //监听房间流信息更新状态，拉取智能体流播放
 - (void)onRoomStreamUpdate:(ZegoUpdateType)updateType
                 streamList:(NSArray<ZegoStream *> *)streamList
@@ -540,7 +703,6 @@ void setEventHandler() {
             ZegoStream* item = [streamList objectAtIndex:i];
             
             [self startPlayStream:item.streamID];
-            break;
         }
     } else if(updateType == ZegoUpdateTypeDelete) {
         for (int i=0; i<streamList.count; i++) {
@@ -549,6 +711,28 @@ void setEventHandler() {
         }
     }
 }
+```
+:::
+:::if{props.platform="flutter"}
+```dart 客户端拉智能体的流
+  ZegoExpressEngine.onRoomStreamUpdate = _onRoomStreamUpdate;
+
+  void _onRoomStreamUpdate(
+    String roomID,
+    ZegoUpdateType updateType,
+    List<ZegoStream> streamList,
+    Map<String, dynamic> extendedData,
+  ) {
+    if (updateType == ZegoUpdateType.Add) {
+      for (var stream in streamList) {
+        ZegoExpressEngine.instance.startPlayingStream(stream.streamID);
+      }
+    } else if (updateType == ZegoUpdateType.Delete) {
+      for (var stream in streamList) {
+        ZegoExpressEngine.instance.stopPlayingStream(stream.streamID);
+      }
+    }
+  }
 ```
 :::
 :::if{props.platform="Web"}
@@ -692,6 +876,44 @@ private void stop() {
 }
 ```
 :::
+:::if{props.platform="flutter"}
+```dart
+// 通知业务后台结束通话
+Future<Map<String, dynamic>> stopCall() async {
+  try {
+    final response = await http.post(
+      Uri.parse('$_currentBaseUrl/api/stop'),
+      headers: {'Content-Type': 'application/json'},
+    );
+    
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      return json;
+    }
+    return {'code': -1, 'message': '请求失败'};
+  } catch (e) {
+    return {'code': -1, 'message': e.toString()};
+  }
+}
+
+/// 停止与AI智能体的会话
+Future<bool> stop() async {
+  stopCall();
+
+  final String _roomId = 'room_id_1';
+
+  final engine = ZegoExpressEngine.instance;
+
+  /// 停止推流
+  await engine.stopPublishingStream();
+
+  /// 登出房间
+  await engine.logoutRoom(_roomId);
+
+  return true;
+}
+```
+:::
 :::if{props.platform="Web"}
 ```javascript {4,21}
 // 退出房间
@@ -720,3 +942,137 @@ zg.logoutRoom();
 
 
 以上就是您实现与智能体进行实时语音互动的完整核心流程。
+
+## ZEGO Express SDK 最佳配置实践
+
+为了获得最佳的音频通话体验，建议按照以下最佳实践配置 ZEGO Express SDK。这些配置可以显著提升智能体语音交互的质量。
+
+:::if{props.platform="undefined|iOS"}
+
+**进房间前设置：**
+<div>
+- 开启传统音频 3A 处理（回声消除AEC、自动增益控制AGC、噪声抑制ANS）
+- 设置房间的使用场景为高品质语聊房场景，SDK 会针对不同的场景采取不同的优化策略
+- 设置音频设备模式为默认模式
+- 开启 AI 回声消除，提高回声消除效果（该功能需要联系 ZEGO 技术支持获取对应版本的 ZEGOExpress SDK）
+- 配置音量闪避，避免声音冲突
+- 启用播放音量自适应，提升用户体验
+- 启用 AI 降噪，设置适当的噪声抑制级别
+</div>
+:::
+
+:::if{props.platform=undefined}
+
+```java
+ZegoEngineConfig config = new ZegoEngineConfig();
+HashMap<String, String> advanceConfig = new HashMap<String, String>();
+// 配置音量闪避，避免声音冲突
+advanceConfig.put("set_audio_volume_ducking_mode", "1");
+// 启用播放音量自适应
+advanceConfig.put("enable_rnd_volume_adaptive", "true");
+config.advancedConfig = advanceConfig;
+ZegoExpressEngine.setEngineConfig(config);
+//设置房间的使用场景为高品质语聊房场景
+ZegoExpressEngine.getEngine().setRoomScenario(ZegoScenario.HIGH_QUALITY_CHATROOM);
+// 设置音频设备模式  默认模式
+ZegoExpressEngine.getEngine().setAudioDeviceMode(ZegoAudioDeviceMode.GENERAL);
+// 开启传统音频 3A 处理
+ZegoExpressEngine.getEngine().enableAEC(true);
+ZegoExpressEngine.getEngine().enableAGC(true);
+ZegoExpressEngine.getEngine().enableANS(true);
+// 开启 AI 回声消除，请注意：开启 AI 回声消除需要联系 ZEGO 技术支持获取对应版本的 ZEGOExpress SDK
+ZegoExpressEngine.getEngine().setAECMode(ZegoAECMode.AI_AGGRESSIVE2);
+// 开启 AI 降噪，适度的噪声抑制
+ZegoExpressEngine.getEngine().setANSMode(ZegoANSMode.MEDIUM);
+```
+:::
+
+:::if{props.platform="iOS"}
+
+```objectivec
+ZegoEngineProfile* profile = [[ZegoEngineProfile alloc]init];
+profile.appID = kZegoAppId;
+profile.scenario = ZegoScenarioHighQualityChatroom; //高品质语聊房场景，设置该场景可以避免申请相机权限，接入方应按自己的业务场景设置具体值
+ZegoEngineConfig* engineConfig = [[ZegoEngineConfig alloc] init];
+engineConfig.advancedConfig = @{
+    @"set_audio_volume_ducking_mode":@1,/**配置音量闪避，避免声音冲突**/
+    @"enable_rnd_volume_adaptive":@"true",/**启用播放音量自适应**/
+};
+[ZegoExpressEngine setEngineConfig:engineConfig];
+[ZegoExpressEngine createEngineWithProfile:profile eventHandler:self];
+// 开启传统音频 3A 处理
+[[ZegoExpressEngine sharedEngine] enableAGC:TRUE];
+[[ZegoExpressEngine sharedEngine] enableAEC:TRUE];
+[[ZegoExpressEngine sharedEngine] enableANS:TRUE];
+// 开启 AI 回声消除，请注意：开启 AI 回声消除需要联系 ZEGO 技术支持获取对应版本的 ZEGOExpress SDK
+[[ZegoExpressEngine sharedEngine] setAECMode:ZegoAECModeAIAggressive2];
+// 开启 AI 降噪，适度的噪声抑制
+[[ZegoExpressEngine sharedEngine] setANSMode:ZegoANSModeMedium];
+
+```
+:::
+
+:::if{props.platform="Web"}
+
+<div>
+- 开启传统音频 3A 处理（回声消除AEC、自动增益控制AGC、噪声抑制ANS）
+- 设置房间的使用场景为高品质语聊房场景，SDK 会针对不同的场景采取不同的优化策略
+- 加载 [AI 降噪](https://doc-zh.zego.im/article/16459)模块，设置均衡模式模式（该功能需要联系 ZEGO 技术支持获取对应版本的 ZEGOExpress SDK）
+- 推流时，设置推流参数配置自动切换为可用的 `videoCodec`
+</div>
+
+```javascript
+// 引入必要的模块
+import { ZegoExpressEngine } from "zego-express-engine-webrtc";
+import { VoiceChanger } from "zego-express-engine-webrtc/voice-changer";
+
+// 加载音频处理模块，需要在 new ZegoExpressEngine 前调用
+ZegoExpressEngine.use(VoiceChanger);
+
+// 实例化 ZegoExpressEngine，设置房间的使用场景为高品质语聊房场景
+const zg = new ZegoExpressEngine(appid, server, { scenario: 7 })
+
+// 传统音频 3A 处理，SDK 默认开启
+
+// 创建本地媒体流
+const localStream = await zg.createZegoStream();
+
+// 创建本地媒体流后开启 AI 降噪
+await zg.enableAiDenoise(localstream, true);
+// 设置为AIBalanced
+await zg.setAiDenoiseMode(localstream, 1);
+
+// 推送本地媒体流，需要设置自动切换为可用的 videoCodec
+await zg.startPublishingStream(userStreamId, localStream, {
+  enableAutoSwitchVideoCodec: true,
+});
+
+// 检查系统要求
+async function checkSystemRequirements() {
+  // 检测是否支持WebRTC
+  const rtcSupport = await zg.checkSystemRequirements("webRTC");
+  if (!rtcSupport.result) {
+    console.error("浏览器不支持WebRTC");
+    return false;
+  }
+  
+  // 检测麦克风权限
+  const micSupport = await zg.checkSystemRequirements("microphone");
+  if (!micSupport.result) {
+    console.error("未获得麦克风权限");
+    return false;
+  }
+  
+  return true;
+}
+```
+
+## 其他优化建议
+<div>
+- **浏览器兼容性**：推荐使用 Chrome、Firefox、Safari 等现代浏览器的最新版本
+- **网络环境**：确保网络连接稳定，建议使用有线网络或信号良好的Wi-Fi
+- **音频设备**：使用质量较好的麦克风和扬声器
+- **页面优化**：避免在同一页面运行过多JavaScript任务，可能会影响音频处理性能
+- **HTTPS环境**：在生产环境中使用HTTPS协议，以确保获取麦克风权限
+</div>
+:::
