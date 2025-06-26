@@ -315,6 +315,7 @@ checkSystemRequirements()
 ### 集成数字人 SDK
 
 :::if{props.platform="undefined"}
+
 数字人 SDK 已经发布在 maven 仓库，可参考以下代码集成 SDK 进项目。
 <Steps>
 <Step title="添加 `maven` 配置">
@@ -378,6 +379,18 @@ digitalMobile.attach(previewView);
 
 :::
 
+:::if{props.platform="iOS"}
+
+iOS TODO
+
+:::
+
+:::if{props.platform="Web"}
+
+web TODO
+
+:::
+
 ### 通知业务后台开始通话
 
 可在客户端真实用户进入房间后立即通知业务后台开始通话，异步调用可加降低通话接通时间。业务后台收到开始通话通知后，使用与客户端相同的 roomID 及关联的 userID 和 streamID 创建智能体实例，这样智能体就能与真实用户在同一个房间内进行相互推拉流实现语音互动。
@@ -391,7 +404,7 @@ digitalMobile.attach(previewView);
 // 通知业务后台开始通话
 private void start() {
     RequestBody body = RequestBody.create("", MediaType.parse("application/json; charset=utf-8"));
-    Request request = new Request.Builder().url(YOUR_SERVER_URL + "/api/start").post(body).build();
+    Request request = new Request.Builder().url(YOUR_SERVER_URL + "/api/start-digital-human").post(body).build();
 
     new OkHttpClient.Builder().build().newCall(request).enqueue(new Callback() {
         @Override
@@ -418,7 +431,7 @@ private void start() {
  */
 - (void)doStartCallWithCompletion:(void (^)(NSInteger code, NSString *message, NSDictionary *data))completion {
     // 构建请求URL
-    NSString *url = [NSString stringWithFormat:@"%@/api/start", self.currentBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/api/start-digital-human", self.currentBaseURL];
     NSURL *requestURL = [NSURL URLWithString:url];
     
     // 创建请求
@@ -489,7 +502,7 @@ private void start() {
 Future<Map<String, dynamic>> startCall() async {
   try {
     final response = await http.post(
-      Uri.parse('$_currentBaseUrl/api/start'),
+      Uri.parse('$_currentBaseUrl/api/start-digital-human'),
       headers: {'Content-Type': 'application/json'},
     );
     
@@ -509,7 +522,7 @@ Future<Map<String, dynamic>> startCall() async {
 // 通知业务后台开始通话
 async function startCall() {
   try {
-    const response = await fetch(`${YOUR_SERVER_URL}/api/start`, { // YOUR_SERVER_URL 为您的业务后台地址
+    const response = await fetch(`${YOUR_SERVER_URL}/api/start-digital-human`, { // YOUR_SERVER_URL 为您的业务后台地址
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -527,6 +540,111 @@ async function startCall() {
 ```
 :::
 </Accordion>
+
+### 开启自定义渲染
+
+:::if{props.platform=undefined}
+
+```java 自定义渲染
+// 开启自定义渲染
+ZegoCustomVideoRenderConfig renderConfig = new ZegoCustomVideoRenderConfig();
+renderConfig.bufferType = ZegoVideoBufferType.RAW_DATA;
+renderConfig.frameFormatSeries = ZegoVideoFrameFormatSeries.RGB;
+renderConfig.enableEngineRender = false;
+ZegoExpressEngine.getEngine().enableCustomVideoRender(true, renderConfig);
+// 监听视频帧回调
+ZegoExpressEngine.getEngine().setCustomVideoRenderHandler(new IZegoCustomVideoRenderHandler() {
+    @Override
+    public void onRemoteVideoFrameRawData(ByteBuffer[] data, int[] dataLength, ZegoVideoFrameParam param,
+                                            String streamID) {
+        IZegoDigitalMobile.ZegoVideoFrameParam digitalParam = new IZegoDigitalMobile.ZegoVideoFrameParam();
+        digitalParam.format = IZegoDigitalMobile.ZegoVideoFrameFormat.getZegoVideoFrameFormat(param.format.value());
+        digitalParam.height = param.height;
+        digitalParam.width = param.width;
+        digitalParam.rotation = param.rotation;
+        for (int i = 0; i < 4; i++) {
+            digitalParam.strides[i] = param.strides[i];
+        }
+        // 把 Express 视频帧数据传给数字人 SDK
+        digitalMobile.onRemoteVideoFrameRawData(data, dataLength, digitalParam, streamID);
+    }
+});
+
+// 监听 Express SEI 数据
+ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onPlayerSyncRecvSEI(String streamID, byte[] data) {
+        // 把 Express SEI 数据传给数字人 SDK
+        digitalMobile.onPlayerSyncRecvSEI(streamID, data);
+    }
+});
+```
+:::
+
+:::if{props.platform="iOS"}
+
+```objectivec 自定义渲染
+- (BOOL)enableCustomVideoRender {
+    // 自定义渲染
+    ZegoCustomVideoRenderConfig *renderConfig =
+    [[ZegoCustomVideoRenderConfig alloc] init];
+    // 选择 RawData 类型视频帧数据
+    renderConfig.bufferType = ZegoVideoBufferTypeRawData;
+    // 选择 RGB 色系数据格式
+    renderConfig.frameFormatSeries = ZegoVideoFrameFormatSeriesRGB;
+    // 指定在自定义视频渲染的同时引擎也渲染
+    renderConfig.enableEngineRender = NO;
+    
+    ZegoExpressEngine *engine = [ZegoExpressEngine sharedEngine];
+    if (!engine) {
+        return NO;
+    }
+    
+    [engine enableCustomVideoRender:YES config:renderConfig];
+    [engine setCustomVideoRenderHandler:self];
+    
+    return YES;
+}
+
+#pragma mark - ZegoEventHandler
+
+- (void)onRemoteVideoFrameRawData:(unsigned char **)data
+                       dataLength:(unsigned int *)dataLength
+                            param:(ZegoVideoFrameParam *)param
+                         streamID:(NSString *)streamID {
+    // 转换参数格式
+    ZDMVideoFrameParam *digitalParam = [[ZDMVideoFrameParam alloc] init];
+    digitalParam.format = (ZDMVideoFrameFormat)param.format;
+    digitalParam.width = param.size.width;
+    digitalParam.height = param.size.height;
+    digitalParam.rotation = param.rotation;
+    
+    for (int i = 0; i < 4; i++) {
+        [digitalParam setStride: param.strides[i] atIndex:i];
+    }
+    
+    // 遍历所有数字人API进行数据回调
+    for (id<IZegoDigitalMobile> digitalMobile in self.digitalMobileArray) {
+        [digitalMobile onRemoteVideoFrameRawData:data dataLength:dataLength param:digitalParam streamID:streamID];
+    }
+}
+
+- (void)onPlayerSyncRecvSEI:(NSData *)data streamID:(NSString *)streamID{
+    // 遍历所有数字人API进行SEI数据回调
+    for (id<IZegoDigitalMobile> digitalMobile in self.digitalMobileArray) {
+        [digitalMobile onPlayerSyncRecvSEI:streamID data:data];
+    }
+}
+```
+
+:::
+
+:::if{props.platform="Web"}
+
+web TODO
+
+:::
+
 
 ### 用户进入房间并推流
 
@@ -553,7 +671,7 @@ async function startCall() {
 </Note>
 
 :::if{props.platform=undefined}
-```java 客户端登录房间并推流 {5,6,12-17,25,30}
+```java 客户端登录房间并推流 {5-8,14-19,27-28,3}
 private void loginRoom(String userId, String userName, String userName, String token,
     IZegoRoomLoginCallback callback) {
     ZegoEngineConfig config = new ZegoEngineConfig();
@@ -599,7 +717,7 @@ private void loginRoom(String userId, String userName, String userName, String t
 ```
 :::
 :::if{props.platform="iOS"}
-```objectivec 客户端登录房间并推流 {6-7,9,16-20,23}
+```objectivec 客户端登录房间并推流 {6-10,12,19-23,26}
 // 记录智能体
 self.streamToPlay = [self getAgentStreamID];
 
@@ -607,6 +725,9 @@ ZegoEngineConfig* engineConfig = [[ZegoEngineConfig alloc] init];
 engineConfig.advancedConfig = @{
     @"set_audio_volume_ducking_mode":@1,/**该配置是用来做音量闪避的**/
     @"enable_rnd_volume_adaptive":@"true",/**该配置是用来做播放音量自适用**/
+    //数字人
+    @"sideinfo_callback_version":@(3),
+    @"sideinfo_bound_to_video_decoder":@"true"
 };
 [ZegoExpressEngine setEngineConfig:engineConfig];
 
@@ -740,41 +861,7 @@ enterRoom()
 
 :::if{props.platform=undefined}
 
-```java 客户端拉智能体的流 {9-16}
-
-// 开启自定义渲染
-ZegoCustomVideoRenderConfig renderConfig = new ZegoCustomVideoRenderConfig();
-renderConfig.bufferType = ZegoVideoBufferType.RAW_DATA;
-renderConfig.frameFormatSeries = ZegoVideoFrameFormatSeries.RGB;
-renderConfig.enableEngineRender = false;
-ZegoExpressEngine.getEngine().enableCustomVideoRender(true, renderConfig);
-// 监听视频帧回调
-ZegoExpressEngine.getEngine().setCustomVideoRenderHandler(new IZegoCustomVideoRenderHandler() {
-    @Override
-    public void onRemoteVideoFrameRawData(ByteBuffer[] data, int[] dataLength, ZegoVideoFrameParam param,
-                                            String streamID) {
-        IZegoDigitalMobile.ZegoVideoFrameParam digitalParam = new IZegoDigitalMobile.ZegoVideoFrameParam();
-        digitalParam.format = IZegoDigitalMobile.ZegoVideoFrameFormat.getZegoVideoFrameFormat(param.format.value());
-        digitalParam.height = param.height;
-        digitalParam.width = param.width;
-        digitalParam.rotation = param.rotation;
-        for (int i = 0; i < 4; i++) {
-            digitalParam.strides[i] = param.strides[i];
-        }
-        // 把 Express 视频帧数据传给数字人 SDK
-        digitalMobile.onRemoteVideoFrameRawData(data, dataLength, digitalParam, streamID);
-    }
-});
-
-// 监听 Express SEI 数据
-ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
-    @Override
-    public void onPlayerSyncRecvSEI(String streamID, byte[] data) {
-        // 把 Express SEI 数据传给数字人 SDK
-        digitalMobile.onPlayerSyncRecvSEI(streamID, data);
-    }
-});
-
+```java 客户端拉智能体的流 {9-12}
 // 监听流回调和拉流
 ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
     @Override
@@ -880,7 +967,7 @@ function setupEvent() {
 // 通知业务后台结束通话
 private void stop() {
     RequestBody body = RequestBody.create("", MediaType.parse("application/json; charset=utf-8"));
-    Request request = new Request.Builder().url(YOUR_SERVER_URL + "/api/stop").post(body).build();
+    Request request = new Request.Builder().url(YOUR_SERVER_URL + "/api/stop-digital-human").post(body).build();
 
     new OkHttpClient.Builder().build().newCall(request).enqueue(new Callback() {
         @Override
@@ -912,7 +999,7 @@ private void stop() {
  */
 - (void)doStopCallWithCompletion:(void (^)(NSInteger code, NSString *message, NSDictionary *data))completion {
     // 构建请求URL
-    NSString *url = [NSString stringWithFormat:@"%@/api/stop", self.currentBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/api/stop-digital-human", self.currentBaseURL];
     NSURL *requestURL = [NSURL URLWithString:url];
     
     // 创建请求
@@ -986,7 +1073,7 @@ private void stop() {
 Future<Map<String, dynamic>> stopCall() async {
   try {
     final response = await http.post(
-      Uri.parse('$_currentBaseUrl/api/stop'),
+      Uri.parse('$_currentBaseUrl/api/stop-digital-human'),
       headers: {'Content-Type': 'application/json'},
     );
     
@@ -1023,7 +1110,7 @@ Future<bool> stop() async {
 // 退出房间
 async function stopCall() {
   try {
-    const response = await fetch(`${YOUR_SERVER_URL}/api/stop`, { // YOUR_SERVER_URL 为您的业务后台地址
+    const response = await fetch(`${YOUR_SERVER_URL}/api/stop-digital-human`, { // YOUR_SERVER_URL 为您的业务后台地址
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1105,6 +1192,8 @@ ZegoEngineConfig* engineConfig = [[ZegoEngineConfig alloc] init];
 engineConfig.advancedConfig = @{
     @"set_audio_volume_ducking_mode":@1,/**配置音量闪避，避免声音冲突**/
     @"enable_rnd_volume_adaptive":@"true",/**启用播放音量自适应**/
+    @"sideinfo_callback_version":@(3),
+    @"sideinfo_bound_to_video_decoder":@"true"
 };
 [ZegoExpressEngine setEngineConfig:engineConfig];
 [ZegoExpressEngine createEngineWithProfile:profile eventHandler:self];
@@ -1132,6 +1221,14 @@ ZegoExpressEngine.getEngine().startPlayingStream(stream.streamID);
 ```
 :::
 
+
+:::if{props.platform="iOS"}
+```objectivec {1}
+    [[ZegoExpressEngine sharedEngine] setPlayStreamBufferIntervalRange:streamId min:100 max:2000];
+
+    [[ZegoExpressEngine sharedEngine] startPlayingStream:streamId];
+```
+:::
 
 :::if{props.platform="Web"}
 
