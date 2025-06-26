@@ -7,7 +7,11 @@ articleID: 1079
 
 ## 功能简介
 
-@@@Introduction_to_the_call_quality_detection_function@@@
+在使用 ZEGO Express SDK 进行通话中，用户有时会出现网络不好的情况，此时您可以通过相关回调了解当前通话的网络质量和音频/视频信息的变化。
+
+例如，在进行多人音视频通话或者多人唱歌时，我们需要实时显示用户的网络质量，就可以参考本文档实现相应功能。
+
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Call_quality_monitoring.png" /></Frame>
 
 ## 示例源码
 
@@ -20,7 +24,9 @@ articleID: 1079
 
 在监测通话质量之前，请确保：
 
-@@@Express-Video_Prerequisites@@@
+- 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目信息](https://doc-zh.zego.im/article/12107)。
+- 已在项目中集成 ZEGO Express SDK，并实现了基本的音视频推拉流功能，详情请参考 [快速开始 - 集成](!Integration/SDK_Integration) 和 [快速开始 - 实现流程](!Integration/Solution_Implementation)。
+
 
 ## 基础网络质量报告
 
@@ -28,13 +34,44 @@ articleID: 1079
 
 不同版本的 [onNetworkQuality](@onNetworkQuality) 回调逻辑有所不同：
 
-@@@onNetworkQuality_callback@@@
+<table>
+  <colgroup>
+    <col width="20%"/>
+    <col width="75%"/>
+  </colgroup>
+<tbody><tr>
+<th>版本号</th>
+<th>回调逻辑</th>
+</tr>
+<tr>
+<td>2.22.0 及以上</td>
+<td>基于 2.14.0 ～ 2.21.1 的 onNetworkQuality 接口的回调逻辑上，还可预估远端推流用户的网络情况，如果远端推流用户心跳丢失 1 次，回调其网络质量为 unknown；如果远端推流用户心跳丢失达到 3 次，回调其网络质量为 die。</td>
+</tr>
+<tr>
+<td>2.14.0 ～ 2.21.1</td>
+<td>
+* 您只要推流或者拉流，就能收到自己的网络质量回调。&nbsp;&nbsp;
+* 当您拉取了其他用户推送的音视频流并且该用户在您的房间内时，您才会收到该用户的网络质量回调。&nbsp;
+* 当 “userID” 为 ""（空字符串）时，代表本次是您自己的网络质量，当 “userID” 不为 ""（空字符串）时，代表是房间内其他用户的报告。
+</td>
+</tr>
+<tr>
+<td>2.10.0 ～ 2.13.1</td>
+<td>
+* 您必须既推流又拉流，才会收到自身的网络质量回调。&nbsp;
+* 当您拉取一条流时，推送该条流的用户必须在同一房间内，且他也进行了拉流，您才会收到该用户的网络质量回调。
+* 当 “userID” 为 ""（空字符串）时，代表本次是您自己的网络质量，当 “userID” 不为 ""（空字符串）时，代表是房间内其他用户的报告。
+</td>
+</tr>
+</tbody></table>
 
-<div class="mk-warning">
+
+<Warning title="注意">
+
 
 
 [onNetworkQuality](@onNetworkQuality) 不适用于使用 CDN 进行直播的场景，您可以参考 [进阶质量报告 - 推流质量报告](!Publisher_Player_Advanced/MonitorStreamQuality#5_1) 监测 CDN 的推流质量。
-</div>
+</Warning>
 
 
 ```objective-c
@@ -151,14 +188,58 @@ articleID: 1079
 }
 ```
 
-@@@Express_mos_quality_score@@@
+## MOS 音质评分
+
+ZEGO Express SDK 2.16.0 版本开始，拉流质量回调 [onPlayerQualityUpdate\|_blank](@onPlayerQualityUpdate) 中新增 "mos" 字段，表示对拉流音质的评分。开发者对音频质量比较关注时，可通过该字段了解当前音频的质量情况。
+
+mos 字段的取值范围为 [-1, 5]，其中 -1 表示未知（例如异常拉流时无法评分），[0, 5] 表示正常评分区间。实时音频 MOS 评分对应的主观音质感受如下：
+
+<table>
+  <colgroup>
+    <col width="25%"/>
+    <col width="75%"/>
+  </colgroup>
+  <tbody><tr>
+    <th>MOS 值</th>
+    <th>评价标准</th>
+  </tr>
+  <tr>
+    <td>4.0 ～ 5.0</td>
+    <td>音质很好，清晰流畅，听的清楚。</td>
+  </tr>
+  <tr>
+    <td>3.5 ～ 4.0</td>
+    <td>音质较好，偶有音质损伤，但依然清晰流畅，听的清楚。</td>
+  </tr>
+  <tr>
+    <td>3.0 ～ 3.5</td>
+    <td>音质一般，偶有卡顿，需要一点注意力才能听清。</td>
+  </tr>
+  <tr>
+    <td>2.5 ～ 3.0</td>
+    <td>音质较差，卡顿频繁，需要集中注意力才能听清。</td>
+  </tr>
+  <tr>
+    <td>2.0 ～ 2.5</td>
+    <td>音质很差，部分语义丢失，难以交流。</td>
+  </tr>
+  <tr>
+    <td>0 ～ 2.0</td>
+    <td>音质极差，大量语义丢失，无法交流。</td>
+  </tr>
+  <tr>
+    <td>-1</td>
+    <td>未知。</td>
+  </tr>
+</tbody></table>
+
 
 
 ## 其他信息监测
 
 ### 推流/拉流状态变化通知
 
-#### 1. 推流状态回调
+#### 推流状态回调
 
 在推流成功后，开发者可通过 [onPublisherStateUpdate](@onPublisherStateUpdate) 获取推流状态变更的通知。
 
@@ -172,10 +253,7 @@ articleID: 1079
 您可以根据回调内的 “state” 参数是否在 “正在请求推流状态” 来大体判断用户的推流网络情况。“state” 参数的取值与用户推流状态对应如下:
 
 <table>
-  <colgroup>
-    <col width="30%">
-    <col width="70%">
-  </colgroup>
+  
 <tbody><tr>
 <th>枚举值</th>
 <th>说明</th>
@@ -196,7 +274,7 @@ articleID: 1079
 
 参数 “extendedData” 为状态更新附带的扩展信息。若使用 ZEGO 的 CDN 内容分发网络，在推流成功后，该参数的内容的键为 “flv_url_list”、“rtmp_url_list”、“hls_url_list”，分别对应 flv、rtmp、hls 协议的拉流 URL。
 
-#### 2. 拉流状态变更回调
+#### 拉流状态变更回调
 
 在拉流成功后，开发者可通过 [onPlayerStateUpdate](@onPlayerStateUpdate) 获取拉流状态变更的通知。
 
@@ -210,10 +288,7 @@ articleID: 1079
 开发者可根据 “state” 参数是否在 “正在请求拉流状态” 来大体判断用户的拉流网络情况。“state” 参数的取值与用户拉流状态对应如下:
 
 <table>
-  <colgroup>
-    <col width="30%">
-    <col width="70%">
-  </colgroup>
+  
 <tbody><tr>
 <th>枚举值</th>
 <th>说明</th>
@@ -234,9 +309,16 @@ articleID: 1079
 
 ### 接收到音频/视频首帧的通知
 
-#### 1. 推流端音频采集首帧回调
+#### 推流端音频采集首帧回调
 
-@@@Callback_of_the_first_frame_of_audio_collection_at_the_push_end@@@
+您可以通过注册 [onPublisherCapturedAudioFirstFrame](@onPublisherCapturedAudioFirstFrame) 接收音频首帧回调。调用推流接口成功后，SDK 采集到第一帧音频数据时会收到此回调。
+
+<Note title="注意">
+
+在未推流的情况下，调用推流接口后，即 SDK 内部的音视频模块的引擎启动时，会采集本机设备的音频数据，收到该回调。开发者可根据该回调判断 SDK 是否真的采集到音频数据，若未收到该回调，说明音频采集设备被占用或异常。
+</Note>
+
+
 
 
 ```objective-c
@@ -245,9 +327,13 @@ articleID: 1079
 }
 ```
 
-#### 2. 推流端视频采集首帧回调（仅实时音视频 Video SDK 支持）
+#### 推流端视频采集首帧回调（仅实时音视频 Video SDK 支持）
 
-@@@Callback_of_the_first_frame_of_video_collection_at_the_push_end@@@
+您可以通过注册 [onPublisherCapturedVideoFirstFrame](@onPublisherCapturedVideoFirstFrame) 接收视频首帧回调。调用推流接口成功后，SDK 采集到第一帧视频数据时会收到此回调。
+
+<Note title="说明">
+在未推流或未预览的情况下，调用推流或预览接口后，即 SDK 内部的音视频模块的引擎启动时，会采集本机设备的视频数据，收到该回调。您可以根据该回调判断 SDK 是否真的采集到视频数据，若未收到该回调，说明视频采集设备被占用或异常。
+</Note>
 
 ```objective-c
 - (void)onPublisherCapturedVideoFirstFrame:(ZegoPublishChannel)channel {
@@ -255,7 +341,7 @@ articleID: 1079
 }
 ```
 
-#### 3. 拉流端音频接收首帧回调
+#### 拉流端音频接收首帧回调
 
 您可以通过注册 [onPlayerRecvAudioFirstFrame](@onPlayerRecvAudioFirstFrame) 监听拉流端音频接收首帧回调。调用拉流接口成功后，SDK 拉流拉到第一帧音频数据时会收到此回调。
 
@@ -264,7 +350,7 @@ articleID: 1079
 }
 ```
 
-#### 4. 拉流端视频接收首帧回调（仅实时音视频 Video SDK 支持）
+#### 拉流端视频接收首帧回调（仅实时音视频 Video SDK 支持）
 
 您可以通过注册 [onPlayerRecvVideoFirstFrame](@onPlayerRecvVideoFirstFrame) 监听拉流端接收视频首帧回调。调用拉流接口成功后，SDK 拉流拉到第一帧视频数据时会收到此回调。
 
@@ -273,14 +359,13 @@ articleID: 1079
 }
 ```
 
-#### 5. 拉流端渲染完视频首帧回调（仅实时音视频 Video SDK 支持）
+#### 拉流端渲染完视频首帧回调（仅实时音视频 Video SDK 支持）
 
 您可以通过注册 [onPlayerRenderVideoFirstFrame](@onPlayerRenderVideoFirstFrame) 监听拉流端渲染完视频首帧回调。调用拉流接口成功后，SDK 拉流并渲染完第一帧视频数据后会收到此回调。
 
-<div class='mk-hint'>
-
+<Note title="说明">
 您可用该回调来统计首帧耗时或更新播放流的 UI 组件。
-</div>
+</Note>
 
 ```objective-c
 - (void)onPlayerRenderVideoFirstFrame:(NSString *)streamID
@@ -289,9 +374,16 @@ articleID: 1079
 
 ### 视频分辨率变化的回调（仅实时音视频 Video SDK 支持）
 
-#### 1. 采集视频分辨率变更回调
+#### 采集视频分辨率变更回调
 
-@@@Callback_of_the_captured_video@@@
+您可以通过注册 [onPublisherVideoSizeChanged](@onPublisherVideoSizeChanged) 监听采集视频大小变更回调。推流成功后，在推流中途如果视频采集分辨率发生变化将会收到此回调。
+
+<Note title="说明">
+
+当在未推流或未预览的情况下，首次推流或首次预览，即 SDK 内部的音视频模块的引擎启动时，会采集本机设备的视频数据，此时采集分辨率会改变。
+
+您可以根据此回调来去除本地预览的 UI 的遮盖等类似操作。也可以根据该回调的分辨率来动态调整预览视图的比例等。
+</Note>
 
 
 ```objective-c
@@ -299,10 +391,16 @@ articleID: 1079
 }
 ```
 
-#### 2. 拉流分辨率变更通知
+#### 拉流分辨率变更通知
 
-@@@Pull_stream_resolution_change_notification@@@
+您可以通过注册 [onPlayerVideoSizeChanged](@onPlayerVideoSizeChanged) 获取拉流分辨率变更通知。拉流成功后，在拉流中途如果有视频分辨率发生变化将会收到此回调，用户可根据流的最终分辨率调整显示。
 
+<Note title="说明">
+
+- 若拉的流只有音频数据，会收不到该回调。
+- 若推流端由于网络问题触发 SDK 内部的流量控制时，可能会动态减小推流端的编码分辨率，此时也会收到此回调。
+- 所拉的音视频流真正渲染到所设置 UI 播放界面时会触发此回调。开发者可利用该回调通知来更新或切换真正播放流的 UI 组件。
+</Note>
 
 ```objective-c
 - (void)onPlayerVideoSizeChanged:(CGSize)size streamID:(NSString *)streamID {
@@ -312,4 +410,6 @@ articleID: 1079
 
 ## 相关文档
 
-@@@Documents_related_to_call_quality_monitoring@@@
+- [怎么处理视频卡顿问题？](https://doc-zh.zego.im/faq/video_freeze?product=ExpressVideo&platform=all)
+- [怎么处理音频卡顿问题？](https://doc-zh.zego.im/faq/audio_freeze?product=ExpressVideo&platform=all)
+- [如何理解和使用 SEI（媒体补充增强信息）？](https://doc-zh.zego.im/faq/sei?product=ExpressVideo&platform=all)
