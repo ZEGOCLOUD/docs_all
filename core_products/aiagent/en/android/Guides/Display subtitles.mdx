@@ -100,7 +100,7 @@ public static class AudioChatMessage {
 By implementing the `ZegoEventHandler` protocol and listening to the `onRecvExperimentalAPI` callback, the client can obtain room custom messages with `method` as `liveroom.room.on_recive_room_channel_message`. Below is an example of the callback listener code:
 
 <CodeGroup>
-```swift YourService.h/m
+```objectivec YourService.h/m
 // Implement ZegoEventHandler protocol
 @interface YourService () <ZegoEventHandler>
 @property (nonatomic, strong) YourViewController *youViewController;
@@ -117,9 +117,9 @@ By implementing the `ZegoEventHandler` protocol and listening to the `onRecvExpe
 @end // YourService implementation
 ```
 
-```swift YourViewController.h/m
+```objectivec YourViewController.h/m
 // Implement ZegoEventHandler protocol in the header file
-@interface YourViewController () <ZegoEventHandler>
+@interface YourViewController ()
 
 @end
 
@@ -190,6 +190,92 @@ By implementing the `ZegoEventHandler` protocol and listening to the `onRecvExpe
 @end // YourViewController implementation
 ```
 </CodeGroup>
+:::
+:::if{props.platform="flutter"}
+```dart
+import 'dart:convert';
+
+import 'package:flutter/cupertino.dart';
+import 'package:zego_express_engine/zego_express_engine.dart';
+
+class YourPage extends StatefulWidget {
+  const YourPage({super.key});
+
+  @override
+  State<YourPage> createState() => _YourPageState();
+}
+
+class _YourPageState extends State<YourPage> {
+  @override
+  void initState() {
+    super.initState();
+
+    ZegoExpressEngine.onRecvExperimentalAPI = onRecvExperimentalAPI;
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+
+    ZegoExpressEngine.onRecvExperimentalAPI = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return YourMessageView();
+  }
+
+  void onRecvExperimentalAPI(String content) {
+    try {
+      /// Check if it is a room message
+      final contentMap = jsonDecode(content);
+      if (contentMap['method'] !=
+          'liveroom.room.on_recive_room_channel_message') {
+        return;
+      }
+
+      final params = contentMap['params'];
+      if (params == null) {
+        return;
+      }
+
+      final msgContent = params['msg_content'];
+      if (msgContent == null) {
+        return;
+      }
+
+      handleMessageContent(msgContent);
+    } catch (e) {}
+  }
+
+  /// Handle message content
+  void handleMessageContent(String msgContent) {
+    final Map<String, dynamic> json = jsonDecode(msgContent);
+
+    /// 解析基本信息
+    final int timestamp = json['Timestamp'] ?? 0;
+    final int seqId = json['SeqId'] ?? 0;
+    final int round = json['Round'] ?? 0;
+    final int cmdType = json['Cmd'] ?? 0;
+    final Map<String, dynamic> data =
+        json['Data'] != null ? Map<String, dynamic>.from(json['Data']) : {};
+
+    // Handle messages based on command type
+    switch (cmdType) {
+      case 3:
+
+        /// ASR text
+        handleRecvAsrMessage(data, seqId, round, timestamp);
+        break;
+      case 4:
+
+        /// LLM text
+        handleRecvLLMMessage(data, seqId, round, timestamp);
+        break;
+    }
+  }
+}
+```
 :::
 :::if{props.platform="Web"}
 By listening to the `recvExperimentalAPI` callback, the client can obtain room custom messages with `method` as `onRecvRoomChannelMessage`. Below is an example of the callback listener code:
@@ -265,7 +351,7 @@ Determine the message type based on the Cmd field, and obtain the message conten
 ```
 :::
 :::if{props.platform="iOS"}
-```swift
+```objectivec
 - (void)handleAsrText:(NSDictionary *)data seqId:(int64_t)seqId round:(int64_t)round timestamp:(int64_t)timestamp {
     NSString *content = data[@"Text"];
     NSString *messageId = data[@"MessageId"];
@@ -275,6 +361,38 @@ Determine the message type based on the Cmd field, and obtain the message conten
         // Process ASR message and update UI
     }
 }
+```
+:::
+:::if{props.platform="flutter"}
+```dart
+  void handleRecvAsrMessage(
+    Map<String, dynamic> data,
+    int seqId,
+    int round,
+    int timestamp,
+  ) {
+    String text = '';
+    String messageId = '';
+    bool endFlag = false;
+    if (data.containsKey('Text')) {
+      text = data['Text'] ?? '';
+    }
+    if (data.containsKey('MessageId')) {
+      messageId = data['MessageId'] ?? '';
+    }
+    if (data.containsKey('EndFlag')) {
+      var val = data['EndFlag'];
+      if (val is bool) {
+        endFlag = val;
+      } else if (val is int) {
+        endFlag = val != 0;
+      } else if (val is String) {
+        endFlag = val == 'true' || val == '1';
+      }
+    }
+
+    /// Process ASR message and update UI
+  }
 ```
 :::
 
@@ -302,7 +420,7 @@ function handleAgentMessage(data, seqId, round) {
 ```
 :::
 :::if{props.platform="iOS"}
-```swift
+```objectivec
 - (void)handleLlmText:(NSDictionary *)data seqId:(int64_t)seqId round:(int64_t)round timestamp:(int64_t)timestamp {
     NSString *content = data[@"Text"];
     NSString *messageId = data[@"MessageId"];
@@ -312,6 +430,38 @@ function handleAgentMessage(data, seqId, round) {
         // Process LLM message and update UI
     }
 }
+```
+:::
+:::if{props.platform="flutter"}
+```dart
+  void handleRecvLLMMessage(
+    Map<String, dynamic> data,
+    int seqId,
+    int round,
+    int timestamp,
+  ) {
+    String text = '';
+    String messageId = '';
+    bool endFlag = false;
+    if (data.containsKey('Text')) {
+      text = data['Text'] ?? '';
+    }
+    if (data.containsKey('MessageId')) {
+      messageId = data['MessageId'] ?? '';
+    }
+    if (data.containsKey('EndFlag')) {
+      var val = data['EndFlag'];
+      if (val is bool) {
+        endFlag = val;
+      } else if (val is int) {
+        endFlag = val != 0;
+      } else if (val is String) {
+        endFlag = val == 'true' || val == '1';
+      }
+    }
+
+    /// 处理LLM消息并更新UI
+  }
 ```
 :::
 
@@ -375,7 +525,7 @@ audioChatMessageParser.setAudioChatMessageListListener(new AudioChatMessageListL
 You can also download the [subtitle component source code](https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/ios/ai_agent_quickstart/aiagent/audio/subtitles) to your project for use.
 <Accordion title="Subtitle Component Usage Example" defaultOpen="false">
 <CodeGroup>
-```swift YourView.h
+```objectivec YourView.h
 #import <UIKit/UIKit.h>
 #import "ZegoAIAgentSubtitlesEventHandler.h"
 
@@ -386,7 +536,7 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 ```
 
-```swift YourView.m
+```objectivec YourView.m
 #import "YourView.h"
 
 #import <Masonry/Masonry.h>
@@ -394,7 +544,7 @@ NS_ASSUME_NONNULL_BEGIN
 #import "ZegoAIAgentSubtitlesTableView.h"
 #import "ZegoAIAgentSubtitlesMessageDispatcher.h"
 
-@interface YourView()<ZegoAIAgentSubtitlesEventHandler>
+@interface YourView()<ZegoEventHandler, ZegoAIAgentSubtitlesEventHandler>
 // AI Agent Subtitles
 @property (nonatomic, strong, readwrite) ZegoAIAgentSubtitlesTableView *subtitlesTableView;
 
@@ -435,6 +585,10 @@ NS_ASSUME_NONNULL_BEGIN
         make.height.equalTo(self.mas_height).multipliedBy(0.5);
     }];
 }
+#pragma mark - ZegoEventHandler
+- (void)onRecvExperimentalAPI:(NSString *)content{
+    [[ZegoAIAgentSubtitlesMessageDispatcher sharedInstance] handleExpressExperimentalAPIContent:content];
+}
 
 #pragma mark - ZegoAIAgentSubtitlesEventHandler
 
@@ -455,6 +609,74 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 @end 
+```
+</CodeGroup>
+</Accordion>
+:::
+:::if{props.platform="flutter"}
+You can also download the [subtitle component source code](https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/flutter/lib/audio/subtitles) to your project for use directly.
+<Accordion title="Subtitle Component Usage Example" defaultOpen="false">
+<CodeGroup>
+```dart
+import 'package:flutter/material.dart';
+
+import 'subtitles/view/view.dart';
+import 'subtitles/view/model.dart';
+import 'subtitles/protocol/message_protocol.dart';
+import 'subtitles/protocol/message_dispatcher.dart';
+import 'package:zego_express_engine/zego_express_engine.dart';
+
+class ZegoAudioPage extends StatefulWidget {
+  const ZegoAudioPage({super.key});
+
+  @override
+  State<ZegoAudioPage> createState() => _ZegoAudioPageState();
+}
+
+class _ZegoAudioPageState extends State<ZegoAudioPage>
+    implements ZegoSubtitlesEventHandler {
+  late ZegoSubtitlesViewModel subtitlesModel;
+
+  @override
+  void initState() {
+    super.initState();
+
+    subtitlesModel = ZegoSubtitlesViewModel();
+
+    ZegoExpressEngine.onRecvExperimentalAPI = _onRecvExperimentalAPI;
+    ZegoSubtitlesMessageDispatcher().registerEventHandler(this);
+  }
+
+  @override
+  void dispose() {
+    ZegoExpressEngine.onRecvExperimentalAPI = null;
+    ZegoSubtitlesMessageDispatcher().unregisterEventHandler(this);
+
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: ZegoSubtitlesView(model: subtitlesModel),
+    );
+  }
+
+  @override
+  void onRecvAsrChatMsg(ZegoSubtitlesMessageProtocol message) {
+    subtitlesModel.handleRecvAsrMessage(message);
+  }
+
+  @override
+  void onRecvLLMChatMsg(ZegoSubtitlesMessageProtocol message) {
+    subtitlesModel.handleRecvLLMMessage(message);
+  }
+
+  void _onRecvExperimentalAPI(String content) {
+    ZegoSubtitlesMessageDispatcher.handleExpressExperimentalAPIContent(content);
+  }
+}
+
 ```
 </CodeGroup>
 </Accordion>
