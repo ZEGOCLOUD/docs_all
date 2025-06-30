@@ -4,7 +4,7 @@
 import re
 
 def process_release_notes():
-    file_path = '/Users/zego/Documents/docs_all/core_products/real-time-voice-video/zh/ios-oc/over-view/release-notes.mdx'
+    file_path = '/Users/zego/Documents/docs_all/core_products/real-time-voice-video/zh/macos-oc/over-view/release-notes.mdx'
     
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
