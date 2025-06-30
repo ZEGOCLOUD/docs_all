@@ -373,24 +373,6 @@ dependencies {
 }
 ```  
 </Step>
-
-<Step title="初始化数字人 SDK 实例">
-需要先在 android 布局文件中添加数字人预览视图，数字人会渲染到该视图上。
-
-```xml
-<im.zego.digitalmobile.ZegoPreviewView
-    android:id="@+id/preview_view"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent" />
-```
-
-```java
-String digitalHumanConfig = xxx; // 数字人配置，从业务后台创建数字人智能体实例接口返回的 DigitalHumanConfig 中获取
-IZegoDigitalMobile digitalMobile = ZegoDigitalMobileFactory.create(this);
-digitalMobile.start(digitalHumanConfig, null);
-digitalMobile.attach(previewView);
-```
-</Step>
 </Steps>
 </div>
 
@@ -440,18 +422,37 @@ digitalMobile.attach(previewView);
 ```java
 // 通知业务后台开始通话
 private void start() {
-    RequestBody body = RequestBody.create("", MediaType.parse("application/json; charset=utf-8"));
-    Request request = new Request.Builder().url(YOUR_SERVER_URL + "/api/start-digital-human").post(body).build();
+    String jsonContent;
+    try {
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put("digital_human_id", Constant.digital_human_id); // 替换为实际的 数字人 ID
+        jsonObject.put("config_id", "mobile"); 
+        jsonContent = jsonObject.toString();
+    } catch (JSONException e) {
+        return;
+    }
 
+    RequestBody body = RequestBody.create(jsonContent, MediaType.parse("application/json; charset=utf-8"));
+    Request request = new Request.Builder().url(Constant.BASE_URL + "/api/start-digital-human").post(body).build();
     new OkHttpClient.Builder().build().newCall(request).enqueue(new Callback() {
         @Override
         public void onFailure(@NonNull Call call, @NonNull IOException e) {
-            
         }
 
         @Override
         public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-            
+            if (response.isSuccessful()) {
+                String responseBody = response.body().string();
+                try {
+                    JSONObject json = new JSONObject(responseBody);
+                    int errorCode = (int) json.get("code");
+                    String digitalHumanConfig = (String) json.get("digital_human_config");   // 初始化数字人 sdk 需要使用
+                    if (errorCode == 0) {
+                        // 初始化数字人 SDK...
+                    }
+                } catch (JSONException e) {
+                }
+            }
         }
     });
 }
@@ -578,15 +579,40 @@ async function startCall() {
 :::
 </Accordion>
 
+
+:::if{props.platform="undefined"}
+### 初始化数字人 SDK 实例
+
+需要先在 android 布局文件中添加数字人预览 view，数字人会渲染到该视图上。
+
+```xml
+<im.zego.digitalmobile.ZegoPreviewView
+    android:id="@+id/preview_view"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />
+```
+
+```java
+String digitalHumanConfig = xxx; // 数字人配置，从业务后台创建数字人智能体实例接口返回的 DigitalHumanConfig 中获取
+IZegoDigitalMobile digitalMobile = ZegoDigitalMobileFactory.create(this);   // 创建数字人 SDK 实例，可以创建多个实例显示不同的数字人
+digitalMobile.start(digitalHumanConfig, null);   // 初始化数字人 SDK 实例，传入数字人配置
+digitalMobile.attach(previewView);   // 绑定上面创建的预览 view，数字人会渲染到该 view 上
+```
+:::
+
+
 :::if{props.platform=undefined}
 
-### 开启自定义渲染
+### 将 Express 数据同步给数字人 SDK
 
-TODO: 自定义渲染要简单说明作用。还有要补充实际渲染画面的示例代码。这里只提了开启就没有下文了。
-TODO: 不要把“数据传给数字人SDK”和“开启自定义渲染”混在一起。这样传数据本来是一个很重要的操作，可能被弱化了，客户可能抄漏代码。建议搞一个新章节：将数据同步给数字人SDK。
+数字人 SDK 渲染画面依赖 Express 的视频帧和 SEI 数据，需要开启 Express 的自定义视频渲染能力并且将 Express 的视频帧和 SEI 数据同步给数字人 SDK。
 
-```java 自定义渲染
-// 开启自定义渲染
+<Warning title="注意">
+- 开启 Express 自定义视频渲染能力需要在调用 Express [startPublishingStream]、[startPlayingStream] 接口之前设置，否则无效。
+</Warning>
+
+```java Express 开启自定义渲染
+// 开启 Express 自定义渲染
 ZegoCustomVideoRenderConfig renderConfig = new ZegoCustomVideoRenderConfig();
 renderConfig.bufferType = ZegoVideoBufferType.RAW_DATA;
 renderConfig.frameFormatSeries = ZegoVideoFrameFormatSeries.RGB;
@@ -623,9 +649,15 @@ ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
 
 :::if{props.platform="iOS"}
 
-### 开启自定义渲染
+### 将 Express 数据同步给数字人 SDK
 
-```objectivec 自定义渲染
+数字人 SDK 依赖 Express 的视频帧和 SEI 数据，需要开启 Express 的自定义视频渲染能力并且将 Express 的视频帧和 SEI 数据同步给数字人 SDK。
+
+<Warning title="注意">
+- 开启 Express 自定义视频渲染能力需要在调用 Express [startPublishingStream]、[startPlayingStream] 接口之前设置，否则无效。
+</Warning>
+
+```objectivec Express 开启自定义渲染
 - (BOOL)enableCustomVideoRender {
     // 自定义渲染
     ZegoCustomVideoRenderConfig *renderConfig =
@@ -680,6 +712,10 @@ ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
 ```
 
 :::
+
+
+
+
 
 ### 用户进入房间并推流
 
