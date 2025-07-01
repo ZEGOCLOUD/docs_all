@@ -71,14 +71,30 @@ def choose_check_remote():
     choice = input('输入数字选择(1/2)，直接回车默认不检查: ').strip()
     return choice == '1'
 
+def get_repo_root():
+    """获取仓库根目录路径"""
+    # 从脚本所在目录向上查找，直到找到包含docuo.config.*.json的目录
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    while current_dir != os.path.dirname(current_dir):  # 直到根目录
+        if any(f.startswith('docuo.config.') and f.endswith('.json')
+               for f in os.listdir(current_dir)):
+            return current_dir
+        current_dir = os.path.dirname(current_dir)
+    return None
+
 def load_config(language):
-    config_file = f'docuo.config.{language}.json'
+    repo_root = get_repo_root()
+    if not repo_root:
+        print(f'{Fore.RED}未找到仓库根目录（包含docuo.config.*.json的目录）{Style.RESET_ALL}')
+        sys.exit(1)
+
+    config_file = os.path.join(repo_root, f'docuo.config.{language}.json')
     if not os.path.exists(config_file):
         print(f'{Fore.RED}未找到配置文件: {config_file}{Style.RESET_ALL}')
         sys.exit(1)
     with open(config_file, 'r', encoding='utf-8') as f:
         config = json.load(f)
-    return config
+    return config, repo_root
 
 def choose_instance(instances):
     # 按组分类实例
@@ -265,7 +281,7 @@ def heading_to_anchor(heading_text):
             result += char
     return result
 
-def check_root_link(link, config, instance):
+def check_root_link(link, config, instance, repo_root):
     # 只检查以/开头的链接
     if not link.startswith('/'):
         return None
@@ -297,9 +313,10 @@ def check_root_link(link, config, instance):
     file_id = '/'.join(parts[len(matched_base.split('/')):])
     if not file_id:
         return False
-    # 路径
+    # 路径 - 使用仓库根目录
     path_dir = matched_inst['path']
-    abs_path_dir = os.path.normpath(path_dir)
+    abs_path_dir = os.path.join(repo_root, path_dir) if not os.path.isabs(path_dir) else path_dir
+    abs_path_dir = os.path.normpath(abs_path_dir)
     # 遍历该目录下所有mdx文件，找file_id是否能对上
     found_file = None
     for dirpath, _, filenames in os.walk(abs_path_dir):
@@ -339,18 +356,15 @@ def check_remote_link(link):
     except Exception:
         return False
 
-def check_mdx_import(import_path, base_file_path):
+def check_mdx_import(import_path, base_file_path, repo_root):
     """检查MDX导入路径是否有效"""
     # 只检查.mdx文件
     if not import_path.lower().endswith('.mdx'):
         return None
 
-    # 使用当前目录作为根目录
-    root_path = os.getcwd()
-    
-    # 构建完整的文件路径
-    full_path = os.path.join(root_path, import_path)
-    
+    # 使用仓库根目录作为根目录
+    full_path = os.path.join(repo_root, import_path)
+
     # 检查文件是否存在
     if not os.path.exists(full_path):
         return False
@@ -360,13 +374,16 @@ def check_mdx_import(import_path, base_file_path):
 def main():
     language = choose_language()
     check_remote = choose_check_remote()
-    config = load_config(language)
+    config, repo_root = load_config(language)
     instances = config.get('instances', [])
     if not instances:
         print(f'{Fore.RED}未找到任何实例，请检查配置文件。{Style.RESET_ALL}')
         sys.exit(1)
     instance = choose_instance(instances)
     instance_path = instance['path']
+    # 确保实例路径是绝对路径
+    if not os.path.isabs(instance_path):
+        instance_path = os.path.join(repo_root, instance_path)
     instance_label = instance.get("label", "未知实例")
     platform = instance.get("navigationInfo", {}).get("platform", "")
     if platform:
@@ -389,7 +406,7 @@ def main():
 
             # 检查MDX导入
             if link_type == 'mdx_import':
-                mdx_result = check_mdx_import(url, file_path)
+                mdx_result = check_mdx_import(url, file_path, repo_root)
                 if mdx_result is False:
                     problems['MDX导入路径无效'].append({
                         'file': file_path,
@@ -424,7 +441,7 @@ def main():
             elif local_result is True:
                 continue
             # 3. 检查根路径链接
-            root_result = check_root_link(url, config, instance)
+            root_result = check_root_link(url, config, instance, repo_root)
             if root_result is False:
                 problems['根路径链接无效'].append({
                     'file': file_path,
