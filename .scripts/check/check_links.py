@@ -39,6 +39,7 @@ import json
 import sys
 import urllib.parse
 import requests
+import subprocess
 from collections import defaultdict
 
 # 终端彩色输出
@@ -71,14 +72,71 @@ def choose_check_remote():
     choice = input('输入数字选择(1/2)，直接回车默认不检查: ').strip()
     return choice == '1'
 
+def get_repo_root():
+    """获取仓库根目录路径"""
+    # 从脚本所在目录向上查找，直到找到包含docuo.config.*.json的目录
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    while current_dir != os.path.dirname(current_dir):  # 直到根目录
+        if any(f.startswith('docuo.config.') and f.endswith('.json')
+               for f in os.listdir(current_dir)):
+            return current_dir
+        current_dir = os.path.dirname(current_dir)
+    return None
+
+def get_git_changed_files():
+    """获取git变更的md/mdx文件"""
+    try:
+        # 获取待提交的文件
+        result = subprocess.run(
+            ['git', 'diff', '--cached', '--name-only', '--diff-filter=AM'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        changed_files = result.stdout.strip().split('\n') if result.stdout.strip() else []
+
+        # 过滤出md/mdx文件
+        md_files = [f for f in changed_files if f.lower().endswith(('.md', '.mdx'))]
+        return md_files
+    except subprocess.CalledProcessError:
+        print(f'{Fore.RED}获取git变更文件失败，请确保在git仓库中运行{Style.RESET_ALL}')
+        return []
+
+def find_instances_for_files(files, config, repo_root):
+    """根据文件路径找到对应的实例"""
+    instances_map = {}
+    instances = config.get('instances', [])
+
+    for file_path in files:
+        for instance in instances:
+            instance_path = instance.get('path', '')
+            instance_id = instance.get('id', '')
+
+            # 检查文件路径是否以实例的path开头
+            if instance_path and file_path.startswith(instance_path):
+                if instance_id not in instances_map:
+                    instances_map[instance_id] = {
+                        'instance': instance,
+                        'files': []
+                    }
+                instances_map[instance_id]['files'].append(file_path)
+                break  # 找到匹配的实例后跳出循环
+
+    return instances_map
+
 def load_config(language):
-    config_file = f'docuo.config.{language}.json'
+    repo_root = get_repo_root()
+    if not repo_root:
+        print(f'{Fore.RED}未找到仓库根目录（包含docuo.config.*.json的目录）{Style.RESET_ALL}')
+        sys.exit(1)
+
+    config_file = os.path.join(repo_root, f'docuo.config.{language}.json')
     if not os.path.exists(config_file):
         print(f'{Fore.RED}未找到配置文件: {config_file}{Style.RESET_ALL}')
         sys.exit(1)
     with open(config_file, 'r', encoding='utf-8') as f:
         config = json.load(f)
-    return config
+    return config, repo_root
 
 def choose_instance(instances):
     # 按组分类实例
@@ -265,7 +323,7 @@ def heading_to_anchor(heading_text):
             result += char
     return result
 
-def check_root_link(link, config, instance):
+def check_root_link(link, config, instance, repo_root):
     # 只检查以/开头的链接
     if not link.startswith('/'):
         return None
@@ -297,9 +355,10 @@ def check_root_link(link, config, instance):
     file_id = '/'.join(parts[len(matched_base.split('/')):])
     if not file_id:
         return False
-    # 路径
+    # 路径 - 使用仓库根目录
     path_dir = matched_inst['path']
-    abs_path_dir = os.path.normpath(path_dir)
+    abs_path_dir = os.path.join(repo_root, path_dir) if not os.path.isabs(path_dir) else path_dir
+    abs_path_dir = os.path.normpath(abs_path_dir)
     # 遍历该目录下所有mdx文件，找file_id是否能对上
     found_file = None
     for dirpath, _, filenames in os.walk(abs_path_dir):
@@ -339,44 +398,105 @@ def check_remote_link(link):
     except Exception:
         return False
 
-def check_mdx_import(import_path, base_file_path):
+def check_mdx_import(import_path, base_file_path, repo_root):
     """检查MDX导入路径是否有效"""
     # 只检查.mdx文件
     if not import_path.lower().endswith('.mdx'):
         return None
 
-    # 使用当前目录作为根目录
-    root_path = os.getcwd()
-    
-    # 构建完整的文件路径
-    full_path = os.path.join(root_path, import_path)
-    
+    # 使用仓库根目录作为根目录
+    full_path = os.path.join(repo_root, import_path)
+
     # 检查文件是否存在
     if not os.path.exists(full_path):
         return False
 
     return True
 
-def main():
-    language = choose_language()
-    check_remote = choose_check_remote()
-    config = load_config(language)
-    instances = config.get('instances', [])
-    if not instances:
-        print(f'{Fore.RED}未找到任何实例，请检查配置文件。{Style.RESET_ALL}')
-        sys.exit(1)
-    instance = choose_instance(instances)
-    instance_path = instance['path']
-    instance_label = instance.get("label", "未知实例")
-    platform = instance.get("navigationInfo", {}).get("platform", "")
-    if platform:
-        display_name = f"{instance_label} ({platform})"
-    else:
-        display_name = instance_label
-    print(f'正在检查实例: {display_name} ({instance_path})')
-    mdx_files = find_mdx_files(instance_path)
-    print(f'共找到{len(mdx_files)}个mdx文件。')
+def check_git_mode():
+    """git模式：检查变更文件对应的实例"""
+    print(f'{Fore.CYAN}Git模式：检查变更文件对应的实例{Style.RESET_ALL}')
 
+    # 获取git变更的文件
+    changed_files = get_git_changed_files()
+    if not changed_files:
+        print(f'{Fore.YELLOW}未发现待提交的md/mdx文件变更{Style.RESET_ALL}')
+        return True
+
+    print(f'发现{len(changed_files)}个变更的md/mdx文件:')
+    for f in changed_files:
+        print(f'  - {f}')
+
+    all_problems = defaultdict(list)
+
+    # 加载主配置文件（包含所有实例）
+    try:
+        repo_root = get_repo_root()
+        if not repo_root:
+            print(f'{Fore.RED}未找到仓库根目录{Style.RESET_ALL}')
+            return False
+
+        config_file = os.path.join(repo_root, 'docuo.config.json')
+        if not os.path.exists(config_file):
+            print(f'{Fore.RED}未找到配置文件: {config_file}{Style.RESET_ALL}')
+            return False
+
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+
+        # 找到对应的实例
+        instances_map = find_instances_for_files(changed_files, config, repo_root)
+        if not instances_map:
+            print(f'{Fore.YELLOW}变更的文件未匹配到任何实例{Style.RESET_ALL}')
+            return True
+
+        print(f'\n匹配到{len(instances_map)}个实例需要检查:')
+
+        for instance_id, instance_info in instances_map.items():
+            instance = instance_info['instance']
+            files = instance_info['files']
+
+            # 获取实例语言
+            instance_locale = instance.get('locale', 'en')  # 默认为英文
+
+            instance_label = instance.get("label", "未知实例")
+            platform = instance.get("navigationInfo", {}).get("platform", "")
+            display_name = f"{instance_label} ({platform})" if platform else instance_label
+
+            print(f'\n正在检查实例: {display_name} [语言: {instance_locale}]')
+            print(f'变更文件: {", ".join(files)}')
+
+            # 检查该实例下的所有文件（不仅仅是变更的文件）
+            instance_path = instance['path']
+            if not os.path.isabs(instance_path):
+                instance_path = os.path.join(repo_root, instance_path)
+
+            # 跳过外部链接实例
+            if instance_path.startswith('http'):
+                print(f'跳过外部链接实例: {instance_path}')
+                continue
+
+            mdx_files = find_mdx_files(instance_path)
+            print(f'实例共有{len(mdx_files)}个mdx文件')
+
+            problems = check_instance_links(mdx_files, config, instance, repo_root, check_remote=True)
+
+            # 合并问题
+            for ptype, items in problems.items():
+                all_problems[ptype].extend(items)
+
+    except Exception as e:
+        print(f'{Fore.RED}加载配置失败: {e}{Style.RESET_ALL}')
+        return False
+
+    # 输出总结
+    print_problems_summary(all_problems, is_warning=True)
+
+    # git模式只输出警告，不返回失败
+    return True
+
+def check_instance_links(mdx_files, config, instance, repo_root, check_remote=False):
+    """检查实例中的链接"""
     problems = defaultdict(list)
 
     for file_path in mdx_files:
@@ -389,7 +509,7 @@ def main():
 
             # 检查MDX导入
             if link_type == 'mdx_import':
-                mdx_result = check_mdx_import(url, file_path)
+                mdx_result = check_mdx_import(url, file_path, repo_root)
                 if mdx_result is False:
                     problems['MDX导入路径无效'].append({
                         'file': file_path,
@@ -401,7 +521,8 @@ def main():
                 continue
 
             # 1. 检查中英文链接混用
-            if check_mixed_language(url, language):
+            instance_locale = instance.get('locale', 'en')  # 默认为英文
+            if check_mixed_language(url, instance_locale):
                 problems['中英文链接混用'].append({
                     'file': file_path,
                     'line': line,
@@ -424,7 +545,7 @@ def main():
             elif local_result is True:
                 continue
             # 3. 检查根路径链接
-            root_result = check_root_link(url, config, instance)
+            root_result = check_root_link(url, config, instance, repo_root)
             if root_result is False:
                 problems['根路径链接无效'].append({
                     'file': file_path,
@@ -448,13 +569,19 @@ def main():
                         'link_type': link_type
                     })
                     continue
-    # 输出总结
-    print('\n检查结果总结:')
+
+    return problems
+
+def print_problems_summary(problems, is_warning=False):
+    """打印问题总结"""
+    prefix = "⚠️  警告" if is_warning else "❌ 错误"
+
     if not problems:
         print(f'{Fore.GREEN}未发现任何问题链接！{Style.RESET_ALL}')
         return
+
     for ptype, items in problems.items():
-        print(f'\n{Fore.YELLOW}{ptype}（共{len(items)}个）:{Style.RESET_ALL}')
+        print(f'\n{Fore.YELLOW}{prefix} - {ptype}（共{len(items)}个）:{Style.RESET_ALL}')
         for item in items:
             # vscode终端可点击跳转格式: "file_path":line (用引号包围路径以支持空格)
             link_type = item.get('link_type', 'unknown')
@@ -462,7 +589,42 @@ def main():
             print(f'  "{item["file"]}":{item["line"]}')
             print(f'    {type_display} {item["url"]}')
             print(f'    {item["line_content"]}')
-            print('\n')
+            print()
+
+def main():
+    # 检查是否是git模式
+    if len(sys.argv) > 1 and sys.argv[1] == 'git':
+        # git模式：检查变更文件对应的实例
+        return check_git_mode()
+
+    # 交互模式
+    language = choose_language()
+    check_remote = choose_check_remote()
+    config, repo_root = load_config(language)
+    instances = config.get('instances', [])
+    if not instances:
+        print(f'{Fore.RED}未找到任何实例，请检查配置文件。{Style.RESET_ALL}')
+        sys.exit(1)
+    instance = choose_instance(instances)
+    instance_path = instance['path']
+    # 确保实例路径是绝对路径
+    if not os.path.isabs(instance_path):
+        instance_path = os.path.join(repo_root, instance_path)
+    instance_label = instance.get("label", "未知实例")
+    platform = instance.get("navigationInfo", {}).get("platform", "")
+    if platform:
+        display_name = f"{instance_label} ({platform})"
+    else:
+        display_name = instance_label
+    print(f'正在检查实例: {display_name} ({instance_path})')
+    mdx_files = find_mdx_files(instance_path)
+    print(f'共找到{len(mdx_files)}个mdx文件。')
+
+    problems = check_instance_links(mdx_files, config, instance, repo_root, check_remote)
+
+    # 输出总结
+    print('\n检查结果总结:')
+    print_problems_summary(problems)
 
 if __name__ == '__main__':
     main()
