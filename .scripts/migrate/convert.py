@@ -261,7 +261,7 @@ def replace_content(file_path, language='zh'):
 
     # 根据语言设置标题
     if language == 'zh':
-        note_title = "提示"
+        note_title = "说明"
         warning_title = "注意"
     else:
         note_title = "Note"
@@ -269,10 +269,10 @@ def replace_content(file_path, language='zh'):
 
     # 定义替换规则
     replacements = [
-        # Note 标签 - 处理带空格的 class 属性和缩进
-        (r'(\s*)<div\s+class\s*=\s*"mk-hint">([\s\S]*?)\s*</div>', rf'\1<Note title="{note_title}">\n\2\n</Note>'),
-        # Warning 标签 - 处理带空格的 class 属性和缩进
-        (r'(\s*)<div\s+class\s*=\s*"mk-warning">([\s\S]*?)\s*</div>', rf'\1<Warning title="{warning_title}">\n\2\n</Warning>'),
+        # Note 标签 - 处理带空格的 class 属性和缩进，支持单引号和双引号
+        (r'(\s*)<div\s+class\s*=\s*["\']mk-hint["\']>([\s\S]*?)</div>', rf'\n\n<Note title="{note_title}">\n\2\n</Note>\n\n'),
+        # Warning 标签 - 处理带空格的 class 属性和缩进，支持单引号和双引号
+        (r'(\s*)<div\s+class\s*=\s*["\']mk-warning["\']>([\s\S]*?)</div>', rf'\n\n<Warning title="{warning_title}">\n\2\n</Warning>\n\n'),
         # 移除 style 标签
         (r'^[\s]*<style[^>]*>[\s\S]*?</style>', ''),
         # 移除 colgroup 标签
