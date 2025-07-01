@@ -429,51 +429,65 @@ def check_git_mode():
 
     all_problems = defaultdict(list)
 
-    # 尝试加载中英文配置，检查所有匹配的实例
-    for lang in ['zh', 'en']:
-        try:
-            config, repo_root = load_config(lang)
+    # 加载主配置文件（包含所有实例）
+    try:
+        repo_root = get_repo_root()
+        if not repo_root:
+            print(f'{Fore.RED}未找到仓库根目录{Style.RESET_ALL}')
+            return False
 
-            # 找到对应的实例
-            instances_map = find_instances_for_files(changed_files, config, repo_root)
-            if not instances_map:
+        config_file = os.path.join(repo_root, 'docuo.config.json')
+        if not os.path.exists(config_file):
+            print(f'{Fore.RED}未找到配置文件: {config_file}{Style.RESET_ALL}')
+            return False
+
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+
+        # 找到对应的实例
+        instances_map = find_instances_for_files(changed_files, config, repo_root)
+        if not instances_map:
+            print(f'{Fore.YELLOW}变更的文件未匹配到任何实例{Style.RESET_ALL}')
+            return True
+
+        print(f'\n匹配到{len(instances_map)}个实例需要检查:')
+
+        for instance_id, instance_info in instances_map.items():
+            instance = instance_info['instance']
+            files = instance_info['files']
+
+            # 获取实例语言
+            instance_locale = instance.get('locale', 'en')  # 默认为英文
+
+            instance_label = instance.get("label", "未知实例")
+            platform = instance.get("navigationInfo", {}).get("platform", "")
+            display_name = f"{instance_label} ({platform})" if platform else instance_label
+
+            print(f'\n正在检查实例: {display_name} [语言: {instance_locale}]')
+            print(f'变更文件: {", ".join(files)}')
+
+            # 检查该实例下的所有文件（不仅仅是变更的文件）
+            instance_path = instance['path']
+            if not os.path.isabs(instance_path):
+                instance_path = os.path.join(repo_root, instance_path)
+
+            # 跳过外部链接实例
+            if instance_path.startswith('http'):
+                print(f'跳过外部链接实例: {instance_path}')
                 continue
 
-            print(f'\n{lang.upper()}配置匹配到{len(instances_map)}个实例需要检查:')
+            mdx_files = find_mdx_files(instance_path)
+            print(f'实例共有{len(mdx_files)}个mdx文件')
 
-            for instance_id, instance_info in instances_map.items():
-                instance = instance_info['instance']
-                files = instance_info['files']
+            problems = check_instance_links(mdx_files, config, instance, repo_root, check_remote=True)
 
-                instance_label = instance.get("label", "未知实例")
-                platform = instance.get("navigationInfo", {}).get("platform", "")
-                display_name = f"{instance_label} ({platform})" if platform else instance_label
+            # 合并问题
+            for ptype, items in problems.items():
+                all_problems[ptype].extend(items)
 
-                print(f'\n正在检查实例: {display_name}')
-                print(f'变更文件: {", ".join(files)}')
-
-                # 检查该实例下的所有文件（不仅仅是变更的文件）
-                instance_path = instance['path']
-                if not os.path.isabs(instance_path):
-                    instance_path = os.path.join(repo_root, instance_path)
-
-                # 跳过外部链接实例
-                if instance_path.startswith('http'):
-                    print(f'跳过外部链接实例: {instance_path}')
-                    continue
-
-                mdx_files = find_mdx_files(instance_path)
-                print(f'实例共有{len(mdx_files)}个mdx文件')
-
-                problems = check_instance_links(mdx_files, config, instance, repo_root, check_remote=True)
-
-                # 合并问题
-                for ptype, items in problems.items():
-                    all_problems[ptype].extend(items)
-
-        except Exception as e:
-            print(f'加载{lang}配置失败: {e}')
-            continue
+    except Exception as e:
+        print(f'{Fore.RED}加载配置失败: {e}{Style.RESET_ALL}')
+        return False
 
     # 输出总结
     print_problems_summary(all_problems, is_warning=True)
@@ -507,8 +521,8 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
                 continue
 
             # 1. 检查中英文链接混用
-            language = 'zh' if 'zh' in config.get('locale', '') else 'en'
-            if check_mixed_language(url, language):
+            instance_locale = instance.get('locale', 'en')  # 默认为英文
+            if check_mixed_language(url, instance_locale):
                 problems['中英文链接混用'].append({
                     'file': file_path,
                     'line': line,
