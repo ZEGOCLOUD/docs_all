@@ -1,0 +1,309 @@
+import SignatureVerification from '/snippets/Reuse/SignatureVerificationEN.mdx'
+
+# Receiving Callback
+
+
+<Warning title="Warning">The callback service cannot guarantee complete reliability. Please carefully consider the risks of building core business processes using the callback solution.</Warning>
+
+With this callback, you can listen to events that occur during user conversations with the agent, including ASR results, LLM results, exception events, agent interruption events, user speaking actions, agent speaking actions, user speaking audio data, agent instance created, and agent instance deleted.
+
+<Note title="Note">
+
+To receive different types of callback results, configure the corresponding [CallbackConfig](./../api-reference/agent-instance-management/create-agent-instance.mdx#callbackconfig) parameter to `1` when [creating an agent instance](./../api-reference/agent-instance-management/create-agent-instance.mdx):
+- ASR results: `CallbackConfig.ASRResult`
+- LLM results: `CallbackConfig.LLMResult`
+- Agent interruption events: `CallbackConfig.Interrupted`
+- User speaking actions: `CallbackConfig.UserSpeakAction`
+- Agent speaking actions: `CallbackConfig.AgentSpeakAction`
+- User speaking audio data: `CallbackConfig.UserAudioData`
+</Note>
+
+## Callback Description
+- Request method: POST.
+    <Note title="Note">The callback data format is JSON. You need to perform UrlDecode decoding on it.</Note>
+- Request URL: Please contact ZEGOCLOUD Technical Support for configuration.
+- Transmission protocol: HTTPS/HTTP, it is recommended to use HTTPS.
+
+## Callback Parameters
+
+<Note title="Note">ZEGOCLOUD will continuously optimize and update the relevant callback parameters in future iteration plans (for example: adding new fields or adding parameter values for certain fields). When developers integrate, please avoid hardcoding to ensure compatibility with new versions after updates.</Note>
+
+| Parameter | Type | Description |
+|------|------|------|
+| AppId | Number | The unique identifier for the developer's APP provided by ZEGOCLOUD. |
+| Event | String | Notification type of event.<ul><li>ASRResult: Callback for ASR results.</li><li>LLMResult: Callback for LLM results.</li><li>Exception: Exception event.</li><li>Interrupted: Callback for agent interruption results.</li><li>UserSpeakAction: Callback for user speaking events.</li><li>AgentSpeakAction: Callback for agent speaking events.</li><li>UserAudioData: Callback for user speaking audio data.</li><li>AgentInstanceCreated: Agent instance created.</li><li>AgentInstanceDeleted: Agent instance deleted.</li></ul> |
+| Nonce | String | A random number used for signature calculation. |
+| Timestamp | Number | Unix timestamp (in milliseconds) when the callback was sent, used for signature calculation. |
+| Signature | String | Verification string to confirm the identity of the sender of the callback. |
+| AgentInstanceId | String | The unique identifier for the AI agent instance. |
+| AgentUserId | String | The user ID of the AI agent. |
+| RoomId | String | The room ID. |
+| Sequence | Number | The sequence number of the callback, ensuring orderliness but not necessarily continuity. |
+| Data | Object | Detailed information about the event. For details, see [Data](#data). |
+
+### Data
+
+**Depending on the different values of `Event`, the parameters included in Data are different.**
+
+<Tabs>
+<Tab title="ASRResult">
+| Parameter | Type | Description |
+|------|------|------|
+| UserId | String | The speaker's user ID. |
+| Round | Number | The dialogue round number. It increases each time the user starts speaking (ordered, not necessarily incremental). |
+| Text | String | ASR result text. |
+
+</Tab>
+<Tab title="LLMResult">
+| Parameter | Type | Description |
+|------|------|------|
+| Round | Number | The dialogue round number to which the LLM result belongs. It increases each time the user starts speaking (ordered, not necessarily incremental). |
+| Text | String | LLM output text. |
+</Tab>
+<Tab title="Exception">
+| Parameter | Type | Description |
+|------|------|------|
+| Code | Number | For details, please refer to [Exception Codes](./exception-codes.mdx). |
+| Message | String | Description of the exception information. |
+</Tab>
+<Tab title="Interrupted">
+| Parameter | Type | Description |
+|------|------|------|
+| Round | Number | The dialogue round number when the interruption occurred. |
+| Reason | Number | The reason for interruption:<ul><li>1: User speaking.</li><li>2: You [actively called LLM](./../api-reference/agent-instance-control/send-agent-instance-llm.mdx) on the server side.</li><li>3: You [actively called TTS](./../api-reference/agent-instance-control/send-agent-instance-tts.mdx) on the server side.</li><li>4: You [interrupted the agent instance](./../api-reference/agent-instance-control/interrupt-agent-instance.mdx) on the server side.</li></ul> |
+</Tab>
+<Tab title="UserSpeakAction">
+| Parameter | Type | Description |
+|------|------|------|
+| UserId | String | The speaker's UserId. |
+| Action | String | User speaking behavior:<ul><li>SPEAK_BEGIN: Start speaking.</li><li>SPEAK_END: Stop speaking.</li></ul> |
+</Tab>
+<Tab title="AgentSpeakAction">
+| Parameter | Type | Description |
+|------|------|------|
+| Action | String | Agent speaking behavior:<ul><li>SPEAK_BEGIN: Start speaking.</li><li>SPEAK_END: Stop speaking.</li></ul> |
+</Tab>
+<Tab title="UserAudioData">
+<Warning title="Note">If the user's speech audio duration is less than 1s, no callback will be triggered.</Warning>
+
+| Parameter | Type | Description |
+|------|------|------|
+| UserId | String | User ID |
+| Round | Int | Round ID |
+| SampleRate | Int | Audio sample rate, default is 16000 |
+| Format | String | Audio data format, default is "pcm" |
+| Audio | String | Base64 encoded audio data, first 1-1.5s of each dialogue round |
+</Tab>
+<Tab title="AgentInstanceCreated">
+| Parameter | Type | Description |
+|------|------|------|
+| CreatedTimestamp | Int64 | Timestamp when the instance was successfully created (in milliseconds). |
+</Tab>
+<Tab title="AgentInstanceDeleted">
+| Parameter | Type | Description |
+|------|------|------|
+| Code | Int | Reason for deletion:<ul><li>0: Instance deleted via DeleteAgentInstance call.</li><li>1201: RTC general error.</li><li>1202: RTC room idle for over 120 seconds.</li><li>1203: Agent instance was kicked from RTC room.</li><li>1204: Agent instance failed to join RTC room.</li><li>1205: Agent instance disconnected from RTC room.</li><li>1206: Agent instance failed to start streaming.</li></ul> |
+| DeletedTimestamp | Int64 | Timestamp when the instance was successfully deleted (in milliseconds). |
+| LatencyData | Object | Latency data for conversations with the agent instance. |
+
+**Data.LatencyData**
+
+<Frame width="auto" height="auto" caption=""><img src="https://media-resource.spreading.io/docuo/workspace741/896bc39e2e65b82d5670b01b7c131c30/f5b0a66d11.png" alt="AI Agent耗时分析.png"/></Frame>
+
+| Parameter | Type | Description |
+|------|------|------|
+| LLMTTFT | Int | Average LLM Time To First Token (in milliseconds). Time taken from requesting the large language model until receiving the first non-empty token. |
+| LLMTPS | Float64 | Average LLM Tokens Per Second. Number of tokens output by the large language model per second. |
+| TTSAudioFirstFrameTime | Int | TTS audio first frame average latency (milliseconds). From the first non-empty LLM token to the first TTS non-silent frame return (including request establishment time) |
+| TotalCost | Int | AI Agent server average total latency (milliseconds): <ul><li>User speaking: The time from when the AI Agent server pulls the stream and determines the user has finished speaking, to when TTS returns the first non-silent frame and starts pushing the stream. All server-generated latency, including at least Automatic Speech Recognition (ASR) latency, Large Language Model (LLM) related latency, Text-to-Speech (TTS) related latency, etc.</li><li>Custom LLM/TTS calls: The time from API call to start of stream pushing.</li></ul> |
+</Tab>
+</Tabs>
+
+## Callback Examples
+
+Below are callback examples for each `Event` type.
+
+<Tabs>
+<Tab title="ASRResult">
+```json
+{
+    "AppId": 1234567,
+    "AgentInstanceId": "1912124734317838336",
+    "Data": {
+        "UserId": "user_1",
+        "Round": 650459806,
+        "Text": "Hello"
+    },
+    "Event": "ASRResult",
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1745502313000
+}
+```
+</Tab>
+<Tab title="LLMResult">
+```json
+{
+    "AppId": 1234567,
+    "AgentInstanceId": "1912124734317838336",
+    "Data": {
+        "Round": 650459806,
+        "Text": "Hi there, you look full of energy today."
+    },
+    "Event": "LLMResult",
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1745502313000
+}
+```
+</Tab>
+<Tab title="Exception">
+```json
+{
+    "AppId": 1234567,
+    "AgentInstanceId": "1912124734317838336",
+    "Data": {
+        "Code": 1001,
+        "Message": "AI Agent general error"
+    },
+    "Event": "Exception",
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1745502313000
+}
+```
+</Tab>
+<Tab title="Interrupted">
+```json
+{
+    "AppId": 1234567,
+    "AgentInstanceId": "1912124734317838336",
+    "AgentUserId": "agent_user_1",,
+    "RoomId": "room_1",
+    "Sequence": 1234567890,
+    "Data": {
+        "Round": 650459806,
+        "Reason": 1
+    },
+    "Event": "Interrupted",
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1745502313000
+}
+```
+</Tab>
+<Tab title="UserSpeakAction">
+```json
+{
+    "AppId": 1234567,
+    "AgentInstanceId": "1912124734317838336",
+    "AgentUserId": "agent_user_1",,
+    "RoomId": "room_1",
+    "Sequence": 1234567890,
+    "Data": {
+        "UserId": "user_1",
+        "Action": "SPEAK_BEGIN"
+    },
+    "Event": "UserSpeakAction",
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1745502313000
+}
+```
+</Tab>
+<Tab title="AgentSpeakAction">
+```json
+{
+    "AppId": 1234567,
+    "AgentInstanceId": "1912124734317838336",
+    "AgentUserId": "agent_user_1",,
+    "RoomId": "room_1",
+    "Sequence": 1234567890,
+    "Data": {
+        "Action": "SPEAK_BEGIN"
+    },
+    "Event": "AgentSpeakAction",
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1745502313000
+}
+```
+</Tab>
+<Tab title="UserAudioData">
+```json
+{
+    "AppId": 1234567,
+    "AgentInstanceId": "1912124734317838336",
+    "AgentUserId": "agent_user_1",
+    "RoomId": "room_1",
+    "Sequence": 1234567890,
+    "Data": {
+        "UserId": "user_1",
+        "Round": 123456,
+        "SampleRate": 16000,
+        "Format": "pcm",
+        "Audio": "base64_encoded_audio_data"
+    },
+    "Event": "UserAudioData",
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1745502313000
+}
+```
+</Tab>
+<Tab title="AgentInstanceCreated">
+```json
+{
+    "AppId": 1234567,
+    "AgentInstanceId": "1912124734317838336",
+    "AgentUserId": "agent_user_1",
+    "RoomId": "room_1",
+    "Sequence": 1234567890,
+    "Data": {
+        "CreatedTimestamp": 1745502312982
+    },
+    "Event": "AgentInstanceCreated",
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1745502313000
+}
+```
+</Tab>
+<Tab title="AgentInstanceDeleted">
+```json
+{
+    "AppId": 1234567,
+    "AgentInstanceId": "1912124734317838336",
+    "AgentUserId": "agent_user_1",
+    "RoomId": "room_1",
+    "Sequence": 1234567890,
+    "Data": {
+        "Code": 0,
+        "DeletedTimestamp": 1745502345138,
+        "LatencyData": {
+            "LLMTTFT": 613,
+            "LLMTPS": 11.493,
+            "TTSAudioFirstFrameTime": 783,
+            "TotalCost": 1693
+        }
+    },
+    "Event": "AgentInstanceDeleted",
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1745502313000
+}
+```
+</Tab>
+</Tabs>
+
+# Signature Verification
+
+<SignatureVerification />
+
+## Return Response
+
+After you receive the callback, please return an HTTP status code of 2XX (e.g., 200) to indicate successful receipt. Any other response will be considered a failure.
+
+## Callback Retry Policy
+
+If the ZEGOCLOUD server does not receive a response, or if the received HTTP status code is not 2XX (e.g., 200), it will attempt to retry, with **a maximum of 5 retries**. The interval between each retry request and the **previous request** will be 2s, 4s, 8s, 16s, and 32s respectively. If the 5th retry still fails, no further retries will be attempted, and the callback will be lost.
