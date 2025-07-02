@@ -1,0 +1,575 @@
+# Interact with AI in IM and make voice calls
+
+This document is designed to guide developers on how to leverage the real-time communication capabilities of [ZIM (ZEGOCLOUD In-app chat)](https://www.zegocloud.com/docs/zim-server/overview) combined with the natural language processing capabilities of LLM to implement In-app Chat with AI and initiate voice calls using AI Agent functionality.
+
+## Core Concepts
+
+Before diving into implementation details, let's clarify several core concepts:
+
+- **ZIM (ZEGOCLOUD In-app chat)**: ZEGOCLOUD's in-app chat service. It supports various message types including text, images, and files, with room management and user status notification capabilities, providing a solid foundation for in-app interactions.
+- **Large Language Model (LLM)**: A deep learning model trained on massive text datasets. LLMs can understand and generate natural language text, widely used in Q&A systems, intelligent conversations, text creation, and various other scenarios.
+- **In-app Chat**: Users interact with LLM through text input via ZIM service.
+- **Voice Call**: Users enter RTC rooms through AI Agent service to have voice conversations with AI.
+
+## Implementation Architecture for In and Voice Calls
+
+This is the architecture for implementing both In-app Chat and voice calls with AI in one APP.
+
+<Frame width="auto" height="512" caption="">
+  <img src="https://media-resource.spreading.io/docuo/workspace741/896bc39e2e65b82d5670b01b7c131c30/1bb2160a17.png" alt="im_with_agent_en.png"/>
+</Frame>
+
+### In-app Chat
+    - **Client APP**: Integrates ZIM SDK to implement text message sending/receiving and persistent chat history storage.
+    - **ZIM Backend**: Receives and processes messages from clients. Safely and reliably delivers user messages to business backend through message callbacks.
+    - **Business Backend**: Serves as the core processing hub, responsible for:
+        * Calling ZIM backend API to register a bot. The bot's `UserId` will be used as `RobotId` for loading historical messages during voice calls.
+        * Receiving user messages from ZIM, preprocessing messages including sensitive word filtering and preliminary intent recognition.
+        * Calling LLM service to send processed user messages to LLM for deep analysis and content generation.
+        * After receiving LLM response content, post-processing the reply including format output and secondary content safety verification.
+        * Calling ZIM backend API to send replies back to clients as the bot through ZIM.
+### Voice Call
+    - **Client APP**: Integrates ZEGO Express SDK to implement voice call functionality.
+    - **Business Backend**: Calls the create agent instance API and passes the bot's `UserId` as the `RobotId` parameter to AI Agent service.
+    - **AI Agent Backend**: Based on the `RobotId` passed from business backend, loads historical messages from ZIM backend as input context for the agent. The LLM configured for the agent will use this context as chat history to interact with users in voice calls and answer user questions.
+
+## Sample Code
+
+The following are client sample codes for integrating ZIM SDK to implement In-app Chat and business backend sample codes for integrating ZIM and real-time interactive AI Agent APIs. You can refer to these samples to implement your own business logic.
+
+<Note title="Note">Please use the im_and_voice branch code for the following examples.</Note>
+
+<CardGroup cols={2}>
+<Card title="Android Client Sample Code" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/im_and_voice/android" target="_blank">
+Includes basic capabilities such as login, sending/receiving text messages, publishing stream, playing stream, and leaving room.
+</Card>
+<Card title="iOS Client Sample Code" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/im_and_voice/ios" target="_blank">
+Includes basic capabilities such as login, sending/receiving text messages, publishing stream, playing stream, and leaving room.
+</Card>
+<Card title="Web Client Sample Code" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/im_and_voice/web" target="_blank">
+Includes basic capabilities such as login, sending/receiving text messages, publishing stream, playing stream, and leaving room.
+</Card>
+<Card title="Flutter Client Sample Code" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/im_and_voice/flutter" target="_blank">
+Includes basic capabilities such as login, sending/receiving text messages, publishing stream, playing stream, and leaving room.
+</Card>
+<Card title="Business Backend Sample Code"  href="https://github.com/ZEGOCLOUD/ai_agent_quick_start_server/tree/im_and_voice" target="_blank">
+Includes basic capabilities such as obtaining ZEGOCLOUD Token, registering ZIM bots, registering agents, creating agent instances, and deleting agent instances.
+</Card>
+</CardGroup>
+
+Here's the implementation result:
+<Video src="https://media-resource.spreading.io/docuo/workspace741/896bc39e2e65b82d5670b01b7c131c30/4282e79adb.mp4" />
+
+## Quick Implementation of In-app Chat with AI
+
+### 1. Set Up Business Backend
+
+The business backend serves as a bridge connecting ZIM and LLM. You can use any backend technology stack you're familiar with, such as Node.js, Python, Java, Go, etc.
+
+#### 1.1 Register ZIM Bot
+
+In-app Chat and AI Agent service need to receive and send messages through ZIM bots. Therefore, you need to specify a bot `UserId` (i.e., RobotId) and call ZIM backend API to register a bot.
+
+For detailed registration instructions, please refer to [ZIM Bot Registration Instructions](https://www.zegocloud.com/docs/zim-server/bot/register-bots).
+
+<Note title="Note">Usually, you only need to register once when creating a new bot. Subsequent chats and calls don't require re-registration.</Note>
+
+#### 1.2 Set Up ZIM Callbacks to Receive User Messages
+
+Configure ZIM backend to notify your business backend of message events through callback mechanisms. For detailed configuration instructions, please refer to [ZIM Callback Configuration Instructions](https://www.zegocloud.com/docs/zim-server/callbacks/callback-configuration-instructions).
+
+Your business backend needs to implement an HTTP interface to listen for [Message Sent Callbacks](https://www.zegocloud.com/docs/zim-server/callbacks/message-sent). Here's sample callback data:
+
+```json title="ZIM Message Callback Sample (Peer Text Message)"
+{
+    "appid": "1",
+    "event": "send_msg",
+    "nonce": "350176",
+    "signature": "signature",
+    "timestamp": 1679553625,
+    "from_user_id": "user_id_1",
+    "conv_type": 0,
+    "conv_id": "@RBT#AIAgentExample1",
+    "msg_type": 1,
+    "msg_body": "msg_body",
+    "msg_id": "857639062792568832",
+    "payload": "payload",
+    "msg_time": 1679554146000,
+    "send_result": 0,
+    "sub_msg_type": 0,
+    "user_list":[
+    ]
+}
+```
+
+#### 1.3 Call LLM Service to Generate AI Replies
+
+After receiving user messages from callbacks, the business backend needs to call LLM service to generate AI replies. You can use LLM services provided by third-party service providers such as DeepSeek, Volcano Ark (DouBao), MiniMax, Volcano Engine, Alibaba Cloud, StepFun, OpenAI (GPT series), or self-deployed LLM services.
+
+Please refer to the relevant service provider's API documentation for integration. Here's sample code for calling DeepSeek model using Node.js:
+
+```javascript title="Node.js DeepSeek Example" {26-36}
+async function generateLLMResponse(messages: MessageItem[]): Promise<string> {
+    try {
+        console.log('Preparing to generate LLM response, message context:', messages);
+        // Get LLM configuration from environment variables
+        const apiKey = process.env.LLM_API_KEY;
+        const baseURL = process.env.LLM_BASE_URL;
+        const model = process.env.LLM_MODEL || 'deepseek-v3-250324';
+        if (!apiKey || !baseURL) {
+            console.error('Missing LLM configuration, please check environment variables');
+            return "Sorry, I'm temporarily unable to reply to your message. Please try again later.";
+        }
+
+        // Convert message format
+        const formattedMessages = messages.map(msg => ({
+            role: msg.role as "user" | "assistant" | "system",
+            content: msg.content
+        }));
+
+        // Add system prompt
+        formattedMessages.unshift({
+            role: "system",
+            content: "You are a helpful assistant. Please answer user questions concisely and clearly."
+        });
+
+        // Use fetch API to call LLM service. Note: using non-streaming response.
+        const response = await fetch(baseURL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                messages: formattedMessages,
+                model: model
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`LLM API request failed: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        // Get reply content
+        const reply = data.choices?.[0]?.message?.content || "Sorry, I cannot generate a reply.";
+        return reply;
+    } catch (error) {
+        console.error('Error generating LLM response:', error);
+        return "Sorry, there was an issue processing your request. Please try again later.";
+    }
+}
+```
+
+#### 1.4 Send AI Reply Back to Client via ZIM
+
+After obtaining the LLM reply, the business backend needs to use ZIM backend API to send this reply content to the real user as AI.
+
+For specific API usage, please refer to the [Send Peer Message](https://www.zegocloud.com/docs/zim-server/messaging/send-a-one-to-one-message) interface in ZIM backend API documentation.
+
+Here's an example of sending messages through ZIM backend API using Node.js:
+
+```javascript title="Node.js" {13,14}
+async function sendReplyMessage(fromUserId: string, toUserId: string, message: string) {
+    try {
+        // Build message body
+        const messageBody = {
+            Message: message, // LLM reply content
+            ExtendedData: ''
+        };
+
+        // Send message
+        // ZegoZIM.getInstance().sendPeerMessage is a demo wrapper method. For complete implementation, refer to: https://github.com/ZEGOCLOUD/ai_agent_quick_start_server/blob/im_and_voice/src/lib/zego/zim.ts#L162
+        // Please refer to detailed send peer message API documentation: https://www.zegocloud.com/docs/zim-server/messaging/send-a-one-to-one-message
+        const result = await ZegoZIM.getInstance().sendPeerMessage(
+            fromUserId,                  // Sender ID, i.e., UserInfo.UserId from bot registration (Bot ID)
+            [toUserId],                  // Receiver ID array (Real user ID)
+            ZegoMessageType.Text,        // Message type: Text
+            messageBody,                 // Message content
+            ZegoMessagePriority.Medium   // Message priority: Medium
+        );
+
+        console.log('Send reply message result:', result);
+        return result;
+    } catch (error) {
+        console.error('Error sending reply message:', error);
+        throw error;
+    }
+}
+```
+
+### 2. Client Processing Logic
+
+The client's ZIM SDK will listen for and receive AI reply messages from the business backend (forwarded through ZIM backend). You need to implement message receiving logic on the client side and display the content in the user interface.
+
+#### Prerequisites
+
+Please integrate ZIM SDK in your client APP. Refer to integration guides for each platform:
+
+- [ZIM Android SDK Integration](https://www.zegocloud.com/docs/zim-android/send-and-receive-messages)
+- [ZIM iOS SDK Integration](https://www.zegocloud.com/docs/zim-ios/send-and-receive-messages)
+- [ZIM Web SDK Integration](https://www.zegocloud.com/docs/zim-web/send-and-receive-messages)
+
+#### 2.1 Get Historical Messages from AI Conversations
+
+When entering the AI chat page, you need to retrieve historical messages from ZIM service. Here are sample codes for implementing historical message retrieval on each platform:
+
+<CodeGroup>
+```java title="Android" {5-6}
+ZIMMessageQueryConfig queryConfig = new ZIMMessageQueryConfig();
+queryConfig.count = 100;     // Query count
+queryConfig.reverse = true;  // Query the latest count messages
+
+String conversationId ; // Conversation ID for querying historical messages. i.e., bot `UserId` (i.e., RobotId)
+ZIM.getInstance().queryHistoryMessage(conversationId, ZIMConversationType.PEER, queryConfig,new ZIMMessageQueriedCallback() {
+    @Override
+    public void onMessageQueried(String conversationID, ZIMConversationType conversationType,ArrayList<ZIMMessage> messageList, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            //  Success
+        } else {
+           // Failure
+        }
+    }
+});
+```
+```javascript title="Web" {1,7}
+const conversationID = ""; // Conversation ID for querying historical messages. i.e., bot `UserId` (i.e., RobotId)
+const conversationType = 0; // Query peer conversation
+const config = {
+    count: 100, // Number of messages to query
+    reverse: true, // Whether to query in reverse order
+};
+zim.queryHistoryMessage(conversationID, conversationType, config)
+    .then(({ messageList }) => {
+        // Process messages and update UI
+        console.log("Query historical messages success:", messageList);
+    })
+    .catch((error) => {
+        console.error("Query historical messages failed:", error);
+    });
+```
+```objctive-c title="iOS" {20}
+@interface ZegoAIAgentIMChatViewController () <ZIMEventHandler>
+
+// zim object
+@property (nonatomic, strong) ZIM *zim;
+
+@end
+
+@implementation ZegoAIAgentIMChatViewController
+
+- (void)fetchHistoryMessagesIfNeeded {
+    if (!self.zim) {
+        return;
+    }
+
+    ZIMMessageQueryConfig *config = [[ZIMMessageQueryConfig alloc] init];
+    config.count = 50; // Fetch 50 messages
+    config.nextMessage = nil; // Start from latest message
+    config.reverse = YES; // Fetch from last page
+
+    [self.zim queryHistoryMessageByConversationID:@"your robot id"
+                                 conversationType:ZIMConversationTypePeer
+                                           config:config
+                                         callback:^(NSString * _Nonnull conversationID, ZIMConversationType conversationType, NSArray<ZIMMessage *> * _Nonnull messageList, ZIMError * _Nonnull errorInfo) {
+        if (errorInfo.code == 0) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+             // Update data
+             // Sort all messages by orderKey
+             // Refresh interface
+            });
+        } else {
+            NSLog(@"Failed to fetch historical messages: %@", errorInfo.message);
+        }
+    }];
+}
+
+@end
+```
+```dart title="flutter"
+
+  Future<void> fetchHistoryMessages() async {
+    String conversationID = '';
+
+    try {
+      ZIMMessageQueryConfig config = ZIMMessageQueryConfig()
+        ..count = 50
+        ..reverse = true;
+
+      final result = await _zim!.queryHistoryMessage(
+        conversationID,
+        ZIMConversationType.peer,
+        config,
+      );
+
+      for (var message in result.messageList) {
+        if (message is ZIMTextMessage) {
+          final flutterMessage = ZegoIMMessage(
+            content: message.message,
+            isFromUser:
+                message.senderUserID == ZegoAIAgentService().getUserId(),
+            timestamp: DateTime.fromMillisecondsSinceEpoch(message.timestamp),
+            orderKey: message.orderKey,
+          );
+
+          /// Update data
+          /// Sort all messages by orderKey
+          /// Refresh interface
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to fetch historical messages: $e');
+    }
+  }
+```
+</CodeGroup>
+
+
+#### 2.2 Send Messages to AI
+
+After users input messages on the client, you can use ZIM SDK to send messages to AI. Here are sample codes for implementing message sending on each platform:
+
+<CodeGroup>
+```java title="Android" {2,6}
+String text ; // Chat text
+String conversationId ; // Conversation ID for sending messages. i.e., bot `UserId` (i.e., RobotId)
+ZIMTextMessage zimMessage = new ZIMTextMessage();
+zimMessage.message = text;
+// In peer chat scenario, set ZIMConversationType to PEER
+ZIM.getInstance().sendMessage(zimMessage, conversationId, ZIMConversationType.PEER, new ZIMMessageSendConfig(),
+    new ZIMMessageSentFullCallback() {
+        @Override
+        public void onMessageAttached(ZIMMessage message) {
+            // Insert message to list when sending starts
+        }
+
+        @Override
+        public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {
+            // Send success
+        }
+
+        @Override
+        public void onMediaUploadingProgress(ZIMMediaMessage message, long currentFileSize,
+            long totalFileSize) {
+
+        }
+
+        @Override
+        public void onMultipleMediaUploadingProgress(ZIMMultipleMessage message, long currentFileSize,
+            long totalFileSize, int messageInfoIndex, long currentIndexFileSize, long totalIndexFileSize) {
+
+        }
+    });
+```
+```javascript title="Web" {1,9}
+const toConversationID = ''; // Peer userID. i.e., bot `UserId` (i.e., RobotId)
+const conversationType = 0; // Send peer message
+const config = {
+    priority: 3, // Set message priority: Low: 1 (default), Medium: 2, High: 3
+};
+
+const messageTextObj = { type: 1, message: 'xxxx' };
+
+zim.sendMessage(messageTextObj, toConversationID, conversationType, config)
+    .then(function ({ message }) {
+        // Send success
+    })
+    .catch(function (err) {
+        // Send failure
+    });
+```
+```objctive-c title="iOS" {34-35}
+@interface ZegoAIAgentIMChatViewController () <ZIMEventHandler>
+
+// zim object
+@property (nonatomic, strong) ZIM *zim;
+
+@end
+
+@implementation ZegoAIAgentIMChatViewController
+
+- (void)sendMessage {
+    if (!self.zim) {
+      return;
+    }
+
+    // Create text message
+    ZIMTextMessage *zimMessage = [[ZIMTextMessage alloc] init];
+    zimMessage.message = @"your message text";
+
+    // Message send configuration
+    ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+    config.priority = ZIMMessagePriorityMedium;
+
+    // Message send notification
+    ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
+    notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
+        // Callback before sending, can show UI in advance here
+        dispatch_async(dispatch_get_main_queue(), ^{
+            // Update data, refresh interface
+        });
+    };
+
+
+    // Send message
+    [self.zim sendMessage:zimMessage
+        toConversationID:@"your robot id"
+        conversationType:ZIMConversationTypePeer
+                  config:config
+            notification:notification
+               callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+        if (errorInfo.code == 0) {
+            NSLog(@"Message sent successfully");
+        } else {
+            NSLog(@"Message sending failed: %@", errorInfo.message);
+        }
+    }];
+}
+
+@end
+```
+```dart title="flutter"
+
+  Future<bool> sendMessage(String content) async {
+    try {
+      /// Create ZIM text message
+      ZIMTextMessage zimMessage = ZIMTextMessage(message: content);
+
+      /// Message send configuration
+      ZIMMessageSendConfig config = ZIMMessageSendConfig()
+        ..priority = ZIMMessagePriority.medium;
+
+      /// Send message
+      final result = await _zim!.sendMessage(
+        zimMessage,
+        ZegoAIAgentService().getAgentRobotId(),
+        ZIMConversationType.peer,
+        config,
+      );
+
+      /// Update data
+      /// Sort all messages by orderKey
+      /// Refresh interface
+
+      return true;
+    } catch (e) {
+      debugPrint('Message sending failed: $e');
+      return false;
+    }
+  }
+```
+</CodeGroup>
+
+#### 2.3 Receive AI Reply Messages
+
+AI reply messages will be sent to the client through ZIM service via the business backend. You need to implement message receiving logic on the client side and display the content in the user interface. Here are sample codes for implementing message receiving on each platform:
+
+<CodeGroup>
+```java title="Android" {3}
+ZIM.getInstance().setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onPeerMessageReceived(ZIM zim, ArrayList<ZIMMessage> messageList, ZIMMessageReceivedInfo info,String fromUserID) {
+        // Only add messages from this conversation to this page
+        List<ZIMMessage> collect = messageList.stream()
+            .filter(zimMessage -> Objects.equals(Constant.agent_zim_robotid, zimMessage.getConversationID()))
+            .collect(Collectors.toList());
+    }
+});
+```
+```javascript title="Web" {1}
+zim.on("peerMessageReceived", (zim, { messageList }) => {
+    console.log("Received new messages:", messageList);
+    // Process messages and update UI
+});
+```
+```objctive-c title="iOS" {10}
+// Implement ZIMEventHandler
+@interface ZegoAIAgentIMChatViewController () <ZIMEventHandler>
+
+@end
+
+@implementation ZegoAIAgentIMChatViewController
+
+#pragma mark - ZIMEventHandler
+
+- (void)zim:(ZIM *)zim peerMessageReceived:(NSArray<ZIMMessage *> *)messageList info:(ZIMMessageReceivedInfo *)info fromUserID:(NSString *)fromUserID {
+    NSLog(@"Received peer messages - Sender ID: %@, Message count: %lu, Message details:", fromUserID, (unsigned long)messageList.count);
+    for (ZIMMessage *message in messageList) {
+        if ([message isKindOfClass:[ZIMTextMessage class]]) {
+            ZIMTextMessage *textMessage = (ZIMTextMessage *)message;
+            NSLog(@"Message ID: %lld, Send time: %llu, Message content: %@", textMessage.messageID, textMessage.timestamp, textMessage.message);
+        }
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+         // Update data
+
+        // Sort all messages by orderKey
+
+        // Refresh interface
+    });
+}
+
+@end
+```
+```dart title="flutter"
+  ZIMEventHandler.onPeerMessageReceived = _handlePeerMessageReceived;
+
+  void _handlePeerMessageReceived(
+    ZIM zim,
+    List<ZIMMessage> messageList,
+    ZIMMessageReceivedInfo info,
+    String fromUserID,
+  ) {
+    for (var message in messageList) {
+      if (message is ZIMTextMessage) {
+        final flutterMessage = ZegoIMMessage(
+          content: message.message,
+          isFromUser: message.senderUserID == localUserId,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(message.timestamp),
+          orderKey: message.orderKey,
+        );
+        /// Update data
+        /// Sort all messages by orderKey
+        /// Refresh interface
+      }
+    }
+  }
+```
+</CodeGroup>
+
+#### Asynchronous Processing and User Feedback
+
+To avoid UI freezing or unresponsiveness due to lengthy LLM processing time, you can use the following methods to optimize interaction:
+- After the client sends a message, you can immediately display "AI is thinking..." or similar waiting prompts in the interface.
+- After the business backend receives user messages, it can quickly respond to the client that the message has been received, then asynchronously call LLM service. When LLM returns results, push the actual reply to the client through ZIM to update the interface.
+
+
+## Quick Implementation of Voice Calls with AI
+
+In real application scenarios, users may switch between text and voice interactions. To maintain conversation continuity and context integrity, please refer to the following instructions to implement the association between In-app Chat historical messages and voice call messages.
+
+### Associate In-app Chat Historical Messages to Voice Calls
+
+
+<Warning title="Note">Please first refer to the [Quick Start](./../quick-start.mdx) document to implement voice call functionality with AI.</Warning>
+
+Before starting a call, you can associate In-app Chat historical messages to voice calls in the following way:
+
+When [creating an agent instance](https://www.zegocloud.com/docs/aiagent-server/api-reference/agent-instance-management/create-agent-instance), configure the MessageHistory parameter:
+   - Set `MessageHistory.SyncMode` (message sync mode) to `0`, indicating synchronization from ZIM historical messages
+   - Provide complete ZIM-related information in `MessageHistory.ZIM`, including:
+     - `RobotId`: The UserInfo.UserId corresponding to the ZIM bot registration API call
+     - `LoadMessageCount`: When creating agent instance, how many messages to fetch from ZIM service as context. Defaults to WindowSize value (upper limit).
+
+After completing the above configuration, the created agent instance will automatically retrieve In-app Chat historical messages as LLM historical message input during voice interactions.
+
+### Associate Voice Call Context to In-app Chat
+
+After the call ends, all voice call messages will be synchronized to ZIM service. You can synchronize these messages to In-app Chat after the call ends to maintain conversation continuity and context integrity.
+
+For detailed steps, refer to the [Get Historical Messages from AI Conversations](#21-get-historical-messages-from-ai-conversations) section.
+
+
+
