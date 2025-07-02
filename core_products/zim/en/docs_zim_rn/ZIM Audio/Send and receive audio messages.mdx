@@ -28,7 +28,7 @@ To only implement audio message sending and receiving, you can pass in an empty 
 To implement more features, pass in a license. For more information about how to obtain a license, see [Implement online authentication](./Implement%20online%20authentication.mdx).
 
 
-```javascript
+```typescript
 // Initialize the ZIM Audio SDK.
 // In this scenario, no license is required.
 ZIMAudio.getInstance().init("");
@@ -38,7 +38,7 @@ ZIMAudio.getInstance().init("");
 
 Implement the callback methods in [ZIMAudioEventHandler](@-ZIMAudioEventHandler) as needed. Take [onError](@onError) as an example.
 
-```javascript
+```typescript
 ZIMAudio.getInstance().on("onError",function(onError){
     console.log('onError,code:'+onError.code+"message:"+onError.message);
 });
@@ -51,7 +51,7 @@ ZIMAudio.getInstance().on("onError",function(onError){
 
 1. Call the [startRecord](@startRecord) method on the sending client to define the audio duration and the local absolute path to store the audio file, which must contain the filename and extension, for example, `xxx/xxx/xxx.m4a`. Only M4A and MP3 files are supported.
 
-    ```javascript   
+    ```typescript   
     ZIMAudio.getInstance().startRecord(ZIMAudioRecordConfig("path", maxDuration: 10 * 1000));
 
     // "path" is the absolute local path where the audio file is expected to be stored, including the file extension (only supports .m4a and .mp3), such as xxx/xxx/xxx.m4a
@@ -67,19 +67,19 @@ ZIMAudio.getInstance().on("onError",function(onError){
    
    - After the recording starts, listen for the [onRecorderStarted](@onRecorderStarted) callback on the sending client to update the UI.
      
-        ```javascript
+        ```typescript
         onRecorderStarted: () => void;
         ```
 
    - The ZIM Audio SDK updates the recording progress once every 500 ms in the [onRecorderProgress](@onRecorderProgress) callback, indicating the duration of the recorded audio file, which can be used to update the UI.
      
-        ```javascript
+        ```typescript
         onRecorderProgress: (currentDuration: number) => void;
         ```
    
    - If the recording fails due to an error, the ZIM Audio SDK sends a notification in the [onRecorderFailed](@onRecorderFailed) callback, and you can handle the failure based on this callback and the error codes specified in [ZIM Audio SDK error codes](./../SDK%20Error%20Codes/ZIM%20Audio.mdx).
      
-     ```javascript
+     ```typescript
      onRecorderFailed: (errorCode: ZIMAudioErrorCode) => void;
      ```
 
@@ -92,13 +92,13 @@ ZIMAudio.getInstance().on("onError",function(onError){
    - If the recording is not completed or canceled, the ZIM Audio SDK automatically completes it when the duration reaches the maximum and triggers the [onRecorderCompleted](@onRecorderCompleted) callback.
    </Note>
     
-    ```javascript
+    ```typescript
     ZIMAudio.getInstance().completeRecord();
     ```
 
 2. After receiving the [onRecorderCompleted](@onRecorderCompleted) callback, you can find the specified absolute audio file path.
 
-    ```javascript
+    ```typescript
     onRecorderCompleted: (totalDuration: number) => void;  // `totalDuration` indicates the total duration (ms) of the audio file.
    ```
 
@@ -106,13 +106,13 @@ ZIMAudio.getInstance().on("onError",function(onError){
 
 1. To cancel the recording and delete the recorded audio, call the [cancelRecord](@cancelRecord) method.
    
-    ```javascript
+    ```typescript
     ZIMAudio.getInstance().cancelRecord();
     ```
 
 2. Calling the [cancelRecord](@cancelRecord) method triggers the [onRecorderCancelled](@onRecorderCancelled) callback to the sending client, which uses the callback to update the UI.
    
-    ```javascript
+    ```typescript
     onRecorderCancelled: () => void;
     ```
 
@@ -120,7 +120,7 @@ ZIMAudio.getInstance().on("onError",function(onError){
 
 To obtain the recording status, call the [isRecording](@isRecording) method.
 
-```javascript
+```typescript
 ZIMAudio.getInstance().isRecording().then((isRecording) => {
     console.log(isRecording);
 });
@@ -131,17 +131,17 @@ ZIMAudio.getInstance().isRecording().then((isRecording) => {
 
 After the [onRecorderCompleted](@onRecorderCompleted) callback is triggered, build the [ZIMAudioMessage](@-ZIMAudioMessage) object (ZIM audio message) by using the specified absolute path and call the [sendMediaMessage](@sendMediaMessage) method to send the message. Below is the sample code for sending an audio message in a one-to-one chat.
 
-```javascript
+```typescript
 // The callback for recording completion.
 ZIMAudio.getInstance().on("onRecorderCompleted",function(totalDuration){
     // Convert audio duration in milliseconds to ZIM seconds
     let second = Math.floor(totalDuration / 1000);
     // Create the audio message.
     /* Note: fileLocalPath is the absolute path of the local file. */
-    var fileLocalPath = 'xxx/xxx.mp3';
-    var conversationID = 'xxxx';
-    var config = { priority: 1 };
-    var notification = {
+    const fileLocalPath = 'xxx/xxx.mp3';
+    const conversationID = 'xxxx';
+    const config: ZIMMessageSendConfig = { priority: 1 };
+    const notification: ZIMMessageSendNotification = {
         onMessageAttached: function(message) {
             // todo: Loading
         },
@@ -150,13 +150,13 @@ ZIMAudio.getInstance().on("onRecorderCompleted",function(totalDuration){
         }
     };
 
-    mediaMessageObj = {
+    const mediaMessageObj: ZIMMessage = {
         fileLocalPath, 
         type: 13,
         audioDuration: second, 
     };
     // Send the audio message in a one-to-one chat.
-    zim.sendMediaMessage(
+    zim.sendMessage(
         mediaMessageObj,
         conversationID,
         0,
@@ -175,13 +175,14 @@ Based on the conversation type (one-to-one chat, voice chatroom, or group chat),
 
 Below is the sample code for receiving and downloading an audio message in a one-to-one chat.
 
-```javascript
+```typescript
 zim.on('peerMessageReceived', function (zim, { messageList, fromConversationID }) {
     // Triggered when receiving a private chat message
+    const config: ZIMMediaDownloadConfig = {messageInfoIndex: 0};
     messageList.forEach(function (msg) {
         // If the message type is 13 (audio)
         if (msg.type == 13) {
-            zim. downloadMediaFile(msg, 1, function(message, currentFileSize, totalFileSize) {}).then((result) => {
+            zim.downloadMediaFile(msg, 1, config, function(message, currentFileSize, totalFileSize) {}).then((result) => {
                 result.message.fileLocalPath; // Download successful, get the absolute local path of the audio file
             });
         }
@@ -197,7 +198,7 @@ For more information about the download progress, see [Callback for the download
 
 1. To play the audio file, call the [startPlay](@startPlay) method on the receiving client to pass in the local absolute path of the audio file and set the routing type for audio output.
 
-    ```javascript
+    ```typescript
     // Play the audio.
     ZIMAudio.getInstance().startPlay({filePath:"Fill in the local path of the audio file",routeType:ZIMAudioRouteType.speaker});
     ```
@@ -206,31 +207,31 @@ For more information about the download progress, see [Callback for the download
    
    - Listen for the [onPlayerStarted](@onPlayerStarted) callback to update the UI.
      
-        ```javascript
+        ```typescript
         onPlayerStarted: (totalDuration: number) => void; // `totalDuration` indicates the total duration (ms) of the audio file.
         ```
    
    - The ZIM Audio SDK updates the playback progress once every 500 ms in the [onPlayerProgress](@onPlayerProgress) callback, indicating the playback duration of the audio file, which can be used to update the UI.
      
-        ```javascript
+        ```typescript
         onPlayerProgress: (currentDuration: number) => void;
         ```
    
    - If the playback fails due to an error, the ZIM Audio SDK sends a notification in the [onPlayerFailed](@onPlayerFailed) callback, and you can handle the failure based on this callback and the error codes specified in [ZIM Audio SDK error codes](./../SDK%20Error%20Codes/ZIM%20Audio.mdx).
      
-        ```javascript
+        ```typescript
         onPlayerFailed: (errorCode: ZIMAudioErrorCode) => void;
         ```
 
    - If the playback is interrupted by recording, an incoming call, or audio output device preemption, the ZIM Audio SDK sends the [onPlayerInterrupted](@onPlayerInterrupted) callback.
      
-        ```javascript
+        ```typescript
         onPlayerInterrupted: () => void;
         ```
    
    - When the playback ends, the ZIM Audio SDK sends the [onPlayerEnded](@onPlayerEnded) callback.
      
-        ```javascript
+        ```typescript
         onPlayerEnded: () => void;
         ```
 
@@ -240,7 +241,7 @@ For more information about the download progress, see [Callback for the download
    If the headphone is connected, this method does not take effect, and the audio is still output from the headphone.
     </Warning>
 
-    ```javascript
+    ```typescript
     // Set the output device to the loudspeaker.
     ZIMAudio.getInstance().setAudioRouteType(ZIMAudioRouteType.speaker);
     ```
@@ -249,13 +250,13 @@ For more information about the download progress, see [Callback for the download
 
 1. To stop the playback, call the [stopPlay](@stopPlay) method.
    
-    ```javascript
+    ```typescript
     ZIMAudio.getInstance().stopPlay();
     ```
 
 2. Listen for the [onPlayerStopped](@onPlayerStopped) callback to update the UI. After the playback is stopped or ends, the ZIM Audio SDK releases the audio device.
 
-    ```javascript
+    ```typescript
     onPlayerStopped: () => void;
     ```
 
@@ -263,6 +264,6 @@ For more information about the download progress, see [Callback for the download
 
 If the audio feature is no longer in use, call the [uninit](@uninit) method to release resources.
 
-```javascript
+```typescript
 ZIMAudio.getInstance().uninit();
 ```
