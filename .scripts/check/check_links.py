@@ -250,7 +250,7 @@ def check_mixed_language(link, language):
     # 检查中英文链接混用
     if language == 'zh' and re.search(r'https?://[^/]*zegocloud\.com', link):
         return True
-    if language == 'en' and re.search(r'https?://[^/]*zego\.im', link):
+    if language == 'en' and re.search(r'https?://(?!storage\.|rtc-api\.)[^/]*zego\.im', link):
         return True
     return False
 
@@ -390,13 +390,28 @@ def check_remote_link(link):
         return None
     if re.search(r'https?://[^/]*zego\.im', link) or re.search(r'https?://[^/]*zegocloud\.com', link):
         return None
+
+    # 跳过特定格式的链接
+    # https://xxx-api-xxx 或 https://xxxapi.xxx 或 https://yourxxx 或 以/chat/completions结尾的链接
+    if re.search(r'https?://[^/]*-api-[^/]*', link) or \
+       re.search(r'https?://[^/]*api\.[^/]*', link) or \
+       re.search(r'https?://your[^/]*', link) or \
+       link.endswith('/chat/completions'):
+        return None
+
     try:
         resp = requests.head(link, allow_redirects=True, timeout=5)
-        if resp.status_code == 404:
-            return False
-        return True
-    except Exception:
-        return False
+        if resp.status_code != 200:
+            return {'valid': False, 'error': f'HTTP {resp.status_code}'}
+        return {'valid': True}
+    except requests.exceptions.Timeout:
+        return {'valid': False, 'error': '请求超时'}
+    except requests.exceptions.ConnectionError:
+        return {'valid': False, 'error': '连接错误'}
+    except requests.exceptions.InvalidURL:
+        return {'valid': False, 'error': '无效链接'}
+    except Exception as e:
+        return {'valid': False, 'error': f'其他错误: {str(e)}'}
 
 def check_mdx_import(import_path, base_file_path, repo_root):
     """检查MDX导入路径是否有效"""
@@ -560,13 +575,15 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
             # 4. 检查远端链接（如果用户选择检查）
             if check_remote:
                 remote_result = check_remote_link(url)
-                if remote_result is False:
+                if remote_result is not None and not remote_result.get('valid', True):
+                    error_msg = remote_result.get('error', '未知错误')
                     problems['远端链接无效'].append({
                         'file': file_path,
                         'line': line,
                         'url': url,
                         'line_content': line_content,
-                        'link_type': link_type
+                        'link_type': link_type,
+                        'error': error_msg
                     })
                     continue
 
@@ -586,8 +603,10 @@ def print_problems_summary(problems, is_warning=False):
             # vscode终端可点击跳转格式: "file_path":line (用引号包围路径以支持空格)
             link_type = item.get('link_type', 'unknown')
             type_display = f"[{link_type}]" if link_type != 'unknown' else ""
+            error_msg = item.get('error', '')
+            error_display = f" - {error_msg}" if error_msg else ""
             print(f'  "{item["file"]}":{item["line"]}')
-            print(f'    {type_display} {item["url"]}')
+            print(f'    {type_display} {item["url"]}{error_display}')
             print(f'    {item["line_content"]}')
             print()
 
