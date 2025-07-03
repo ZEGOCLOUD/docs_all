@@ -1,0 +1,254 @@
+# Display User and Agent Status
+
+During real-time voice calls with AI agents, you may need to display the speaking status changes of both the AI agent instance and users in real-time on the client interface to enhance user experience. You can obtain these statuses by listening to corresponding server callback events.
+
+Status messages include the following types:
+
+- AI agent instance speaking status events: Start speaking, Stop speaking.
+- User speaking status events: Start speaking, Stop speaking.
+
+## Quick Implementation
+
+### Listen for Server Callbacks
+
+Please refer to the [Receiving Callback](./../callbacks/receiving-callback.mdx) documentation to develop callbacks for receiving AI Agent event notifications, and contact ZEGOCLOUD technical support to configure the callback address.
+
+<Note title="Note">
+
+To receive user and agent status callback results, when [creating an agent instance](./../api-reference/agent-instance-management/create-agent-instance.mdx), set the [CallbackConfig.UserSpeakAction](./../api-reference/agent-instance-management/create-agent-instance.mdx#callbackconfig) and [CallbackConfig.AgentSpeakAction](./../api-reference/agent-instance-management/create-agent-instance.mdx#callbackconfig) parameters to `1`.
+
+</Note>
+
+Callback content samples:
+
+<CodeGroup>
+```json title="Agent speaking status callback" {5,7}
+{
+    "AppId": 1234567,
+    "AgentInstanceId": "1912124734317838336",
+    "Data": {
+        "Action": "SPEAK_BEGIN",// SPEAK_BEGIN: Start speaking SPEAK_END: Stop speaking
+    },
+    "Event": "AgentSpeakAction",
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1745502313000,
+    "AgentUserId": "123456789",
+    "RoomId": "123456789",
+    "Sequence": 123456789,
+}
+```
+```json title="User speaking status callback" {5,7}
+{
+    "AppId": 1234567,
+    "AgentInstanceId": "1912124734317838336",
+    "Data": {
+        "Action": "SPEAK_BEGIN",// SPEAK_BEGIN: Start speaking SPEAK_END: Stop speaking
+    },
+    "Event": "UserSpeakAction",
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1745502313000,
+    "AgentUserId": "123456789",
+    "RoomId": "123456789",
+    "Sequence": 123456789,
+}
+```
+</CodeGroup>
+
+### How to Notify Clients and Display Status
+
+After receiving speaking status events for AI agent instances or users through server callbacks, you can notify clients of these status updates to enable real-time status display. Here are two common notification methods:
+
+#### Using Your Own Signaling Channel
+
+If your application already has its own signaling channel, such as WebSocket or instant messaging system, you can:
+
+- Forward status information to relevant clients through your signaling channel after receiving status event callbacks on the server.
+- Agree on a message format with clients, so they can update their UI (e.g., display speaking indicators, animations) based on received status information.
+
+The advantage of this approach is complete control over message format and transmission logic, making it suitable for applications with mature signaling systems.
+
+#### Using ZEGOCLOUD RTC Room Message Channel for Custom Messages
+
+If you don't have your own business signaling channel, you can utilize ZEGOCLOUD RTC's room messaging feature:
+
+- Call ZEGOCLOUD RTC Server API to send custom messages after receiving status event callbacks on the server
+- Agree on a message format with clients, so they can listen for custom messages via ZEGOCLOUD RTC SDK and update their UI based on status change notifications (e.g., display speaking indicators, animations)
+
+The advantage of this approach is that no additional signaling system setup is required, as you can directly use ZEGOCLOUD's infrastructure. However, the disadvantage is that room messages are not guaranteed to be completely reliable and have sending frequency limitations, making them unsuitable for scenarios requiring high message reliability.
+
+
+Implementation examples are as follows:
+<Tabs>
+<Tab title="Server">
+
+Here is an example code of the server receiving AI agent and user speaking status events and sending custom messages through ZEGOCLOUD Server API [Send Custom Message](https://docs.zegocloud.com/article/9784):
+
+
+```javascript {27-30,47-72}
+export class AgentCallbackController {
+    // Send custom command to RTC room
+    private async handleSendCustomCommand(
+        commonArgs: any,
+        roomId: string,
+        agentUserId: string,
+        data: any,
+    ) {
+        try {
+            // Build query parameters, ToUserId[] appears multiple times as an array
+            const params: Record<string, any> = {
+                Action: 'SendCustomCommand',
+                RoomId: roomId,
+                FromUserId: agentUserId,
+                MessageContent: JSON.stringify(data),
+                ...commonArgs
+            };
+            // Append ToUserId[]
+            const searchParams = new URLSearchParams();
+            Object.entries(params).forEach(([key, value]) => {
+                if (Array.isArray(value)) {
+                    value.forEach(v => searchParams.append(key, v));
+                } else {
+                    searchParams.append(key, value);
+                }
+            });
+            // Build complete URL
+            const url = `https://rtc-api.zego.im/?${searchParams.toString()}`;
+            // Send GET request directly to send custom message
+            const res = await rtcRequest<any>({ method: 'GET', url });
+
+            if (res.Code !== 0) logger.error(`sendCustomCommand errorCode: ${res.Code}, errorMessage: ${res.Message}`);
+        } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            logger.error('[AgentCallbackController] handleSendCustomCommand error:' + errMsg);
+        }
+    }
+    // Receive AI agent and user speaking status change callbacks
+    callbackHandler = async (req: Request, res: Response) => {
+        const RequestId = req.headers.RequestId as string;
+        const payload = req.body as AIAgentCallbackPayload;
+        const { AppId, AgentInstanceId, RoomId, AgentUserId, Event, Data } = payload;
+
+        // For commonArgs generation, refer to https://zegocloud.com/docs/article/19456#3
+        const commonArgs = genCommonArgs(AppId, globalConfig.appEnvSecretMap[AppId]);
+
+        switch (Event) {
+            case AgentEvent.AgentSpeakAction: {
+                const { Sequence, Action } = Data as AgentSpeakActionPayload;
+                const command = {
+                    eventType: 'AgentSpeakAction',
+                    data: {
+                        sequence: Sequence,
+                        action: Action,
+                    },
+                };
+                await this.handleSendCustomCommand(commonArgs, RoomId, AgentInstanceId, command);
+                break;
+            }
+            case AgentEvent.UserSpeakAction: {
+                const { UserId, Sequence, Action } = Data as UserSpeakActionPayload;
+                const command = {
+                    eventType: 'UserSpeakAction',
+                    data: {
+                        userId: UserId,
+                        sequence: Sequence,
+                        action: Action,
+                    },
+                };
+                await this.handleSendCustomCommand(commonArgs, RoomId, AgentInstanceId, command);
+                break;
+            }
+            // ... Handle other events
+        }
+    };
+}
+```
+
+</Tab>
+<Tab title="Client">
+
+Here are example codes for receiving messages on different client platforms:
+
+<CodeGroup>
+```javascript title="Web"
+// 3. Listen for custom messages via ZEGOCLOUD RTC SDK
+    zg.on("IMRecvCustomCommand", (roomID: string, fromUser: ZegoUser, command: string) => {
+      try {
+        const message = JSON.parse(command);
+        switch (message.eventType) {
+          case "AgentSpeakAction":
+            // Handle agent speaking status event
+            // Update UI
+            break;
+          case "UserSpeakAction":
+            // Handle user speaking status event
+            // Update UI
+            break;
+        }
+      } catch (error) {
+        console.error("Failed to parse message:", error);
+      }
+    });
+```
+```objc title="iOS"
+@interface YourClass () <ZegoEventHandler>
+
+@end
+
+@implementation YourClass
+
+- (void)onIMRecvCustomCommand:(NSString *)command
+                     fromUser:(ZegoUser *)fromUser
+                       roomID:(NSString *)roomID{
+    if (command == nil) {
+        return;
+    }
+
+    NSDictionary* msgDict = [ZegoAIAgentUtil dictFromJson:command];
+    if (!msgDict) {
+        return;
+    }
+
+    NSString *eventType = msgDict[@"eventType"];
+    if (eventType) {
+        if ([eventType isEqualToString:@"AgentSpeakAction"]) {
+            // Handle agent speaking status event
+            // Update UI
+        } else if ([eventType isEqualToString:@"UserSpeakAction"]) {
+            // Handle user speaking status event
+            // Update UI
+        }
+    }
+}
+@end
+```
+```java title="Android"
+// Listen for custom messages via ZEGOCLOUD RTC SDK
+ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onIMRecvCustomCommand(String roomID, ZegoUser fromUser, String command) {
+        super.onIMRecvCustomCommand(roomID, fromUser, command);
+        try {
+            // Step 1: Parse content to JSONObject
+            JSONObject json = new JSONObject(command);
+            if (json.has("eventType")) {
+                String eventType = json.getString("eventType");
+                if ("AgentSpeakAction".equals(eventType)) {
+                    // Handle agent speaking status event
+                    // Update UI
+                } else if ("UserSpeakAction".equals(eventType)) {
+                    // Handle user speaking status event
+                    // Update UI
+                }
+            }
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+});
+```
+</CodeGroup>
+
+</Tab>
+</Tabs>
