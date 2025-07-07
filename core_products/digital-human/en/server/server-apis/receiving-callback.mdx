@@ -1,0 +1,110 @@
+
+import Content from '/snippets/Reuse/SignatureVerificationZH.mdx'
+
+# 接收回调
+
+<Warning title="注意">回调服务不能保证完全可靠，请慎重考虑使用回调方案构建核心业务流程的风险。</Warning>
+
+
+通过本回调，您可以监听数字人视频流任务相关的信息，包含视频流任务状态、视频流驱动任务状态。
+
+## 回调说明
+
+- 请求方法：POST。
+    <Note title="说明">回调数据格式为 JSON。</Note>
+- 请求地址：请提供您业务后台用于接收回调的地址并联系 ZEGO 技术支持配置。
+- 传输协议：HTTPS/HTTP，建议使用 HTTPS。
+
+## 回调参数
+
+<Note title="说明">回调的相关参数，ZEGO 会在之后的迭代计划中，持续优化更新（例如：新增字段、或新增某些字段的参数取值）。开发者在接入时，请避免将代码写死，造成后期更新后，无法兼容新版本。</Note>
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| AppId | Number | ZEGO 给开发者 APP 的唯一标识。 |
+| EventType | Number | 事件通知类型。<ul><li>3：数字人视频流任务状态。</li><li>4：数字人视频流任务驱动状态。</li></ul> |
+| Nonce | String | 随机数，用于检验串计算。 |
+| Timestamp | String | 回调发送时的 Unix 时间戳（秒），用于检验串计算。 |
+| Signature | String | 检验串，验证回调发送方身份。 |
+| EventTime | Number | 事件在 ZEGO 服务器上发生的 Unix 时间戳（毫秒）。 |
+| TaskId | String | 数字人视频流任务 ID。 |
+| Detail | Object | 事件详细信息。本参数结构，请参考 [Detail](#detail)。 |
+
+### Detail
+
+**根据 `EventType` 取值不同，Detail 包含的参数不同。**
+
+<Tabs>
+<Tab title="3：数字人视频流任务状态">
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| Status      | Number | 任务状态：<ul><li>1：视频流任务初始化中。</li><li>2：视频流任务初始化失败。</li><li>3：推流中。</li><li>4：正在停止推流。</li><li>5：已停止推流。</li></ul> |
+| RoomId | String | 数字人视频流任务的房间 ID。 |
+| StreamId | String | 数字人视频流任务的流ID。 |
+| FailReason | String | 数字人视频流任务初始化失败原因，仅当 `Status` 为 2 时有意义。 |
+
+</Tab>
+<Tab title="4：数字人视频流驱动任务状态">
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| DriveId | String | 数字人视频流驱动任务 ID。 |
+| Status      | Number       | 数字人视频流驱动任务状态：<ul><li>1：排队中。</li><li>2：驱动中。</li><li>3：驱动失败。</li><li>4：驱动结束。</li></ul> |
+| Duration | Number | 本次驱动任务的时长，单位为秒。仅当 `Status` 为 4 时有意义。 |
+</Tab>
+</Tabs>
+
+## 回调示例
+
+以下展示各种事件的回调示例。
+
+<Tabs>
+<Tab title="3">
+```json
+{
+    "AppId": 123456789,
+    "TaskId": "XXXXXX",
+    "EventType": 3,
+    "Nonce": "abcdd22113",
+    "Timestamp": "1681221510",
+    "Signature": "XXXXXXX",
+    "EventTime": 1681221510034,
+    "Detail": {
+        "Status": 5,
+        "RoomId": "XXXXXXXXXXXX",
+        "StreamId": "XXXXXXXXXXXX"
+    }
+}
+```
+</Tab>
+<Tab title="4">
+```json
+{
+    "AppId": 123456789,
+    "TaskId": "XXXXXX",
+    "EventType": 4,
+    "Nonce": "abcdd22113",
+    "Timestamp": "1681221510",
+    "Signature": "XXXXXXX",
+    "EventTime": 1681221510034,
+    "Detail": {
+        "DriveId": "XXXXXXXXXXXX",
+        "Status": 4,
+        "Duration": 10
+    }
+}
+```
+</Tab>
+</Tabs>
+
+## 验证签名
+
+<Content />
+
+## 返回响应
+
+当您收到回调后，请返回 HTTP status code 为 2XX （例如 200），表示接收成功。返回其他，都表示接收失败。
+
+
+## 回调重试策略
+
+如果 ZEGO 服务器没有收到响应，或收到的 HTTP status code 不为 2XX（例如 200），都会尝试重试，**最多进行 5 次重试**。每次重试请求与**上一次请求**的间隔时间分别为 2s、4s、8s、16s、32s。若第 5 次重试后仍然失败，将不再重试，该回调丢失。
