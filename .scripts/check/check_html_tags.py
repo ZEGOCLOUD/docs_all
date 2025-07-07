@@ -6,7 +6,8 @@ HTML元素闭合检查脚本
 功能说明：
 - 检查MDX文件中的HTML元素是否正确配对闭合
 - 支持嵌套元素、自闭合元素、跨行元素等
-- 自动过滤代码块中的内容和编程语言泛型语法
+- 自动跳过代码块（```...```）中的所有HTML标签检查
+- 自动过滤编程语言泛型语法
 - 支持常见的HTML标签和MDX组件
 
 检查类型：
@@ -15,6 +16,10 @@ HTML元素闭合检查脚本
 3. 标签嵌套错误 - 标签闭合顺序不正确
 4. 自闭合标签错误闭合 - 自闭合标签不应该有闭合标签（如 </br>）
 5. 自闭合标签格式错误 - 自闭合标签应该以 /> 结尾（如 <br> 应该写成 <br/>）
+
+注意事项：
+- 代码块中的HTML标签将被完全忽略，不会进行检查
+- 这样可以避免误报代码示例中的HTML标签问题
 
 使用方法：
 python3 .scripts/check/check_html_tags.py
@@ -216,18 +221,29 @@ def extract_html_tags(content):
     tags = []
     lines = content.split('\n')
     in_code_block = False
+    code_block_language = None
 
     # 匹配HTML标签的正则表达式
     # 支持: <tag>, <tag attr="value">, </tag>, <tag/>, <tag attr="value"/>
     tag_pattern = re.compile(r'<(/?)([a-zA-Z][a-zA-Z0-9]*)[^>]*?(/?)>', re.IGNORECASE)
 
     for line_num, line in enumerate(lines, 1):
+        stripped_line = line.strip()
+        
         # 检查是否在代码块中
-        if line.strip().startswith('```'):
-            in_code_block = not in_code_block
+        if stripped_line.startswith('```'):
+            if not in_code_block:
+                # 进入代码块
+                in_code_block = True
+                # 提取代码块语言（如果有的话）
+                code_block_language = stripped_line[3:].strip() or None
+            else:
+                # 退出代码块
+                in_code_block = False
+                code_block_language = None
             continue
 
-        # 如果在代码块中，跳过这一行
+        # 如果在代码块中，完全跳过这一行的所有HTML标签检查
         if in_code_block:
             continue
 
