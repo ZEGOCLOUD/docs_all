@@ -205,8 +205,11 @@ def is_likely_html_tag(tag_name, line_content, match_start, match_end):
     after_tag = line_content[match_end:].strip()
 
     # 检查是否在代码上下文中
-    if (before_tag.endswith(':') or before_tag.endswith('<') or
-        after_tag.startswith('>') or '(' in before_tag[-10:] or ')' in after_tag[:10]):
+    # 注意：需要更精确的检查，避免误判HTML标签
+    # 只有在明确的编程上下文中才过滤
+    if (before_tag.endswith('<') or  # 泛型开始，如 List<
+        (after_tag.startswith('>') and not after_tag.startswith('> ')) or  # 泛型结束，如 >，但不是 > 文本
+        ('(' in before_tag[-5:] and ')' in after_tag[:5])):  # 函数调用上下文
         return False
 
     # 如果标签名看起来像类名（首字母大写），可能是MDX组件
