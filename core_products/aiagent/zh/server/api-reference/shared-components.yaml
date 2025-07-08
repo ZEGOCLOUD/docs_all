@@ -1,0 +1,537 @@
+openapi: 3.0.0
+info:
+  title: AI Agent API - 共享组件
+  version: 1.0.0
+
+# 共享的服务器配置
+servers:
+  - url: https://aigc-aiagent-api.zegotech.cn
+    description: 统一接入地址（不区分区域）
+  - url: https://aigc-aiagent-api-sha.zegotech.cn
+    description: 中国大陆（上海）
+  - url: https://aigc-aiagent-api-hkg.zegotech.cn
+    description: 港澳台（香港）
+  - url: https://aigc-aiagent-api-fra.zegotech.cn
+    description: 欧洲（法兰克福）
+  - url: https://aigc-aiagent-api-lax.zegotech.cn
+    description: 美西（加州）
+  - url: https://aigc-aiagent-api-bom.zegotech.cn
+    description: 亚太（孟买）
+  - url: https://aigc-aiagent-api-sgp.zegotech.cn
+    description: 东南亚（新加坡）
+
+components:
+  # 共享的参数定义
+  parameters:
+    AppId:
+      name: AppId
+      in: query
+      description: AppId，ZEGO 分配的用户唯一凭证。
+      required: true
+      schema:
+        type: integer
+        format: uint32
+
+    SignatureNonce:
+      name: SignatureNonce
+      in: query
+      description: 随机字符串。
+      required: true
+      schema:
+        type: string
+
+    Timestamp:
+      name: Timestamp
+      in: query
+      description: Unix 时间戳，单位为秒。最多允许 10 分钟的误差。
+      required: true
+      schema:
+        type: integer
+        format: int64
+
+    SignatureVersion:
+      name: SignatureVersion
+      in: query
+      description: 签名版本号，默认值为 2.0。
+      required: true
+      schema:
+        type: string
+        enum: ["2.0"]
+
+    Signature:
+      name: Signature
+      in: query
+      description: 签名，用于验证请求的合法性。
+      required: true
+      schema:
+        type: string
+
+  # 共享的Schema定义
+  schemas:
+    RTC:
+      type: object
+      description: |
+        RTC 房间相关配置
+
+        <br/>
+        > **📌 重要说明**
+        >
+        > RoomId、AgentStreamId、AgentUserId、UserStreamId 说明如下：
+        >
+        > - 字符限制：仅支持数字、英文字符、'_'、'-'、'.'。
+        > - 长度限制：
+        >   - RoomId、AgentStreamId、UserStreamId：128 字节。
+        >   - AgentUserId：32 字节。
+
+      required:
+        - RoomId
+        - AgentStreamId
+        - AgentUserId
+        - UserStreamId
+      properties:
+        RoomId:
+          type: string
+          description: RTC 房间 ID。
+          example: "room_1"
+        AgentStreamId:
+          type: string
+          description: 智能体实例用于推流的流 ID。
+          example: "agent_stream_1"
+        AgentUserId:
+          type: string
+          description: 智能体实例的用户 ID。
+          example: "agent_user_1"
+        UserStreamId:
+          type: string
+          description: 真实用户用于推流使用的流 ID
+          example: "user_stream_1"
+
+    LLM:
+      type: object
+      required:
+        - Url
+        - Model
+      properties:
+        Url:
+          type: string
+          description: |
+            接收请求的端点（可以是你自己的服务，也可以是任何 LLM 服务提供商提供的服务），并且必须兼容 [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat)。
+
+            例如：https://api.openai.com/v1/chat/completions
+
+            > **📌 重要说明**
+            >
+            > 如果 ApiKey 设置为 "zego_test"，则必须使用以下 Url 地址之一：
+            > - MiniMax：https://api.minimax.chat/v1/text/chatcompletion_v2
+            > - 火山引擎（豆包）：https://ark.cn-beijing.volces.com/api/v3/chat/completions
+            > - 阿里云百炼（通义千问）：https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+            > - 阶跃星辰：https://api.stepfun.com/v1/chat/completions
+
+          example: "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+        ApiKey:
+          type: string
+          description: |
+            LLM 服务提供商用于认证的参数。默认为空，但在生产环境中必须提供。
+
+            > **📌 重要说明**
+            >
+            > 在接入测试期间(AI Agent 服务开通 2 周内)，可以将该参数值设置为 "zego_test" 即可使用该服务。
+          example: "zego_test"
+        Model:
+          type: string
+          description: |
+            LLM 模型。不同的 LLM 服务提供商支持不同的模型，请参考其官方文档选择合适的模型。
+
+            > **📌 重要说明**
+            >
+            > 如果 ApiKey 设置为 "zego_test"，则必须使用以下模型之一：
+            > - MiniMax：
+            >   - MiniMax-Text-01
+            > - 火山引擎（豆包）：
+            >   - doubao-1-5-pro-32k-250115
+            >   - doubao-1-5-lite-32k-250115
+            > - 阿里云百炼（通义千问）：
+            >   - qwen-plus
+            > - 阶跃星辰：
+            >   - step-2-16k
+          example: "doubao-1-5-lite-32k-250115"
+        SystemPrompt:
+          type: string
+          description: 智能体系统提示（prompt）。调用 LLM 时附加在最前的预定义信息，用于控制 LLM 输出。可以是角色设定、提示词和回答样例等。
+          example: "你是一个友好的助手"
+        Temperature:
+          type: number
+          description: 数值越高，输出越随机；数值越低，输出越集中和确定。
+          minimum: 0
+          maximum: 2
+          default: 0.7
+          example: 0.7
+        TopP:
+          type: number
+          description: 采样方法，数值越小，确定性越强；数值越大，随机性越强。
+          minimum: 0
+          maximum: 1
+          default: 0.9
+          example: 0.9
+        Params:
+          type: object
+          description: LLM 服务提供商支持的其他参数，如最大 Token 数量限制等。不同的 LLM 提供商支持不同的参数，请参考其官方文档并根据需要填写。
+          example: {"max_tokens": 16384}
+        AddAgentInfo:
+          type: boolean
+          description: |
+            如果此值为 true，AI Agent 服务器在请求 LLM 服务时会在请求参数中包含智能体信息。
+            您可以使用此参数在自定义 LLM 服务中执行额外的业务逻辑。
+
+            agent_info 的结构如下：
+            - room_id: 房间 ID
+            - user_id: 用户 ID
+            - agent_instance_id: 智能体实例 ID
+          default: false
+          example: false
+
+    TTS:
+      type: object
+      required:
+        - Vendor
+        - Params
+      properties:
+        Vendor:
+          type: string
+          description: |
+            语音合成（TTS）服务提供商。选项：
+            - Aliyun: 阿里云
+            - ByteDance: 字节跳动火山语音（大模型语音合成 API）
+            - ByteDanceFlowing: 字节跳动火山语音（流式语音合成 API (WebSocket)）
+            - MiniMax: MiniMax
+            - CosyVoice: 阿里云 CosyVoice
+          enum: ["Aliyun", "ByteDance", "ByteDanceFlowing", "MiniMax", "CosyVoice"]
+          example: "ByteDance"
+        Params:
+          type: object
+          description: |
+            TTS 配置参数，格式为 JSON 对象。包含 app 参数（用于认证）和其他参数（用于调整 TTS 效果）。
+
+            除 app 参数外，还可以传入其他 TTS 配置参数来调整语音合成效果，这些参数会直接透传给对应的 TTS 服务提供商。
+            常见的其他参数包括：
+            - **Aliyun**: voice, volume, speech_rate, pitch_rate 等
+            - **ByteDance**: audio.voice_type, audio.loudness_ratio, audio.speed_ratio 等
+            - **ByteDanceFlowing**: req_params.speaker, req_params.audio_params 等
+            - **MiniMax**: model, voice_setting.voice_id, voice_setting.vol, voice_setting.speed 等
+            - **CosyVoice**: payload.model, payload.parameters.voice, payload.parameters.volume 等
+
+            具体支持的参数请参考各厂商的官方文档。
+          required:
+            - app
+          additionalProperties: true
+          properties:
+            app:
+              type: object
+              description: |
+                用于 TTS 服务鉴权，不同的 Vendor 值要求传入的 app 参数的结构各异。
+              oneOf:
+                - title: Aliyun App 配置
+                  type: object
+                  required: [app_key, ak_id, ak_key]
+                  properties:
+                    app_key:
+                      type: string
+                      description: 阿里云 AppKey
+                      example: "zego_test"
+                    ak_id:
+                      type: string
+                      description: 阿里云 AccessKey ID
+                      example: "zego_test"
+                    ak_key:
+                      type: string
+                      description: 阿里云 AccessKey Secret
+                      example: "zego_test"
+                - title: ByteDance App 配置
+                  type: object
+                  required: [appid, token, cluster]
+                  properties:
+                    appid:
+                      type: string
+                      description: 火山引擎应用 ID
+                      example: "zego_test"
+                    token:
+                      type: string
+                      description: 火山引擎访问令牌
+                      example: "zego_test"
+                    cluster:
+                      type: string
+                      description: 火山引擎集群配置
+                      enum: ["volcano_tts", "volcano_mega", "volcano_icl"]
+                      default: "volcano_tts"
+                      example: "volcano_tts"
+                - title: ByteDanceFlowing App 配置
+                  type: object
+                  required: [appid, token, resource_id]
+                  properties:
+                    appid:
+                      type: string
+                      description: 火山引擎应用 ID
+                      example: "zego_test"
+                    token:
+                      type: string
+                      description: 火山引擎访问令牌
+                      example: "zego_test"
+                    resource_id:
+                      type: string
+                      description: 火山引擎资源 ID
+                      enum: ["volc.service_type.10029", "volc.megatts.default", "volc.megatts.concurr"]
+                      default: "volc.service_type.10029"
+                      example: "volc.service_type.10029"
+                - title: MiniMax App 配置
+                  type: object
+                  required: [api_key]
+                  properties:
+                    api_key:
+                      type: string
+                      description: MiniMax API 密钥
+                      example: "zego_test"
+                - title: CosyVoice App 配置
+                  type: object
+                  required: [api_key]
+                  properties:
+                    api_key:
+                      type: string
+                      description: CosyVoice API 密钥
+                      example: "zego_test"
+          example: {
+            "app": {
+              "appid": "zego_test",
+              "token": "zego_test",
+              "cluster": "volcano_tts"
+            },
+            "audio": {
+              "voice_type": "zh_female_qingxinnvsheng_mars_bigtts",
+              "loudness_ratio": 1.0,
+              "speed_ratio": 1.0
+            }
+          }
+        FilterText:
+          type: array
+          description: |
+            从 LLM 返回的内容中过滤指定标点符号内的文本，然后再进行语音合成。
+
+            注意：
+            - 需要在 LLM > SystemPrompt 中定义哪些内容应该放在指定标点符号内
+            - 此参数在更新智能体实例时无法更新
+          items:
+            type: object
+            required:
+              - BeginCharacters
+              - EndCharacters
+            properties:
+              BeginCharacters:
+                type: string
+                description: 过滤文本的开始标点符号。例如，如果要过滤 () 中的内容，请设置为 (。
+                example: "("
+              EndCharacters:
+                type: string
+                description: 过滤文本的结束标点符号。例如，如果要过滤 () 中的内容，请设置为 )。
+                example: ")"
+          example: [
+            {
+              "BeginCharacters": "(",
+              "EndCharacters": ")"
+            }
+          ]
+
+    ASR:
+      type: object
+      properties:
+        HotWord:
+          type: string
+          description: |
+            热词列表用于提高识别准确率。格式：Hotword1|Weight1,Hotword2|Weight2,Hotword3|Weight3
+
+            单个热词不超过 30 个字符（最多 10 个汉字），不能包含空格，权重范围：[-1, 11]。
+            最多支持 128 个热词
+
+            > **📌 重要说明**
+            >
+            > 当权重为 11 时，表示该词为超级热词。建议仅将重要且必须生效的热词设置到 11，过多权重为 11 的热词会影响识别效果。
+          example: "历史类|10,物理类|10,体育类|10"
+        Params:
+          type: object
+          description: 扩展参数，详情请联系 ZEGO 技术支持。
+          example: {}
+        VADSilenceSegmentation:
+          type: number
+          description: |
+            用于设置用户说话停顿多少秒后，不再将两句话视为一句。
+            单位为 ms，范围 [200，2000]，默认为 500。
+          minimum: 200
+          maximum: 2000
+          default: 500
+          example: 500
+        PauseInterval:
+          type: number
+          description: |
+            用于设置用户说话停顿多少秒内，将两句话视为一句，即 ASR 多句拼接。
+            单位为 ms，范围 [200，2000]。
+            仅当此值大于 `VADSilenceSegmentation` 时，才会启用 ASR 多句拼接。
+          minimum: 200
+          maximum: 2000
+          example: 800
+
+    MessageHistory:
+      type: object
+      description: |
+        消息历史记录配置
+
+        > **📋 使用说明**
+        >
+        > - **SyncMode 0**：从即时通讯同步，需要配置 ZIM 参数
+        > - **SyncMode 1**：通过 Messages 参数同步，最多支持 100 条消息
+        > - **WindowSize**：影响 LLM 上下文理解能力，建议设置为 10-30
+        > - **消息格式**：Role 只支持 "user" 和 "assistant"
+
+      properties:
+        SyncMode:
+          type: integer
+          description: |
+            消息同步模式：
+            - 0: 从即时通讯同步
+            - 1: 通过 Messages 参数同步
+          enum: [0, 1]
+          example: 1
+        Messages:
+          type: array
+          description: 消息列表
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/Message"
+        WindowSize:
+          type: integer
+          description: 每次调用 LLM 服务时使用的近期历史消息数量
+          minimum: 0
+          maximum: 100
+          default: 20
+          example: 20
+        ZIM:
+          $ref: "#/components/schemas/ZIM"
+
+    Message:
+      type: object
+      required:
+        - Role
+        - Content
+      properties:
+        Role:
+          type: string
+          description: 消息发送者的角色
+          enum: [user, assistant]
+          example: "user"
+        Content:
+          type: string
+          description: 消息内容
+          example: "你好，我想了解一下产品信息"
+
+    ZIM:
+      type: object
+      properties:
+        RobotId:
+          type: string
+          description: 即时通讯机器人 ID
+          example: "@RBT#robot_123"
+        LoadMessageCount:
+          type: integer
+          description: 创建 AI Agent 实例时从即时通讯服务获取的消息数量
+          minimum: 0
+          maximum: 100
+          example: 20
+
+    CallbackConfig:
+      type: object
+      description: |
+        服务端回调配置
+
+        > **💡 配置说明**
+        >
+        > - **回调值**：0 = 禁用，1 = 启用
+        > - **回调地址**：需要在控制台中配置回调 URL
+        > - **超时时间**：回调请求超时时间为 5 秒
+        > - **重试机制**：失败时会重试 3 次
+
+      properties:
+        ASRResult:
+          type: integer
+          description: 是否启用 ASR 结果的服务端回调
+          enum: [0, 1]
+          default: 0
+        LLMResult:
+          type: integer
+          description: 是否启用 LLM 结果的服务端回调
+          enum: [0, 1]
+          default: 0
+        Interrupted:
+          type: integer
+          description: 是否启用智能体中断结果的服务端回调
+          enum: [0, 1]
+          default: 0
+        UserSpeakAction:
+          type: integer
+          description: 是否启用用户说话事件的服务端回调
+          enum: [0, 1]
+          default: 0
+        AgentSpeakAction:
+          type: integer
+          description: 是否启用智能体说话事件的服务端回调
+          enum: [0, 1]
+          default: 0
+        UserAudioData:
+          type: integer
+          description: 是否启用用户说话音频数据的服务端回调
+          enum: [0, 1]
+          default: 0
+
+    AdvancedConfig:
+      type: object
+      properties:
+        InterruptMode:
+          type: integer
+          description: |
+            智能体说话时用户语音中断的处理模式：
+            - 0: 立即中断（默认）
+            - 1: 不中断
+          enum: [0, 1]
+          default: 0
+          example: 0
+
+    DigitalHuman:
+      type: object
+      properties:
+        DigitalHumanId:
+          type: string
+          description: 数字人形象 ID
+          example: "xiaozhi"
+        ConfigId:
+          type: string
+          description: 数字人配置 ID
+          enum: [mobile, web]
+          example: "mobile"
+        EncodeCode:
+          type: string
+          description: 数字人视频编码格式
+          enum: [H264, VP8]
+          default: "H264"
+          example: "H264"
+
+    ErrorResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          description: 错误码
+          example: 400
+        Message:
+          type: string
+          description: 错误信息
+          example: "Invalid request parameters"
+        RequestId:
+          type: string
+          description: 请求 ID
+          example: "3151527792559699733"
