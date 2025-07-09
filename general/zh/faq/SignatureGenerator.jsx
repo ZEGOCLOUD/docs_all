@@ -316,56 +316,27 @@ const SignatureGenerator = () => {
             }}>
                 <h3 style={{ textAlign: 'center', marginBottom: '20px' }}>签名生成器</h3>
                 
-                {copyFeedback && (
-                    <div style={{ 
-                        backgroundColor: '#d4edda', 
-                        color: '#155724', 
-                        padding: '10px', 
-                        marginBottom: '15px', 
-                        border: '1px solid #c3e6cb', 
-                        borderRadius: '4px',
-                        textAlign: 'center'
-                    }}>
-                        {copyFeedback}
-                    </div>
-                )}
-                
-                <div style={{ marginBottom: '15px' }}>
-                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                        AppId:
-                    </label>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                        <input
-                            type="text"
-                            value={appId}
-                            onChange={(e) => setAppId(e.target.value)}
-                            placeholder="请输入AppId"
-                            style={{
-                                flex: 1,
-                                padding: '8px',
-                                border: '1px solid #ccc',
-                                borderRadius: '4px',
-                                fontSize: '14px'
-                            }}
-                        />
-                        <button
-                            onClick={() => copyToClipboard(appId, 'AppId')}
-                            disabled={!appId}
-                            style={{
-                                padding: '8px 16px',
-                                backgroundColor: '#007bff',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '4px',
-                                cursor: appId ? 'pointer' : 'not-allowed',
-                                opacity: appId ? 1 : 0.6
-                            }}
-                        >
-                            复制
-                        </button>
-                    </div>
+                <div style={{ 
+                    height: '40px',
+                    marginBottom: '15px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}>
+                    {copyFeedback && (
+                        <div style={{ 
+                            backgroundColor: '#d4edda', 
+                            color: '#155724', 
+                            padding: '10px', 
+                            border: '1px solid #c3e6cb', 
+                            borderRadius: '4px',
+                            textAlign: 'center'
+                        }}>
+                            {copyFeedback}
+                        </div>
+                    )}
                 </div>
-
+                
                 <div style={{ marginBottom: '15px' }}>
                     <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
                         ServerSecret:
@@ -395,6 +366,42 @@ const SignatureGenerator = () => {
                                 borderRadius: '4px',
                                 cursor: serverSecret ? 'pointer' : 'not-allowed',
                                 opacity: serverSecret ? 1 : 0.6
+                            }}
+                        >
+                            复制
+                        </button>
+                    </div>
+                </div>
+
+                <div style={{ marginBottom: '15px' }}>
+                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                        AppId:
+                    </label>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <input
+                            type="text"
+                            value={appId}
+                            onChange={(e) => setAppId(e.target.value)}
+                            placeholder="请输入AppId"
+                            style={{
+                                flex: 1,
+                                padding: '8px',
+                                border: '1px solid #ccc',
+                                borderRadius: '4px',
+                                fontSize: '14px'
+                            }}
+                        />
+                        <button
+                            onClick={() => copyToClipboard(appId, 'AppId')}
+                            disabled={!appId}
+                            style={{
+                                padding: '8px 16px',
+                                backgroundColor: '#007bff',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: appId ? 'pointer' : 'not-allowed',
+                                opacity: appId ? 1 : 0.6
                             }}
                         >
                             复制
