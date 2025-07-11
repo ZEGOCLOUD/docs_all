@@ -7,7 +7,60 @@ articleID: 10905
 
 ## 功能简介
 
-@@@Express_Mix_Introduce@@@
+### 概述
+
+混流是把多路音视频流从云端合并成一路流的技术，也称合流。开发者只需要拉取合并后的流就能看到房间内所有成员的画面，听到房间内所有成员的声音，无需分别管理房间内的每一条流。
+
+本篇文档主要介绍通过客户端发起混流的操作说明，如果你需要通过自己的服务端发起混流，请参考 [服务端 API - 开始混流](https://doc-zh.zego.im/article/19595)。
+
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/mixed_flow.png" /></Frame>
+
+### 混流方式分类
+
+ZEGO 支持手动混流、自动混流和全自动混流三种方式，三种混流方式的区别如下：
+
+<table>
+  
+  <tbody><tr>
+    <th>混流方式</th>
+    <td>手动混流</td>
+    <td>自动混流</td>
+    <td>全自动混流</td>
+  </tr>
+  <tr>
+    <th>含义</th>
+    <td>自定义控制混流任务和混流内容，包括输入流、混流布局等。支持手动混视频流和音频流。</td>
+    <td>指定房间，自动将房间内的所有音频流进行混流。只支持自动混音频流。</td>
+    <td>每个房间都自动混音频流。只支持全自动混音频流。</td>
+  </tr>
+  <tr>
+    <th>应用场景</th>
+    <td>合并多个视频画面和声音时可用，比如在线课堂中老师和学生画面的直播，娱乐场景中的跨房间连麦，特殊场景中需混合指定几条流等；设备不支持同时拉多条流或者设备性能较差的场景。</td>
+    <td>将房间内所有音频流合为一条流时使用自动混流，比如语聊房、合唱。</td>
+    <td>不想做任何开发，房间内所有音频流合为一条流时使用全自动混流，比如语聊房、合唱。</td>
+  </tr>
+  <tr>
+    <th>优势</th>
+    <td>灵活性强，能够根据业务需要实现逻辑。</td>
+    <td>降低了开发者接入的复杂程度，不需要管理指定房间音频流的生命周期。</td>
+    <td>开发者接入复杂程度很低，不需要管理所有房间音频混流任务的生命周期以及音频流的生命周期。</td>
+  </tr>
+  <tr>
+    <th>发起方式</th>
+    <td>用户客户端或用户服务端发起混流任务，用户客户端维护流的生命周期。</td>
+    <td>用户客户端发起混流任务，ZEGO 服务端自动维护房间内流的生命周期（即输入流列表）。</td>
+    <td>联系 ZEGO 技术支持开通全自动混流，ZEGO 服务端维护混流任务和房间内流的生命周期（即输入流列表）。</td>
+  </tr>
+</tbody></table>
+
+
+### 优点
+
+- 降低了开发实现上的复杂性。比如当有 N 个主播进行连麦，如果采用混流，观众端不必同时拉 N 路视频流，开发实现上省去了拉 N 路流并布局的步骤。
+- 降低了对设备的性能要求，减少设备的性能开销和网络带宽的负担。比如当连麦方过多时，观众端需要拉 N 路视频流，需要设备硬件上能支持同时拉 N 路流。
+- 转推多路 CDN 实现简单，只需要在混流配置时按需增加输出流。
+- 观众端需要回放多主播连麦视频时，仅需要在 CDN 上开启录制的配置。
+- 鉴黄时只需要观察一个画面，不必再同时查看多个画面。
 
 ## 示例源码下载
 
@@ -22,43 +75,63 @@ articleID: 10905
 - 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目信息](https://doc-zh.zego.im/article/12107)。
 - 已在项目中集成 ZEGO Express SDK，并实现了基本的音视频推拉流功能，详情请参考 [快速开始 - 集成](!Integration/SDK_Integration) 和 [快速开始 - 实现流程](!Integration/Solution_Implementation)。
 
+<Warning title="注意">
 
-@@@Enable_Mixed_Flow@@@
 
-@@@Express_Mix_Main@@@
+混流功能不是默认开启的，使用前请在 [ZEGO 控制台](https://console.zego.im) 自助开通（开通步骤请参考 [项目管理 - 服务配置](https://doc-zh.zego.im/article/14214) 中的“混流”），或联系 ZEGO 技术支持开通。
+
+</Warning>
+
+
+
+## 实现流程
+
+混流的主要流程如下：
+1. 房间内的用户推 A 流和 B 流到 ZEGO 实时音视频云服务器上。
+2. ZEGO 实时音视频云服务器可以根据需要配置推混流或者推单独的 A 流和 B 流到 CDN 服务器。（采用 RTMP 协议）
+3. 拉流端根据需要从 CDN 服务器上拉混流，也可以拉单独的 A 流和 B 流（支持 RTMP、FLV、HLS 等协议）。
+
 
 ## 手动混流使用步骤
 
-@@@Express_Mix_One@@@
+手动混流可自定义控制混流任务和混流内容，包括输入流、混流布局等，常用于多人互动直播和跨房间连麦场景。支持手动混视频流和音频流。
 
-### 1 初始化并登录房间
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/mixstream.png" /></Frame>
+
+开发者可通过 SDK 或 ZEGO 服务端 API 实现手动混流功能，服务端相关接口请参考 [开始混流](https://doc-zh.zego.im/article/8791) 和 [停止混流](https://doc-zh.zego.im/article/8792)。
+
+以下介绍如何使用 SDK 实现手动混流。
+
+### 初始化并登录房间
 
 可参考 [快速开始 - 实现流程](!Integration/Solution_Implementation#CreateEngine) 的 “创建引擎” 和 “登录房间”。
 
-<div class = 'mk-warning'>
+<Warning title="注意">
+
 
 - 混流的前置条件为房间内需要有已存在的流。
 - 发起混流的设备可以混房间内已有的其他设备推的流而自己不用推流，也可以自己推流后再混自己推的流。
-</div>
 
-### 2 设置混流配置
+</Warning>
 
-[ZegoMixerTask](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerTask-class.html) 是 ZegoExpressEngine SDK 中定义的混流任务配置对象，其中包含输入流、输出流等信息。
 
-#### 2.1 创建混流任务对象
 
-通过构造函数 [ZegoMixerTask ](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerTask-class.html) 新建一个混流任务对象，然后调用实例方法分别设置输入、输出等参数。
+### 设置混流配置
+
+[ZegoMixerTask](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerTask-class.html) 是 ZegoExpressEngine SDK 中定义的混流任务配置对象，其中包含输入流、输出流等信息。
+
+#### 创建混流任务对象
+
+通过构造函数 [ZegoMixerTask ](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerTask-class.html) 新建一个混流任务对象，然后调用实例方法分别设置输入、输出等参数。
 
 ```dart
 ZegoMixerTask task = ZegoMixerTask("task1");
 ```
 
-#### 2.2 （可选）设置混流视频配置
+#### （可选）设置混流视频配置
 
-<details class="zg-primary">
-    <summary>混流视频配置设置</summary>
-
-开发者可以调用 [ZegoMixerVideoConfig](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerVideoConfig-class.html) 方法，配置混流任务的视频参数（帧率、码率、分辨率）。
+<Accordion title="混流视频配置设置" defaultOpen="false">
+开发者可以调用 [ZegoMixerVideoConfig](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerVideoConfig-class.html) 方法，配置混流任务的视频参数（帧率、码率、分辨率）。
 
 如果要混的流都是纯音频，则不用进行设置。
 
@@ -70,18 +143,15 @@ ZegoMixerVideoConfig videoConfig = ZegoMixerVideoConfig(360, 640, 15, 600);
 
 task.videoConfig = videoConfig;
 ```
+</Accordion>
 
-</details>
 
+#### （可选）设置混流音频配置
 
-#### 2.3 （可选）设置混流音频配置
+<Accordion title="混流音频配置设置" defaultOpen="false">
+开发者可以调用 [ZegoMixerAudioConfig](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerAudioConfig-class.html) 方法，配置混流任务的音频码率、声道数、音频编码。
 
-<details class="zg-primary">
-    <summary>混流音频配置设置</summary>
-
-开发者可以调用 [ZegoMixerAudioConfig](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerAudioConfig-class.html) 方法，配置混流任务的音频码率、声道数、音频编码。
-
-音频的码率 [bitrate](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerAudioConfig-class.html) 默认值为 48 kbps。
+音频的码率 [bitrate](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerAudioConfig-class.html) 默认值为 48 kbps。
 
 ```dart
 // 在创建 ZegoMixerAudioConfig 对象之后，有需要的开发者可以直接设置 audioConfig 的对应字段的对应值，若不设置则使用默认构造方法里设置的默认值 48 kbps，单声道，默认的音频编码模式
@@ -89,24 +159,26 @@ ZegoMixerAudioConfig audioConfig = ZegoMixerAudioConfig(48, ZegoAudioChannel.Mon
 
 task.audioConfig = audioConfig;
 ```
-
-</details>
-
-
-#### 2.4 设置混流输入流
+</Accordion>
 
 
-根据实际业务场景，定义输入的视频流 [ZegoMixerInput](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerInput-class.html) 列表，设置其中每条视频流的 “layout” 参数来对每条输入流的画面进行布局，由 ZEGO 实时音视频云服务器将输入流进行混合，输出在一个画面中的混流。
+#### 设置混流输入流
 
 
-<div class="mk-warning">
+根据实际业务场景，定义输入的视频流 [ZegoMixerInput](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerInput-class.html) 列表，设置其中每条视频流的 “layout” 参数来对每条输入流的画面进行布局，由 ZEGO 实时音视频云服务器将输入流进行混合，输出在一个画面中的混流。
+
+<Warning title="注意">
+
 
 
 - 默认支持最多输入 9 路流，如果需要输入更多路流，请联系 ZEGO 技术支持确认和配置。
 - 当混流输入流的 “contentType” 都设置为 “Audio” 时，SDK 内部不处理布局字段，此时无需关注 “layout” 参数。    
 - 当混流输入流的 “contentType” 都设置为 “Audio” 时，SDK 内部会默认把分辨率设置为 1*1（即混流输出是纯音频）。如果您想要混流输出有视频画面或者背景图，则至少需要将一路输入流的 “contentType” 设置为 “Vudio”。
 
-</div>
+
+</Warning>
+
+
 
 
 输入流的布局以输出混流画面的左上角为坐标系原点，参考原点设置输入流的布局，即将 `Rect.fromLTRB(left, top, right, bottom)` 传入输入流的 “layout” 参数。此外，输入流的图层层次由输入流在输入流列表中的位置决定，在列表中的位置越后，表示图层层次越高。
@@ -115,10 +187,7 @@ task.audioConfig = audioConfig;
 `Rect` 参数说明如下：
 
 <table>
-  <colgroup>
-    <col width="20%">
-    <col width="80%">
-  </colgroup>
+  
   <tbody><tr>
     <th>参数</th>
     <th>描述</th>
@@ -141,7 +210,14 @@ task.audioConfig = audioConfig;
   </tr>
 </tbody></table>
 
-@@@Notes_Rect_Parameter@@@
+<Warning title="注意">
+
+
+以上参数在不同的开发平台可能有所差异，具体请以各端的文档为准。
+
+</Warning>
+
+
 
 
 
@@ -151,18 +227,15 @@ task.audioConfig = audioConfig;
 
 那么这条输入流在最终的输出混流中的位置如下所示：
 
-![](/Pics/iOS/ZegoExpressEngine/Mixer/mixer-layout.png)
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/Mixer/mixer-layout.png" /></Frame>
 
 
 开发者可参考以下示例代码实现常见的混流布局：两个画面水平平铺、四个画面水平垂直平铺、一个大画面铺满和两个小画面悬浮。
 
 以下布局示例皆以 360×640 分辨率进行说明。
 
-<details class="zg-primary">
-    <summary>混流布局示例 1：两个画面水平平铺</summary>
-
-
-![](/Pics/Common/ZegoExpressEngine/mixstreamdemo1.png)
+<Accordion title="混流布局示例 1：两个画面水平平铺" defaultOpen="false">
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/mixstreamdemo1.png" /></Frame>
 
 ```dart
 // 创建输入流列表对象 
@@ -184,15 +257,11 @@ inputList.add(input_2);
 // 设置混流输入 
 task.inputList = inputList;
 ```
-
-</details>
-
-
-<details class="zg-primary">
-    <summary>混流布局示例 2：四个画面水平垂直平铺</summary>
+</Accordion>
 
 
-![](/Pics/Common/ZegoExpressEngine/mixstreamdemo2.png)
+<Accordion title="混流布局示例 2：四个画面水平垂直平铺" defaultOpen="false">
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/mixstreamdemo2.png" /></Frame>
 
 
 ```dart
@@ -223,15 +292,11 @@ inputList.add(input_4);
 // 设置混流输入 
 task.inputList = inputList;   
 ```
-
-</details>
-
-
-<details class="zg-primary">
-    <summary>混流布局示例 3：一个大画面铺满和两个小画面悬浮</summary>
+</Accordion>
 
 
-![](/Pics/Common/ZegoExpressEngine/mixstreamdemo3.png)
+<Accordion title="混流布局示例 3：一个大画面铺满和两个小画面悬浮" defaultOpen="false">
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/mixstreamdemo3.png" /></Frame>
 
 
 输入流的图层层次由输入流在输入流列表中的位置决定，在列表中的位置越后，表示图层层次越高。如以下示例代码所示，第 2 条输入流的图层层次和第 3 条输入流的图层层次则比第 1 条输入流的层次要高，则第 2 条和第 3 条流悬浮第 1 条流的画面上。
@@ -258,11 +323,10 @@ inputList.add(input_3);
 // 设置混流输入 
 task.inputList = inputList;
 ```
+</Accordion>
 
-</details>
 
-
-#### 2.5 设置混流输出信息
+#### 设置混流输出信息
 
 混流输出最多可设置 3 个。当输出目标为 URL 格式时，目前只支持 RTMP URL 格式：rtmp://xxxxxxxx，且不能传入两个相同的混流输出的地址。
 
@@ -279,11 +343,9 @@ task.outputList = mixerOutputList;
 ```
 
 
-#### 2.6 （可选）设置混流图片水印
+#### （可选）设置混流图片水印
 
-<details class="zg-primary">
-    <summary>混流图片水印设置</summary>
-
+<Accordion title="混流图片水印设置" defaultOpen="false">
 如果需要水印图片的 URL，请联系 ZEGO 技术支持获取。
 
 以下代码演示设置一个 ZEGO 的图片水印放置于画面左上角：
@@ -296,53 +358,55 @@ ZegoWatermark watermark = ZegoWatermark("preset-id://zegowp.png", Rect.fromLTRB(
 // 设置输出水印配置
 task.watermark = watermark;
 ```
-</details>
+</Accordion>
 
 
-#### 2.7 （可选）设置混流背景图片
+#### （可选）设置混流背景图片
 
-<details class="zg-primary">
-    <summary>混流背景图片设置</summary>
-
+<Accordion title="混流背景图片设置" defaultOpen="false">
 如果需要背景图片的 URL，请联系 ZEGO 技术支持获取。
 
 ```dart
 task.backgroundImageURL = "preset-id://zegobg.png";
 ```
-</details>
+</Accordion>
 
-#### 2.8 （可选）设置混流声浪回调
+#### （可选）设置混流声浪回调
 
-<details class="zg-primary">
-    <summary>混流声浪回调设置</summary>
+<Accordion title="混流声浪回调设置" defaultOpen="false">
+<Warning title="注意">
 
-<div class = 'mk-warning'>
 
 Web 平台暂不支持设置混流声浪回调。在视频场景中，不建议打开声浪开关，否则web端拉HLS协议的流可能会出现兼容性问题。
-</div>
 
-可通过设置 [enableSoundLevel](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerTask/enableSoundLevel.html) 参数选择是否开启混流的声浪回调通知，开启后（取值为 “True”）用户拉混流时可通过 [onMixerSoundLevelUpdate](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoExpressEngine/onMixerSoundLevelUpdate.html) 回调收到每条单流的声浪信息。
+</Warning>
+
+
+
+可通过设置 [enableSoundLevel](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerTask/enableSoundLevel.html) 参数选择是否开启混流的声浪回调通知，开启后（取值为 “True”）用户拉混流时可通过 [onMixerSoundLevelUpdate](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoExpressEngine/onMixerSoundLevelUpdate.html) 回调收到每条单流的声浪信息。
 
 ```dart
 task.enableSoundLevel = true;
 ```
-</details>
+</Accordion>
 
 
-#### 2.9 （可选）设置高级配置
+#### （可选）设置高级配置
 
-<details class="zg-primary">
-    <summary>高级配置设置</summary>
-
+<Accordion title="高级配置设置" defaultOpen="false">
 高级配置适用于一些定制化需求，例如：配置视频编码格式。
 
 如果需要了解具体支持的配置项信息，请联系 ZEGO 技术支持。
 
-<div class="mk-warning">
+<Warning title="注意">
+
 
 - 普通场景无需设置高级配置。 
 - Web 平台不支持高级配置 advancedConfig。 
-</div>
+
+</Warning>
+
+
 
 ```dart
 // 指定混流输出视频格式为 vp8 ，使用特定的推流协议才能生效。
@@ -355,17 +419,21 @@ ZegoMixerAudioConfig audioConfig = ZegoMixerAudioConfig.defaultConfig();
 audioConfig.codecID = ZegoAudioCodecID.Low3;
 task.audioConfig = audioConfig;
 ```
-</details>
+</Accordion>
 
-### 3 启动混流任务
+### 启动混流任务
 
-完成了 [ZegoMixerTask](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerTask-class.html) 混流任务对象的配置后，调用开始混流的接口以启动这个混流任务，并在回调中处理启动混流任务失败的逻辑。
+完成了 [ZegoMixerTask](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerTask-class.html) 混流任务对象的配置后，调用开始混流的接口以启动这个混流任务，并在回调中处理启动混流任务失败的逻辑。
 
-<div class="mk-warning">
+<Warning title="注意">
+
 
 
 如果需要 Web 端播放混流 CDN 资源，在使用 CDN 录制时，音频编码请选择 AAC-LC，由于部分浏览器（如 Google Chrome 和 Microsoft Edge）不兼容 HE-AAC 音频编码格式，会导致录制文件无法播放。  
-</div>
+
+</Warning>
+
+
 
 ```dart
 ZegoExpressEngine.instance.startMixerTask(task).then((ZegoMixerStartResult result) {
@@ -378,17 +446,21 @@ ZegoExpressEngine.instance.startMixerTask(task).then((ZegoMixerStartResult resul
 });
 ```
 
-### 4 更新混流任务的配置
+### 更新混流任务的配置
 
-当混流信息发生变更时，例如混流的输入流列表发生增减、调整混流视频输出码率等，修改该混流任务对象的参数，然后再调用一次 [startMixerTask](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoExpressEngineMixer/startMixerTask.html) 接口即可更新配置。
+当混流信息发生变更时，例如混流的输入流列表发生增减、调整混流视频输出码率等，修改该混流任务对象的参数，然后再调用一次 [startMixerTask](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoExpressEngineMixer/startMixerTask.html) 接口即可更新配置。
 
-<div class= 'mk-warning'>
+<Warning title="注意">
+
 
 更新混流任务的配置时，“taskID” 不可更改。 
-</div>
+
+</Warning>
 
 
-### 5 停止混流
+
+
+### 停止混流
 
 
 ```dart
@@ -403,24 +475,28 @@ ZegoExpressEngine.instance.stopMixerTask("task1").then((ZegoMixerStopResult resu
 });
 ```
 
-## 自动混流使用步骤 
+## 自动混流使用步骤
 
-### 1 初始化并登录房间
+### 初始化并登录房间
 
 请参考 [快速开始 - 实现流程](!Integration/Solution_Implementation#CreateEngine) 中的的 “创建引擎” 和 “登录房间” 完成初始化和房间登录。
 
-<div class = 'mk-warning'>
+<Warning title="注意">
+
 
 - 自动混流的前置条件为目标房间存在。
 - 发起自动混流的用户可以混房间内已有的其他用户推的流（只能混音频流），而自己不用登录房间或者在房间内推流。
 - Web 平台不支持使用自动混流功能。
-</div>
 
-### 2 设置混流配置
+</Warning>
 
-[ZegoAutoMixerTask](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoAutoMixerTask-class.html) 是 SDK 中定义的自动混流任务配置对象，通过配置该对象可定制化自动混流任务。
 
-#### 2.1 创建自动混流任务对象
+
+### 设置混流配置
+
+[ZegoAutoMixerTask](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoAutoMixerTask-class.html) 是 SDK 中定义的自动混流任务配置对象，通过配置该对象可定制化自动混流任务。
+
+#### 创建自动混流任务对象
 
 新建一个自动混流任务对象，然后分别设置输入、输出等参数。
 
@@ -433,12 +509,10 @@ task.taskID = "taskID1";
 task.roomID = "roomID1";
 ```
 
-#### 2.2 （可选）设置自动混流音频配置
+#### （可选）设置自动混流音频配置
 
-<details class="zg-primary">
-    <summary>自动混流音频配置</summary>
-
-通过 [ZegoMixerAudioConfig](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerAudioConfig-class.html) 设置自动混流音频相关配置，主要包括音频码率、声道数、编码 ID。
+<Accordion title="自动混流音频配置" defaultOpen="false">
+通过 [ZegoMixerAudioConfig](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerAudioConfig-class.html) 设置自动混流音频相关配置，主要包括音频码率、声道数、编码 ID。
 
 ```dart
 ZegoMixerAudioConfig audioConfig = ZegoMixerAudioConfig.defaultConfig();
@@ -451,7 +525,7 @@ audioConfig.codecID = ZegoAudioCodecID.Default;
 task.audioConfig = audioConfig;
 ```
 
-通过 [channel](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoAudioChannel.html) 参数可以修改音频声道，目前支持如下音频声道:
+通过 [channel](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoAudioChannel.html) 参数可以修改音频声道，目前支持如下音频声道:
 
 |枚举值|说明|适用场景|
 |-|-|-|
@@ -459,24 +533,24 @@ task.audioConfig = audioConfig;
 |Mono|单声道|只有单声道的场景|
 |Stereo|双声道|有双声道的场景|
 
-通过 [codecID](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoAudioCodecID.html)  参数可以修改编码 ID，目前支持如下编码 ID:
+通过 [codecID](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoAudioCodecID.html)  参数可以修改编码 ID，目前支持如下编码 ID:
 
 |枚举值|说明|适用场景|
 |-|-|-|
-|Default|默认值。|根据调用 [createEngineWithProfile](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoExpressEngine/createEngineWithProfile.html) 时的 [scenario] 决定。|
+|Default|默认值。|根据调用 [createEngineWithProfile](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoExpressEngine/createEngineWithProfile.html) 时的 [scenario] 决定。|
 |Normal|码率范围 10 kbps ~ 128 kbps；支持双声道；延迟在 500 ms 左右。与 Web SDK 互通时需要服务端转码；转推 CDN 时不需要服务端云转码。|可用于 RTC 和 CDN 推流。|
 |Normal2|兼容性好，码率范围 16 kbps ~ 192 kbps；支持双声道；延迟 350 ms 左右；相同码率下（较低码率），音质弱于 [Normal]。与 Web SDK 互通时需要服务端转码；转推 CDN 时不需要服务端云转码。|可用于 RTC 和 CDN 推流。|
 |Normal3|不推荐使用。|仅可用于 RTC 推流。|
 |Low|不推荐使用。|仅可用于 RTC 推流。|
 |Low2|不推荐使用，最大码率为 16 kbps。|仅可用于 RTC 推流。|
 |Low3|码率范围 6 kbps ~ 192 kbps；支持双声道；延迟在 200 ms 左右；相同码率下（较低码率），音质明显好于 [Normal] 与 [Normal2]；CPU 开销较低。与 Web SDK 互通时不需要服务端云转码；转推 CDN 时需要服务端转码。|仅可用于 RTC 推流。
-</details>
+</Accordion>
 
 
 
-#### 2.3 设置自动混流输出列表
+#### 设置自动混流输出列表
 
-通过 [ZegoMixerOutput](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerOutput-class.html) 设置自动混流输出列表，用户可以从列表中的输出目标拉取混流。
+通过 [ZegoMixerOutput](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerOutput-class.html) 设置自动混流输出列表，用户可以从列表中的输出目标拉取混流。
 
 ```dart
 List<ZegoMixerOutput> outputList = [];
@@ -486,26 +560,28 @@ outputList.add(output);
 task.outputList = outputList;
 ```
 
-#### 2.4 （可选）设置自动混流声浪回调
+#### （可选）设置自动混流声浪回调
 
-<details class="zg-primary">
-    <summary>自动混流声浪回调设置</summary>
+<Accordion title="自动混流声浪回调设置" defaultOpen="false">
+<Warning title="注意">
 
-<div class="mk-warning">
 
 在视频场景中，不建议打开声浪开关，否则web端拉HLS协议的流可能会出现兼容性问题。
-</div>
 
-可通过设置 [enableSoundLevel](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoAutoMixerTask/enableSoundLevel.html) 参数选择是否开启自动混流的声浪回调通知，开启后（取值为 “True”）用户拉混流时可通过 [onAutoMixerSoundLevelUpdate](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoExpressEngine/onAutoMixerSoundLevelUpdate.html) 回调收到每条单流的声浪信息。
+</Warning>
+
+
+
+可通过设置 [enableSoundLevel](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoAutoMixerTask/enableSoundLevel.html) 参数选择是否开启自动混流的声浪回调通知，开启后（取值为 “True”）用户拉混流时可通过 [onAutoMixerSoundLevelUpdate](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoExpressEngine/onAutoMixerSoundLevelUpdate.html) 回调收到每条单流的声浪信息。
 
 ```dart
 task.enableSoundLevel = true;
 ```
-</details>
+</Accordion>
 
-### 3 开始自动混流任务
+### 开始自动混流任务
 
-完成了 [ZegoAutoMixerTask ](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoAutoMixerTask/ZegoAutoMixerTask.html) 自动混流任务对象的配置后，调用 [startAutoMixerTask](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoExpressEngineMixer/startAutoMixerTask.html) 接口开始该自动混流任务，并在 [ZegoMixerStartCallback ](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerStartResult-class.html) 回调中接收开始自动混流任务结果。
+完成了 [ZegoAutoMixerTask ](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoAutoMixerTask/ZegoAutoMixerTask.html) 自动混流任务对象的配置后，调用 [startAutoMixerTask](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoExpressEngineMixer/startAutoMixerTask.html) 接口开始该自动混流任务，并在 [ZegoMixerStartCallback ](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerStartResult-class.html) 回调中接收开始自动混流任务结果。
 
 ```dart
 ZegoExpressEngine.instance.startAutoMixerTask(task).then((ZegoMixerStartResult result) {
@@ -518,14 +594,18 @@ ZegoExpressEngine.instance.startAutoMixerTask(task).then((ZegoMixerStartResult r
 });
 ```
 
-### 4 停止自动混流
+### 停止自动混流
 
-调用 [stopAutoMixerTask ](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoExpressEngineMixer/stopAutoMixerTask.html) 接口停止自动混流。
+调用 [stopAutoMixerTask ](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoExpressEngineMixer/stopAutoMixerTask.html) 接口停止自动混流。
 
-<div class = 'mk-warning'>
+<Warning title="注意">
 
-在同一个房间内开启下一个自动混流任务前，请先调用 [stopAutoMixerTask ](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoExpressEngineMixer/stopAutoMixerTask.html) 接口结束上一次自动混流任务，以免造成当一个主播已经开启下一个自动混流任务与其他主播混流时，观众依然在一直拉上一个自动混流任务的输出流的情况。若用户未主动结束当前自动混流任务，该任务将在房间关闭后自动结束。
-</div>
+
+在同一个房间内开启下一个自动混流任务前，请先调用 [stopAutoMixerTask ](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoExpressEngineMixer/stopAutoMixerTask.html) 接口结束上一次自动混流任务，以免造成当一个主播已经开启下一个自动混流任务与其他主播混流时，观众依然在一直拉上一个自动混流任务的输出流的情况。若用户未主动结束当前自动混流任务，该任务将在房间关闭后自动结束。
+
+</Warning>
+
+
 
 
 ```dart
@@ -540,33 +620,35 @@ ZegoExpressEngine.instance.stopAutoMixerTask(currentMixTask).then((ZegoMixerStop
 });
 ```
 
-@@@Express_Mix_Three@@@
+## 全自动混流使用步骤
+
+通过 ZEGO 服务端的配置实现每个房间都自动混音频流，详情请联系 ZEGO 技术支持。
 
 
 ## 常见问题
 
 1. **能将混流推到第三方 CDN 吗？如何转推多路 CDN？**
 
-  若需要将混流推到第三方 CDN，可在 [ZegoMixerOutput](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerOutput/ZegoMixerOutput.html) 的 “target” 参数填写 CDN 的 URL。
+  若需要将混流推到第三方 CDN，可在 [ZegoMixerOutput](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerOutput/ZegoMixerOutput.html) 的 “target” 参数填写 CDN 的 URL。
 
   填写的 URL 格式需要为 RTMP 格式：“rtmp://xxxxxxxx”。
 
-  推多路 CDN 就创建 N 个输出流对象 [ZegoMixerOutput](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerOutput/ZegoMixerOutput.html) 放入 [ZegoMixerTask](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerTask-class.html) 中的 “outputList” 输出列表中。
+  推多路 CDN 就创建 N 个输出流对象 [ZegoMixerOutput](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerOutput/ZegoMixerOutput.html) 放入 [ZegoMixerTask](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerTask-class.html) 中的 “outputList” 输出列表中。
 
 2. **如何设置混流中每条流的布局？**
 
-  [ZegoMixerInput](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerInput-class.html) 的 “layout” 参数使用示例。
+  [ZegoMixerInput](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerInput-class.html) 的 “layout” 参数使用示例。
 
     - 假设指定某条流的左上角坐标为 (50，300)，右下角坐标为 (200，450)，即 “layout” 参数为 “Rect.fromLTRB(50 ,300 ,200 ,450);”。
-    - 假设 [ZegoMixerTask](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerTask-class.html) 的 “videoConfig” 参数中的分辨率 “witdh” 为 “375”，“height” 为 “667”。
+    - 假设 [ZegoMixerTask](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerTask-class.html) 的 “videoConfig” 参数中的分辨率 “witdh” 为 “375”，“height” 为 “667”。
 
   那么这条流在最终的输出混流中的位置如下所示：
 
-  ![](/Pics/iOS/ZegoExpressEngine/Mixer/mixer-layout.png)
+  <Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/Mixer/mixer-layout.png" /></Frame>
 
 3. **混流输入对象 “ZegoMixerInput” 的 “ZegoRect” 布局的比例与这条流本身的分辨率不相符时，画面将如何裁剪？**
 
-  SDK 会做等比缩放。假设一条输入流的分辨率为 “720 × 1280”，即比例为 “9：16”，同时这条流的 [ZegoMixerInput](/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerInput-class.html) 的 “layout” 参数为 “[left:0 top:0 right:100 bottom:100]”，即比例为 “1：1” 时，画面将会显示这条流的中间部分，即上下部分被裁剪掉。
+  SDK 会做等比缩放。假设一条输入流的分辨率为 “720 × 1280”，即比例为 “9：16”，同时这条流的 [ZegoMixerInput](https://doc-zh.zego.im/unique-api/express-video-sdkhttps://doc-zh.zego.im/article/dart_flutter/zego_express_engine/ZegoMixerInput-class.html) 的 “layout” 参数为 “[left:0 top:0 right:100 bottom:100]”，即比例为 “1：1” 时，画面将会显示这条流的中间部分，即上下部分被裁剪掉。
 
 4. **参与连麦的主播们想让各自的观众看到自己的视频在混流后的画面布局中位于大窗口，如何混流？**
 

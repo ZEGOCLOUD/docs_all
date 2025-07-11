@@ -13,15 +13,25 @@ from typing import List, Set
 # ========== 配置区域 - 在这里修改你的参数 ==========
 CONFIG = {
     # 要替换的articleID列表
-    "ids": ["6645", "6670", "6668", "14767", "21231", "7272", "7270"],
+    "ids": ["20651", "16993", "18023"],
     
     # 引用语句 - 注意这里可以直接使用单引号，不需要转义
-    "import_statement": """import Content from '/core_products/real-time-voice-video/zh/ios-oc/communication-capability/testing-network.mdx'
+    "import_statement": """import Content from '/core_products/real-time-voice-video/zh/windows-cpp/communication-capability/state-sync.mdx'
 
 <Content />""",
     
     # 搜索路径
-    "path": "/Users/zego/Documents/docs_all/core_products/real-time-voice-video",
+    "path": "/Users/zego/Documents/docs_all/core_products",
+
+    # 排除路径（多个）- 这些路径下的文件将不会被处理
+    "exclude_paths": [
+        # 示例：排除特定文件夹
+        # "/Users/zego/Documents/docs_all/core_products/real-time-voice-video/zh/android-java/snippets",
+        # "/Users/zego/Documents/docs_all/core_products/real-time-voice-video/zh/ios-oc/snippets",
+        # 您可以在这里添加要排除的路径
+        "/Users/zego/Documents/docs_all/core_products/aiagent",
+        "/Users/zego/Documents/docs_all/core_products/zim",
+    ],
     
     # 是否为预览模式（True: 只预览不修改，False: 实际执行修改）
     "dry_run": False
@@ -64,12 +74,13 @@ def extract_frontmatter(content: str) -> str:
     return ""
 
 
-def find_mdx_files(search_path: str) -> List[Path]:
+def find_mdx_files(search_path: str, exclude_paths: List[str] = None) -> List[Path]:
     """
-    递归查找指定路径下的所有.mdx文件
+    递归查找指定路径下的所有.mdx文件，支持排除指定路径
     
     Args:
         search_path: 搜索路径
+        exclude_paths: 要排除的路径列表
         
     Returns:
         .mdx文件路径列表
@@ -79,10 +90,27 @@ def find_mdx_files(search_path: str) -> List[Path]:
         print(f"错误：路径 {search_path} 不存在")
         return []
     
+    # 将排除路径转换为Path对象
+    exclude_paths = exclude_paths or []
+    exclude_path_objects = [Path(path) for path in exclude_paths]
+    
     mdx_files = []
     for file_path in search_path.rglob("*.mdx"):
         if file_path.is_file():
-            mdx_files.append(file_path)
+            # 检查文件是否在排除路径中
+            should_exclude = False
+            for exclude_path in exclude_path_objects:
+                try:
+                    # 检查文件路径是否在排除路径下
+                    file_path.relative_to(exclude_path)
+                    should_exclude = True
+                    break
+                except ValueError:
+                    # 如果文件不在排除路径下，relative_to会抛出ValueError
+                    continue
+            
+            if not should_exclude:
+                mdx_files.append(file_path)
     
     return mdx_files
 
@@ -148,17 +176,24 @@ def main():
     target_ids = set(CONFIG["ids"])
     import_statement = CONFIG["import_statement"]
     search_path = CONFIG["path"]
+    exclude_paths = CONFIG.get("exclude_paths", [])
     dry_run = CONFIG["dry_run"]
     
     print("=== 文件内容替换脚本 ===")
     print(f"目标ArticleID列表: {', '.join(target_ids)}")
     print(f"搜索路径: {search_path}")
+    if exclude_paths:
+        print(f"排除路径: ")
+        for path in exclude_paths:
+            print(f"  - {path}")
+    else:
+        print("排除路径: 无")
     print(f"引用语句:\n{import_statement}")
     print(f"预览模式: {'是' if dry_run else '否'}")
     print("=" * 50)
     
     # 查找所有.mdx文件
-    mdx_files = find_mdx_files(search_path)
+    mdx_files = find_mdx_files(search_path, exclude_paths)
     print(f"找到 {len(mdx_files)} 个.mdx文件")
     
     # 如果是预览模式，询问用户是否继续
