@@ -1,0 +1,178 @@
+# Get AI Agent Status and Latency Data
+
+---
+
+During real-time voice calls with AI Agents, you might need to obtain the AI agent instance's status or real-time change messages to handle subsequent operations promptly on the business side or ensure business stability. You can obtain this information through active API calls or by listening to corresponding server callbacks.
+
+The information includes the following types:
+- Server exception events: including AI Agent service errors, Real-Time Communication (RTC) related errors, Large Language Model (LLM) related errors, Text-to-Speech (TTS) related errors (such as TTS concurrency limit exceeded), etc.
+- AI agent instance status:
+    - Status that can be queried via server API: idle, listening, thinking, speaking, etc.
+    - Status that can be monitored via server callbacks: agent instance creation success, interruption, and deletion success events.
+- AI agent average latency data:
+    - Large Language Model (LLM) related latency.
+    - Text-to-Speech (TTS) related latency.
+    - AI Agent server total latency.
+    - Client & server latency. Can be obtained through ZEGO Express SDK.
+
+## Listen for Server Exception Events
+
+<Note title="Note">Please contact ZEGOCLOUD Technical Support to configure the address for receiving AI Agent backend callbacks.</Note>
+
+When there are exception events on the server, the AI Agent backend will send an exception event notification (`Event` is `Exception`) to the configured address above. Here's a callback content sample:
+
+```json {3}
+{
+    "AppId": 123456789,
+    "Event": "Exception",
+    "Nonce": "abcdd22113",
+    "Timestamp":1741221508000,
+    "Signature": "XXXXXXX",
+    "Sequence": 1921825797275873300,
+    "RoomId": "test_room",
+    "AgentUserId": "test_agent",
+    "AgentInstanceId": "1912124734317838336",
+    "Data": {
+        "Code": 2203,
+        "Message": "The API key in the request is missing or invalid"
+    }
+}
+```
+For more detailed information, please refer to the [Receiving Callback](./../callbacks/receiving-callback.mdx) and [Exception Codes](./../callbacks/exception-codes.mdx) documentation.
+
+## Get Agent Instance Status
+
+### Via Server API
+
+Call the Query Agent Instance Status API ([QueryAgentInstanceStatus](./../api-reference/agent-instance-control/query-agent-instance-status.mdx)), pass in the corresponding `AgentInstanceId`, and the server will return the current status of the AI agent instance (such as idle, listening, thinking, speaking, etc.).
+
+<Note title="Note">The `AgentInstanceId` field is included in the successful response when you create an agent instance (CreateAgentInstance).</Note>
+
+### Listen for Agent-Related Events
+
+<Note title="Note">Please contact ZEGOCLOUD Technical Support to configure the address for receiving AI Agent backend callbacks.</Note>
+
+<Tabs>
+<Tab title="Agent Instance Created">
+When an agent instance is successfully created and has entered the RTC room and started streaming, the AgentInstanceCreated event will be triggered.
+
+```json title="AgentInstanceCreated callback data example"
+{
+    "AppId": 1234567,
+    "AgentInstanceId": "1912124734317838336",
+    "AgentUserId": "agent_user_1",
+    "RoomId": "room_1",
+    "Sequence": 1234567890,
+    "Data": {
+        "CreatedTimestamp": 1745502312982
+    },
+    "Event": "AgentInstanceCreated",
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1745502313000
+}
+```
+</Tab>
+<Tab title="Agent Interrupted">
+When [creating an agent instance](./../api-reference/agent-instance-management/create-agent-instance.mdx), set the request parameter `CallbackConfig.Interrupted` to 1.
+
+When the AI agent is interrupted, the AI Agent backend will send an interruption event notification (`Event` is `Interrupted`) to the configured address above. You can interrupt certain ongoing tasks based on actual needs, such as terminating RAG tasks. Here's an example of the content:
+```json title="Interrupted callback data example"
+{
+    "AppId": 123456789,
+    "Nonce": "abcdd22113",
+    "Timestamp": 1747033950524，
+    "Sequence": 1921825797275873300,
+    "Signature": "XXXXXXX",
+    "Event": "Interrupted",
+    "RoomId": "90000001237",
+    "AgentInstanceId": "1921825671047294976",
+    "AgentUserId": "apitest689_agent",
+    "Data": {
+        "Round": 1481651956,
+        "Reason": 1
+    }
+}
+```
+The `Reason` (interruption reason) is defined as follows:
+| Parameter | Type | Description |
+|--------|--------|--------------|
+| Reason | Number | Interruption reason:<ul><li>1: User is speaking.</li><li>2: You actively [call LLM](./../api-reference/agent-instance-control/send-agent-instance-llm.mdx) on the server.</li><li>3: You actively [call TTS](./../api-reference/agent-instance-control/send-agent-instance-tts.mdx) on the server.</li><li>4: You [interrupt the agent instance](./../api-reference/agent-instance-control/interrupt-agent-instance.mdx) on the server.</li></ul> |
+</Tab>
+<Tab title="Agent Instance Deleted">
+When an agent instance is successfully deleted, the AgentInstanceDeleted event will be triggered. A Code of 0 indicates that the instance was deleted through the server API DeleteAgentInstance.
+
+```json title="AgentInstanceDeleted callback data example"
+{
+    "AppId": 1234567,
+    "AgentInstanceId": "1912124734317838336",
+    "AgentUserId": "agent_user_1",
+    "RoomId": "room_1",
+    "Sequence": 1234567890,
+    "Data": {
+        "Code": 0,
+        "DeletedTimestamp": 1745502345138,
+        "LatencyData": {
+            "LLMTTFT": 613,
+            "LLMTPS": 11.493,
+            "TTSAudioFirstFrameTime": 783,
+            "TotalCost": 1693
+        }
+    },
+    "Event": "AgentInstanceDeleted",
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1745502313000
+}
+```
+
+The deletion reasons are defined as follows:
+
+| Parameter | Type | Description |
+|------|------|------|
+| Code | Int | <ul><li>0: Instance deleted by calling DeleteAgentInstance.</li><li>1201: RTC general error.</li><li>1202: RTC room idle for more than 120 seconds.</li><li>1203: Agent instance was kicked out of RTC room.</li><li>1204: Agent instance failed to log into RTC room.</li><li>1205: Agent instance disconnected from RTC room.</li><li>1206: Agent instance failed to publish stream.</li></ul> |
+</Tab>
+</Tabs>
+
+
+## Get Agent Latency Data
+
+<Note title="Note">Please contact ZEGOCLOUD Technical Support to configure the address for receiving AI Agent backend callbacks.</Note>
+
+When an agent instance is successfully deleted, the AgentInstanceDeleted event will be triggered, which includes average latency data for conversations with the agent instance.
+
+```json title="AgentInstanceDeleted callback data example"
+{
+    "AppId": 1234567,
+    "AgentInstanceId": "1912124734317838336",
+    "AgentUserId": "agent_user_1",
+    "RoomId": "room_1",
+    "Sequence": 1234567890,
+    "Data": {
+        "Code": 0,
+        "DeletedTimestamp": 1745502345138,
+        "LatencyData": {
+            "LLMTTFT": 613,
+            "LLMTPS": 11.493,
+            "TTSAudioFirstFrameTime": 783,
+            "TotalCost": 1693
+        }
+    },
+    "Event": "AgentInstanceDeleted",
+    "Nonce": "7450395512627324902",
+    "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
+    "Timestamp": 1745502313000
+}
+```
+
+The latency data (average values) are defined as follows:
+
+
+<Frame width="auto" height="auto" caption=""><img src="https://media-resource.spreading.io/docuo/workspace741/896bc39e2e65b82d5670b01b7c131c30/f5b0a66d11.png" alt="AI Agent耗时分析.png"/></Frame>
+
+| Parameter | Type | Description |
+|------|------|------|
+| LLMTTFT | Int | LLM first token average latency (milliseconds). The time from requesting the Large Language Model to the Large Language Model returning the first non-empty token. |
+| LLMTPS | Float64 | LLM average output speed (tokens/second). The average number of tokens output per second by the Large Language Model. |
+| TTSAudioFirstFrameTime | Int | TTS audio first frame average latency (milliseconds). From the first non-empty LLM token to the first TTS non-silent frame return (including request establishment time) |
+| TotalCost | Int | AI Agent server average total latency (milliseconds): <ul><li>User speaking: The time from when the AI Agent server pulls the stream and determines the user has finished speaking, to when TTS returns the first non-silent frame and starts pushing the stream. All server-generated latency, including at least Automatic Speech Recognition (ASR) latency, Large Language Model (LLM) related latency, Text-to-Speech (TTS) related latency, etc.</li><li>Custom LLM/TTS calls: The time from API call to start of stream pushing.</li></ul> |

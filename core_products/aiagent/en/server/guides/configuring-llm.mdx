@@ -1,0 +1,171 @@
+# Configuring LLM
+
+---
+
+Depending on your use case, you can plug in any third-party LLM—whether it's Volcano Ark, MiniMax, Qwen, Stepfun, DeepSeek, or your own in-house model. This guide walks you through configuring for the above kinds of LLMs and highlights key considerations.
+
+## LLM Parameter Description
+
+When using third-party LLM services or custom LLM services, you need to configure LLM parameters.
+
+| Parameter       | Type            | Required | Description                                                                                                                                                  |
+|-----------------|-----------------|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Url             | String          | Yes      | LLM callback address, which must be compatible with the OpenAI protocol.                                                                                    |
+| ApiKey          | String          | No       | Authentication credentials for accessing various models and related services provided by LLM.                                                               |
+| Model           | String          | Yes      | The model to call. Different LLM service providers support different configurations, please refer to the corresponding documentation.                      |
+| SystemPrompt    | String          | No       | System prompt. Can include role settings, prompts, and response examples.                                                                                   |
+| Temperature     | Float           | No       | Higher values will make the output more random, while lower values will make the output more focused and deterministic.                                     |
+| TopP            | Float           | No       | Sampling method, smaller values result in stronger determinism; larger values result in more randomness.                                                    |
+| Params          | Object          | No       | Other LLM parameters, such as maximum Token number limit, etc. Different LLM providers support different configurations, please refer to the corresponding documentation and fill in as needed. <Note title="Note">Parameter names should match those of each vendor's LLM.</Note> |
+| AddAgentInfo    | Bool            | No       | If this value is true, when the AI Agent backend sends requests to custom LLM services, the request parameters will include agent information `agent_info`. This value defaults to false. When using custom LLM, additional business logic can be implemented based on this parameter content. |
+
+## Using Third-party LLMs
+
+<Note title="Note">
+Please contact ZEGOCLOUD Technical Support first to activate third-party LLM services and obtain the access Url and API Key.
+
+Third-party LLMs must be compatible with the OpenAI protocol.
+</Note>
+
+You can set LLM parameters when registering an AI agent ([RegisterAgent](./../api-reference/agent-configuration-management/register-agent.mdx)) or creating an AI agent instance ([CreateAgentInstance](./../api-reference/agent-instance-management/create-agent-instance.mdx)).
+
+Here are configuration samples for common LLM vendors:
+
+<Tabs>
+<Tab title="Volcano Ark">
+For model usage docs, read [Volcano Ark Large Model Service Platform](https://www.volcengine.com/docs/82379/1298454).
+```json
+"LLM": {
+    "Url": "POST https://ark.ap-southeast.bytepluses.com/api/v3/chat/completions",
+    "ApiKey": "zego_test", // your api key (zego_test can be used during the integration testing period (within 2 weeks of AI Agent service activation))
+    "Model": "doubao-lite-32k-240828",    // Your inference access point created on the Volcano Ark Large Model Platform
+    "SystemPrompt": "You are Xiao Zhi, an adult female, a **companion assistant created by ZEGOCLOUD Technology**, knowledgeable in astronomy and geography, smart, wise, enthusiastic, and friendly.\nDialogue requirements: 1. Interact with users according to the character requirements.\n2. Do not exceed 100 words.",
+    "Temperature": 1,
+    "TopP": 0.7,
+    "Params": {
+        "max_tokens": 1024
+    }
+}
+```
+</Tab>
+<Tab title="Qwen">
+For model usage docs, read [Alibaba Cloud Model Studio - OpenAI compatibility - Chat](https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope).
+```json
+"LLM": {
+    "Url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+    "ApiKey": "zego_test", // your api key (zego_test can be used during the integration testing period (within 2 weeks of AI Agent service activation))
+    "Model": "qwen-plus",
+    "SystemPrompt": "You are Xiaozhi, an adult woman, a companion assistant **created by ZEGOCLOUD**. knowledgeable in everything, intelligent, wise, enthusiastic, and friendly. \nDialogue requirements: 1. Dialogue with users according to the requirements of the persona. \n2.No more than 100 words.",
+    "Temperature": 1,
+    "TopP": 0.7,
+    "Params": {
+        "max_tokens": 1024
+    }
+}
+```
+</Tab>
+<Tab title="MiniMax">
+For model usage docs, read [MiniMax - Chat Completion - API](https://www.minimax.io/platform/document/ChatCompletion%20v2?key=66701d281d57f38758d581d0#QklxsNSbaf6kM4j6wjO5eEek).
+
+```json
+"LLM": {
+    "Url": "https://api.minimax.chat/v1/text/chatcompletion_v2",
+    "ApiKey": "zego_test", // your api key (zego_test can be used during the integration testing period (within 2 weeks of AI Agent service activation))
+    "Model": "MiniMax-Text-01",
+    "SystemPrompt": "You are Xiaozhi, an adult woman, a companion assistant **created by ZEGOCLOUD**. knowledgeable in everything, intelligent, wise, enthusiastic, and friendly. \nDialogue requirements: 1. Dialogue with users according to the requirements of the persona. \n2.No more than 100 words.",
+    "Temperature": 1,
+    "TopP": 0.7,
+    "Params": {
+        "max_tokens": 1024
+    }
+}
+```
+</Tab>
+</Tabs>
+
+## Use Custom LLM
+
+The ZEGOCLOUD AI Agent server uses the OpenAI API protocol to call LLM services. Therefore, you can also use any custom LLM compatible with the OpenAI protocol. The custom LLM can even call multiple sub-LLM models or perform RAG search and web search before integrating and outputting results at the underlying implementation level.
+
+The implementation steps are as follows:
+
+<Steps>
+<Step title="Create a service compatible with the OpenAI API protocol">
+Provide an interface compatible with [platform.openai.com](https://platform.openai.com/docs/api-reference/chat). Key points are as follows:
+
+- Endpoint: Define a Url that can be called by the AI Agent, for example `https://your-custom-llm-service/chat/completions`.
+- Request Format: Accept request headers and request body compatible with the OpenAI protocol.
+<Accordion title="Example request body sent by AI Agent backend to custom LLM service" defaultOpen="false">
+```json
+{
+    "model": "your model name", // Corresponds to LLM.Model parameter
+    "temperature": 1, // Corresponds to LLM.Temperature parameter
+    "top_p": 0.7, // Corresponds to LLM.TopP parameter
+    "max_tokens": 1024, // Corresponds to LLM.Params.max_tokens parameter
+    "messages":[
+        {
+            "role": "system",
+            "content": "You are Xiaozhi..." // Corresponds to LLM.SystemPrompt parameter
+        },
+        ... // Other messages
+    ],
+    ... // Other parameters
+    // If LLM.AddAgentInfo parameter is true, agent_info information will be included
+    "agent_info": {
+        "room_id": "room id",
+        "agent_instance_id" : "agent instance id",
+        "agent_user_id" : "agent user id",
+        "user_id": "user id",
+        "round_id": 1, // round id
+        "time_stamp": 193243200 // millisecond timestamp
+    }
+}
+```
+</Accordion>
+
+- Response Format: Return streaming response data that is compatible with the OpenAI protocol and conforms to the SSE specification.
+
+<Accordion title="Chat Completion Stream Response Object Block Example" defaultOpen="false">
+```json
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"Hello"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":1,"total_tokens":84}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"!"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":2,"total_tokens":85}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":" ZEGO"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":3,"total_tokens":86}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"CLOUD"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":4,"total_tokens":87}}
+...
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":" more"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":147,"total_tokens":230}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":" value"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":148,"total_tokens":231}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"."},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":149,"total_tokens":232}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":""},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":150,"total_tokens":233}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":83,"completion_tokens":150,"total_tokens":233}}
+data: [DONE]
+```
+</Accordion>
+<Warning title="Note">
+Custom LLM streaming data format considerations:
+- Each data entry must start with `data: ` (note the space after the colon).
+- The last valid data entry must contain `"finish_reason":"stop"`.
+- A termination data entry must be sent at the end: `data: [DONE]`.
+
+Incorrect format may cause the agent to not output or output incompletely.
+</Warning>
+
+</Step>
+<Step title="Configure the custom LLM">
+When registering an AI agent ([RegisterAgent](./../api-reference/agent-configuration-management/register-agent.mdx)) or creating an AI agent instance ([CreateAgentInstance](./../api-reference/agent-instance-management/create-agent-instance.mdx)), set the configuration for the custom LLM.
+
+```json
+"LLM": {
+    "Url": "https://your-custom-llm-service/chat/completions",
+    "ApiKey": "your_api_key",
+    "Model": "your_model",
+    "SystemPrompt": "You are Xiaozhi, an adult woman, a companion assistant **created by ZEGOCLOUD**. knowledgeable in everything, intelligent, wise, enthusiastic, and friendly. \nDialogue requirements: 1. Dialogue with users according to the requirements of the persona. \n2.No more than 100 words.",
+    "Temperature": 1,
+    "TopP": 0.7,
+    "Params": {
+        "max_tokens": 1024
+    }
+}
+
+```
+</Step>
+</Steps>
