@@ -198,9 +198,11 @@ def extract_links_from_file(file_path):
     # 匹配多种类型的链接
     # 1. markdown链接: [xxx](url)
     markdown_pattern = re.compile(r'\[[^\]]*\]\(([^)]+)\)')
-    # 2. 纯文本链接: http://xxx 或 https://xxx
+    # 2. HTML a标签链接: <a href="url"> 或 <a href='url'>
+    html_a_pattern = re.compile(r'<a[^>]*href\s*=\s*[\'"]([^\'"]+)[\'"][^>]*>')
+    # 3. 纯文本链接: http://xxx 或 https://xxx
     url_pattern = re.compile(r'https?://[^\s\'"<>()]+')
-    # 3. MDX导入语句: import xxx from 'path' 或 import xxx from "path" 或 import { xxx } from 'path'
+    # 4. MDX导入语句: import xxx from 'path' 或 import xxx from "path" 或 import { xxx } from 'path'
     mdx_import_pattern = re.compile(r'import\s+(?:{[^}]+}|\w+)\s+from\s+[\'"]([^\'"]+)[\'"]')
 
     links = []
@@ -218,9 +220,20 @@ def extract_links_from_file(file_path):
                     'type': 'markdown'
                 })
 
-            # 检查纯文本链接（排除已经在markdown链接中的）
+            # 检查HTML a标签链接
+            for match in html_a_pattern.finditer(line):
+                url = match.group(1).strip()
+                links.append({
+                    'url': url,
+                    'line': idx,
+                    'line_content': line_content,
+                    'type': 'html_a'
+                })
+
+            # 检查纯文本链接（排除已经在markdown链接和HTML a标签中的）
             line_without_markdown = markdown_pattern.sub('', line)
-            for match in url_pattern.finditer(line_without_markdown):
+            line_without_html = html_a_pattern.sub('', line_without_markdown)
+            for match in url_pattern.finditer(line_without_html):
                 url = match.group(0).strip()
                 # 移除可能的尾部标点符号
                 url = url.rstrip('.,;:!?')
@@ -280,6 +293,24 @@ def check_local_link(link, base_file_path):
         headings = extract_headings_from_file(abs_path)
         if anchor not in headings:
             return False
+
+    return True
+
+def check_anchor_link(link, base_file_path):
+    """检查锚点链接是否有效"""
+    # 只检查以#开头的链接
+    if not link.startswith('#'):
+        return None
+
+    # 提取锚点（去掉#号）
+    anchor = link[1:]
+    if not anchor:
+        return False
+
+    # 检查当前文件中的锚点
+    headings = extract_headings_from_file(base_file_path)
+    if anchor not in headings:
+        return False
 
     return True
 
@@ -510,6 +541,13 @@ def check_git_mode():
     # git模式只输出警告，不返回失败
     return True
 
+def check_invalid_numeric_link(url):
+    """检查是否为无效的纯数字链接"""
+    # 检查是否为纯数字（可能包含空白字符）
+    if url.strip().isdigit():
+        return True
+    return False
+
 def check_instance_links(mdx_files, config, instance, repo_root, check_remote=False):
     """检查实例中的链接"""
     problems = defaultdict(list)
@@ -535,6 +573,17 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
                     })
                 continue
 
+            # 0. 检查无效的纯数字链接
+            if check_invalid_numeric_link(url):
+                problems['无效的纯数字链接'].append({
+                    'file': file_path,
+                    'line': line,
+                    'url': url,
+                    'line_content': line_content,
+                    'link_type': link_type
+                })
+                continue
+
             # 1. 检查中英文链接混用
             instance_locale = instance.get('locale', 'en')  # 默认为英文
             if check_mixed_language(url, instance_locale):
@@ -546,7 +595,20 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
                     'link_type': link_type
                 })
                 continue
-            # 2. 检查本地链接
+            # 2. 检查锚点链接
+            anchor_result = check_anchor_link(url, file_path)
+            if anchor_result is False:
+                problems['锚点链接无效'].append({
+                    'file': file_path,
+                    'line': line,
+                    'url': url,
+                    'line_content': line_content,
+                    'link_type': link_type
+                })
+                continue
+            elif anchor_result is True:
+                continue
+            # 3. 检查本地链接
             local_result = check_local_link(url, file_path)
             if local_result is False:
                 problems['本地链接无效'].append({
@@ -559,7 +621,7 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
                 continue
             elif local_result is True:
                 continue
-            # 3. 检查根路径链接
+            # 4. 检查根路径链接
             root_result = check_root_link(url, config, instance, repo_root)
             if root_result is False:
                 problems['根路径链接无效'].append({
@@ -572,7 +634,7 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
                 continue
             elif root_result is True:
                 continue
-            # 4. 检查远端链接（如果用户选择检查）
+            # 5. 检查远端链接（如果用户选择检查）
             if check_remote:
                 remote_result = check_remote_link(url)
                 if remote_result is not None and not remote_result.get('valid', True):
