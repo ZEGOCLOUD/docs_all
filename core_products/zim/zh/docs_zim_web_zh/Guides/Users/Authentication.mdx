@@ -1,6 +1,10 @@
 ---
 articleID: 14607
 ---
+
+import { getPlatformData2 } from "/snippets/utils-content-parser.js"
+import { connectionStateChangedMap, tokenWillExpireMap } from "/snippets/zim/const-link.mdx"
+
 # 使用 Token 鉴权
 
 - - -
@@ -16,7 +20,9 @@ articleID: 14607
 
 登录时 Token 校验的流程如下图：
 
-![/Pics/ZIM/Authenticate_users_with_tokens.png](https://storage.zego.im/sdk-doc/Pics/ZIM/Authenticate_users_with_tokens.png)
+<Frame width="auto" height="auto">
+  <img src="https://storage.zego.im/sdk-doc/Pics/ZIM/Authenticate_users_with_tokens.png" alt="Token Authentication Flow" />
+</Frame>
 
 1. 客户端发起申请 Token 的请求。
 2. 在开发者的服务端上生成 Token，并返回给客户端。
@@ -24,8 +30,6 @@ articleID: 14607
 4. ZIM SDK 会自动将 Token 发送到 ZIM 服务端进行校验。
 5. ZIM 服务端会将校验的结果返回给 ZIM SDK。
 6. ZIM SDK 再将校验的结果直接返回给客户端，没有权限客户端登录将失败。
-
-
 
 ## 3 使用步骤
 
@@ -111,11 +115,11 @@ Token 有效时长不能超过 24 天，为保证安全性，ZEGO 强烈建议�
 2. 使用命令 `import zsa "your-project-go-mod-path/zegoserverassistant"` 引入插件，需要将 “your-project-go-mod-path” 替换为开发者自己的项目名称。
 3. 调用插件提供的 `GenerateToken04` 方法生成 Token。
 
-```go
-var appId uint32 = <Your AppId>   // type: uint32
+```go title="Go"
+const appId uint32 = <Your AppId>   // type: uint32
 userId := <Your userID>  // type: string
 secret := <ServerSecret>  // type: 32 byte length string
-var effectiveTimeInSeconds int64 = <Your token effectiveTime> //type: int64; unit: s
+const effectiveTimeInSeconds int64 = <Your token effectiveTime> //type: int64; unit: s
 
 token, err := zsa.GenerateToken04(appId, userId, secret, effectiveTimeInSeconds)
 if err != nil {
@@ -128,13 +132,12 @@ fmt.Println(token)
 #### 3. 开发者浏览器端生成 Token。
 
 <Warning title="注意">
-
 以下示例代码仅供参考。Token 有效时长不能超过 24 天，为保证安全性，ZEGO 强烈建议开发者在自己的服务端生成 Token。
 </Warning>
 
 浏览器端生成 Token 的代码示例请参考如下：
 
-```javascript
+```typescript
 import CryptoJS from 'crypto-js';
 
 const appConfig = {
@@ -194,21 +197,23 @@ export function generateToken(userID, seconds) {
 }
 ```
 
-
 ### 3.2 设置 Token 
 
 <Warning title="注意">
-
 Token 有效时长不能超过 24 天，为保证安全性，ZEGO 强烈建议开发者在自己的服务端生成 Token。
 </Warning>
 
 用户在登录时传入权限相关的 Token，并设置对应的权限。
 
-```javascript
-var useID = 'xxxx';
-var config = {
-    userName: 'xxxx',
-    token: '',// 有效时长不能超过 24 天，请求开发者服务端获取
+
+:::if{props.platform="undefined|UTS"}
+```typescript
+const useID = 'xxxx';
+const config: ZIMLoginConfig = {
+    token: '', // 有效时长不能超过 24 天，请求开发者服务端获取
+    userName: '',
+    customStatus: '',
+    isOfflineLogin: false
 }
 
 zim.login(useID, config)
@@ -219,23 +224,24 @@ zim.login(useID, config)
         // 登录失败
     });
 ```
-
+:::
 
 ### 3.3 Token 过期时的处理方式
 
-在 Token 过期前 30 秒，SDK 会通过 [tokenWillExpire](@tokenWillExpire) 回调发出通知。若登录成功后 Token 有效期不足 30 秒，则会立即回调。
+在 Token 过期前 30 秒，SDK 会通过 {getPlatformData2(props,tokenWillExpireMap)} 回调发出通知。若登录成功后 Token 有效期不足 30 秒，则会立即回调。
 
 收到该回调后，开发者需要从自己的服务端获取新的有效 Token，并调用 SDK 提供的 [renewToken](@renewToken) 接口更新 Token。
 
 <Note title="说明">
-
-当 Token 过期且未得到更新时，用户会掉线，收到 [connectionStateChanged](@connectionStateChanged) 回调，其中 `event` 为 `TokenExpired`，`state` 为 `Disconnected`。
+当 Token 过期且未得到更新时，用户会掉线，收到 {getPlatformData2(props,connectionStateChangedMap)} 回调，其中 `event` 为 `TokenExpired`，`state` 为 `Disconnected`。
 </Note>
 
-```javascript
+
+:::if{props.platform=undefined}
+```typescript
 // 注册监听“令牌即将过期”的回调
 zim.on('tokenWillExpire', function(zim, second) {
-    var token = ''; // 有效时长不能超过 24 天，重新请求开发者服务端获取 Token
+    const token = ''; // 有效时长不能超过 24 天，重新请求开发者服务端获取 Token
     zim.renewToken(token)    
         .then(function({ token }) {
             // 更新成功
@@ -245,6 +251,22 @@ zim.on('tokenWillExpire', function(zim, second) {
         });
 })
 ```
+:::
+:::if{props.platform="UTS"}
+```typescript
+// 注册监听“令牌即将过期”的回调
+zim.onTokenWillExpire(function(second) {
+    const token = ''; // 有效时长不能超过 24 天，重新请求开发者服务端获取 Token
+    zim.renewToken(token)    
+        .then(function({ token }) {
+            // 更新成功
+        })
+        .catch(function(err) {
+            // 更新失败
+        });
+})
+```
+:::
 
 ## 4 API 参考
 

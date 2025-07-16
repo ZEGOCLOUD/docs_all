@@ -6,6 +6,8 @@
 
 安装 Docuo CLI.
 
+
+
 ```
 npm i -g @spreading/docuo
 ```
@@ -28,6 +30,10 @@ docuo clear & docuo dev
 
 ## 更新搜索数据
 
-登录以下网址触发重新爬取数据。
+登录以下网址触发重新爬取数据。 
 
 https://dashboard.algolia.com/
+
+## 更新 AI 数据
+
+请参考 [更新AI数据说明](.scripts/ai_data/README.md)

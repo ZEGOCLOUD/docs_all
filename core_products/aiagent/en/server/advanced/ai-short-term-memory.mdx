@@ -1,0 +1,158 @@
+import MessagesStructure from '/snippets/Reuse/MessagesStructureforAIAgentEN.mdx'
+
+# AI Short-Term Memory (Agent Context) Management
+
+When creating an agent instance and implementing role-playing conversations, the agent can remember recent chat interactions (commonly known as short-term memory), which is implemented through the context of LLM (Large Language Model).
+During voice conversations, memory has the following stages:
+- Initial Memory: Whether chat history is needed when creating an instance.
+  - You can use [In-app chat](https://www.zegocloud.com/docs/zim-android/introduction/overview) conversation message history as initial memory;
+  - You can customize the initial memory with external context. If empty, the AI agent has no memory.
+- Memory During Voice Call: The chat history generated during voice calls and cached on the AI Agent server.
+  - To get the real-time memory, read [Get Agent Instance Context List](#get-agent-instance-context-list).
+  - To clear the existing memory, read [Reset Agent Instance Context List](#reset-agent-instance-context-list).
+- Memory Archival After Voice Call:
+  - You can archive the chat history in In-app chat. Read [Archive Memory After Voice Call](#archive-memory-after-voice-call).
+
+<Warning title="Warning">
+
+- **Context Length Limit:** LLMs typically have a maximum length limit, exceeding which will result in an error. For example, "skylark-1.5-pro-32k" allows no more than 32k tokens.
+
+- **Context Length vs. Inference Time:** Generally, longer context results in slower LLM output.
+
+- **Context Length vs. Cost:** LLM pricing is usually based on context length for input billing - longer length means higher cost.
+</Warning>
+
+## Implementation Steps
+
+### Set Initial Memory
+
+When [creating an agent instance](./../api-reference/agent-instance-management/create-agent-instance.mdx), you can set the initial memory (initial context) for the agent instance. Memory sources can be either "In-app chat conversation history" or "custom external context",
+controlled through the [MessageHistory](./../api-reference/agent-instance-management/create-agent-instance.mdx#messagehistory) parameter of the create agent instance API. The detailed parameter structure is as follows:
+
+<Tabs>
+<Tab title="MessageHistory">
+
+| Parameter    | Type      | Required | Description                                                                               |
+|---------------|-----------|----------|------------------------------------------------------------------------------------------|
+| SyncMode      | Number    | No       | Message sync mode: <ul><li>0: Sync from In-app chat. <Note title="Note"><ul><li>Before using this mode, ensure your project has In-app chat service enabled.</li><li>If the UserID hasn't logged in via In-app chat client or isn't registered on In-app chat server, the ZEGOCLOUD AI Agent server will automatically register it with In-app chat service.</li><li>We recommend you to register the user in advance to complete user information settings and improve agent instance creation efficiency.</li></ul></Note></li><li>1: Sync through the following `Messages` parameter.</li></ul> |
+| Messages      | Array of Object | No  | Message list.                                                                           |
+| WindowSize    | Number    | No       | Number of recent historical messages to use as context when calling LLM service. Default is 20, maximum is 100. Valid range is [0, 100].                                    |
+| In-app chat           | Object    | No       | In-app chat-related information. <Note title="Note">Only valid when `SyncMode` is 0.</Note>     |
+
+</Tab>
+<Tab title="MessageHistory.Messages">
+
+<MessagesStructure/>
+
+</Tab>
+<Tab title="MessageHistory.In-app chat">
+
+| Parameter  | Type   | Required | Description                                                           |
+|------------|--------|----------|-----------------------------------------------------------------------|
+| RobotId    | String | No       | The `UserInfo.UserId` corresponding to the In-app chat [register bot](https://www.zegocloud.com/docs/zim-server/bot/register-bots#request-parameters) API call. Used to load chat context between users and this In-app chat bot, and synchronize messages generated during conversations to In-app chat. If empty, the Real-Time AI Agent backend will generate one randomly. |
+| LoadMessageCount | Number | No  | Number of messages to fetch from In-app chat service as context when creating agent instance. Defaults to `WindowSize` value (upper limit). |
+
+</Tab>
+</Tabs>
+
+#### Load Initial Memory from In-app chat conversation History
+
+1. Ensure you have enabled the [In-app chat](https://www.zegocloud.com/docs/zim-android/introduction/overview) service.
+2. When [creating an agent instance](./../api-reference/agent-instance-management/create-agent-instance.mdx), set `SyncMode` to 0 and fill in the corresponding `In-app chat` parameters. Example:
+
+<Note title="Note">`In-app chat.RobotId` is the `UserInfo.UserId` used when calling the In-app chat API to [register a bot](https://www.zegocloud.com/docs/zim-server/bot/register-bots#request-parameters).</Note>
+
+```json {2-5}
+ "MessageHistory": {
+    "SyncMode": 0,
+    "In-app chat": {
+        "RobotId": "@RBT#123",
+        "LoadMessageCount": 10
+    }
+ }
+```
+
+#### Load Initial Memory from Custom External Context
+
+1. Business needs to store context information itself.
+2. When [creating an agent instance](./../api-reference/agent-instance-management/create-agent-instance.mdx), set `SyncMode` to 1 and fill in the `Messages` parameter. Example:
+
+```json {2-20}
+ "MessageHistory":{
+    "SyncMode": 1,
+    "Messages": [
+        {
+            "Role": "user",
+            "Content": "What's your name?"
+        },
+        {
+            "Role": "assistant",
+            "Content": "My name is Skylark."
+        },
+        {
+            "Role": "user",
+            "Content": "Tell me a story."
+        },
+        {
+            "Role": "assistant",
+            "Content": "Sure, let me tell you the story of 'The Three Little Pigs'."
+        }
+    ]
+}
+```
+
+### Manage Memory During Voice Call
+
+Managing memory during voice calls means managing the agent instance context. You can get the context or reset it.
+
+#### Get Agent Instance Context List
+
+Call the [GetAgentInstanceMsgList](./../api-reference/agent-instance-control/get-agent-instance-msg-list.mdx) API with the `AgentInstanceId` returned after creating an agent instance. The server will return the context of the AI agent instance, with messages sorted by chat time in ascending order.
+
+```json title="Sample"
+{
+    "Code": 0,
+    "Message": "success",
+    "RequestId": "2537521374375652066",
+    "Data": {
+        "Total": 4,
+        "MessageList": [
+            {
+                "Role": "user",
+                "Content": "What's your name?"
+            },
+            {
+                "Role": "assistant",
+                "Content": "My name is Skylark."
+            },
+            {
+                "Role": "user",
+                "Content": "Tell me a story."
+            },
+            {
+                "Role": "assistant",
+                "Content": "Sure, let me tell you the story of 'The Three Little Pigs'."
+            }
+        ]
+    }
+}
+```
+
+#### Reset Agent Instance Context List
+
+Call the [ResetAgentInstanceMsgList](./../api-reference/agent-instance-control/reset-agent-instance-msg-list.mdx) API with the `AgentInstanceId` returned after creating an agent instance. The server will reset the context of the AI agent instance.
+
+### Archive Memory After Voice Call
+
+Simply set `SyncMode` to `0` and provide a valid In-app chat bot ID as `In-app chat.RobotId` when creating an agent instance, and the voice call conversation records will be stored in the In-app Chat service.
+
+These stored chat history messages can be used as initial memory for subsequent conversations. Read [Load Initial Memory from In-app chat conversation History](#load-initial-memory-from-in-app-chat-conversation-history). You can also maintain memory archives in other ways according to your business needs.
+
+```json title="Sample" {2-5}
+"MessageHistory": {
+    "SyncMode": 0,
+    "In-app chat": {
+        "RobotId": "@RBT#123"
+    }
+}
+```
