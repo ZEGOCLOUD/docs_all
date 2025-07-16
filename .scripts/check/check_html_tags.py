@@ -7,6 +7,7 @@ HTML元素闭合检查脚本
 - 检查MDX文件中的HTML元素是否正确配对闭合
 - 支持嵌套元素、自闭合元素、跨行元素等
 - 自动跳过代码块（```...```）中的所有HTML标签检查
+- 自动跳过内联代码（`...`）中的所有HTML标签检查
 - 自动过滤编程语言泛型语法
 - 支持常见的HTML标签和MDX组件
 
@@ -219,6 +220,13 @@ def is_likely_html_tag(tag_name, line_content, match_start, match_end):
     # 默认情况下，如果不确定，倾向于认为是HTML标签
     return True
 
+def is_in_inline_code(line, position):
+    """检查指定位置是否在内联代码（反引号）中"""
+    # 计算position之前的反引号数量
+    backticks_before = line[:position].count('`')
+    # 如果反引号数量是奇数，说明在内联代码中
+    return backticks_before % 2 == 1
+
 def extract_html_tags(content):
     """从内容中提取所有HTML标签"""
     tags = []
@@ -232,7 +240,7 @@ def extract_html_tags(content):
 
     for line_num, line in enumerate(lines, 1):
         stripped_line = line.strip()
-        
+
         # 检查是否在代码块中
         if stripped_line.startswith('```'):
             if not in_code_block:
@@ -255,6 +263,10 @@ def extract_html_tags(content):
             tag_name = match.group(2)
             has_slash_end = bool(match.group(3))  # 是否以 /> 结尾
             col_num = match.start() + 1
+
+            # 检查是否在内联代码中
+            if is_in_inline_code(line, match.start()):
+                continue
 
             # 判断是否可能是HTML标签
             if not is_likely_html_tag(tag_name, line, match.start(), match.end()):
