@@ -13,10 +13,10 @@ from typing import List, Set
 # ========== 配置区域 - 在这里修改你的参数 ==========
 CONFIG = {
     # 要替换的articleID列表
-    "ids":["6814", "6817", "6816", "21071", "21079"],
+    "ids":["9731", "10169", "5696", "16049", "17363", "16291", "17483", "4573", "9012"],
     
     # 引用语句 - 注意这里可以直接使用单引号，不需要转义
-    "import_statement": """import Content from '/core_products/real-time-voice-video/zh/ios-swift/integration/download-demo.mdx'
+    "import_statement": """import Content from '/core_products/real-time-voice-video/zh/web/error-code.mdx'
 
 <Content />""",
     
