@@ -40,6 +40,8 @@ import sys
 import urllib.parse
 import requests
 import subprocess
+import threading
+import time
 from collections import defaultdict
 
 # 终端彩色输出
@@ -51,6 +53,48 @@ except ImportError:
         def __getattr__(self, name):
             return ''
     Fore = Style = Dummy()
+
+class SpinnerAnimation:
+    """旋转动画类"""
+    def __init__(self, message="处理中"):
+        self.message = message
+        self.spinner_chars = '|/-\\'
+        self.running = False
+        self.thread = None
+        self.current_char_index = 0
+
+    def _animate(self):
+        """动画循环"""
+        while self.running:
+            char = self.spinner_chars[self.current_char_index]
+            # 使用 \r 回到行首，覆盖之前的内容
+            print(f'\r{char} {self.message}', end='', flush=True)
+            self.current_char_index = (self.current_char_index + 1) % len(self.spinner_chars)
+            time.sleep(0.1)
+
+    def start(self):
+        """开始动画"""
+        if not self.running:
+            self.running = True
+            self.thread = threading.Thread(target=self._animate)
+            self.thread.daemon = True
+            self.thread.start()
+
+    def stop(self, final_message=None):
+        """停止动画"""
+        if self.running:
+            self.running = False
+            if self.thread:
+                self.thread.join(timeout=0.2)
+            # 清除动画行
+            print('\r' + ' ' * (len(self.message) + 10), end='')
+            print('\r', end='')
+            if final_message:
+                print(final_message)
+
+    def update_message(self, new_message):
+        """更新动画消息"""
+        self.message = new_message
 
 def choose_language():
     while True:
@@ -138,7 +182,23 @@ def load_config(language):
         config = json.load(f)
     return config, repo_root
 
-def choose_instance(instances):
+def choose_check_mode():
+    """选择检查模式"""
+    print('请选择检查模式:')
+    print('1. 检查单个平台实例')
+    print('2. 检查整个产品（所有平台）')
+
+    while True:
+        choice = input('输入数字选择(1/2): ').strip()
+        if choice == '1':
+            return 'single'
+        elif choice == '2':
+            return 'group'
+        else:
+            print('输入无效，请重新输入。')
+
+def choose_group_and_instances(instances):
+    """选择产品组，返回组信息和选择模式"""
     # 按组分类实例
     groups = {}
     for inst in instances:
@@ -166,6 +226,10 @@ def choose_instance(instances):
         else:
             print('输入无效，请重新输入。')
 
+    return selected_group
+
+def choose_single_instance(selected_group):
+    """从选定的组中选择单个实例"""
     # 显示选中组下的实例列表
     print(f'\n请选择 {selected_group["name"]} 下的实例:')
     sorted_instances = sorted(selected_group["instances"], key=lambda x: x.get("label", ""))
@@ -186,6 +250,11 @@ def choose_instance(instances):
         else:
             print('输入无效，请重新输入。')
 
+def choose_instance(instances):
+    """原有的选择实例函数，保持向后兼容"""
+    selected_group = choose_group_and_instances(instances)
+    return choose_single_instance(selected_group)
+
 def find_mdx_files(root_path):
     mdx_files = []
     for dirpath, _, filenames in os.walk(root_path):
@@ -193,6 +262,25 @@ def find_mdx_files(root_path):
             if fname.lower().endswith('.mdx'):
                 mdx_files.append(os.path.join(dirpath, fname))
     return mdx_files
+
+def is_in_inline_code(line, position):
+    """检查指定位置是否在内联代码（反引号）中"""
+    # 计算position之前的反引号数量
+    backticks_before = line[:position].count('`')
+    # 如果反引号数量是奇数，说明在内联代码中
+    return backticks_before % 2 == 1
+
+def is_in_code_block_context(lines, line_index):
+    """检查指定行是否在代码块中"""
+    in_code_block = False
+
+    # 检查从文件开始到当前行的所有代码块标记
+    for i in range(line_index):
+        line = lines[i].strip()
+        if line.startswith('```'):
+            in_code_block = not in_code_block
+
+    return in_code_block
 
 def extract_links_from_file(file_path):
     # 匹配多种类型的链接
@@ -205,41 +293,60 @@ def extract_links_from_file(file_path):
 
     links = []
     with open(file_path, 'r', encoding='utf-8') as f:
-        for idx, line in enumerate(f, 1):
-            line_content = line.strip()
+        lines = f.readlines()
 
-            # 检查markdown链接
-            for match in markdown_pattern.finditer(line):
+    in_code_block = False
+
+    for idx, line in enumerate(lines):
+        line_content = line.strip()
+
+        # 检查是否进入或退出代码块
+        if line_content.startswith('```'):
+            in_code_block = not in_code_block
+            continue
+
+        # 如果在代码块中，跳过这一行的所有链接检查
+        if in_code_block:
+            continue
+
+        # 检查markdown链接
+        for match in markdown_pattern.finditer(line):
+            # 检查链接是否在内联代码中
+            if not is_in_inline_code(line, match.start()):
                 url = match.group(1).strip()
                 links.append({
                     'url': url,
-                    'line': idx,
+                    'line': idx + 1,
                     'line_content': line_content,
                     'type': 'markdown'
                 })
 
-            # 检查纯文本链接（排除已经在markdown链接中的）
-            line_without_markdown = markdown_pattern.sub('', line)
-            for match in url_pattern.finditer(line_without_markdown):
+        # 检查纯文本链接（排除已经在markdown链接中的）
+        line_without_markdown = markdown_pattern.sub('', line)
+        for match in url_pattern.finditer(line_without_markdown):
+            # 重新计算在原始行中的位置
+            original_pos = line.find(match.group(0))
+            if original_pos != -1 and not is_in_inline_code(line, original_pos):
                 url = match.group(0).strip()
                 # 移除可能的尾部标点符号
                 url = url.rstrip('.,;:!?')
                 links.append({
                     'url': url,
-                    'line': idx,
+                    'line': idx + 1,
                     'line_content': line_content,
                     'type': 'plain_text'
                 })
 
-            # 检查MDX导入语句
-            for match in mdx_import_pattern.finditer(line):
+        # 检查MDX导入语句
+        for match in mdx_import_pattern.finditer(line):
+            if not is_in_inline_code(line, match.start()):
                 import_path = match.group(1).strip()
                 # 移除开头的斜杠（如果有）
                 if import_path.startswith('/'):
                     import_path = import_path[1:]
                 links.append({
                     'url': import_path,
-                    'line': idx,
+                    'line': idx + 1,
                     'line_content': line_content,
                     'type': 'mdx_import'
                 })
@@ -253,6 +360,29 @@ def check_mixed_language(link, language):
     if language == 'en' and re.search(r'https?://(?!storage\.|rtc-api\.)[^/]*zego\.im', link):
         return True
     return False
+
+def find_similar_files(target_dir, target_filename):
+    """在目录中查找相似的文件名"""
+    if not os.path.exists(target_dir):
+        return []
+
+    similar_files = []
+    target_lower = target_filename.lower()
+
+    for filename in os.listdir(target_dir):
+        if filename.lower().endswith('.mdx'):
+            # 简单的相似度匹配
+            filename_lower = filename.lower()
+
+            # 检查是否包含相同的关键词
+            target_words = set(re.findall(r'\w+', target_lower))
+            file_words = set(re.findall(r'\w+', filename_lower))
+
+            # 如果有共同词汇，认为是相似的
+            if target_words & file_words:
+                similar_files.append(filename)
+
+    return similar_files
 
 def check_local_link(link, base_file_path):
     # 只检查以./或../开头，且以.mdx结尾的链接
@@ -273,7 +403,21 @@ def check_local_link(link, base_file_path):
     abs_path = os.path.normpath(os.path.join(os.path.dirname(base_file_path), rel_path))
 
     if not os.path.exists(abs_path):
-        return False
+        # 尝试查找相似的文件
+        target_dir = os.path.dirname(abs_path)
+        target_filename = os.path.basename(abs_path)
+        similar_files = find_similar_files(target_dir, target_filename)
+
+        if similar_files:
+            # 返回详细错误信息，包含建议
+            return {
+                'valid': False,
+                'error': f'文件不存在',
+                'suggestions': similar_files,
+                'target_path': abs_path
+            }
+        else:
+            return False
 
     # 如果有锚点，检查锚点是否存在
     if anchor:
@@ -384,7 +528,7 @@ def check_root_link(link, config, instance, repo_root):
 
     return True
 
-def check_remote_link(link):
+def check_remote_link(link, spinner=None):
     # 只检查http/https开头，且不是zego.im/zegocloud.com
     if not re.match(r'https?://', link):
         return None
@@ -398,6 +542,35 @@ def check_remote_link(link):
        re.search(r'https?://your[^/]*', link) or \
        link.endswith('/chat/completions'):
         return None
+
+    # 跳过示例/占位符链接
+    # 常见的示例域名和占位符模式
+    example_patterns = [
+        r'https?://xxx\.com',           # https://xxx.com/...
+        r'https?://example\.com',       # https://example.com/...
+        r'https?://test\.com',          # https://test.com/...
+        r'https?://demo\.com',          # https://demo.com/...
+        r'https?://sample\.com',        # https://sample.com/...
+        r'https?://placeholder\.com',   # https://placeholder.com/...
+        r'https?://[^/]*\.example',     # https://xxx.example/...
+        r'https?://[^/]*\.test',        # https://xxx.test/...
+        r'https?://[^/]*\.local',       # https://xxx.local/...
+        r'https?://localhost',          # https://localhost/...
+        r'https?://127\.0\.0\.1',       # https://127.0.0.1/...
+        r'https?://192\.168\.',         # https://192.168.x.x/...
+        r'https?://10\.',               # https://10.x.x.x/...
+        r'https?://172\.(1[6-9]|2[0-9]|3[01])\.',  # https://172.16-31.x.x/...
+    ]
+
+    for pattern in example_patterns:
+        if re.match(pattern, link):
+            return None
+
+    # 更新动画消息
+    if spinner:
+        domain = re.search(r'https?://([^/]+)', link)
+        domain_name = domain.group(1) if domain else 'unknown'
+        spinner.update_message(f'检查外链: {domain_name}')
 
     try:
         resp = requests.head(link, allow_redirects=True, timeout=5)
@@ -514,78 +687,118 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
     """检查实例中的链接"""
     problems = defaultdict(list)
 
-    for file_path in mdx_files:
-        links = extract_links_from_file(file_path)
-        for link_info in links:
-            url = link_info['url']
-            line = link_info['line']
-            line_content = link_info['line_content']
-            link_type = link_info['type']
+    # 创建动画（仅在检查外链时显示）
+    spinner = None
+    if check_remote:
+        spinner = SpinnerAnimation("准备检查链接")
+        spinner.start()
 
-            # 检查MDX导入
-            if link_type == 'mdx_import':
-                mdx_result = check_mdx_import(url, file_path, repo_root)
-                if mdx_result is False:
-                    problems['MDX导入路径无效'].append({
+    try:
+        total_links = 0
+        remote_links_checked = 0
+
+        for file_index, file_path in enumerate(mdx_files, 1):
+            # 更新动画消息
+            if spinner:
+                file_name = os.path.basename(file_path)
+                spinner.update_message(f'检查文件 [{file_index}/{len(mdx_files)}]: {file_name}')
+
+            links = extract_links_from_file(file_path)
+            total_links += len(links)
+
+            for link_info in links:
+                url = link_info['url']
+                line = link_info['line']
+                line_content = link_info['line_content']
+                link_type = link_info['type']
+
+                # 检查MDX导入
+                if link_type == 'mdx_import':
+                    mdx_result = check_mdx_import(url, file_path, repo_root)
+                    if mdx_result is False:
+                        problems['MDX导入路径无效'].append({
+                            'file': file_path,
+                            'line': line,
+                            'url': url,
+                            'line_content': line_content,
+                            'link_type': link_type
+                        })
+                    continue
+
+                # 1. 检查中英文链接混用
+                instance_locale = instance.get('locale', 'en')  # 默认为英文
+                if check_mixed_language(url, instance_locale):
+                    problems['中英文链接混用'].append({
                         'file': file_path,
                         'line': line,
                         'url': url,
                         'line_content': line_content,
                         'link_type': link_type
                     })
-                continue
-
-            # 1. 检查中英文链接混用
-            instance_locale = instance.get('locale', 'en')  # 默认为英文
-            if check_mixed_language(url, instance_locale):
-                problems['中英文链接混用'].append({
-                    'file': file_path,
-                    'line': line,
-                    'url': url,
-                    'line_content': line_content,
-                    'link_type': link_type
-                })
-                continue
-            # 2. 检查本地链接
-            local_result = check_local_link(url, file_path)
-            if local_result is False:
-                problems['本地链接无效'].append({
-                    'file': file_path,
-                    'line': line,
-                    'url': url,
-                    'line_content': line_content,
-                    'link_type': link_type
-                })
-                continue
-            elif local_result is True:
-                continue
-            # 3. 检查根路径链接
-            root_result = check_root_link(url, config, instance, repo_root)
-            if root_result is False:
-                problems['根路径链接无效'].append({
-                    'file': file_path,
-                    'line': line,
-                    'url': url,
-                    'line_content': line_content,
-                    'link_type': link_type
-                })
-                continue
-            elif root_result is True:
-                continue
-            # 4. 检查远端链接（如果用户选择检查）
-            if check_remote:
-                remote_result = check_remote_link(url)
-                if remote_result is not None and not remote_result.get('valid', True):
-                    error_msg = remote_result.get('error', '未知错误')
-                    problems['远端链接无效'].append({
+                    continue
+                # 2. 检查本地链接
+                local_result = check_local_link(url, file_path)
+                if local_result is False:
+                    problems['本地链接无效'].append({
+                        'file': file_path,
+                        'line': line,
+                        'url': url,
+                        'line_content': line_content,
+                        'link_type': link_type
+                    })
+                    continue
+                elif isinstance(local_result, dict) and not local_result.get('valid', True):
+                    # 处理带建议的错误
+                    error_info = {
                         'file': file_path,
                         'line': line,
                         'url': url,
                         'line_content': line_content,
                         'link_type': link_type,
-                        'error': error_msg
+                        'error': local_result.get('error', '未知错误')
+                    }
+                    if local_result.get('suggestions'):
+                        error_info['suggestions'] = local_result['suggestions']
+                        error_info['target_path'] = local_result['target_path']
+                    problems['本地链接无效'].append(error_info)
+                    continue
+                elif local_result is True:
+                    continue
+                # 3. 检查根路径链接
+                root_result = check_root_link(url, config, instance, repo_root)
+                if root_result is False:
+                    problems['根路径链接无效'].append({
+                        'file': file_path,
+                        'line': line,
+                        'url': url,
+                        'line_content': line_content,
+                        'link_type': link_type
                     })
                     continue
+                elif root_result is True:
+                    continue
+                # 4. 检查远端链接（如果用户选择检查）
+                if check_remote:
+                    remote_links_checked += 1
+                    remote_result = check_remote_link(url, spinner)
+                    if remote_result is not None and not remote_result.get('valid', True):
+                        error_msg = remote_result.get('error', '未知错误')
+                        problems['远端链接无效'].append({
+                            'file': file_path,
+                            'line': line,
+                            'url': url,
+                            'line_content': line_content,
+                            'link_type': link_type,
+                            'error': error_msg
+                        })
+                        continue
+    finally:
+        # 停止动画
+        if spinner:
+            final_msg = f'检查完成: {total_links} 个链接'
+            if check_remote:
+                final_msg += f' (含 {remote_links_checked} 个外链)'
+            spinner.stop(final_msg)
 
     return problems
 
@@ -610,6 +823,43 @@ def print_problems_summary(problems, is_warning=False):
             print(f'    {item["line_content"]}')
             print()
 
+def check_group_links(selected_group, config, repo_root, check_remote=False):
+    """检查整个产品组的所有实例"""
+    all_problems = defaultdict(list)
+    total_files = 0
+
+    print(f'\n正在检查产品组: {selected_group["name"]}')
+    print(f'包含 {len(selected_group["instances"])} 个平台实例')
+
+    for i, instance in enumerate(selected_group["instances"], 1):
+        instance_path = instance['path']
+        # 确保实例路径是绝对路径
+        if not os.path.isabs(instance_path):
+            instance_path = os.path.join(repo_root, instance_path)
+
+        instance_label = instance.get("label", "未知实例")
+        platform = instance.get("navigationInfo", {}).get("platform", "")
+        if platform:
+            display_name = f"{instance_label} ({platform})"
+        else:
+            display_name = instance_label
+
+        print(f'\n[{i}/{len(selected_group["instances"])}] 检查实例: {display_name}')
+
+        mdx_files = find_mdx_files(instance_path)
+        print(f'  找到 {len(mdx_files)} 个MDX文件')
+        total_files += len(mdx_files)
+
+        if mdx_files:
+            instance_problems = check_instance_links(mdx_files, config, instance, repo_root, check_remote)
+
+            # 合并问题到总问题列表
+            for problem_type, problem_list in instance_problems.items():
+                all_problems[problem_type].extend(problem_list)
+
+    print(f'\n产品组检查完成，共检查了 {total_files} 个文件')
+    return all_problems
+
 def main():
     # 检查是否是git模式
     if len(sys.argv) > 1 and sys.argv[1] == 'git':
@@ -624,22 +874,32 @@ def main():
     if not instances:
         print(f'{Fore.RED}未找到任何实例，请检查配置文件。{Style.RESET_ALL}')
         sys.exit(1)
-    instance = choose_instance(instances)
-    instance_path = instance['path']
-    # 确保实例路径是绝对路径
-    if not os.path.isabs(instance_path):
-        instance_path = os.path.join(repo_root, instance_path)
-    instance_label = instance.get("label", "未知实例")
-    platform = instance.get("navigationInfo", {}).get("platform", "")
-    if platform:
-        display_name = f"{instance_label} ({platform})"
-    else:
-        display_name = instance_label
-    print(f'正在检查实例: {display_name} ({instance_path})')
-    mdx_files = find_mdx_files(instance_path)
-    print(f'共找到{len(mdx_files)}个mdx文件。')
 
-    problems = check_instance_links(mdx_files, config, instance, repo_root, check_remote)
+    # 选择检查模式
+    check_mode = choose_check_mode()
+    selected_group = choose_group_and_instances(instances)
+
+    if check_mode == 'single':
+        # 单个实例模式
+        instance = choose_single_instance(selected_group)
+        instance_path = instance['path']
+        # 确保实例路径是绝对路径
+        if not os.path.isabs(instance_path):
+            instance_path = os.path.join(repo_root, instance_path)
+        instance_label = instance.get("label", "未知实例")
+        platform = instance.get("navigationInfo", {}).get("platform", "")
+        if platform:
+            display_name = f"{instance_label} ({platform})"
+        else:
+            display_name = instance_label
+        print(f'正在检查实例: {display_name} ({instance_path})')
+        mdx_files = find_mdx_files(instance_path)
+        print(f'共找到{len(mdx_files)}个mdx文件。')
+
+        problems = check_instance_links(mdx_files, config, instance, repo_root, check_remote)
+    else:
+        # 整个产品组模式
+        problems = check_group_links(selected_group, config, repo_root, check_remote)
 
     # 输出总结
     print('\n检查结果总结:')
