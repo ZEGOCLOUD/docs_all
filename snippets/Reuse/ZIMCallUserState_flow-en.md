@@ -1,5 +1,5 @@
 The following figure shows how a user state changes in an entire call invitation process from call initiation to call termination.
-![/Pics/in_app_chat/14243_1.jpg](//doc.oa.zego.im/Pics/in_app_chat/14243_1.jpg)
+![https://doc-media.zego.im/sdk-doc/Pics/in_app_chat/14243_1.jpg](//doc.oa.zego.imhttps://doc-media.zego.im/sdk-doc/Pics/in_app_chat/14243_1.jpg)
 <table>
   <colgroup>
     <col width="20%">

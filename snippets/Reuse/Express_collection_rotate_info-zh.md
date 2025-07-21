@@ -18,11 +18,11 @@ ZEGO 针对移动端提供 4 种采集旋转模式（固定比例模式、自适
 
 - UI 固定为竖屏：
 
-  ![/Pics/Express/collection_rotate/fixed_UI_vertical.jpg](https://storage.zego.im/sdk-doc/Pics/Express/collection_rotate/fixed_UI_vertical.jpg)
+  ![/Pics/Express/collection_rotate/fixed_UI_vertical.jpg](https://doc-media.zego.im/sdk-doc/Pics/Express/collection_rotate/fixed_UI_vertical.jpg)
 
 - UI 不锁定（启用 App 屏幕自动旋转）：
 
-  ![/Pics/Express/collection_rotate/fixed_UI_rotate.jpg](https://storage.zego.im/sdk-doc/Pics/Express/collection_rotate/fixed_UI_rotate.jpg)
+  ![/Pics/Express/collection_rotate/fixed_UI_rotate.jpg](https://doc-media.zego.im/sdk-doc/Pics/Express/collection_rotate/fixed_UI_rotate.jpg)
 
 ### 自适应模式
 
@@ -38,7 +38,7 @@ ZEGO 针对移动端提供 4 种采集旋转模式（固定比例模式、自适
 
 表现如下：
 
-![/Pics/Express/collection_rotate/Adaptive_mode.jpg](https://storage.zego.im/sdk-doc/Pics/Express/collection_rotate/Adaptive_mode.jpg)
+![/Pics/Express/collection_rotate/Adaptive_mode.jpg](https://doc-media.zego.im/sdk-doc/Pics/Express/collection_rotate/Adaptive_mode.jpg)
 
 ### 对齐模式
 
@@ -54,15 +54,15 @@ ZEGO 针对移动端提供 4 种采集旋转模式（固定比例模式、自适
 
 - UI 固定为竖屏时：
 
-    ![/Pics/Express/collection_rotate/alignment_UI_vertical.jpg](https://storage.zego.im/sdk-doc/Pics/Express/collection_rotate/alignment_UI_vertical.jpg)
+    ![/Pics/Express/collection_rotate/alignment_UI_vertical.jpg](https://doc-media.zego.im/sdk-doc/Pics/Express/collection_rotate/alignment_UI_vertical.jpg)
 
 - UI 固定为横屏时：
 
-    ![/Pics/Express/collection_rotate/alignment_UI_horizontal.jpg](https://storage.zego.im/sdk-doc/Pics/Express/collection_rotate/alignment_UI_horizontal.jpg)
+    ![/Pics/Express/collection_rotate/alignment_UI_horizontal.jpg](https://doc-media.zego.im/sdk-doc/Pics/Express/collection_rotate/alignment_UI_horizontal.jpg)
 
 - UI 不锁定（启用 App 屏幕自动旋转）：
 
-    ![/Pics/Express/collection_rotate/alignment_UI_rotate.jpg](https://storage.zego.im/sdk-doc/Pics/Express/collection_rotate/alignment_UI_rotate.jpg)
+    ![/Pics/Express/collection_rotate/alignment_UI_rotate.jpg](https://doc-media.zego.im/sdk-doc/Pics/Express/collection_rotate/alignment_UI_rotate.jpg)
 
 ### 自定义模式（默认）
 

@@ -15,7 +15,7 @@
 
 |超分前|超分后|
 |-|-|
-|<img src="https://storage.zego.im/sdk-doc/Pics/VideoSuperResolution/portrait_720.jpg" width="50%">| ![https://storage.zego.im/sdk-doc/Pics/VideoSuperResolution/portrait_360.jpg](https://storage.zego.im/sdk-doc/Pics/VideoSuperResolution/portrait_360.jpg)|
+|<img src="https://doc-media.zego.im/sdk-doc/Pics/VideoSuperResolution/portrait_720.jpg" width="50%">| ![https://doc-media.zego.im/sdk-doc/Pics/VideoSuperResolution/portrait_360.jpg](https://doc-media.zego.im/sdk-doc/Pics/VideoSuperResolution/portrait_360.jpg)|
 
 
 
@@ -24,7 +24,7 @@
 
 |超分前|超分后|
 |-|-|
-|<img src="https://storage.zego.im/sdk-doc/Pics/VideoSuperResolution/text_720.jpg" width=50% >| ![/Pics/VideoSuperResolution/text_360.jpg](https://storage.zego.im/sdk-doc/Pics/VideoSuperResolution/text_360.jpg)|
+|<img src="https://doc-media.zego.im/sdk-doc/Pics/VideoSuperResolution/text_720.jpg" width=50% >| ![/Pics/VideoSuperResolution/text_360.jpg](https://doc-media.zego.im/sdk-doc/Pics/VideoSuperResolution/text_360.jpg)|
 
 
 

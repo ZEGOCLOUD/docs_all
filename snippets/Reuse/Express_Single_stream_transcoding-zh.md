@@ -1,6 +1,6 @@
 单流转码，指在云端把单条原始流转换为不同编码格式、不同分辨率的转码流。在直播等场景中，观众可以基于接入网络质量、终端设备等，自行选择不同分辨率的流进行观看，以保证播放的流畅性。
 
-![image.png](https://storage.zego.im/sdk-doc/Pics/Express/Single_stream_transcoding.jpeg)
+![image.png](https://doc-media.zego.im/sdk-doc/Pics/Express/Single_stream_transcoding.jpeg)
 
 ### 应用场景
 

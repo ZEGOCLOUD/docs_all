@@ -20,7 +20,7 @@ Both processing methods can be used independently or simultaneously and are comp
 
 |Before Enhancement|After Enhancement|
 |-|-|
-|![/Pics/lowlightenhancement/lowlightenhancement_before.jpg](/Pics/lowlightenhancement/lowlightenhancement_before.jpg)| ![/Pics/lowlightenhancement/lowlightenhancement_after.jpg](/Pics/lowlightenhancement/lowlightenhancement_after.jpg)|
+|![https://doc-media.zego.im/sdk-doc/Pics/lowlightenhancement/lowlightenhancement_before.jpg](https://doc-media.zego.im/sdk-doc/Pics/lowlightenhancement/lowlightenhancement_before.jpg)| ![https://doc-media.zego.im/sdk-doc/Pics/lowlightenhancement/lowlightenhancement_after.jpg](https://doc-media.zego.im/sdk-doc/Pics/lowlightenhancement/lowlightenhancement_after.jpg)|
 
 
 

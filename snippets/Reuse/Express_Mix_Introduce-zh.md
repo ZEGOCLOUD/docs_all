@@ -4,7 +4,7 @@
 
 本篇文档主要介绍通过客户端发起混流的操作说明，如果你需要通过自己的服务端发起混流，请参考 [服务端 API - 开始混流](#19595)。
 
-![](/Pics/Common/ZegoExpressEngine/mixed_flow.png)
+![](https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/mixed_flow.png)
 
 ### 混流方式分类
 

@@ -8,7 +8,7 @@ This document describes the implementation process based on the first scenario.
 
 The system architecture:
 
-![/Pics/RoomKit/AllPlatform/roomkit_architecture_en.png](https://storage.zego.im/sdk-doc/Pics/RoomKit/AllPlatform/roomkit_architecture_en.png)
+![/Pics/RoomKit/AllPlatform/roomkit_architecture_en.png](https://doc-media.zego.im/sdk-doc/Pics/RoomKit/AllPlatform/roomkit_architecture_en.png)
 
 In this system architecture, the following components need to be implemented by yourself:
 

@@ -26,7 +26,7 @@
 </tbody></table>
 
 
-![CDN拉流](https://storage.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/mixed_flow.png)
+![CDN拉流](https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/mixed_flow.png)
 
 有关混流相关接口的使用及注意事项，请参考 [实时音视频 - 基础功能 - 混流](!ExpressVideoSDK-Other_Functions/Mixer)。    
 
