@@ -31,7 +31,7 @@
 - 由于指定地理围栏区域与 App 用户所在区域之间存在跨区域公共互联网，公共互联网网络质量较差会导致通信体验受到影响。
 </div>
 
-![/Pics/Express/Geofencing_pic.jpeg](https://storage.zego.im/sdk-doc/Pics/Express/Geofencing_pic.jpeg)
+![/Pics/Express/Geofencing_pic.jpeg](https://doc-media.zego.im/sdk-doc/Pics/Express/Geofencing_pic.jpeg)
 
 当前 SDK 支持配置地区如下：
 

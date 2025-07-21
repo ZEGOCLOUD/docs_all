@@ -11,7 +11,7 @@
 
 当前 ZEGO 通过混流功能，将主讲人的音视频流与白板相关操作在 ZEGO 服务端合成一路，再输出到第三方平台，实现第三方平台无需集成 ZEGO Express 和 ZegoSuperBoard，即可在第三方平台同时接收主讲人画面、语音和白板内容的效果。
 
-![/Pics/Express/whiteboard_mixer.jpeg](https://storage.zego.im/sdk-doc/Pics/Express/whiteboard_mixer.jpeg)
+![/Pics/Express/whiteboard_mixer.jpeg](https://doc-media.zego.im/sdk-doc/Pics/Express/whiteboard_mixer.jpeg)
 
 
 

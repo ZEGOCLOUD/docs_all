@@ -8,7 +8,7 @@ ZEGO 语聊房解决方案预设 5 个麦位（包括主播麦位），观众人
 
 本方案房间内业务的整体架构如下图所示。由于业务后台仅管理房间列表，不涉及房间内业务，因此没有在下图中体现。房间内通过 ZIM SDK 进行消息的可靠传输，实现麦位管理等，通过 ZEGO Express SDK 实现推拉流管理。   
 
-![/Pics/GoEnjoy/GoChatHouse/iOS/internal_buiness_architect.png](https://storage.zego.im/sdk-doc/Pics/GoEnjoy/GoChatHouse/iOS/internal_buiness_architect.png)
+![/Pics/GoEnjoy/GoChatHouse/iOS/internal_buiness_architect.png](https://doc-media.zego.im/sdk-doc/Pics/GoEnjoy/GoChatHouse/iOS/internal_buiness_architect.png)
 
 ## 体验 App 源码
 

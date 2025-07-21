@@ -11,20 +11,20 @@
 
     |复杂场景|绿幕背景|
     |-|-|
-    |<img src="https://storage.zego.im/sdk-doc/Pics/subject_segmentation/people_with_realenvironment.jpg" width="90%">    | <img src="https://storage.zego.im/sdk-doc/Pics/subject_segmentation/people_with_greenscreen.png" width="90%">
+    |<img src="https://doc-media.zego.im/sdk-doc/Pics/subject_segmentation/people_with_realenvironment.jpg" width="90%">    | <img src="https://doc-media.zego.im/sdk-doc/Pics/subject_segmentation/people_with_greenscreen.png" width="90%">
 
 
 - **ZEGO 主体分割与传输的视频画面**
 
     ZEGO 通过自研 AI 主体分割算法，准确识别并分离画面中的主体，将分割出的主体信息编码后在 RTC 网络中传输。无论是复杂的实景，还是简单的绿幕背景，都能获得清晰的边缘效果。
 
-    <img src="https://storage.zego.im/sdk-doc/Pics/subject_segmentation/people_after_segmentation.png" width="50%">
+    <img src="https://doc-media.zego.im/sdk-doc/Pics/subject_segmentation/people_after_segmentation.png" width="50%">
 
 - **在业务场景中的应用**
 
     根据不同的业务需求，将拉取到的主体在对应的场景中渲染出来。让身处不同空间的用户，在同一个“空间”中互动。
 
-    <img src="https://storage.zego.im/sdk-doc/Pics/subject_segmentation/stage.png" width="80%">
+    <img src="https://doc-media.zego.im/sdk-doc/Pics/subject_segmentation/stage.png" width="80%">
 
 
 ### 应用场景
@@ -83,13 +83,13 @@ ZEGO 自研实景抠图和绿幕抠图算法，
 <tr>
 <td>分割前</td>
 <td>
-<img src="https://storage.zego.im/sdk-doc/Pics/subject_segmentation/people_with_realenvironment.jpg" width="80%"></td>
-<td><img src="https://storage.zego.im/sdk-doc/Pics/subject_segmentation/people_with_greenscreen.png" width="80%"></td>
+<img src="https://doc-media.zego.im/sdk-doc/Pics/subject_segmentation/people_with_realenvironment.jpg" width="80%"></td>
+<td><img src="https://doc-media.zego.im/sdk-doc/Pics/subject_segmentation/people_with_greenscreen.png" width="80%"></td>
 </tr>
 <tr>
 <td>分割后</td>
-<td><img src="https://storage.zego.im/sdk-doc/Pics/subject_segmentation/people_after_segmentation.png" width="80%"></td>
+<td><img src="https://doc-media.zego.im/sdk-doc/Pics/subject_segmentation/people_after_segmentation.png" width="80%"></td>
 <td>
-<img src="https://storage.zego.im/sdk-doc/Pics/subject_segmentation/people_after_segmentation.png" width="80%"></td>
+<img src="https://doc-media.zego.im/sdk-doc/Pics/subject_segmentation/people_after_segmentation.png" width="80%"></td>
 </tr>
 </tbody></table>

@@ -13,7 +13,7 @@
 
 获取播放`ZEGO 影视资源`时，ZEGO 影视资源 Token 校验的流程如下图：
 
-![/Pics/copyrightedvideo/Video_Token.png](https://storage.zego.im/sdk-doc/Pics/copyrightedvideo/Video_Token.png)
+![/Pics/copyrightedvideo/Video_Token.png](https://doc-media.zego.im/sdk-doc/Pics/copyrightedvideo/Video_Token.png)
 
 1. 开发者客户端发起申请 ZEGO 影视资源 Token 的请求。
 2. 在开发者的服务端上生成 ZEGO 影视资源 Token ，并返回给开发者客户端。

@@ -15,7 +15,7 @@
 <td><ul><li>版本：1.2.0</li><li>最近更新：2022-08-02</li></ul></td>
 </tr>
 <tr>
-<td><a href="https://storage.zego.im/GoCall/GoCall.apk" title="手机扫码体验，或浏览器点击下载。"><img src="https://zego-platform-growth.oss-cn-shanghai.aliyuncs.com/official-website/zego/experience-app/img_videocall_app_android.png" width="80%"></a></td>
+<td><a href="https://artifact-demo.zego.im/GoCall/GoCall.apk" title="手机扫码体验，或浏览器点击下载。"><img src="https://zego-platform-growth.oss-cn-shanghai.aliyuncs.com/official-website/zego/experience-app/img_videocall_app_android.png" width="80%"></a></td>
 <td><a href="https://apps.apple.com/cn/app/gocall/id1600603263" target="_blank" title="手机扫码体验，或浏览器点击下载。"><img src="https://zego-platform-growth.oss-cn-shanghai.aliyuncs.com/official-website/zego/experience-app/img_videocall_app_ios%402x.png" width="80%"></a></td>
 <td><a href="https://gocall.zego.im/#/index" class="md-btn-primary important" target="_blank" title="点击按钮，打开网页。"><span class="text">GoCall 网页版</span></a></td>
 </tr>
