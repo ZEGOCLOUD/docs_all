@@ -6,7 +6,7 @@ articleID: 18280
 ---
 
 
-## 1 功能简介
+## 功能简介
 
 本文将介绍如何快速实现一个简单的实时音频通话。
 
@@ -20,59 +20,66 @@ articleID: 18280
     2. 用户只能收到自己所在房间内的相关消息（用户进出、音频流变化等）。
 
 
-更多相关概念请参考 [术语说明](#5390)。
+更多相关概念请参考 [术语说明](https://doc-zh.zego.im/article/5390)。
+
+<Warning title="注意">
 
 
-<div class="mk-warning">
+
+如下实现流程支持的是 SDK 需为 2.10.0 及以上版本，如使用 2.10.0 以下版本的 SDK 请参考旧版方案 [实现流程](https://doc-zh.zego.im/article/14194)。
+
+</Warning>
 
 
-如下实现流程支持的是 SDK 需为 2.10.0 及以上版本，如使用 2.10.0 以下版本的 SDK 请参考旧版方案 [实现流程](#14194)。
-</div>
 
 
-## 2 前提条件
+## 前提条件
 
 在实现基本的实时音频功能之前，请确保：
 - 已在项目中集成 ZEGO Express SDK，详情请参考 [微信小程序 - 集成 SDK](!SDK_Integration_WeChat)。
-- 已在 [ZEGO 控制台](https://console.zego.im/) 创建项目，申请有效的 AppID 和 Server 地址，详情请参考 [控制台 - 项目信息](#12107)。
+- 已在 [ZEGO 控制台](https://console.zego.im/) 创建项目，申请有效的 AppID 和 Server 地址，详情请参考 [控制台 - 项目信息](https://doc-zh.zego.im/article/12107)。
 
 
 
-## 3 实现流程
+## 实现流程
 
 用户通过 ZEGO Express SDK 进行音频通话的基本流程为：   
 
 用户 A、B 加入房间，用户 B 预览并将音频流推送到 ZEGO 云服务（推流），用户 A 收到用户 B 推送音频流的通知之后，在通知中播放用户 B 的音频流（拉流）。
 
 
-![/Pics/Common/ZegoExpressEngine/common_usage.png](/Pics/Common/ZegoExpressEngine/common_usage_flowchart_new.png)
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/common_usage_flowchart_new.png" /></Frame>
 
 
-### 3.1 配置微信小程序后台
+### 配置微信小程序后台
 
 在初始化 SDK 前，需要在 [微信公众平台](https://mp.weixin.qq.com/?token=&lang=zh_CN) 中进行如下配置：
 
-- [服务器域名配置](https://developers.weixin.qq.com/miniprogram/dev/framework/ability/network.html)：在“小程序后台 > 开发管理 > 开发设置 > 服务器域名”中，按照协议分类，将即构 Server 地址、LogUrl、以及用户业务需要用到的地址填到指定的“socket合法域名”或“request合法域名”中，详情请参考 [控制台 - 项目信息](#12107)。
+- [服务器域名配置](https://developers.weixin.qq.com/miniprogram/dev/framework/ability/network.html)：在“小程序后台 > 开发管理 > 开发设置 > 服务器域名”中，按照协议分类，将即构 Server 地址、LogUrl、以及用户业务需要用到的地址填到指定的“socket合法域名”或“request合法域名”中，详情请参考 [控制台 - 项目信息](https://doc-zh.zego.im/article/12107)。
 
-    <div class="mk-warning">
+<Warning title="注意">
+
 
     - 控制台提供的 Server 地址格式为：wss://xxxxxxxxxx.com/ws。在 [微信公众平台](https://mp.weixin.qq.com/?token=&lang=zh_CN) 填写时，不能直接复制原地址，需要删除原地址的“/ws”，应填入地址的格式为：wss://xxxxxxxxxx.com。
     - 控制台提供的 LogUrl 地址格式为：https://xxxxxxxxxx.com/httplog。在 [微信公众平台](https://mp.weixin.qq.com/?token=&lang=zh_CN) 填写时，不能直接复制原地址，需要删除原地址的“/httplog”，应填入地址的格式为：https://xxxxxxxxxx.com。
-    - 如果您使用 3.0.0 或以上版本的 SDK，还需要添加一些 socket 域名，详情请参考 [3.0.0 及以上版本升级指南](#18287)。
-    </div>
+    - 如果您使用 3.0.0 或以上版本的 SDK，还需要添加一些 socket 域名，详情请参考 [3.0.0 及以上版本升级指南](https://doc-zh.zego.im/article/18287)。
     
-    ![](/Pics/MiniProgram/Configure_server_domain_name.png)
+</Warning>
+
+
+    
+    <Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/MiniProgram/Configure_server_domain_name.png" /></Frame>
 
 - 相关功能开启：在“小程序后台 > 开发管理 > 接口设置 > 接口权限”中，打开 **实时播放音视频流** 和 **实时录制音视频流** 功能开关。
 
-    ![](/Pics/MiniProgram/apiconfig_2.png)
+    <Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/MiniProgram/apiconfig_2.png" /></Frame>
 
 - 由于使用麦克风涉及到用户隐私，请参考微信官方文档 [配置小程序用户隐私保护指引](https://developers.weixin.qq.com/doc/oplatform/Third-party_Platforms/2.0/product/privacy_setting.html) 补充相应用户隐私保护指引。否则，当您的项目部署到正式环境时，将无法推流。
 
 
-### 3.2 初始化
+### 初始化
 
-***1. 创建界面***
+**1. 创建界面**
 
 根据场景需要，为您的项目创建视频通话的用户界面。我们推荐您在项目中添加如下元素：
 
@@ -80,13 +87,11 @@ articleID: 18280
 - 远端视频窗口
 - 结束按钮
 
-![/Pics/QuickStart/express_quickstart_video_call.png](http://doc.oa.zego.im/Pics/QuickStart/express_quickstart_video_call.png)
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/QuickStart/express_quickstart_video_call.png" /></Frame>
 
 
 
-<details class="zg-primary">
-    <summary>界面代码示例（组件化版）</summary>
-
+<Accordion title="界面代码示例（组件化版）" defaultOpen="true">
 ```xml
 <view wx:if="{{canShow== 1}}" class="">
   <view class="containerBase">
@@ -113,12 +118,9 @@ articleID: 18280
   </button>
 </view>
 ```
+</Accordion>
 
-</details>
-
-<details class="zg-primary">
-    <summary>界面代码示例（原生版）</summary>
-
+<Accordion title="界面代码示例（原生版）" defaultOpen="true">
 ```xml
 <view wx:if="{{canShow== 1}}" class="">
   <view class="containerBase">
@@ -190,20 +192,24 @@ articleID: 18280
   </button>
 </view>
 ```
-</details>
+</Accordion>
 
-<div class="mk-hint">
+<Note title="说明">
+
 
 组件化版（推荐）：指的是在示例代码的层面，将微信小程序推拉流组件封装成 ZEGO 自定义组件 \<zego-pusher> 和 \<zego-player>。
 
 原生版：指的是使用微信小程序推拉流组件 \<live-pusher> 和 \<live-player> 进行推拉流。
 
-两者均能实现一样的功能，但是推荐客户参考组件化的示例代码进行开发。因为小程序组件化后，使得代码更加简洁，具体请参考 [3.4 将自己的音视频流推送到 ZEGO 音视频云](!Solution_Implementation_WeChat#3_4) 中的 **“3.4.2 创建对应业务场景的 WXML”**。
-</div>
+两者均能实现一样的功能，但是推荐客户参考组件化的示例代码进行开发。因为小程序组件化后，使得代码更加简洁，具体请参考 [将自己的音视频流推送到 ZEGO 音视频云](!Solution_Implementation_WeChat#3_4) 中的 **“创建对应业务场景的 WXML”**。
+
+</Note>
 
 
 
-***2. 创建引擎***
+
+
+**2. 创建引擎**
 
 创建 [ZegoExpressEngine ](@-ZegoExpressEngine) 引擎实例，将申请到的 AppID 传入参数 “appID”，将获取到的 Server 地址传入参数 “server”。
 
@@ -212,7 +218,7 @@ articleID: 18280
 zg = new ZegoExpressEngine(appID, server);
 ```
 
-如果需要注册回调，开发者可根据实际需要，实现 ZegoEvent 中的某些方法，创建引擎后可通过调用 [on](/article/api?doc=Express_Audio_SDK_API~javascript_wxxcx~class~ZegoExpressEngine#on) 接口设置回调。
+如果需要注册回调，开发者可根据实际需要，实现 ZegoEvent 中的某些方法，创建引擎后可通过调用 [on](https://doc-zh.zego.im/article/api?doc=Express_Audio_SDK_API~javascript_wxxcx~class~ZegoExpressEngine#on) 接口设置回调。
 
 ```javascript
 zg.on('roomStateUpdate', (roomID, state, errorCode, extendedData) => {
@@ -233,17 +239,17 @@ zg.on('roomStateUpdate', (roomID, state, errorCode, extendedData) => {
 })
 ```
 
-### 3.3 登录房间
+### 登录房间
 
 **1. 获取登录 Token**
 
-登录房间需要用于验证身份的 Token，获取方式请参考 [用户权限控制](#8940)。如需快速调试，建议使用控制台生成的临时 Token，生成临时 Token 的具体操作请参考 [控制台 - 开发辅助](#16309)。
+登录房间需要用于验证身份的 Token，获取方式请参考 [用户权限控制](https://doc-zh.zego.im/article/8940)。如需快速调试，建议使用控制台生成的临时 Token，生成临时 Token 的具体操作请参考 [控制台 - 开发辅助](https://doc-zh.zego.im/article/16309)。
 
 **2. 登录房间**
 
 您可以调用 SDK 的 [loginRoom ](@loginRoom) 接口，传入房间 ID 参数 “roomID”、“token” 和用户参数 “user”，登录房间。如果房间不存在，调用该接口时会创建并登录此房间。
 
-您可通过监听 [roomStateUpdate ](@roomStateUpdate) 回调实时监控自己在本房间内的连接状态，具体请参考 [4.1 常见通知回调 ](!Solution_Implementation_WeChat#4_1) 中的“4.1.1 我在房间内的连接状态变化通知”。
+您可通过监听 [roomStateUpdate ](@roomStateUpdate) 回调实时监控自己在本房间内的连接状态，具体请参考 [常见通知回调 ](!Solution_Implementation_WeChat#4_1) 中的“我在房间内的连接状态变化通知”。
    
 roomID 和 user 的参数由您本地生成，但是需要满足以下条件：
 
@@ -251,11 +257,15 @@ roomID 和 user 的参数由您本地生成，但是需要满足以下条件：
 - 同一个 AppID 内，需保证 “userID” 全局唯一，建议开发者将 “userID” 与自己业务的账号系统进行关联。 
 - “userID” 必须与生成 token 时传入的 userID 保持一致，否则登录失败。
 
-<div class="mk-warning">
+<Warning title="注意">
 
 
-为避免错过任何通知，您需要在登录房间前先设置所有的监听回调（如房间状态、用户状态、流状态、推拉流状态等），具体请参考 [4.1 常见通知回调 ](!Solution_Implementation_WeChat#4_1)。  
-</div>
+
+为避免错过任何通知，您需要在登录房间前先设置所有的监听回调（如房间状态、用户状态、流状态、推拉流状态等），具体请参考 [常见通知回调 ](!Solution_Implementation_WeChat#4_1)。  
+
+</Warning>
+
+
 
 <a id="publishingStream"></a>
 
@@ -265,16 +275,16 @@ const result = await zg.loginRoom(roomID, token, {userID, userName});
 ```
 
 
-### 3.4 将自己的音频流推送到 ZEGO 音视频云
+### 将自己的音频流推送到 ZEGO 音视频云
 
-#### 3.4.1 初始化小程序组件实例
+#### 初始化小程序组件实例
 
 为了您更好的进行推拉流状态管理，需要调用 [initContext ](@initContext) 接口初始化小程序组件。
 
 小程序组件中用于存储推流属性 pusher 和拉流属性列表 playerList 两个字段需要传给 SDK，SDK 后续将通过传入的两个字段对相应的推拉流作状态及视图更新处理。
 
-- pusher 字段中的属性值请参考 [ZegoWxPusherAttributes](/article/api?doc=Express_Audio_SDK_API~javascript_wxxcx~interface~ZegoWxPusherAttributes)。
-- playerlist 字段中的属性值请参考 [ZegoWxPlayerAttributes](/article/api?doc=Express_Audio_SDK_API~javascript_wxxcx~interface~ZegoWxPlayerAttributes)。
+- pusher 字段中的属性值请参考 [ZegoWxPusherAttributes](https://doc-zh.zego.im/article/api?doc=Express_Audio_SDK_API~javascript_wxxcx~interface~ZegoWxPusherAttributes)。
+- playerlist 字段中的属性值请参考 [ZegoWxPlayerAttributes](https://doc-zh.zego.im/article/api?doc=Express_Audio_SDK_API~javascript_wxxcx~interface~ZegoWxPlayerAttributes)。
 
 ```javascript
 zg.initContext({
@@ -284,14 +294,18 @@ zg.initContext({
 })
 ```
 
-<div class="mk-warning">
+<Warning title="注意">
+
 
 
 SDK 在内部会对推拉流实例进行操作以及视图更新，开发者无需保存推拉流实例和调用小程序 setData 接口更新视图，避免与 SDK 发生冲突。后续可通过 [getPusherInstance](@getPusherInstance) 和 [getPlayerInstance](@getPlayerInstance) 接口获取推拉流实例。
-</div>
+
+</Warning>
 
 
-#### 3.4.2 创建对应业务场景的 WXML
+
+
+#### 创建对应业务场景的 WXML
 
 此处我们提供了两种方案供开发者选择：    
 小程序组件化版（推荐）：指的是在示例代码的层面，将微信小程序 \<live-pusher> 和 \<live-player> 组件封装成 ZEGO 自定义组件 \<zego-pusher> 和 \<zego-player> 进行推拉流。     
@@ -339,33 +353,37 @@ SDK 在内部会对推拉流实例进行操作以及视图更新，开发者无�
   <zego-player wx:for="{{zegoPlayerList}}" wx:key="id" id="{{item.componentID}}" playerId="{{item.playerId}}" playerList="{{playerList}}" />
 ```
 
-pusher 是小程序原生推流组件的属性，具体包含的属性值可参考 [ZegoWxPusherAttributes](/article/api?doc=Express_Video_SDK_API~javascript_wxxcx~interface~ZegoWxPusherAttributes)，在执行 [initContext](@initContext) 后创建，用于管理原生推流组件的属性。
+pusher 是小程序原生推流组件的属性，具体包含的属性值可参考 [ZegoWxPusherAttributes](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~javascript_wxxcx~interface~ZegoWxPusherAttributes)，在执行 [initContext](@initContext) 后创建，用于管理原生推流组件的属性。
 
-playerList 是小程序原生拉流组件的属性，具体包含的属性值可参考 [ZegoWxPlayerAttributes](/article/api?doc=Express_Video_SDK_API~javascript_wxxcx~interface~ZegoWxPlayerAttributes)，在执行 [initContext](@initContext) 后创建，用于管理原生拉流组件列表的属性。
+playerList 是小程序原生拉流组件的属性，具体包含的属性值可参考 [ZegoWxPlayerAttributes](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~javascript_wxxcx~interface~ZegoWxPlayerAttributes)，在执行 [initContext](@initContext) 后创建，用于管理原生拉流组件列表的属性。
 
+<Note title="说明">
 
-<div class="mk-hint">
 
 zego-pusher 和 zego-player 的对象名由“3.4.1 初始化小程序组件实例”的 pushAtr 与 playAtr 参数决定。 
-</div>
+
+</Note>
+
+
 
 
 - **小程序原生版**
 
-<details class="zg-primary">
-    <summary>小程序原生版编写 WXML 文件</summary>
-
-
+<Accordion title="小程序原生版编写 WXML 文件" defaultOpen="true">
 根据您的业务场景需求，编写 WXML 文件，创建推拉流组件 \<live-pusher> 和 \<live-player>。
 
 - [\<live-pusher>](https://developers.weixin.qq.com/miniprogram/dev/component/live-pusher.html) 组件用于小程序的实时推送音视频流功能。
 - [\<live-player>](https://developers.weixin.qq.com/miniprogram/dev/component/live-player.html) 组件用户小程序的实时播放音视频流功能。
 
-<div class="mk-hint">
+<Note title="说明">
+
 
 
 WXML 的具体含义与用法请参考微信官网文档中的介绍 [WXML](https://developers.weixin.qq.com/miniprogram/dev/framework/view/wxml/)。
-</div>
+
+</Note>
+
+
 
 
 WXML 中的 pusher 与 playerList，必须与初始化小程序组件 [initContext](@initContext) 中定义的这两个字段属性名保持一致，后续 SDK 调用推拉流接口之后才能正确地进行状态及视图更新。
@@ -425,13 +443,13 @@ bindstatechange 表示播放状态变化事件；bindaudiovolumenotify 表示播
       auto-pause-if-open-native= "{{item.autoPauseIfOpenNative}}" enable-metadata="true" bindmetadatachange="binddatachange"  bindstatechange="onPlayStateChange" bindnetstatus="onPlayNetStateChange">
 </live-player>
 ```
-</details>
+</Accordion>
 
-#### 3.4.3 推送音频流到 ZEGO 音视频云
+#### 推送音频流到 ZEGO 音视频云
 
 必须完成初始化小程序组件实例和创建业务场景的 WXML 之后，才能调用 SDK 接口创建推流和拉流实例。
 
-用户调用 SDK 的 [createPusher](@createPusher) 接口创建推流实例，并通过调用实例对象上的 [start](@start) 接口，传入流 ID 参数 “streamID”。您可通过监听 [publisherStateUpdate ](@publisherStateUpdate) 回调知晓推流是否成功，具体请参考 [4.1 常见通知回调 ](!Solution_Implementation_WeChat#4_1) 中的“4.1.4 用户推送音频流的状态通知”。
+用户调用 SDK 的 [createPusher](@createPusher) 接口创建推流实例，并通过调用实例对象上的 [start](@start) 接口，传入流 ID 参数 “streamID”。您可通过监听 [publisherStateUpdate ](@publisherStateUpdate) 回调知晓推流是否成功，具体请参考 [常见通知回调 ](!Solution_Implementation_WeChat#4_1) 中的“用户推送音频流的状态通知”。
 
 “streamID” 由您本地生成，但是需要保证：
 - 同一个 AppID 下，“streamID” 全局唯一。如果同一个 AppID 下，不同用户各推了一条 “streamID” 相同的流，后推流的用户推流失败。 
@@ -449,13 +467,13 @@ bindstatechange 表示播放状态变化事件；bindaudiovolumenotify 表示播
 });
 ```
 
-### 3.5 拉取其他用户的音频
+### 拉取其他用户的音频
 
 进行视频通话时，我们需要拉取到其他用户的音频。
 
-用户先调用 [getPlayerInstance](@getPlayerInstance) 接口，根据传入的流 ID 参数 “streamID”，获取 streamID 对应的拉流实例，然后通过调用拉流实例对象的 [play](@play) 接口开始拉流。您可通过监听 [playerStateUpdate ](@playerStateUpdate) 回调知晓是否成功拉取音频，具体请参考 [4.1 常见通知回调 ](!Solution_Implementation_WeChat#4_1) 中的“4.1.5 用户拉取音频流的状态通知”。
+用户先调用 [getPlayerInstance](@getPlayerInstance) 接口，根据传入的流 ID 参数 “streamID”，获取 streamID 对应的拉流实例，然后通过调用拉流实例对象的 [play](@play) 接口开始拉流。您可通过监听 [playerStateUpdate ](@playerStateUpdate) 回调知晓是否成功拉取音频，具体请参考 [常见通知回调 ](!Solution_Implementation_WeChat#4_1) 中的“用户拉取音频流的状态通知”。
    
-远端用户推送的 “streamID” 可以从 [roomStreamUpdate](@roomStreamUpdate) 回调中获得，具体回调设置请参考 [4.1 常见通知回调 ](!Solution_Implementation_WeChat#4_1) 中的“4.1.3 房间内流状态变更的通知”。
+远端用户推送的 “streamID” 可以从 [roomStreamUpdate](@roomStreamUpdate) 回调中获得，具体回调设置请参考 [常见通知回调 ](!Solution_Implementation_WeChat#4_1) 中的“房间内流状态变更的通知”。
 
 
 ```javascript
@@ -480,11 +498,11 @@ zg.on("roomStreamUpdate", (roomID, updateType, streamList) => {
 如果用户在音频通话的过程中，遇到相关错误，可查询 [错误码](!Error_Code/Error_Code)。
 
 
-## 4 常用功能
+## 常用功能
 
-### 4.1 常见通知回调
+### 常见通知回调
 
-#### 4.1.1 我在房间内的连接状态变化通知
+#### 我在房间内的连接状态变化通知
 
 [roomStateUpdate](@roomStateUpdate)：本地调用 [loginRoom](@loginRoom) 加入房间时，您可通过监听该回调实时监控自己在本房间内的连接状态。
 
@@ -510,10 +528,7 @@ zg.on('roomStateUpdate', (roomID, state, errorCode, extendedData) => {
 ```
 
 <table>
-  <colgroup>
-    <col width="30%">
-    <col width="70%">
-  </colgroup>
+  
   <tbody><tr>
     <th>状态</th>
     <th>含义</th>
@@ -533,7 +548,7 @@ zg.on('roomStateUpdate', (roomID, state, errorCode, extendedData) => {
 </tbody></table>
 
 
-#### 4.1.2 其他用户进出房间的通知
+#### 其他用户进出房间的通知
 
 [roomUserUpdate](@roomUserUpdate)：同一房间内的其他用户进出房间时，您可通过此回调收到通知。登录房间后，当房间内有用户新增或删除时，SDK 会通过该回调通知。   
 
@@ -550,7 +565,7 @@ zg.on('roomUserUpdate', (roomID, updateType, userList) => {
 });
 ```
 
-#### 4.1.3 房间内流状态变更的通知
+#### 房间内流状态变更的通知
 
 [roomStreamUpdate](@roomStreamUpdate)：流状态更新回调。登录房间后，当房间内有用户新推送或删除音频流时，SDK 会通过该回调通知。
 
@@ -565,7 +580,7 @@ zg.on('roomStreamUpdate', async (roomID, updateType, streamList, extendedData) =
 });
 ```
 
-#### 4.1.4 用户推送音频流的状态通知
+#### 用户推送音频流的状态通知
 
 - 推流状态事件
 
@@ -609,7 +624,7 @@ zg.on("publishQualityUpdate", (streamID, publishStats) => {
 });
 ```
 
-#### 4.1.5 用户拉取音频流的状态通知
+#### 用户拉取音频流的状态通知
 
 - 拉流状态事件
 
@@ -652,13 +667,13 @@ zg.on("playQualityUpdate", (playStreamID, playStats) => {
 <a id="Stoppublishplay"></a>
 
 
-### 4.2 停止音频通话
+### 停止音频通话
 
-#### 4.2.1 停止推送/拉取音频流
+#### 停止推送/拉取音频流
 
-***1. 停止推流***
+**1. 停止推流**
 
-调用 SDK 的 [getPusherInstance](@getPusherInstance) 接口获取推流实例，并调用推流实例的 [stop](/article/api?doc=Express_Audio_SDK_API~javascript_wxxcx~class~ZegoWxLivePusher#stop) 方法停止推流。
+调用 SDK 的 [getPusherInstance](@getPusherInstance) 接口获取推流实例，并调用推流实例的 [stop](https://doc-zh.zego.im/article/api?doc=Express_Audio_SDK_API~javascript_wxxcx~class~ZegoWxLivePusher#stop) 方法停止推流。
 
 ```javascript
 // 停止推流
@@ -666,14 +681,18 @@ zg.getPusherInstance().stop();
 ```
 
 
-***2. 停止拉流***   
+**2. 停止拉流**   
 
-调用 SDK 的 [getPlayerInstance](@getPlayerInstance) 接口获取拉流实例，并调用推流实例的 [stop](/article/api?doc=Express_Audio_SDK_API~javascript_wxxcx~class~ZegoWxLivePlayer#stop) 方法停止拉流。
+调用 SDK 的 [getPlayerInstance](@getPlayerInstance) 接口获取拉流实例，并调用推流实例的 [stop](https://doc-zh.zego.im/article/api?doc=Express_Audio_SDK_API~javascript_wxxcx~class~ZegoWxLivePlayer#stop) 方法停止拉流。
 
-<div class="mk-warning">
+<Warning title="注意">
 
-如果开发者通过 [roomStreamUpdate](@roomStreamUpdate) 回调收到了音视频流 “减少” 的通知，请及时调用 [stop](/article/api?doc=Express_Audio_SDK_API~javascript_wxxcx~class~ZegoWxLivePlayer#stop) 接口停止拉流，避免拉到空流、产生额外的成本；或者，开发者可以根据自己的业务需求，选择合适的时机，主动调用 [stop](/article/api?doc=Express_Audio_SDK_API~javascript_wxxcx~class~ZegoWxLivePlayer#stop) 接口停止拉流。
-</div>
+
+如果开发者通过 [roomStreamUpdate](@roomStreamUpdate) 回调收到了音视频流 “减少” 的通知，请及时调用 [stop](https://doc-zh.zego.im/article/api?doc=Express_Audio_SDK_API~javascript_wxxcx~class~ZegoWxLivePlayer#stop) 接口停止拉流，避免拉到空流、产生额外的成本；或者，开发者可以根据自己的业务需求，选择合适的时机，主动调用 [stop](https://doc-zh.zego.im/article/api?doc=Express_Audio_SDK_API~javascript_wxxcx~class~ZegoWxLivePlayer#stop) 接口停止拉流。
+
+</Warning>
+
+
 
 ```javascript
 // 停止拉流
@@ -681,7 +700,7 @@ zg.getPlayerInstance(streamID).stop();
 ```
 
 
-#### 4.2.2 退出房间
+#### 退出房间
 
 调用 SDK 的 [logoutRoom](@logoutRoom) 接口退出房间。
 
@@ -689,7 +708,7 @@ zg.getPlayerInstance(streamID).stop();
 zg.logoutRoom(roomID);
 ```
 
-#### 4.2.3 销毁引擎
+#### 销毁引擎
 
 如果用户彻底不使用音频功能时，可调用 [destroyEngine ](@destroyEngine) 接口销毁引擎，释放麦克风、内存、CPU 等资源。
 
@@ -698,8 +717,8 @@ zg.destroyEngine();
 zg = null;
 ```
 
-## 5 音频通话 API 调用时序
+## 音频通话 API 调用时序
 
 整个推拉流过程的 API 调用时序可参考下图：
 
-<img src="/Pics/QuickStart/quickstart_uml_mini_new.png" alt="时序图">
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml_mini_new.png" /></Frame>

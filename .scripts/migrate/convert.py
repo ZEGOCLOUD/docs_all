@@ -307,6 +307,9 @@ def replace_content(file_path, language='zh'):
     # 处理资源布局转换
     content = convert_resource_layouts(content)
 
+    # 处理 SDK 下载区域转换
+    content = convert_sdk_downloads(content)
+
     # 处理代码组转换
     content = convert_code_groups(content)
 
@@ -551,6 +554,44 @@ def convert_resource_layouts(content):
     # 匹配资源布局
     resource_layout_pattern = r'<div class="md-resource-layout">((?:.|\n)*?)</div>'
     content = re.sub(resource_layout_pattern, resource_layout_replacer, content, flags=re.IGNORECASE)
+
+    return content
+
+
+def convert_sdk_downloads(content):
+    """
+    将旧版 SDK 下载 HTML 结构转换为 Card 组件
+
+    Args:
+        content (str): 文件内容
+
+    Returns:
+        str: 转换后的内容
+    """
+    def replacer(match):
+        block = match.group(0)
+
+        # 提取标题
+        title_match = re.search(r'<div\s+class="download-title">\s*([^<]+?)\s*</div>', block, re.IGNORECASE)
+        title = title_match.group(1).strip() if title_match else "下载"
+
+        # 提取链接
+        href_match = re.search(r'data-href="([^"]+)"', block)
+        if not href_match:
+            href_match = re.search(r'<a[^>]+href="([^"]+)"[^>]*>', block, re.IGNORECASE)
+        href = href_match.group(1).strip() if href_match else "#"
+
+        # 提取按钮文本
+        text_match = re.search(r'<li[^>]*>\s*([^<]+?)\s*</li>', block)
+        if not text_match:
+            text_match = re.search(r'<a[^>]*class="download-target-btn"[^>]*>\s*([^<]+?)\s*</a>', block, re.IGNORECASE)
+        text = text_match.group(1).strip() if text_match else title
+
+        return f'<Card title="{title}" href="{href}" target="_blank">\n{text}\n</Card>'
+
+    # 使用非贪婪匹配获取下载块
+    pattern = r'<div[^>]*class="sdk-download-wrapper[^"]*"[\s\S]*?</div>\s*</div>'
+    content = re.sub(pattern, replacer, content, flags=re.IGNORECASE)
 
     return content
 

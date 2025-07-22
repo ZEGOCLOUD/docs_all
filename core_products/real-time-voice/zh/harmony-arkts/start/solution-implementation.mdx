@@ -1,4 +1,3 @@
-# 实现音频通话
 ---
 articleID: 19524
 ---
@@ -6,27 +5,55 @@ articleID: 19524
 
 ---
 
-@@@Common_usage_introduction@@@
+## 功能简介
 
-## 2 前提条件
+本文将介绍如何快速实现一个简单的实时音视频通话。
+
+相关概念解释:
+
+- ZEGO Express SDK：由 ZEGO 提供的实时音视频 SDK，能够为开发者提供便捷接入、高清流畅、多平台互通、低延迟、高并发的音视频服务。
+- 流：指一组按指定编码格式封装，不断发送中的音视频数据。一个用户可以同时推多条流（例如一条推摄像头数据，一条推屏幕共享数据）也可以同时拉多条流。每条流都由一个流 ID（streamID）标识。
+- 推流：把封包好的音视频数据流推送到 ZEGO 实时音视频云的过程。
+- 拉流：从 ZEGO 实时音视频云将已有音视频数据流拉取播放的过程。
+- 房间：是 ZEGO 提供的音视频空间服务，用于组织用户群，同一房间内的用户可以互相收发实时音视频及消息。
+    1. 用户需要先登录某个房间，才能进行推流、拉流操作。
+    2. 用户只能收到自己所在房间内的相关消息（用户进出、音视频流变化等）。
+    3. 每个房间由一个 ApplD 内唯一的 roomlD 标识。所有使用同一个 roomID 登录房间的用户即属于同房间。
+
+
+
+更多相关概念请参考 [术语说明](https://doc-zh.zego.im/article/5390)。
+
+## 前提条件
 
 在实现基本的音频通话功能之前，请确保：
 
-@@@Express_Video_Implementation_Process_Prerequisites@@@
+- 已在项目中集成 ZEGO Express SDK，实现基本的实时音视频功能，详情请参考 [快速开始 - 集成](!Integration/SDK_Integration)。
+- 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目管理](https://doc-zh.zego.im/article/12107) 中的“项目信息”。
 
-## 3 实现流程
+<Warning title="注意">
+
+
+SDK 同时也支持 Token 鉴权，若您对项目安全性有更高要求，建议您升级鉴权方式，详情请参考 [如何从 AppSign 鉴权升级为 Token 鉴权](http://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo)。
+
+</Warning>
+
+
+
+
+## 实现流程
 
 以用户 A 拉取用户 B 的流为例，流程如下图：
 
-![/Pics/Common/ZegoExpressEngine/common_usage_new.png](/Pics/Common/ZegoExpressEngine/common_usage_new.png)
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/common_usage_new.png" /></Frame>
 
-### 3.1 创建引擎
+### 创建引擎
 
 **1. 引入 ZegoExpressEngine 包** 
 
 在项目中引入 ZegoExpressEngine 包。
 
-```ets
+```ts
 // 引入 ZegoExpressEngine 包
 import ZegoExpressEngine, {
   ZegoBarrageMessageInfo,
@@ -47,14 +74,18 @@ import { ZegoEngineProfile } from '@ohos/ZegoExpressEngine/Index';
 
 **2. 创建引擎**
 
-调用 [createEngine ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#createengine) 接口，将 [前提条件](!Integration/Solution_Implementation#2) 中申请到的 AppID 传入参数 “appID”，创建引擎单例对象。
+调用 [createEngine ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#createengine) 接口，将 [前提条件](!Integration/Solution_Implementation#2) 中申请到的 AppID 传入参数 “appID”，创建引擎单例对象。
 
-<div class="mk-hint">
+<Note title="说明">
+
 
 如果需要将日志信息输出到 DevEco Studio 的 HiLog 窗口，可参考 [常见问题](!Integration/Solution_Implementation#6) 中的“鸿蒙系统如何打印调试日志？”实现。
-</div>
 
-```ets
+</Note>
+
+
+
+```ts
 // 定义 SDK 引擎对象
 ZegoExpressInstance: ZegoExpressEngine| null = null
 
@@ -90,31 +121,38 @@ ZegoExpressEngine.createEngine(profile).then((engineInst) => {
 **3. 设置回调**
 
 
-创建引擎后，您可以通过引擎实例的[on](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#on)方法注册回调。
+创建引擎后，您可以通过引擎实例的[on](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#on)方法注册回调。
 
-<div class="mk-warning">
+<Warning title="注意">
+
 
 为避免错过事件通知，建议在在创建引擎后立即注册回调
-</div>
 
-### 3.2 登录房间
+</Warning>
+
+
+
+### 登录房间
 
 **1. 登录**
 
-传入用户 ID 参数 “userID” 创建 [ZegoUser ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressdefines_.zegouser.html) 用户对象后，调用 [loginRoom ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) 接口，传入房间 ID 参数 “roomID” 和用户参数 “user”，登录房间。
+传入用户 ID 参数 “userID” 创建 [ZegoUser ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressdefines_.zegouser.html) 用户对象后，调用 [loginRoom ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) 接口，传入房间 ID 参数 “roomID” 和用户参数 “user”，登录房间。
 
 “roomID” 和 “user” 的参数由您本地生成，但是需要满足以下条件：
 
 - 同一个 AppID 内，需保证 “roomID” 全局唯一。  
-- 同一个 AppID 内，需保证 “userID” 全局唯一，建议开发者将其设置成一个有意义的值，可将 “userID” 与自己业务账号系统进行关联。  
+- 同一个 AppID 内，需保证 “userID” 全局唯一，建议开发者将其设置成一个有意义的值，可将 “userID” 与自己业务账号系统进行关联。
+
+<Warning title="注意">
+  
+
+ZegoUser 的构造方法 [public ZegoUser(String userID) ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressdefines_.zegouser.html) 会将 “userName” 设为与传的参数 “userID” 一样。“userID” 不能为 “null”，否则会导致登录房间失败。  
+
+</Warning>
 
 
-<div class="mk-warning">  
 
-ZegoUser 的构造方法 [public ZegoUser(String userID) ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressdefines_.zegouser.html) 会将 “userName” 设为与传的参数 “userID” 一样。“userID” 不能为 “null”，否则会导致登录房间失败。  
-</div>
-
-```ets
+```ts
 // 创建用户
 let user = new ZegoUser();
 user.userID = this.currentUserID;
@@ -126,11 +164,11 @@ roomConfig.isUserStatusNotify = true;
 this.ZegoExpressInstance.loginRoom('room_id', user, roomConfig);
 ```
 
-调用登录房间接口之后，您可通过监听 [onRoomStateUpdate ](/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onroomstateupdate) 回调实时监控自己在本房间内的连接状态，详情请参考 [房间内的连接状态变化通知](!Integration/Solution_Implementation#4_1)。
+调用登录房间接口之后，您可通过监听 [onRoomStateUpdate ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onroomstateupdate) 回调实时监控自己在本房间内的连接状态，详情请参考 [房间内的连接状态变化通知](!Integration/Solution_Implementation#4_1)。
 
-只有当房间状态是连接成功时，才能进行推流（[startPublishingStream ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#startpublishingstream)）、拉流（[startPlayingStream ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#startplayingstream)）等操作。
+只有当房间状态是连接成功时，才能进行推流（[startPublishingStream ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#startpublishingstream)）、拉流（[startPlayingStream ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#startplayingstream)）等操作。
 
-```ets
+```ts
 this.ZegoExpressInstance.on('onRoomStateUpdate', (roomID: string, state: ZegoRoomState, errorCode: number, extendedData: string) => {
     this.logInfo('onRoomStateUpdate. roomID: ' + roomID + ", state: " + state + ", code: "+ errorCode)
     // 更新本地登录状态
@@ -155,20 +193,24 @@ this.ZegoExpressInstance.on('onRoomStateUpdate', (roomID: string, state: ZegoRoo
 })
 ```
 
-###  3.3 推送到 ZEGO 实时音视频云
+### 推送到 ZEGO 实时音视频云
 
-在用户登录房间成功之后，调用 [startPublishingStream ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#startpublishingstream) 接口，传入 “streamID”，将自己的音视频流推送到 ZEGO 实时音视频云。
+在用户登录房间成功之后，调用 [startPublishingStream ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#startpublishingstream) 接口，传入 “streamID”，将自己的音视频流推送到 ZEGO 实时音视频云。
 
 “streamID” 由您本地生成，但是需要保证：
-同一个 AppID 下，“streamID” 全局唯一。如果同一个 AppID 下，不同用户各推了一条 “streamID” 相同的流，会导致后推流的用户推流失败。 
+同一个 AppID 下，“streamID” 全局唯一。如果同一个 AppID 下，不同用户各推了一条 “streamID” 相同的流，会导致后推流的用户推流失败。
 
-<div class="mk-hint">
-
-此处在登录房间成功后（即 [onRoomStateUpdate ](/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onroomstateupdate) 回调通知开发者当前用户的连接状态为 “Connected”），立即进行推流。在实现具体业务时，您可选择其他时机进行推流，只要保证当前房间连接状态是连接成功的即可。
-</div>
+<Note title="说明">
 
 
-```ets
+此处在登录房间成功后（即 [onRoomStateUpdate ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onroomstateupdate) 回调通知开发者当前用户的连接状态为 “Connected”），立即进行推流。在实现具体业务时，您可选择其他时机进行推流，只要保证当前房间连接状态是连接成功的即可。
+
+</Note>
+
+
+
+
+```ts
 this.ZegoExpressInstance.on('onRoomStateUpdate', (roomID: string, state: ZegoRoomState, errorCode: number, extendedData: string) => {
     this.logInfo('onRoomStateUpdate. roomID: ' + roomID + ", state: " + state + ", code: "+ errorCode)
     // 更新本地登录状态
@@ -185,17 +227,17 @@ this.ZegoExpressInstance.on('onRoomStateUpdate', (roomID: string, state: ZegoRoo
 })
 ```
 
-### 3.4 拉取其他用户的音视频流
+### 拉取其他用户的音视频流
 
 进行视频通话时，我们需要拉取到其他用户的音视频流。
 
-[onRoomStreamUpdate](/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onroomstreamupdate)：在同一房间内的其他用户将音视频流推送到 ZEGO 实时音视频云时，我们会在此回调中收到音视频流新增的通知。
+[onRoomStreamUpdate](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onroomstreamupdate)：在同一房间内的其他用户将音视频流推送到 ZEGO 实时音视频云时，我们会在此回调中收到音视频流新增的通知。
 
-我们可以在该回调中，调用 [startPlayingStream](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#startplayingstream) 接口，传入 “streamID” 拉取播放该用户的音视频流。
+我们可以在该回调中，调用 [startPlayingStream](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#startplayingstream) 接口，传入 “streamID” 拉取播放该用户的音视频流。
 
 拉取播放用户的音视频流后，如果无法正常看到远端画面，可以检查设置的远端拉流渲染视图类型是否正确。
 
-```ets
+```ts
 this.ZegoExpressInstance.on('onRoomStreamUpdate', (roomID: string, updateType: ZegoUpdateType, streamList: ZegoStream[], extendedData: string) => {
     this.logInfo('onRoomStreamUpdate. roomID: ' + roomID + ", updateType: " + updateType + ", extendedData: "+ extendedData)
     if(updateType == ZegoUpdateType.Add)
@@ -216,29 +258,25 @@ this.ZegoExpressInstance.on('onRoomStreamUpdate', (roomID: string, updateType: Z
 
 如果您在音视频通话的过程中，遇到相关错误，可查询 [错误码](!Error_Code/Error_Code)。
 
-## 4 常用功能
+## 常用功能
 
-### 4.1 常见通知回调
+### 常见通知回调
 
-#### 4.1.1  用户自己在房间内的连接状态变化通知
+#### 用户自己在房间内的连接状态变化通知
 
-[onRoomStateUpdate](/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onroomstateupdate)：本地调用 [loginRoom](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) 接口加入房间时，您可通过监听 [onRoomStateUpdate](/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onroomstateupdate) 回调实时监控自己在本房间内的连接状态。
+[onRoomStateUpdate](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onroomstateupdate)：本地调用 [loginRoom](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) 接口加入房间时，您可通过监听 [onRoomStateUpdate](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onroomstateupdate) 回调实时监控自己在本房间内的连接状态。
 
 您可以在回调中根据不同状态处理业务逻辑。
 
-```ets
+```ts
 this.ZegoExpressInstance.on('onRoomStateUpdate', (roomID: string, state: ZegoRoomState, errorCode: number, extendedData: string) => {
 })
 ```
 
-[ZegoRoomState](/unique-api/express-video-sdk/zh/ets_ohos/enums/_zegoexpressdefines_.zegoroomstate.html) 状态含义如下：
+[ZegoRoomState](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/enums/_zegoexpressdefines_.zegoroomstate.html) 状态含义如下：
 
 <table>
-  <colgroup>
-    <col width="30%">
-    <col width="20%">
-    <col width="50%">
-  </colgroup>
+  
   <tbody><tr>
     <th>状态</th>
     <th>枚举值</th>
@@ -264,21 +302,25 @@ this.ZegoExpressInstance.on('onRoomStateUpdate', (roomID: string, state: ZegoRoo
 
 详情可参考 [房间连接状态说明 ](!AdvancedModule/Room_Connection_Status)。
 
-#### 4.1.2 其他用户进出房间的通知
+#### 其他用户进出房间的通知
 
-<div class="mk-warning">
+<Warning title="注意">
 
-只有在调用 [loginRoom ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) 接口登录房间时传的 [ZegoRoomConfig ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressdefines_.zegoroomconfig.html) 中的 “isUserStatusNotify” 参数为 “true” 时，用户才能收到 [onRoomUserUpdate ](/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onroomuserupdate) 回调。 
+
+只有在调用 [loginRoom ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) 接口登录房间时传的 [ZegoRoomConfig ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressdefines_.zegoroomconfig.html) 中的 “isUserStatusNotify” 参数为 “true” 时，用户才能收到 [onRoomUserUpdate ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onroomuserupdate) 回调。 
 
 用户自己加入房间时，不会触发此回调。
 
-</div>
 
-[onRoomUserUpdate ](/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onroomuserupdate)：同一房间内的其他用户进出房间时，您可通过此回调收到通知。
+</Warning>
 
-回调中的 [ZegoUpdateType ](/unique-api/express-video-sdk/zh/ets_ohos/enums/_zegoexpressdefines_.zegoupdatetype.html) 参数为 “Add” 时，表示有用户进入了房间；为 “Delete” 时，表示有用户退出了房间。
 
-```ets
+
+[onRoomUserUpdate ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onroomuserupdate)：同一房间内的其他用户进出房间时，您可通过此回调收到通知。
+
+回调中的 [ZegoUpdateType ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/enums/_zegoexpressdefines_.zegoupdatetype.html) 参数为 “Add” 时，表示有用户进入了房间；为 “Delete” 时，表示有用户退出了房间。
+
+```ts
 this.ZegoExpressInstance.on('onRoomUserUpdate', (roomID: string, updateType: ZegoUpdateType, userList: ZegoUser[]) =>{
     // 您可以在回调中根据用户的进出/退出情况，处理对应的业务逻辑
     if(updateType == ZegoUpdateType.Add)
@@ -292,11 +334,11 @@ this.ZegoExpressInstance.on('onRoomUserUpdate', (roomID: string, updateType: Zeg
 });
 ```
 
-#### 4.1.3 用户推送音视频流的状态通知
+#### 用户推送音视频流的状态通知
 
-[onPublisherStateUpdate](/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onpublisherstateupdate)：根据实际应用需要，用户推送音视频流之后，当推送视频流的状态发生变更时（例如出现网络中断导致推流异常等情况），您会收到此回调，同时 SDK 会进行自动进行重试。
+[onPublisherStateUpdate](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onpublisherstateupdate)：根据实际应用需要，用户推送音视频流之后，当推送视频流的状态发生变更时（例如出现网络中断导致推流异常等情况），您会收到此回调，同时 SDK 会进行自动进行重试。
 
-```ets
+```ts
 this.ZegoExpressInstance.on('onPublisherStateUpdate', (streamID: string, state: ZegoPublisherState, errorCode: number, extendedData: string) => {
     if (errorCode != 0) {
         // 推流状态出错
@@ -318,11 +360,11 @@ this.ZegoExpressInstance.on('onPublisherStateUpdate', (streamID: string, state: 
 ```
 
 
-#### 4.1.4 用户拉取音视频流的状态通知
+#### 用户拉取音视频流的状态通知
 
-[onPlayerStateUpdate](/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onplayerstateupdate)：根据实际应用需要，用户拉取音视频流之后，当拉取的音视频流的状态发生变更时（例如出现网络中断导致拉流异常等情况），您会收到该回调，同时 SDK 会进行自动进行重试。
+[onPlayerStateUpdate](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#onplayerstateupdate)：根据实际应用需要，用户拉取音视频流之后，当拉取的音视频流的状态发生变更时（例如出现网络中断导致拉流异常等情况），您会收到该回调，同时 SDK 会进行自动进行重试。
 
-```ets
+```ts
 this.ZegoExpressInstance.on('onPlayerStateUpdate', (streamID: string, state: ZegoPlayerState, errorCode: number, extendedData: string) => {
     if (errorCode != 0) {
         // 拉流状态出错
@@ -343,63 +385,65 @@ this.ZegoExpressInstance.on('onPlayerStateUpdate', (streamID: string, state: Zeg
 })
 ```
 
-### 4.2 停止音视频通话
+### 停止音视频通话
 
-#### 4.2.1 停止推送/拉取音视频流
+#### 停止推送/拉取音视频流
 
 **1. 停止推流**
 
-调用 [stopPublishingStream ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#stoppublishingstream) 接口停止向远端用户发送本端的音视频流。
+调用 [stopPublishingStream ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#stoppublishingstream) 接口停止向远端用户发送本端的音视频流。
 
-```ets
+```ts
 // 停止推流
 this.ZegoExpressInstance.stopPublishingStream();
 ```
 
 **2. 停止拉流**
 
-调用 [stopPlayingStream ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#stopplayingstream) 接口停止拉取远端推送的音视频流。
+调用 [stopPlayingStream ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#stopplayingstream) 接口停止拉取远端推送的音视频流。
 
-```ets
+```ts
 // 停止拉流
 this.ZegoExpressInstance.stopPlayingStream(this.currentPlayStreamID);
 ```
 
-#### 4.2.2 退出房间
+#### 退出房间
 
-调用 [logoutRoom ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#logoutroom) 接口退出房间。
+调用 [logoutRoom ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#logoutroom) 接口退出房间。
 
-```ets
+```ts
 // 退出房间
 this.ZegoExpressInstance.logoutRoom(this.currentRoomID);
 ```
 
-#### 4.2.3 销毁引擎
+#### 销毁引擎
 
-如果用户彻底不使用音视频功能时，可调用 [destroyEngine ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#destroyengine) 接口销毁引擎，释放麦克风、内存、CPU 等资源。
+如果用户彻底不使用音视频功能时，可调用 [destroyEngine ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#destroyengine) 接口销毁引擎，释放麦克风、内存、CPU 等资源。
 
-```ets
+```ts
 ZegoExpressEngine.destroyEngine();
 // reset local engine
 this.ZegoExpressInstance = null;
 ```
 
-## 5 调试视频通话功能
+## 调试视频通话功能
 
-@@@New_Experience_RTC_Functions@@@
+在真机中运行项目，运行成功后，可以看到本端视频画面。
 
-## 6 常见问题
+为方便体验，ZEGO 提供了一个 [Web 端调试示例 ](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html)，在该页面下，输入相同的 AppID、RoomID，输入不同的 UserID、以及对应的 [Token](https://doc-zh.zego.im/article/16309)，即可加入同一房间与真机设备互通。当成功开始音视频通话时，可以听到远端的音频，看到远端的视频画面。
 
-1. **调用 [logoutRoom ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#logoutroom) 接口退出房间时，能否直接杀掉进程？**
+## 常见问题
 
-    调用 [logoutRoom ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#logoutroom) 接口后直接杀掉进程，有一定概率会导致 [logoutRoom ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#logoutroom) 信令没发出去，ZEGO 服务端只能等心跳超时后才认为该用户退出了房间，为了确保 [logoutRoom ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#logoutroom) 信令发送出去，建议再调用 [destroyEngine ](/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#destroyengine) 接口并收到回调后再杀进程。
+1. **调用 [logoutRoom ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#logoutroom) 接口退出房间时，能否直接杀掉进程？**
+
+    调用 [logoutRoom ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#logoutroom) 接口后直接杀掉进程，有一定概率会导致 [logoutRoom ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#logoutroom) 信令没发出去，ZEGO 服务端只能等心跳超时后才认为该用户退出了房间，为了确保 [logoutRoom ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#logoutroom) 信令发送出去，建议再调用 [destroyEngine ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#destroyengine) 接口并收到回调后再杀进程。
 
 2. **鸿蒙系统如何打印调试日志？**
 
     鸿蒙系统提供了与 Android Log 类似的日志打印工具类 HiLog，具体用法可参考 [HiLog 日志打印 ](https://developer.harmonyos.com/cn/docs/documentation/doc-guides/ide-debug-hilog-0000001172459337)。
 
-## 7 API 时序图
+## API 时序图
 
 整个推拉流过程的 API 调用时序如下图：
 
-<img src="/Pics/QuickStart/quickstart_uml.png" alt="时序图">
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml.png" /></Frame>
