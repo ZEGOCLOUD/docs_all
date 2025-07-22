@@ -1,0 +1,132 @@
+---
+articleID: 13900
+---
+
+# Create and switch between multiple whiteboards
+
+- - -
+## Overview
+
+This document describes how to create multiple whiteboards using the Super Board SDK and switch between them freely. The example scenario in this document is as follows:
+1. Create a common whiteboard.
+2. Switch to the common whiteboard, enter a line of words on the whiteboard, and then zoom in on the whiteboard.
+
+
+## Implementation steps
+
+<Frame width="512" height="auto" caption=""><img src="https://storage.zego.im/sdk-doc/Pics/WhiteboardView/Superboard_bestpractice_EN.png" /></Frame>
+
+Assume that A creates a whiteboard and operates on it and that B watches the whiteboard in this flow. In the preceding figure, the dotted line indicates that B can obtain related information from the corresponding callback when A performs the operation.
+
+
+### Initialize the SDK and log in to the room
+Refer to [Create a super board](../quick-start/create-white-board.mdx) to integrate and initialize the SDK and log in to the room. The complete sample code is as follows:
+
+```objc
+// Integrate the SDK before executing the following code.
+// Initialize ZegoExpressEngine.
+ZegoEngineProfile *profile = [ZegoEngineProfile new];
+// Register with the official website and obtain the data in the format similar to 1234567890.
+profile.appID = appID; 
+// Register on the official website and obtain a string of 64 characters in the format similar to @"0123456789012345678901234567890123456789012345678901234567890123" (64 characters in total).
+profile.appSign = appSign; 
+// Access in general scenarios.
+profile.scenario = ZegoScenarioGeneral; 
+// Create an engine and register self as the eventHandler callback. If there's no need to register a callback, eventHandler can be set as nil, and call the -setEventHandler: method to set the callback later on.
+[ZegoExpressEngine createEngineWithProfile:profile eventHandler:self];
+
+// Obtain an instance of ZegoSuperBoard.
+ZegoSuperBoardManager *superBoardManager = [ZegoSuperBoardManager sharedInstance];
+// Register a proxy.
+superBoardManager.delegate = self;
+// Initialize ZegoSuperBoard.
+ZegoSuperBoardInitConfig * config = [ZegoSuperBoardInitConfig new];
+config.appID = appID;// Enter the value of `appID` obtained from the ZEGO Admin Console.
+config.appSign = appSign;// Enter the value of `appSign` obtained from the ZEGO Admin Console.
+
+[[ZegoSuperBoardManager sharedInstance] initWithConfig:config complete:^(ZegoSuperBoardError errorCode) {
+       // The result of SuperBoard initialization is returned. 
+ }];
+
+// Log in to the room.
+// Set isUserStatusNotify to YES to receive the [onRoomUserUpdate] callback. The listening mechanism is disabled by default.
+NSString *userID = userID;// Set it to userID used to log in to the room.
+NSString *userName = userName;// Set it based on your requirement.
+NSString *roomID = roomID;//
+// Create a user.
+ZegoUser *user = [ZegoUser userWithUserID:userID userName:userName];
+// Set it to YES to receive the [onRoomUserUpdate] callback
+ZegoRoomConfig *config = [[ZegoRoomConfig alloc] init];
+config.isUserStatusNotify = YES;
+// Log in.
+[expressEngine loginRoom:roomID user:user config:config];
+
+// Listen for the room status callback.
+- (void)onRoomStateUpdate:(ZegoRoomState)state errorCode:(int)errorCode extendedData:(NSDictionary *)extendedData roomID:(NSString *)roomID {
+    
+    if (state == ZegoRoomStateConnected && errorCode == 0) { 
+        // Login to the room is successful.
+    }
+}
+```
+
+### Create a whiteboard
+
+Assume that A creates a common whiteboard.
+```objc
+// Operations by user A
+// A whiteboard can be created only after the user successfully logs in to the room.
+// Create a common whiteboard.
+ZegoCreateWhiteboardConfig * config = [ZegoCreateWhiteboardConfig new];
+config.name = Whiteboard name;
+config.pageCount = 5;
+config.perPageWidth = 16;
+config.perPageHeight = 9;
+[[ZegoSuperBoardManager sharedInstance] createWhiteboardView:config complete:^(ZegoSuperBoardError errorCode, ZegoSuperBoardSubViewModel *model) {
+      // The result of creating a common whiteboard and the data model of ZegoSuperBoardSubViewModel are returned.
+
+}];
+```
+
+After the whiteboards are created, `SuperBoardView` automatically synchronizes the whiteboard creation to multiple parties. The last created whiteboard is displayed by default. User B receives the `remoteSuperBoardSubViewAdded` or `onScrollChange:pageCount:subViewModel` notification each time when user A creates a whiteboard. User B can refresh the local UI logic in the corresponding callback.
+
+```objc
+// User B listens for the callback and refreshes the local UI logic in the callback.
+// Listen for the remotely added whiteboard.
+- (void)onRemoteSuperBoardSubViewAdded:(ZegoSuperBoardSubViewModel *)model
+{
+    // The UI can be updated based on the information returned in ZegoSuperBoardSubViewModel.
+}
+
+// Listen for the whiteboard page turning and scrolling.
+-  (void)onScrollChange:(NSInteger)currentPage pageCount:(NSInteger)pageCount subViewModel:(ZegoSuperBoardSubViewModel *)subViewModel {
+    // The UI can be updated based on the parameters returned by the callback, including the current displayed page/current animation step.
+}
+```
+
+You can use [setOperationMode](@setOperationMode) to grant permissions for clients to operate on the whiteboard.
+
+On the clients with the corresponding permission, users can draw on the whiteboard. For details, refer to [Draw on a whiteboard](../basic-function/sketch.mdx).
+
+### Switch to the common whiteboard, draw on the whiteboard, and zoom in
+
+To synchronize the zooming effect among multiple parties, you must enable the zooming effect synchronization and responding functions on each party.
+
+```objc
+// The zooming effect needs to be synchronized between the local and peer parties.
+[ZegoSuperBoardManager sharedInstance].enableSyncScale = YES;// Synchronize the zooming effect to the other party.
+[ZegoSuperBoardManager sharedInstance].enableResponseScale = YES;// Respond to the zooming effect synchronized from the other party.
+```
+
+User A switches to the common whiteboard, uses the text tool to write on the whiteboard, and uses gestures to zoom in or out.
+```objc
+// Operations by user A
+// Switch to the target whiteboard.
+[[ZegoSuperBoardManager sharedInstance].superBoardView switchSuperBoardSubView:uniqueID complete:^(ZegoSuperBoardError errorCode) {
+     // The default whiteboard tool is brush. To set other tool types, call setToolType.
+     // For example, set the tool type to text, click on the whiteboard where you want to display the text, and enter the text.
+     [ZegoSuperBoardManager sharedInstance].toolType = ZegoSuperBoardToolText;
+}];
+```
+
+After user A switches the whiteboard, the switching is automatically synchronized to user B. User B receives the  `onRemoteSuperBoardSubViewSwitched` notification, which has been implemented in the preceding step.
