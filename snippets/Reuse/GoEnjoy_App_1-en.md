@@ -15,7 +15,7 @@
 <td><ul><li>Version：1.2.0</li><li>Last updated date：2022-03-23</li></ul></td>
 </tr>
 <tr>
-<td><a href="https://storage.zego.im/GoEnjoy/GoEnjoy.apk" target="_blank" title="Scan the QR code with your mobile phone to experience it, or click on the picture to jump."><img src="https://zego-platform-growth.oss-cn-shanghai.aliyuncs.com/official-website/zego/experience-app/img_ktv_app_android%402x.png" width="80%"></a></td>
+<td><a href="https://artifact-demo.zego.im/GoEnjoy/GoEnjoy.apk" target="_blank" title="Scan the QR code with your mobile phone to experience it, or click on the picture to jump."><img src="https://zego-platform-growth.oss-cn-shanghai.aliyuncs.com/official-website/zego/experience-app/img_ktv_app_android%402x.png" width="80%"></a></td>
 
 <td><a href="https://apps.apple.com/cn/app/goenjoy/id1554247729" target="_blank" title="Scan the QR code with your mobile phone to experience it, or click on the picture to jump."><img src="https://zego-platform-growth.oss-cn-shanghai.aliyuncs.com/official-website/zego/experience-app/img_ktv_app_ios%402x.png" width="80%"></a></td>
 

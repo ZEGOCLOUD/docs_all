@@ -4,7 +4,7 @@ This use case has the following two features:
 
 - The guest host can play the streams directly from the ZEGO Real-Time Audio and Video Cloud when the host publishes his stream to the Cloud for interactive communication, but this also requires the device the guest host using to support the H.265 decoding ability.
 
-![/Pics/LiveRoom/H265/RetweetCDN_EN.png](https://storage.zego.im/sdk-doc/Pics/LiveRoom/H265/RetweetCDN_EN.png)
+![/Pics/LiveRoom/H265/RetweetCDN_EN.png](https://doc-media.zego.im/sdk-doc/Pics/LiveRoom/H265/RetweetCDN_EN.png)
 
 
 

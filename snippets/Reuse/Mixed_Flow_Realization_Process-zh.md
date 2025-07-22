@@ -1,4 +1,4 @@
-![](/Pics/Common/ZegoExpressEngine/Mixed_flow.png)
+![](https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Mixed_flow.png)
 
 主要流程如下：
 1. 房间内的用户推流到 ZEGO 实时音视频云服务器上。

@@ -1,6 +1,6 @@
 
 
-![/Pics/zegocloud/mini_game/4Game_status_description.jpg](//doc.oa.zego.im/Pics/zegocloud/mini_game/4Game_status_description.jpg)
+![https://doc-media.zego.im/sdk-doc/Pics/zegocloud/mini_game/4Game_status_description.jpg](//doc.oa.zego.imhttps://doc-media.zego.im/sdk-doc/Pics/zegocloud/mini_game/4Game_status_description.jpg)
 
 <table>
   <colgroup>

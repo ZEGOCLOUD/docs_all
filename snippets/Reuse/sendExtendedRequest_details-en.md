@@ -283,7 +283,7 @@
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;└ channel</td>
     <td>Int</td>
-    <td>歌曲渠道。<ul><li>0：音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志</li><li>其他值：其他渠道歌曲，UI 界面无需展示“音速达” logo 标志</li></ul> UI 界面示例如下： <br><img src="https://storage.zego.im/sdk-doc/Pics/CopyrightedMusic/Chart_songs.png"/></td>
+    <td>歌曲渠道。<ul><li>0：音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志</li><li>其他值：其他渠道歌曲，UI 界面无需展示“音速达” logo 标志</li></ul> UI 界面示例如下： <br><img src="https://doc-media.zego.im/sdk-doc/Pics/CopyrightedMusic/Chart_songs.png"/></td>
   </tr>
 </tbody></table>
 
@@ -773,7 +773,7 @@
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;└ channel</td>
     <td>Int</td>
-    <td>歌曲渠道。<ul><li>0：音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志</li><li>其他值：其他渠道歌曲，UI 界面无需展示“音速达” logo 标志</li></ul> UI 界面示例如下： <br><img src="https://storage.zego.im/sdk-doc/Pics/CopyrightedMusic/Search_songs.png" /></td>
+    <td>歌曲渠道。<ul><li>0：音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志</li><li>其他值：其他渠道歌曲，UI 界面无需展示“音速达” logo 标志</li></ul> UI 界面示例如下： <br><img src="https://doc-media.zego.im/sdk-doc/Pics/CopyrightedMusic/Search_songs.png" /></td>
   </tr>
 </tbody></table>
 
@@ -989,7 +989,7 @@
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;└ channel</td>
     <td>Int</td>
-    <td>歌曲渠道。<ul><li>0：音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志</li><li>其他值：其他渠道歌曲，UI 界面无需展示“音速达” logo 标志</li></ul> UI 界面示例如下： <br><img src="https://storage.zego.im/sdk-doc/Pics/CopyrightedMusic/Chart_songs.png" /></td>
+    <td>歌曲渠道。<ul><li>0：音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志</li><li>其他值：其他渠道歌曲，UI 界面无需展示“音速达” logo 标志</li></ul> UI 界面示例如下： <br><img src="https://doc-media.zego.im/sdk-doc/Pics/CopyrightedMusic/Chart_songs.png" /></td>
   </tr>
 </tbody></table>
 
@@ -1140,7 +1140,7 @@
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;└ channel</td>
     <td>Int</td>
-    <td>歌曲渠道。<ul><li>0：音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志</li><li>其他值：其他渠道歌曲，UI 界面无需展示“音速达” logo 标志</li></ul> UI 界面示例如下： <br><img src="https://storage.zego.im/sdk-doc/Pics/CopyrightedMusic/Chart_songs.png" /></td>
+    <td>歌曲渠道。<ul><li>0：音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志</li><li>其他值：其他渠道歌曲，UI 界面无需展示“音速达” logo 标志</li></ul> UI 界面示例如下： <br><img src="https://doc-media.zego.im/sdk-doc/Pics/CopyrightedMusic/Chart_songs.png" /></td>
   </tr>
 </tbody></table>
 

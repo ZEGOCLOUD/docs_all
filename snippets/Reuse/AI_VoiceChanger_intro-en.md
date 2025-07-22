@@ -32,15 +32,15 @@ The AI voice changer changes a user's voice as needed while retaining the origin
 <th>After AI voice change</th>
 </tr>
 <tr>
-<td rowspan="4"><audio src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/original_voice.wav" controls="">Your browser does not support the audio tag.</audio></td>
+<td rowspan="4"><audio src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/original_voice.wav" controls="">Your browser does not support the audio tag.</audio></td>
 <td>Young men</td>
-<td><audio src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/zegocloud_adult_male_changer_voice2.mp3" controls="">Your browser does not support the audio tag.</audio></td>
-<td><audio src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/young_male_changer_voice.wav" controls="">Your browser does not support the audio tag.</audio></td>
+<td><audio src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/zegocloud_adult_male_changer_voice2.mp3" controls="">Your browser does not support the audio tag.</audio></td>
+<td><audio src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/young_male_changer_voice.wav" controls="">Your browser does not support the audio tag.</audio></td>
 </tr>
 <tr>
 <td>Adult male 1</td>
-<td><audio src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/zegocloud_adult_male_changer_voice1.mp3" controls="">Your browser does not support the audio tag.</audio></td>
-<td><audio src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/zegocloud_adult_male_changer_voice2.mp3" controls="">Your browser does not support the audio tag.</audio></td>
+<td><audio src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/zegocloud_adult_male_changer_voice1.mp3" controls="">Your browser does not support the audio tag.</audio></td>
+<td><audio src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/zegocloud_adult_male_changer_voice2.mp3" controls="">Your browser does not support the audio tag.</audio></td>
 </tr>
 <tr>
 
@@ -65,23 +65,23 @@ The AI voice changer changes a user's voice as needed while retaining the origin
 
 </tr>
 <tr>
-<td rowspan="4"><audio src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/zegocloud_original_voice.mp3" controls="">您的浏览器不支持 audio 标签。</audio></td>
+<td rowspan="4"><audio src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/zegocloud_original_voice.mp3" controls="">您的浏览器不支持 audio 标签。</audio></td>
 <td>Adult male 1</td>
-<td><audio src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/zegocloud_adult_male_changer_voice1.mp3" controls="">您的浏览器不支持 audio 标签。</audio></td>
+<td><audio src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/zegocloud_adult_male_changer_voice1.mp3" controls="">您的浏览器不支持 audio 标签。</audio></td>
 </tr>
 <tr>
 <td>Adult male 2</td>
-<td><audio src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/zegocloud_adult_male_changer_voice2.mp3" controls="">您的浏览器不支持 audio 标签。</audio></td>
+<td><audio src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/zegocloud_adult_male_changer_voice2.mp3" controls="">您的浏览器不支持 audio 标签。</audio></td>
 
 </tr>
 <tr>
 <td>Adult female 1</td>
-<td><audio src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/zegocloud_adult_female_target_voice1.mp3" controls="">您的浏览器不支持 audio 标签。</audio></td>
+<td><audio src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/zegocloud_adult_female_target_voice1.mp3" controls="">您的浏览器不支持 audio 标签。</audio></td>
 
 </tr>
 <tr>
 <td>Adult female 2</td>
-<td><audio src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/zegocloud_adult_female_target_voice2.mp3" controls="">您的浏览器不支持 audio 标签。</audio></td>
+<td><audio src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/zegocloud_adult_female_target_voice2.mp3" controls="">您的浏览器不支持 audio 标签。</audio></td>
 </tr>
 </tbody></table>
 

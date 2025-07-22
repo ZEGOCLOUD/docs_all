@@ -9,7 +9,7 @@ To add a permission statement, open the "app/AndroidManifest.xml" file and add t
    ```
 
 
-![/Pics/superboard/new_project_4.png](//doc.oa.zego.im/Pics/superboard/new_project_4.png)
+![https://doc-media.zego.im/sdk-doc/Pics/superboard/new_project_4.png](//doc.oa.zego.imhttps://doc-media.zego.im/sdk-doc/Pics/superboard/new_project_4.png)
 
 
 The permissions are explained as follows:

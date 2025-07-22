@@ -32,7 +32,7 @@
 
 使用 Token 判断用户是否能登录房间的使用流程如下图：
 
-![token_uml](/Pics/QuickStart/token_uml.png)
+![token_uml](https://doc-media.zego.im/sdk-doc/Pics/QuickStart/token_uml.png)
 
 1. 客户端发起申请 Token 的请求。
 2. 在开发者的服务端上生成 Token，并返回给客户端。

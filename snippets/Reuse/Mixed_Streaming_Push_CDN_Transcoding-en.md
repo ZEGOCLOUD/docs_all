@@ -2,7 +2,7 @@ In this case, after the ZEGO Real-Time Audio and Video Cloud received the stream
 
 For the audience, they can choose to play the H.265 or H.264 stream from the CDN according to the H.265 video encoding ability of their devices.
 
-![/Pics/LiveRoom/H265/Mix_EN.png](https://storage.zego.im/sdk-doc/Pics/LiveRoom/H265/Mix_EN.png)
+![/Pics/LiveRoom/H265/Mix_EN.png](https://doc-media.zego.im/sdk-doc/Pics/LiveRoom/H265/Mix_EN.png)
 
 
 

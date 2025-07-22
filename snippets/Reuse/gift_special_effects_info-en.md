@@ -29,7 +29,7 @@ When the gift asset is played on a client, the R channel of the video on the rig
 During rendering, the Alpha channel value is divided by 255 and normalized to generate an Alpha value between 0 and 1. Then, the RGBA value is used to render each pixel to the screen, thus achieving a semi-transparent effect.
 
 
-![/Pics/transparentgift.jpeg](//doc.oa.zego.im/Pics/transparentgift.jpeg)
+![https://doc-media.zego.im/sdk-doc/Pics/transparentgift.jpeg](//doc.oa.zego.imhttps://doc-media.zego.im/sdk-doc/Pics/transparentgift.jpeg)
 
 
 
