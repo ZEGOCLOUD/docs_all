@@ -1,0 +1,112 @@
+#!/bin/sh
+#
+# Pre-commit hook script to verify what is about to be committed.
+# Called by "git commit" with no arguments.  The hook should
+# exit with non-zero status after issuing an appropriate message if
+# it wants to stop the commit.
+#
+# This hook checks:
+# 1. Non-ASCII filenames (original check)
+# 2. Whitespace errors (original check)
+# 3. HTML tag balance in modified .md/.mdx files
+#
+# To enable this hook:
+# 1. Copy this file to .git/hooks/pre-commit
+# 2. Make it executable: chmod +x .git/hooks/pre-commit
+#
+# HTML tag checking features:
+# - Detects unclosed HTML tags
+# - Detects extra closing tags
+# - Detects improper tag nesting
+# - Validates self-closing tags format
+# - Ignores content inside code blocks (```)
+# - Filters out programming language generic syntax
+
+if git rev-parse --verify HEAD >/dev/null 2>&1
+then
+	against=HEAD
+else
+	# Initial commit: diff against an empty tree object
+	against=$(git hash-object -t tree /dev/null)
+fi
+
+# If you want to allow non-ASCII filenames set this variable to true.
+allownonascii=$(git config --type=bool hooks.allownonascii)
+
+# Redirect output to stderr.
+exec 1>&2
+
+# Cross platform projects tend to avoid non-ASCII filenames; prevent
+# them from being added to the repository. We exploit the fact that the
+# printable range starts at the space character and ends with tilde.
+if [ "$allownonascii" != "true" ] &&
+	# Note that the use of brackets around a tr range is ok here, (it's
+	# even required, for portability to Solaris 10's /usr/bin/tr), since
+	# the square bracket bytes happen to fall in the designated range.
+	test $(git diff --cached --name-only --diff-filter=A -z $against |
+	  LC_ALL=C tr -d '[ -~]\0' | wc -c) != 0
+then
+	cat <<\EOF
+Error: Attempt to add a non-ASCII file name.
+
+This can cause problems if you want to work with people on other platforms.
+
+To be portable it is advisable to rename the file.
+
+If you know what you are doing you can disable this check using:
+
+  git config hooks.allownonascii true
+EOF
+	exit 1
+fi
+
+# Check for HTML tag balance in modified .md/.mdx files
+echo "检查待提交文件中的HTML标签..."
+
+# Get list of modified .md/.mdx files
+modified_md_files=$(git diff --cached --name-only --diff-filter=AM $against | grep -E '\.(md|mdx)$')
+
+if [ -n "$modified_md_files" ]; then
+	echo "发现待提交的Markdown文件:"
+	echo "$modified_md_files"
+	echo ""
+
+	# Use a while loop to handle filenames with spaces properly
+	check_failed=0
+	while IFS= read -r file; do
+		if [ -n "$file" ]; then
+			if ! python3 .scripts/check/check_html_tags.py "$file"; then
+				check_failed=1
+			fi
+		fi
+	done <<< "$modified_md_files"
+
+	if [ $check_failed -eq 1 ]; then
+		echo ""
+		echo "❌ 提交被阻止：请修复上述HTML标签问题后再次提交"
+		exit 1
+	fi
+	echo ""
+else
+	echo "未发现待提交的Markdown文件，跳过HTML标签检查"
+fi
+
+# Check links in modified .md/.mdx files
+echo "检查待提交文件中的链接..."
+
+if [ -n "$modified_md_files" ]; then
+	echo "正在检查变更文件的链接..."
+
+	# 调用链接检查脚本（git模式）
+	if ! python3 .scripts/check/check_links.py git; then
+		echo ""
+		echo "⚠️  警告：发现链接问题，但不会阻止提交"
+		echo "建议修复上述链接问题"
+	fi
+	echo ""
+else
+	echo "未发现待提交的Markdown文件，跳过链接检查"
+fi
+
+# If there are whitespace errors, print the offending file names and fail.
+# git diff-index --check --cached $against --

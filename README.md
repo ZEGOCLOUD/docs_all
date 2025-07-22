@@ -30,7 +30,7 @@ docuo clear & docuo dev
 
 ## 更新搜索数据
 
-登录以下网址触发重新爬取数据。
+登录以下网址触发重新爬取数据。 
 
 https://dashboard.algolia.com/
 
