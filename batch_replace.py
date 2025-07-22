@@ -6,7 +6,7 @@ import os
 
 def process_release_notes(file_path=None):
     if file_path is None:
-        file_path = '/Users/zego/Documents/docs_all/core_products/real-time-voice/zh/uni-app/summary/release-notes.mdx'
+        file_path = '/Users/zego/Documents/docs_all/core_products/low-latency-live-streaming/zh/rn-js/over-view/release-notes.mdx'
     
     print(f"正在处理文件: {file_path}")
     
