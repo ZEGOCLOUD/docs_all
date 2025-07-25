@@ -1,0 +1,696 @@
+openapi: 3.0.0
+info:
+  title: AI Agent API - 共享组件
+  version: 1.0.0
+
+servers:
+  - url: https://aigc-aiagent-api.zegotech.cn
+    description: Unified access address (no regional distinction)
+  - url: https://aigc-aiagent-api-sha.zegotech.cn
+    description: Mainland China (Shanghai)
+  - url: https://aigc-aiagent-api-hkg.zegotech.cn
+    description: Hong Kong, Macao, and Taiwan (Hong Kong)
+  - url: https://aigc-aiagent-api-fra.zegotech.cn
+    description: Europe (Frankfurt)
+  - url: https://aigc-aiagent-api-lax.zegotech.cn
+    description: Western United States (California)
+  - url: https://aigc-aiagent-api-bom.zegotech.cn
+    description: Asia-Pacific (Mumbai)
+  - url: https://aigc-aiagent-api-sgp.zegotech.cn
+    description: Southeast Asia (Singapore)
+
+components:
+  # 共享的参数定义
+  parameters:
+    AppId:
+      name: AppId
+      in: query
+      description: The unique Application ID assigned to your project by ZEGOCLOUD. Get it from the [ZEGOCLOUD Admin Console](https://console.zegocloud.com/).
+      required: true
+      schema:
+        type: integer
+        format: uint32
+
+    SignatureNonce:
+      name: SignatureNonce
+      in: query
+      description: Random string.
+      required: true
+      schema:
+        type: string
+
+    Timestamp:
+      name: Timestamp
+      in: query
+      description: Unix timestamp, in seconds. The maximum allowed error is 10 minutes.
+      required: true
+      schema:
+        type: integer
+        format: int64
+
+    SignatureVersion:
+      name: SignatureVersion
+      in: query
+      description: Signature version number, default value is 2.0.
+      required: true
+      schema:
+        type: string
+        enum: ["2.0"]
+
+    Signature:
+      name: Signature
+      in: query
+      description: Signature, used to verify the legitimacy of the request. Refer to [Signing the requests](/aiagent-server/api-reference/accessing-server-apis#signing-the-requests) for how to generate an API request signature.
+      required: true
+      schema:
+        type: string
+
+  schemas:
+    RTC:
+      type: object
+      description: |
+        <div>
+          <p>RTC related information</p>
+          <br/>
+          <strong>📌 Important Note</strong>
+          <p>All attribute character restrictions: only numbers, English characters, '_', '-', and '.' are supported.</p>
+        </div>
+
+      required:
+        - RoomId
+        - AgentStreamId
+        - AgentUserId
+        - UserStreamId
+      properties:
+        RoomId:
+          type: string
+          description: RTC room ID.
+          maxLength: 128
+          example: "room_1"
+        AgentStreamId:
+          type: string
+          description: |
+            The stream ID used by the AI agent instance for streaming.
+            > **📌 Important Note**
+            >
+            > Ensure that multiple AI agent instances (even if they are not in the same RTC room) use different stream IDs, otherwise the streaming of the later created AI agent instance will fail.
+          maxLength: 128
+          example: "agent_stream_1"
+        AgentUserId:
+          type: string
+          description: |
+            The user ID of the AI agent instance.
+            > **📌 Important Note**
+            >
+            > Ensure that multiple AI agent instances (even if they are not in the same RTC room) use different user IDs, otherwise the earlier created AI agent instance will be kicked out of the RTC room.
+          maxLength: 32
+          example: "agent_user_1"
+        UserStreamId:
+          type: string
+          description: The stream ID used by the real user for streaming.
+          maxLength: 128
+          example: "user_stream_1"
+
+    LLM:
+      type: object
+      required:
+        - Url
+        - Model
+      properties:
+        Url:
+          type: string
+          description: |
+            The endpoint that receives the request (can be your own service or any LLM service provider's service) and must be compatible with [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat).
+
+            For example: https://api.openai.com/v1/chat/completions
+
+            > **📌 Important Note**
+            >
+            > If ApiKey is set to "zego_test", you must use one of the following Url addresses:
+            > - MiniMax：https://api.minimax.chat/v1/text/chatcompletion_v2
+            > - Volcano Engine (Doubao): https://ark.cn-beijing.volces.com/api/v3/chat/completions
+            > - Aliyun Bailei (Tongyi Qianwen): https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+            > - Stepfun: https://api.stepfun.com/v1/chat/completions
+
+          example: "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+        ApiKey:
+          type: string
+          description: |
+            The parameter used for authentication by the LLM service provider. It is empty by default, but must be provided in production environments.
+
+            > **📌 Important Note**
+            >
+            > During the test period (within 2 weeks after the AI Agent service is enabled), you can set this parameter value to "zego_test" to use this service.
+          example: "zego_test"
+        Model:
+          type: string
+          description: |
+            The LLM model. Different LLM service providers support different models, please refer to their official documentation to select the appropriate model.
+
+            > **📌 Important Note**
+            >
+            > If ApiKey is set to "zego_test", you must use one of the following models:
+            > - MiniMax:
+            >   - *MiniMax-Text-01*
+            > - Volcano Engine (Doubao):
+            >   - *doubao-1-5-pro-32k-250115*
+            >   - *doubao-1-5-lite-32k-250115*
+            > - Aliyun Bailei (Tongyi Qianwen):
+            >   - *qwen-plus*
+            > - Stepfun:
+            >   - *step-2-16k*
+          example: "doubao-1-5-lite-32k-250115"
+        SystemPrompt:
+          type: string
+          description: The system prompt of the AI agent. It is the predefined information that is added at the beginning when calling the LLM, used to control the output of the LLM. It can be role settings, prompts, and answer examples.
+          example: "You are a friendly assistant"
+        Temperature:
+          type: number
+          description: The higher the value, the more random the output; the lower the value, the more concentrated and determined the output.
+          minimum: 0
+          maximum: 2
+          default: 0.7
+          example: 0.7
+        TopP:
+          type: number
+          description: The sampling method. The smaller the value, the stronger the determinism; the larger the value, the stronger the randomness.
+          minimum: 0
+          maximum: 1
+          default: 0.9
+          example: 0.9
+        Params:
+          type: object
+          description: Other parameters supported by the LLM service provider, such as the maximum token limit. Different LLM providers support different parameters, please refer to their official documentation and fill in as needed.
+          example: {"max_tokens": 16384}
+        AddAgentInfo:
+          type: boolean
+          description: |
+            If this value is true, the AI Agent server will include the AI agent information in the request parameters when requesting the LLM service.
+            You can use this parameter to execute additional business logic in your custom LLM service.
+
+            The structure of agent_info is as follows:
+            - room_id: RTC room ID
+            - user_id: User ID
+            - agent_instance_id: AI agent instance ID
+          default: false
+          example: false
+
+    TTS:
+      type: object
+      required:
+        - Vendor
+        - Params
+      properties:
+        Vendor:
+          type: string
+          description: |
+            The TTS service provider. Options:
+            - Aliyun: Aliyun
+            - ByteDance: ByteDance (Volcano Voice - Large Model Speech Synthesis API)
+            - ByteDanceFlowing: ByteDance (Volcano Voice - Streaming Speech Synthesis API (WebSocket))
+            - MiniMax: MiniMax
+            - CosyVoice: Aliyun CosyVoice
+          enum: ["Aliyun", "ByteDance", "ByteDanceFlowing", "MiniMax", "CosyVoice"]
+          example: "ByteDance"
+        Params:
+          type: object
+          description: |
+            <div>
+              <p>TTS configuration parameters, in JSON object format. Contains app parameters (for authentication) and other parameters (for adjusting TTS effects).</p>
+              <br/>
+              <p>In addition to the app parameter, you can also pass in other TTS configuration parameters to adjust the speech synthesis effect. These parameters will be directly passed to the corresponding TTS service provider.</p>
+              <p>You can refer to the official documentation of the service provider for the required information according to the value of Vendor.</p>
+              <p>- `Aliyun`: [Intelligent Speech Interaction - Overview of speech synthesis - 2. Start the synthesis task](https://www.alibabacloud.com/help/en/isi/developer-reference/overview-of-speech-synthesis?spm=a2c63.p38356.help-menu-30413.d_2_1_0_0.15e84cc6x7labr#section-qon-0fj-mow)</p>
+              <p>- `ByteDance`: [Large Model Speech Synthesis API - Parameter List - Request Parameters](https://www.volcengine.com/docs/6561/1257584#%E8%AF%B7%E6%B1%82%E5%8F%82%E6%95%B0)</p>
+              <p>- `ByteDanceFlowing`: "Payload request parameters" in [Streaming Text-to-Speech API (WebSocket) - WebSocket Binary Protocol](https://docs.byteplus.com/en/docs/byteplusvoice/streaming_tts#websocket-binary-protocol)</p>
+              <p>- `MiniMax`: [Voice Model - T2A v2 - WebSocket API - Interface Parameters](https://www.minimax.io/platform/document/T2A%20V2?key=66719005a427f0c8a5701643#PxNsxKPXzZqmI7zIc3O2Wy63)</p>
+              <p>- `CosyVoice`: "Payload request parameters" in [CosyVoice WebSocket API for Speech Synthesis](https://help.aliyun.com/zh/model-studio/cosyvoice-websocket-api?spm=a2c4g.11186623.help-menu-2400256.d_2_5_0_2.3edf33b47WqNcp)</p>
+            </div>
+
+          required:
+            - app
+          properties:
+            app:
+              type: object
+              description: |
+                The TTS service authentication parameter, which is different for different Vendor values. Please refer to the requirements of each vendor for the structure of the app parameter.
+              oneOf:
+                - title: Aliyun
+                  type: object
+                  required: [app_key, ak_id, ak_key]
+                  properties:
+                    app_key:
+                      type: string
+                      description: |
+                        Read the Alibaba Cloud docs [Intelligent Speech Interaction - Create a project](https://www.alibabacloud.com/help/en/isi/getting-started/start-here?spm=a2c4g.11186623.0.0.44f34b4f40XABA#659bb8103941q) to create a project and get the AppKey from the Intelligent Speech Interaction console, and pass it here.
+                        > **📌 Important Note**
+                        >
+                        > During the test period (within 2 weeks after the AI Agent service is enabled), you can set this parameter value to "zego_test" to use this service.
+                      example: "zego_test"
+                    ak_id:
+                      type: string
+                      description: |
+                        Read the Alibaba Cloud docs [Intelligent Speech Interaction - Activate Intelligent Speech Interaction - Procedure](https://www.alibabacloud.com/help/en/isi/activate-intelligent-speech-interaction-1#h2-699-vc6-tgh) to obtain the AccessKey ID and pass it here.
+                        > **📌 Important Note**
+                        >
+                        > During the test period (within 2 weeks after the AI Agent service is enabled), you can set this parameter value to "zego_test" to use this service.
+                      example: "zego_test"
+                    ak_key:
+                      type: string
+                      description: |
+                        Read the Alibaba Cloud docs [Intelligent Speech Interaction - Activate Intelligent Speech Interaction - Procedure](https://www.alibabacloud.com/help/en/isi/activate-intelligent-speech-interaction-1#h2-699-vc6-tgh) to obtain the AccessKey Secret and pass it here.
+                        > **📌 Important Note**
+                        >
+                        > During the test period (within 2 weeks after the AI Agent service is enabled), you can set this parameter value to "zego_test" to use this service.
+                      example: "zego_test"
+                - title: ByteDance
+                  type: object
+                  required: [appid, token, cluster]
+                  properties:
+                    appid:
+                      type: string
+                      description: |
+                        Read the BytePlus docs [Voice Technology - Quick Start - Console Usage FAQ](https://www.volcengine.com/docs/6561/196768#q1%EF%BC%9A%E5%93%AA%E9%87%8C%E5%8F%AF%E4%BB%A5%E8%8E%B7%E5%8F%96%E5%88%B0%E4%BB%A5%E4%B8%8B%E5%8F%82%E6%95%B0appid%EF%BC%8Ccluster%EF%BC%8Ctoken%EF%BC%8Cauthorization-type%EF%BC%8Csecret-key-%EF%BC%9F) under "Where can I get the following parameters: appid, cluster, token, authorization_type, secret_key?".
+                        > **📌 Important Note**
+                        >
+                        > During the test period (within 2 weeks after the AI Agent service is enabled), you can set this parameter value to "zego_test" to use this service.
+                      example: "zego_test"
+                    token:
+                      type: string
+                      description: |
+                        Read the BytePlus docs [Voice Technology - Quick Start - Console Usage FAQ](https://www.volcengine.com/docs/6561/196768#q1%EF%BC%9A%E5%93%AA%E9%87%8C%E5%8F%AF%E4%BB%A5%E8%8E%B7%E5%8F%96%E5%88%B0%E4%BB%A5%E4%B8%8B%E5%8F%82%E6%95%B0appid%EF%BC%8Ccluster%EF%BC%8Ctoken%EF%BC%8Cauthorization-type%EF%BC%8Csecret-key-%EF%BC%9F) under "Where can I get the following parameters: appid, cluster, token, authorization_type, secret_key?".
+                        > **📌 Important Note**
+                        >
+                        > During the test period (within 2 weeks after the AI Agent service is enabled), you can set this parameter value to "zego_test" to use this service.
+                      example: "zego_test"
+                    cluster:
+                      description: |
+                        BytePlus cluster configuration
+                        > **📌 Important Note**
+                        >
+                        > This parameter must match the audio.voice_type parameter.
+                      enum: ["volcano_tts", "volcano_mega", "volcano_icl"]
+                      default: "volcano_tts"
+                      example: "volcano_tts"
+                - title: ByteDanceFlowing
+                  type: object
+                  required: [appid, token, resource_id]
+                  properties:
+                    appid:
+                      type: string
+                      description: |
+                        Read the BytePlus Voice docs [Voice Console Guide - Step 2: Trial Use](https://docs.byteplus.com/en/docs/byteplusvoice/Voice_Console_Guide#step-2-trial-use) to get the App ID, and pass it here.
+                        > **📌 Important Note**
+                        >
+                        > During the test period (within 2 weeks after the AI Agent service is enabled), you can set this parameter value to "zego_test" to use this service.
+                      example: "zego_test"
+                    token:
+                      type: string
+                      description: |
+                        Read the BytePlus Voice docs [Voice Console Guide - Step 2: Trial Use](https://docs.byteplus.com/en/docs/byteplusvoice/Voice_Console_Guide#step-2-trial-use) to get the App ID, and pass it here.
+                        > **📌 Important Note**
+                        >
+                        > During the test period (within 2 weeks after the AI Agent service is enabled), you can set this parameter value to "zego_test" to use this service.
+                      example: "zego_test"
+                    resource_id:
+                      description: |
+                        BytePlus resource ID
+                        > **📌 Important Note**
+                        >
+                        > This parameter must match the req_params.speaker parameter.
+                      enum: ["volc.service_type.10029", "volc.megatts.default", "volc.megatts.concurr"]
+                      default: "volc.service_type.10029"
+                      example: "volc.service_type.10029"
+                - title: MiniMax
+                  type: object
+                  required: [api_key]
+                  properties:
+                    api_key:
+                      type: string
+                      description: |
+                        Read the MiniMax docs [Quick Start](https://www.minimax.io/platform/document/platform%20introduction?key=66701c8e1d57f38758d58198#fxvi2gssBBRAIx5V60y7dYfo) to get the API Key, and pass it here.
+                        > **📌 Important Note**
+                        >
+                        > During the test period (within 2 weeks after the AI Agent service is enabled), you can set this parameter value to "zego_test" to use this service.
+                      example: "zego_test"
+                - title: CosyVoice
+                  type: object
+                  required: [api_key]
+                  properties:
+                    api_key:
+                      type: string
+                      description: |
+                        Read the CosyVoice docs [Get API Key](https://help.aliyun.com/zh/model-studio/get-api-key?spm=a2c4g.11186623.0.0.621433b4VRO9z6) to get the API Key, and pass it here.
+                        > **📌 Important Note**
+                        >
+                        > During the test period (within 2 weeks after the AI Agent service is enabled), you can set this parameter value to "zego_test" to use this service.
+                      example: "zego_test"
+            other_params:
+              type: string
+              description: |
+                
+                > **📌 Important Note**
+                >
+                > other_params is not a valid parameter, it is only used to demonstrate how to pass vendor parameters.
+                > Except for the app parameter, other parameters are directly passed to the vendor parameters.
+
+                The following are the parameter filling examples for each vendor, please fill in according to your actual needs:
+
+                1. Aliyun:
+                ```json
+                "TTS": {
+                    "Vendor": "Aliyun",
+                    "Params": {
+                        "app":{
+                            "app_key": "your key",
+                            "ak_id": "your ak id",
+                            "ak_key": "your ak key"
+                        },
+                        "voice": "zhitian_emo"
+                    }
+                }
+                ```
+                2. ByteDance:
+                ```json
+                /*
+                    cluster configuration description: 
+                    default: volcano_tts: normal voice cluster
+                          volcano_mega: voice clone large model 1.0
+                          volcano_icl: voice clone large model 2.0
+                */
+
+                "TTS": {
+                    "Vendor": "ByteDance",
+                    "Params": {
+                        "app": {
+                            "appid": "your_appid",
+                            "token": "your_token",
+                            "cluster": "volcano_tts"
+                        },
+                        "audio": {
+                            "voice_type": "your_voice_type"
+                        }
+                    }
+                }
+                ```
+                3. ByteDanceFlowing:
+                ```json
+                /*
+                    resource_id configuration description: 
+                    default: volc.service_type.10029, that is: Volcano large model speech synthesis
+                    voice clone 2.0:
+                       volc.megatts.default（hour version）
+                       volc.megatts.concurr（concurrent version） 
+                    ⚠️（voice clone 1.0 is not supported）
+                    ⚠️Note: speaker (voice id) and resource_id must match
+                */
+
+                "TTS": {
+                    "Vendor": "ByteDanceFlowing",
+                    "Params": {
+                        "app": {
+                            "appid": "your appid",
+                            "token": "your token",
+                            "resource_id": "volc.service_type.10029" // voice resourceid
+                        },
+                        "req_params": {
+                            "speaker": "zh_female_qingxinnvsheng_mars_bigtts" //voice id
+                        }
+                    }
+                }
+                ```
+                4. Minimax:
+                ```json
+                "TTS": {
+                    "Vendor": "MiniMax",
+                    "Params": {
+                        "app": {
+                            "group_id": "your_group_id",
+                            "api_key":  "your_api_key",
+                        },
+                        "model": "speech-02-turbo-preview",
+                        "voice_setting": {
+                            "voice_id": "male-qn-qingse"
+                        }
+                    }
+                }
+                ```
+                5. CosyVoice:
+                ```json
+                {
+                    "Vendor": "CosyVoice",
+                    "Params": {
+                        "app": {
+                            "api_key": "your_api_key"
+                        },
+                        "payload": {
+                            "model": "cosyvoice-v2",
+                            "parameters": {
+                                "voice": "longxiaochun_v2"
+                            }
+                        }
+                    }
+                }
+                ```
+
+          example: {
+            "app": {
+              "appid": "zego_test",
+              "token": "zego_test",
+              "cluster": "volcano_tts"
+            },
+            "audio": {
+              "voice_type": "zh_female_qingxinnvsheng_mars_bigtts",
+              "loudness_ratio": 1.0,
+              "speed_ratio": 1.0
+            }
+          }
+        FilterText:
+          type: array
+          description: |
+            Filter the text within the specified punctuation marks from the content returned by the LLM, and then perform speech synthesis.
+
+            Note:
+            - The content that should be placed within the specified punctuation marks must be defined in LLM > SystemPrompt.
+            - This parameter cannot be updated when updating the AI agent instance.
+          items:
+            type: object
+            required:
+              - BeginCharacters
+              - EndCharacters
+            properties:
+              BeginCharacters:
+                type: string
+                description: The start punctuation mark of the filtered text. For example, if you want to filter the content in (), set it to (.
+                example: "("
+              EndCharacters:
+                type: string
+                description: The end punctuation mark of the filtered text. For example, if you want to filter the content in (), set it to ).
+                example: ")"
+          example: [
+            {
+              "BeginCharacters": "(",
+              "EndCharacters": ")"
+            }
+          ]
+
+    ASR:
+      type: object
+      properties:
+        HotWord:
+          type: string
+          description: |
+            The hot word list is used to improve the recognition accuracy. Format: Hotword1|Weight1,Hotword2|Weight2,Hotword3|Weight3
+
+            A single hot word cannot exceed 30 characters, cannot contain spaces, and the weight range is [-1, 11].
+            Up to 128 hot words are supported.
+
+            > **📌 Important Note**
+            >
+            > When the weight is 11, it means that the word is a super hot word. It is recommended to set only the important and must-take-effect hot words to 11, and too many hot words with a weight of 11 will affect the recognition effect.
+          example: "ZEGO|10,AI|10,Agent|10"
+        Params:
+          type: object
+          description: Extended parameters, please contact ZEGOCLOUD technical support for details.
+          example: {}
+        VADSilenceSegmentation:
+          type: number
+          description: |
+            Set the time after which the user's speech is no longer considered as a sentence.
+            The unit is ms, range [200, 2000], default is 500.
+          minimum: 200
+          maximum: 2000
+          default: 500
+          example: 500
+        PauseInterval:
+          type: number
+          description: |
+            Set the time within which two sentences are considered as one sentence, i.e., ASR multi-sentence concatenation.
+            The unit is ms, range [200, 2000].
+            Only when this value is greater than VADSilenceSegmentation, ASR multi-sentence concatenation will be enabled.
+          minimum: 200
+          maximum: 2000
+          example: 800
+
+    MessageHistory:
+      type: object
+      description: Configuration of the history messages used by the AI agent instance
+      properties:
+        SyncMode:
+          type: integer
+          description: |
+            Message synchronization mode:
+            - 0: Synchronize from the In-app Chat (ZIM)
+            - 1: Synchronize through the Messages parameter
+          enum: [0, 1]
+          default: 0
+          example: 0
+        Messages:
+          type: array
+          description: Message list
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/Message"
+        WindowSize:
+          type: integer
+          description: The number of recent history messages used when calling the LLM service. It affects the LLM context understanding ability, and it is recommended to set it to 10-30.
+          minimum: 0
+          maximum: 100
+          default: 20
+          example: 20
+        ZIM:
+          $ref: "#/components/schemas/ZIM"
+
+    Message:
+      type: object
+      required:
+        - Role
+        - Content
+      properties:
+        Role:
+          type: string
+          description: |
+            The role of the message sender:
+            - user: User
+            - assistant: AI agent
+          enum: [user, assistant]
+          example: "user"
+        Content:
+          type: string
+          description: Message content
+          example: "Hello, I want to know about the product information"
+
+    ZIM:
+      type: object
+      description: |
+        ZIM-related information.
+        <div>
+        <br/>
+        <strong>📌 Important Note</strong>
+        <p>- Only effective when MessageHistory.SyncMode is 0.</p>
+        <p>- Please ensure that your project has enabled the ZIM service.</p>
+        <p>- Please ensure that you have called the ZIM robot registration interface, and set the returned UserInfo.UserId as the RobotId.</p>
+        <p>- It is recommended to register the robot in advance to improve the user information settings and enhance the efficiency of creating AI agent instances.</p>
+        </div>
+      properties:
+        RobotId:
+          type: string
+          description: ZIM robot ID. That is, the UserInfo.UserId returned by calling the ZIM [register robot](/zim-server/bot/register-bots#request-parameters) interface. It is used to load the chat context between the user and the ZIM robot, and synchronize the messages generated during the conversation to ZIM. If this parameter is empty, the real-time interactive AI Agent backend will randomly generate one.
+          example: "@RBT#robot_123"
+        LoadMessageCount:
+          type: integer
+          description: The number of messages to be fetched from the ZIM service as context when creating an AI agent instance. The default is the value of WindowSize (the upper limit).
+          minimum: 0
+          maximum: 100
+          example: 20
+
+    CallbackConfig:
+      type: object
+      description: |
+        Server-side callback configuration
+
+        <div>
+        <br/>
+        <strong>📌 Important Note</strong>
+        <p>Before configuring the following parameters, you need to set the callback address according to [Receiving Callback](/aiagent-server/callbacks/receiving-callback), and understand the specific field descriptions.</p>
+        </div>
+
+      properties:
+        ASRResult:
+          type: integer
+          description: Whether to enable server-side callback for ASR results.
+          enum: [0, 1]
+          default: 0
+        LLMResult:
+          type: integer
+          description: Whether to enable server-side callback for LLM results. If enabled, the ZEGOCLOUD server will return the LLM output result for each sentence.
+          enum: [0, 1]
+          default: 0
+        Interrupted:
+          type: integer
+          description: Whether to enable server-side callback for the AI agent being interrupted.
+          enum: [0, 1]
+          default: 0
+        UserSpeakAction:
+          type: integer
+          description: Whether to enable server-side callback for user speech.
+          enum: [0, 1]
+          default: 0
+        AgentSpeakAction:
+          type: integer
+          description: Whether to enable server-side callback for the AI agent speaking.
+          enum: [0, 1]
+          default: 0
+        UserAudioData:
+          type: integer
+          description: Whether to enable server-side callback for user speech audio data.
+          enum: [0, 1]
+          default: 0
+
+    AdvancedConfig:
+      type: object
+      properties:
+        InterruptMode:
+          type: integer
+          description: |
+            The mode of interrupting the AI agent when the user speaks:
+            - 0: Interrupt immediately. If the user speaks while the AI is speaking, the AI will be immediately interrupted and stop speaking.
+            - 1: Do not interrupt. If the user speaks while the AI is speaking, the AI will not be affected until the content is finished.
+          enum: [0, 1]
+          default: 0
+          example: 0
+
+    DigitalHuman:
+      type: object
+      properties:
+        DigitalHumanId:
+          type: string
+          description: Digital human ID
+          example: "xiaozhi"
+        ConfigId:
+          type: string
+          description: Digital human configuration ID
+          enum: [mobile, web]
+          example: "mobile"
+        EncodeCode:
+          type: string
+          description: Digital human video encoding format
+          enum: [H264, VP8]
+          default: "H264"
+          example: "H264"
+
+    ErrorResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          description: Error code
+          example: 400
+        Message:
+          type: string
+          description: Error message
+          example: "Invalid request parameters"
+        RequestId:
+          type: string
+          description: Request ID
+          example: "3151527792559699733"

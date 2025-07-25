@@ -4,7 +4,7 @@
 - 主播推 H.265 码流时，连麦嘉宾从 ZEGO 实时音视频云直接拉流进行实时互动，此时要求连麦嘉宾的终端设备支持 H.265 视频解码能力。
 
 
-![转推 CDN 直播](https://storage.zego.im/sdk-doc/Pics/LiveRoom/H265/RetweetCDN.png)
+![转推 CDN 直播](https://doc-media.zego.im/sdk-doc/Pics/LiveRoom/H265/RetweetCDN.png)
 
 
 

@@ -9,7 +9,7 @@
 
 登录时 Token 校验的流程如下图：
 
-![/Pics/ZIM/Authenticate_users_with_tokens.png](https://storage.zego.im/sdk-doc/Pics/ZIM/Authenticate_users_with_tokens.png)
+![/Pics/ZIM/Authenticate_users_with_tokens.png](https://doc-media.zego.im/sdk-doc/Pics/ZIM/Authenticate_users_with_tokens.png)
 
 1. 客户端发起申请 Token 的请求。
 2. 在开发者的服务端上生成 Token，并返回给客户端。

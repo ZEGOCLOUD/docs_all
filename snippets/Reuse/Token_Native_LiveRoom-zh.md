@@ -50,7 +50,7 @@
 
 用户权限控制功能的登录校验使用流程如下图：
 
-![token_uml](/Pics/QuickStart/token_uml.png)
+![token_uml](https://doc-media.zego.im/sdk-doc/Pics/QuickStart/token_uml.png)
 
 1. 客户端发起申请 Token 的请求。
 2. 在开发者的服务端上生成 Token，并返回给客户端。
@@ -81,11 +81,11 @@
 
 1. 在 [ZEGO 控制台](https://console.zego.im/) 中，在“概览 > 我的项目”中，即可查看 AppId。
 
-![get_AppID.png](/Pics/QuickStart/get_AppID.png)
+![get_AppID.png](https://doc-media.zego.im/sdk-doc/Pics/QuickStart/get_AppID.png)
 
 2. 在 [ZEGO 控制台](https://console.zego.im/) 中，在“概览 > 我的项目”中，单击项目的“配置”信息，进入项目的“基本信息”页，单击项目的“后台相关密钥”，弹窗中的 “ServerSecret” 即生成 Token 需要使用的密钥。
 
-![get_ServerSecret.png](/Pics/QuickStart/get_ServerSecret.png)
+![get_ServerSecret.png](https://doc-media.zego.im/sdk-doc/Pics/QuickStart/get_ServerSecret.png)
 
 
 #### 4.1.2 开发者服务端生成 Token
@@ -197,11 +197,11 @@ fmt.Println(token)
 
 1. 在 [ZEGO 控制台](https://console.zego.im/) 中，在“概览 > 我的项目”中，单击项目的“配置”信息，进入项目的“基本信息”页，单击项目的“音视频临时 Token”，在弹窗中填写测试的 “RoomId” 和 “UserId” 信息。
 
-![console_Token.png](/Pics/QuickStart/console_Token.png)
+![console_Token.png](https://doc-media.zego.im/sdk-doc/Pics/QuickStart/console_Token.png)
 
 2. 填写完信息，单击“生成”按钮即可查看生成的 “临时Token” 信息，该 Token 的有效期为 24 小时。
 
-![console_Token_Result.png](/Pics/QuickStart/console_Token_Result.png)
+![console_Token_Result.png](https://doc-media.zego.im/sdk-doc/Pics/QuickStart/console_Token_Result.png)
 
 
 

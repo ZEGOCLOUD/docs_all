@@ -4,7 +4,7 @@
 
 ZEGO Express SDK 媒体播放器提供 RGB 通道与 Alpha 通道分离播放 MP4 素材（RGB 与 Alpha 拼接后的 MP4 素材）的功能，实现播放透明礼物的动态效果，即播放礼物特效时，不会挡住直播间内容，大大提升用户体验。
 
-<video poster="https://storage.zego.im/sdk-doc/Pics/Express/gift_special_effects.png" src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/gift_special_effects.mp4" width="70%" muted="true" loop="true" autoplay="autoplay" preload="auto" nocontrols></video>
+<video poster="https://doc-media.zego.im/sdk-doc/Pics/Express/gift_special_effects.png" src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/gift_special_effects.mp4" width="70%" muted="true" loop="true" autoplay="autoplay" preload="auto" nocontrols></video>
 
 ### 功能优势
 
@@ -28,7 +28,7 @@ ZEGO Express SDK 媒体播放器提供 RGB 通道与 Alpha 通道分离播放 MP
 
 渲染时，将 Alpha 通道的值除以 255，进行归一化处理，得到 0 ~ 1 之间的 Alpha 取值，最后根据 RGBA 值将每个像素点渲染到屏幕上，实现半透明效果。
 
-![/Pics/Express/RGBtoRGBA.jpeg](/Pics/Express/RGBtoRGBA.jpeg)
+![https://doc-media.zego.im/sdk-doc/Pics/Express/RGBtoRGBA.jpeg](https://doc-media.zego.im/sdk-doc/Pics/Express/RGBtoRGBA.jpeg)
 
 
 

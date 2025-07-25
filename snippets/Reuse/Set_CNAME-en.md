@@ -19,7 +19,7 @@
 | TTL(秒) | 缓存的生存时间。 | 建议填写 600 秒（默认）。 |
 
 5. 单击“保存”，配置 CNAME 完毕。
-![](/Pics/Consle/Permissions/Tencent_cname.png)
+![](https://doc-media.zego.im/sdk-doc/Pics/Consle/Permissions/Tencent_cname.png)
 
 ### 2.2 阿里云配置方法
 
@@ -40,7 +40,7 @@
   c. 解析路线：默认值。  
   d. 记录值：填写 ZEGO 提供的域名对应的 CNAME 值。  
   e. TTL：默认填写 10 分钟。
-  ![](/Pics/Consle/Permissions/AliCloud_cname.png)
+  ![](https://doc-media.zego.im/sdk-doc/Pics/Consle/Permissions/AliCloud_cname.png)
 
 ### 2.3 百度云配置方法
 
@@ -56,7 +56,7 @@
   e. TTL：建议填写 10 分钟。
 
 4. 单击“确定”提交即可。
- ![](/Pics/Consle/Permissions/BaiduCloud_cname.png)
+ ![](https://doc-media.zego.im/sdk-doc/Pics/Consle/Permissions/BaiduCloud_cname.png)
 
 ### 2.4 DNSPod 配置方法
 
@@ -71,7 +71,7 @@
   d. 记录值为 CNAME 指向的域名，只可以填写域名，记录生成后会自动在域名后面补一个 “.”，这是正常现象。  
   e. MX 优先级不需要填写。  
   f. TTL 不需要填写，添加时系统会自动生成，默认为 600 秒（TTL 为缓存时间，数值越小，修改记录各地生效时间越快）。
- ![](/Pics/Consle/Permissions/DNSPod_cname.png)
+ ![](https://doc-media.zego.im/sdk-doc/Pics/Consle/Permissions/DNSPod_cname.png)
  
 ### 2.5 万网配置方法
 
@@ -81,7 +81,7 @@
 3. 单击要解析的域名，进入解析记录页。
 4. 进入解析记录页后，单击“新增解析”，开始设置解析记录。
 5. 若要设置 CNAME 解析记录，将记录类型选择为 “CNAME”。主机记录即域名前缀，可任意填写（如：www）。记录值填写为当前域名指向的另一个域名。解析线路，TTL 默认即可。
- ![](/Pics/Consle/Permissions/Wan_cname.png)
+ ![](https://doc-media.zego.im/sdk-doc/Pics/Consle/Permissions/Wan_cname.png)
 
 6. 填写完成后，单击“保存”，完成解析设置。
 
@@ -92,5 +92,5 @@
 
 例如，有一台计算机名为 “host.mydomain.com（A记录）”，它同时提供 WWW 和 MAIL 服务，为了便于用户访问服务。可以为该计算机设置两个别名（CNAME）：WWW 和 MAIL。如下图：
 
-  ![](/Pics/Consle/Permissions/Xin_cname.png)
+  ![](https://doc-media.zego.im/sdk-doc/Pics/Consle/Permissions/Xin_cname.png)
 

@@ -2,7 +2,7 @@
 
 例如，在进行多人音视频通话或者多人唱歌时，我们需要实时显示用户的网络质量，就可以参考本文档实现相应功能。
 
-![](/Pics/Common/ZegoExpressEngine/Call_quality_monitoring.png)
+![](https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Call_quality_monitoring.png)
 
 
 

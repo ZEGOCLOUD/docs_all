@@ -12,7 +12,7 @@
 
 ## 架构说明
 
-![架构图](https://storage.zego.im/sdk-doc/Pics/Express/iOS_Client_Framework.png)
+![架构图](https://doc-media.zego.im/sdk-doc/Pics/Express/iOS_Client_Framework.png)
 
 ## 使用流程
 

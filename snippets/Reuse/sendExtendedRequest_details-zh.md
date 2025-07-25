@@ -320,7 +320,7 @@
 <tr data-row-level="5-1-14-3">
 <td>channel</td>
 <td>Int</td>
-<td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲。</li><li>若 channel 为 0，需要在 UI 界面展示 logo 标志。开发者可通过 <a href="https://storage.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。UI 界面示例如下：<br><img src="/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
+<td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲。</li><li>若 channel 为 0，需要在 UI 界面展示 logo 标志。开发者可通过 <a href="https://artifact-sdk.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。UI 界面示例如下：<br><img src="/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
 </tr>
 </tbody></table>
 
@@ -544,7 +544,7 @@
 <tr data-row-level="5-1-17-3">
 <td>channel</td>
 <td>Int</td>
-<td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲。</li><li>若 channel 为 0，需要在 UI 界面展示 logo 标志。开发者可通过 <a href="https://storage.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。UI 界面示例如下：<br><img src="/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
+<td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲。</li><li>若 channel 为 0，需要在 UI 界面展示 logo 标志。开发者可通过 <a href="https://artifact-sdk.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。UI 界面示例如下：<br><img src="/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
 </tr>
 </tbody></table>
 
@@ -887,7 +887,7 @@
 <tr data-row-level="5-1-16-3">
 <td>channel</td>
 <td>Int</td>
-<td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲。</li><li>若 channel 为 0，需要在 UI 界面展示 logo 标志。开发者可通过 <a href="https://storage.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。UI 界面示例如下：<br><img src="/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
+<td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲。</li><li>若 channel 为 0，需要在 UI 界面展示 logo 标志。开发者可通过 <a href="https://artifact-sdk.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。UI 界面示例如下：<br><img src="/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
 </tr>
 </tbody></table>
 
@@ -1142,7 +1142,7 @@
 <tr data-row-level="5-1-16-3">
 <td>channel</td>
 <td>Int</td>
-<td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲。</li><li>若 channel 为 0，需要在 UI 界面展示 logo 标志。开发者可通过 <a href="https://storage.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。UI 界面示例如下：<br><img src="/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
+<td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲。</li><li>若 channel 为 0，需要在 UI 界面展示 logo 标志。开发者可通过 <a href="https://artifact-sdk.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。UI 界面示例如下：<br><img src="/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
 </tr>
 </tbody></table>
 
@@ -1377,7 +1377,7 @@
 <tr data-row-level="5-1-15-3">
 <td>channel</td>
 <td>Int</td>
-<td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲。</li><li>若 channel 为 0，需要在 UI 界面展示 logo 标志。开发者可通过 <a href="https://storage.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。UI 界面示例如下：<br><img src="/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
+<td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲。</li><li>若 channel 为 0，需要在 UI 界面展示 logo 标志。开发者可通过 <a href="https://artifact-sdk.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。UI 界面示例如下：<br><img src="/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
 </tr>
 </tbody></table>
 
@@ -1542,7 +1542,7 @@
 <tr data-row-level="5-1-3-3">
 <td>channel</td>
 <td>Int</td>
-<td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲。</li><li>若 channel 为 0，需要在 UI 界面展示 logo 标志。开发者可通过 <a href="https://storage.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。UI 界面示例如下：<br><img src="/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
+<td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲。</li><li>若 channel 为 0，需要在 UI 界面展示 logo 标志。开发者可通过 <a href="https://artifact-sdk.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。UI 界面示例如下：<br><img src="/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
 </tr>
 </tbody></table>
 
