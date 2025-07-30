@@ -26,6 +26,10 @@ HTML元素闭合检查脚本
 python3 .scripts/check/check_html_tags.py
 
 然后按提示选择语言、组和实例即可开始检查。
+
+关闭方法：
+rm .git/hooks/pre-commit
+
 """
 
 import os
