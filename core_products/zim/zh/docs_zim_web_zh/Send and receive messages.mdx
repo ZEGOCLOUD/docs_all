@@ -100,7 +100,18 @@ ZIM SDK 提供了如下接入方案：
 2. 导入 SDK。
 
     ```typescript
-    import { ZIM } from 'zego-zim-web';
+    import {
+        ZIM,
+        ZIMError,
+        ZIMAppConfig,
+        ZIMLoginConfig,
+        ZIMMessage,
+        ZIMMessageSendConfig,
+        ZIMMessageSendNotification,
+        ZIMMessageSentResult,
+        ZIMTextMessage,
+        ZIMTokenRenewedResult,
+    } from 'zego-zim-web';
     ```
 
 
@@ -129,10 +140,10 @@ ZIM SDK 提供了如下接入方案：
 例如，客户端 A、B 分别调用 [create](@create) 接口，传入在 [2 前提条件](#2-前提条件) 中获取到的 AppID，创建了 A、B 的实例：
 
 ```typescript
-const appID = xxxx;
 // 静态同步方法，创建 zim 实例，传入 AppID。
 // create 方法仅第一次调用时会创建 ZIM 实例，后续调用会返回 null。
-ZIM.create({ appID });
+const config: ZIMAppConfig = { appID: 0 };
+ZIM.create(config);
 // 通过 getInstance 获取单实例，避免热更新导致 create 多次创建返回 null。
 const zim = ZIM.getInstance();
 ```   
@@ -143,36 +154,38 @@ const zim = ZIM.getInstance();
 
 ```typescript
 // 注册监听“运行时错误信息”的回调  
-zim.on('error', function (zim, errorInfo) {
+zim.on('error', (zim, errorInfo) => {
     console.log('error', errorInfo.code, errorInfo.message);
 });
 
 // 注册监听“网络连接状态变更”的回调
-zim.on('connectionStateChanged', function (zim, { state, event, extendedData }) {
-    console.log('connectionStateChanged', state, event, extendedData);
+zim.on('connectionStateChanged', (zim, data) => {
+    console.log('connectionStateChanged', data);
     // 当长时间网络连接断开导致SDK内部登出时，需要重新登录
-    if (state == 0 && event != 0 && event != 4) {
+    const state = data.state;
+    const event = data.event;
+    if (state == 0 && event != 0 && event != 4 && event != 5) {
         zim.login(userID, config)
     }
 });
 
 // 注册监听“收到单聊消息”的回调
-zim.on('peerMessageReceived', function (zim, { messageList, fromConversationID }) {
-    console.log('peerMessageReceived', messageList, fromConversationID);
+zim.on('peerMessageReceived', (zim, data) => {
+    console.log('peerMessageReceived', data);
 });
 
 // 注册监听“Token 即将过期”的回调
-zim.on('tokenWillExpire', function (zim, { second }) {
-    console.log('tokenWillExpire', second);
+zim.on('tokenWillExpire', (zim, data) => {
+    console.log('tokenWillExpire', data);
     // 可以在这里调用 renewToken 接口来更新 token
     // 新 token 生成可以参考上文
     zim.renewToken(token)
-        .then(function({ token }){
+        .then((res: ZIMTokenRenewedResult) => {
             // 更新成功
         })
-        .catch(function(err){
+        .catch((err: ZIMError) => {
             // 更新失败
-        })
+        });
 });
 ```
 
@@ -217,10 +230,10 @@ const config: ZIMLoginConfig = {
 };
 
 zim.login(userID, config)
-    .then(function () {
+    .then(() => {
         // 登录成功
     })
-    .catch(function (err) {
+    .catch((err: ZIMError) => {
         // 登录失败
     });
 ```
@@ -243,22 +256,22 @@ zim.login(userID, config)
 
 const toConversationID = ''; // 对方 userID
 const conversationType = 0; // 会话类型，取值为 单聊:0, 房间:1, 群组:2
-const config = { 
+const config: ZIMMessageSendConfig = { 
     priority: 1, // 设置消息优先级，取值为 低：1（默认），中：2，高：3
 };
-const notification = {
-    onMessageAttached: function(message) {
+const notification: ZIMMessageSendNotification = {
+    onMessageAttached: (message: ZIMMessage) => {
         // todo: Loading
     }
 }
 
-const messageTextObj = { type: 1, message: 'xxxx' };
+const messageTextObj: ZIMTextMessage = { type: 1, message: 'xxxx' };
 
 zim.sendMessage(messageTextObj, toConversationID, conversationType, config, notification)
-    .then(function ({ message }) {
+    .then((res: ZIMMessageSentResult) => {
         // 发送成功
     })
-    .catch(function (err) {
+    .catch((err: ZIMError) => {
         // 发送失败
     });
 ```
@@ -270,8 +283,8 @@ zim.sendMessage(messageTextObj, toConversationID, conversationType, config, noti
 
 ```typescript 
 // 注册监听“收到单聊消息”的回调
-zim.on('peerMessageReceived', function (zim, { messageList, fromConversationID }) {
-    console.log('peerMessageReceived', messageList, fromConversationID);
+zim.on('peerMessageReceived', (zim, data) => {
+    console.log('peerMessageReceived', data);
 });
 ```
 
