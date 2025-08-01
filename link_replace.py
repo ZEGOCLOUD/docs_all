@@ -44,7 +44,7 @@ def process_directory(directory, mapping):
 
 def main():
     # 配置路径
-    target_dir = "/Users/zego/Documents/docs_all/core_products/real-time-voice-video/zh"
+    target_dir = "/Users/zego/Documents/docs_all/core_products/real-time-voice"
     mapping_file = "/Users/zego/Documents/docs_all/ai_search_mapping.json"
     
     # 检查目录是否存在
