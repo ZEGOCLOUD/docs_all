@@ -5,7 +5,7 @@ def convert_h4_to_bold(file_path):
     try:
         with open(file_path, "r", encoding="utf-8") as file:
             content = file.read()
-        converted_content = re.sub(r'####\s+([^\n]+)', r'**\1**', content)
+        converted_content = re.sub(r'####\s+([^\n]+)', r'<h4>\1</h4>', content)
         with open(file_path, "w", encoding="utf-8") as file:
             file.write(converted_content)
         print(f"文件 {file_path} 转换完成！")
