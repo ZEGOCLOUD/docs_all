@@ -127,10 +127,10 @@ def find_instances_for_files(files, config, repo_root):
 def load_config(language):
     repo_root = get_repo_root()
     if not repo_root:
-        print(f'{Fore.RED}未找到仓库根目录（包含docuo.config.*.json的目录）{Style.RESET_ALL}')
+        print(f'{Fore.RED}未找到仓库根目录（包含docuo.config.json的目录）{Style.RESET_ALL}')
         sys.exit(1)
 
-    config_file = os.path.join(repo_root, f'docuo.config.{language}.json')
+    config_file = os.path.join(repo_root, 'docuo.config.json')
     if not os.path.exists(config_file):
         print(f'{Fore.RED}未找到配置文件: {config_file}{Style.RESET_ALL}')
         sys.exit(1)
@@ -168,6 +168,7 @@ def choose_instance(instances):
 
     # 显示选中组下的实例列表
     print(f'\n请选择 {selected_group["name"]} 下的实例:')
+    print('0. 选择所有')
     sorted_instances = sorted(selected_group["instances"], key=lambda x: x.get("label", ""))
     for idx, inst in enumerate(sorted_instances, 1):
         label = inst.get("label", "(无名实例)")
@@ -180,9 +181,11 @@ def choose_instance(instances):
 
     # 选择实例
     while True:
-        instance_choice = input('输入数字选择实例: ').strip()
-        if instance_choice.isdigit() and 1 <= int(instance_choice) <= len(sorted_instances):
-            return sorted_instances[int(instance_choice)-1]
+        instance_choice = input('输入数字选择实例 (0=所有): ').strip()
+        if instance_choice == '0':
+            return sorted_instances  # 返回所有实例
+        elif instance_choice.isdigit() and 1 <= int(instance_choice) <= len(sorted_instances):
+            return [sorted_instances[int(instance_choice)-1]]  # 返回单个实例的列表
         else:
             print('输入无效，请重新输入。')
 
@@ -288,10 +291,13 @@ def check_local_link(link, base_file_path):
     if not os.path.exists(abs_path):
         return False
 
-    # 如果有锚点，检查锚点是否存在
+    # 如果有锚点，检查锚点是否存在（大小写不敏感）
     if anchor:
         headings = extract_headings_from_file(abs_path)
-        if anchor not in headings:
+        # 将锚点和标题都转换为小写进行比较
+        anchor_lower = anchor.lower()
+        headings_lower = [h.lower() for h in headings]
+        if anchor_lower not in headings_lower:
             return False
 
     return True
@@ -307,9 +313,12 @@ def check_anchor_link(link, base_file_path):
     if not anchor:
         return False
 
-    # 检查当前文件中的锚点
+    # 检查当前文件中的锚点（大小写不敏感）
     headings = extract_headings_from_file(base_file_path)
-    if anchor not in headings:
+    # 将锚点和标题都转换为小写进行比较
+    anchor_lower = anchor.lower()
+    headings_lower = [h.lower() for h in headings]
+    if anchor_lower not in headings_lower:
         return False
 
     return True
@@ -325,9 +334,11 @@ def extract_headings_from_file(file_path):
     headings = []
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
-            for line in f:
+            content = f.read()
+
+            # 1. 匹配markdown标题 (# ## ### #### ##### ######)
+            for line in content.split('\n'):
                 line = line.strip()
-                # 匹配markdown标题 (# ## ### #### ##### ######)
                 if line.startswith('#'):
                     # 提取标题文本
                     heading_text = line.lstrip('#').strip()
@@ -335,6 +346,15 @@ def extract_headings_from_file(file_path):
                         # 转换为锚点格式
                         anchor = heading_to_anchor(heading_text)
                         headings.append(anchor)
+
+            # 2. 匹配HTML a标签的id属性 <a id="anchor"></a>
+            # 支持多种格式：<a id="anchor"></a>、<a id='anchor'></a>、<a id="anchor"/>等
+            a_tag_pattern = re.compile(r'<a[^>]*id\s*=\s*[\'"]([^\'"]+)[\'"][^>]*/?>', re.IGNORECASE)
+            for match in a_tag_pattern.finditer(content):
+                anchor_id = match.group(1).strip()
+                if anchor_id:
+                    headings.append(anchor_id)
+
     except Exception:
         pass
     return headings
@@ -355,6 +375,11 @@ def heading_to_anchor(heading_text):
     return result
 
 def check_root_link(link, config, instance, repo_root):
+    """检查站内根路径链接是否有效
+
+    支持跨实例链接检查，链接格式：/routeBasePath/file-path
+    例如：/console/service-configuration-2/activate-cdn-service
+    """
     # 只检查以/开头的链接
     if not link.startswith('/'):
         return None
@@ -369,37 +394,62 @@ def check_root_link(link, config, instance, repo_root):
     parts = link_path[1:].split('/')
     if not parts:
         return False
-    # routeBasePath可能多级
-    route_bases = [inst['routeBasePath'] for inst in config['instances']]
+
+    # 在所有实例中查找匹配的routeBasePath（支持跨实例链接）
     matched_base = None
     matched_inst = None
+
+    # 先尝试精确匹配，再尝试前缀匹配
     for inst in config['instances']:
         base = inst['routeBasePath'].strip('/')
+        if not base:  # 跳过空的routeBasePath
+            continue
+
         base_parts = base.split('/')
-        if parts[:len(base_parts)] == base_parts:
-            matched_base = base
-            matched_inst = inst
-            break
+        # 检查链接是否以这个routeBasePath开头
+        if len(parts) >= len(base_parts) and parts[:len(base_parts)] == base_parts:
+            # 如果找到更长的匹配，替换之前的匹配
+            if not matched_base or len(base_parts) > len(matched_base.split('/')):
+                matched_base = base
+                matched_inst = inst
+
     if not matched_base or not matched_inst:
         return False
-    # 文件id
-    file_id = '/'.join(parts[len(matched_base.split('/')):])
-    if not file_id:
-        return False
-    # 路径 - 使用仓库根目录
+
+    # 提取文件id（去掉routeBasePath部分）
+    base_parts = matched_base.split('/')
+    file_id_parts = parts[len(base_parts):]
+    if not file_id_parts:
+        # 如果没有文件id，可能是访问实例根路径，检查是否有index文件
+        file_id = 'index'
+    else:
+        file_id = '/'.join(file_id_parts)
+
+    # 在匹配的实例路径下查找文件
     path_dir = matched_inst['path']
     abs_path_dir = os.path.join(repo_root, path_dir) if not os.path.isabs(path_dir) else path_dir
     abs_path_dir = os.path.normpath(abs_path_dir)
+
     # 遍历该目录下所有mdx文件，找file_id是否能对上
     found_file = None
+    
+    # 修正后的文件ID转换逻辑
     for dirpath, _, filenames in os.walk(abs_path_dir):
         for fname in filenames:
             if fname.lower().endswith('.mdx'):
-                rel = os.path.relpath(os.path.join(dirpath, fname), abs_path_dir)
-                rel = rel.replace('\\', '/').replace('\\', '/')
-                rel_id = '/'.join([get_file_id(x) for x in rel.split('/')])
+                # 获取文件的完整相对路径
+                full_path = os.path.join(dirpath, fname)
+                rel = os.path.relpath(full_path, abs_path_dir)
+                rel = rel.replace('\\', '/')
+                
+                # 去掉.mdx后缀
+                rel_without_ext = os.path.splitext(rel)[0]
+                
+                # 将路径转换为文件ID格式：小写+连接线
+                rel_id = '/'.join(part.lower().replace(' ', '-') for part in rel_without_ext.split('/'))
+                
                 if rel_id == file_id:
-                    found_file = os.path.join(dirpath, fname)
+                    found_file = full_path
                     break
         if found_file:
             break
@@ -407,10 +457,13 @@ def check_root_link(link, config, instance, repo_root):
     if not found_file:
         return False
 
-    # 如果有锚点，检查锚点是否存在
+    # 如果有锚点，检查锚点是否存在（大小写不敏感）
     if anchor:
         headings = extract_headings_from_file(found_file)
-        if anchor not in headings:
+        # 将锚点和标题都转换为小写进行比较
+        anchor_lower = anchor.lower()
+        headings_lower = [h.lower() for h in headings]
+        if anchor_lower not in headings_lower:
             return False
 
     return True
@@ -686,26 +739,41 @@ def main():
     if not instances:
         print(f'{Fore.RED}未找到任何实例，请检查配置文件。{Style.RESET_ALL}')
         sys.exit(1)
-    instance = choose_instance(instances)
-    instance_path = instance['path']
-    # 确保实例路径是绝对路径
-    if not os.path.isabs(instance_path):
-        instance_path = os.path.join(repo_root, instance_path)
-    instance_label = instance.get("label", "未知实例")
-    platform = instance.get("navigationInfo", {}).get("platform", "")
-    if platform:
-        display_name = f"{instance_label} ({platform})"
-    else:
-        display_name = instance_label
-    print(f'正在检查实例: {display_name} ({instance_path})')
-    mdx_files = find_mdx_files(instance_path)
-    print(f'共找到{len(mdx_files)}个mdx文件。')
+    selected_instances = choose_instance(instances)
 
-    problems = check_instance_links(mdx_files, config, instance, repo_root, check_remote)
+    all_problems = defaultdict(list)
+
+    # 处理选中的实例列表
+    for instance in selected_instances:
+        instance_path = instance['path']
+        # 确保实例路径是绝对路径
+        if not os.path.isabs(instance_path):
+            instance_path = os.path.join(repo_root, instance_path)
+        instance_label = instance.get("label", "未知实例")
+        platform = instance.get("navigationInfo", {}).get("platform", "")
+        if platform:
+            display_name = f"{instance_label} ({platform})"
+        else:
+            display_name = instance_label
+        print(f'\n正在检查实例: {display_name} ({instance_path})')
+
+        # 跳过外部链接实例
+        if instance_path.startswith('http'):
+            print(f'跳过外部链接实例: {instance_path}')
+            continue
+
+        mdx_files = find_mdx_files(instance_path)
+        print(f'共找到{len(mdx_files)}个mdx文件。')
+
+        problems = check_instance_links(mdx_files, config, instance, repo_root, check_remote)
+
+        # 合并问题
+        for ptype, items in problems.items():
+            all_problems[ptype].extend(items)
 
     # 输出总结
     print('\n检查结果总结:')
-    print_problems_summary(problems)
+    print_problems_summary(all_problems)
 
 if __name__ == '__main__':
     main()
