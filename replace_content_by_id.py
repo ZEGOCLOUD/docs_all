@@ -13,15 +13,15 @@ from typing import List, Set
 # ========== 配置区域 - 在这里修改你的参数 ==========
 CONFIG = {
     # 要替换的articleID列表
-    "ids":["11462", "11461", "11459", "11458", "11457", "11456", "11455", "11454", "11453", "11452", "11451", "11450", "11449", "11447", "18083", "19446", "17987", "14714", "14715", "14716", "14896", "16024", "17148", "20997", "21040", "21093", "21119", "21137", "21220", "21282", "13143"],
+    "ids":["18698", "18699", "18869"],
     
     # 引用语句 - 注意这里可以直接使用单引号，不需要转义
-    "import_statement": """import Content from '/core_products/real-time-voice-video/zh/ios-oc/over-view/price-overview/serverside-price.mdx'
+    "import_statement": """import Content from '/cloud-market/ai-voice-changer/zh/ios/overview.mdx'
 
 <Content />""",
     
     # 搜索路径
-    "path": "/Users/zego/Documents/docs_all/core_products",
+    "path": "/Users/zego/Documents/docs_all/cloud-market",
 
     # 排除路径（多个）- 这些路径下的文件将不会被处理
     "exclude_paths": [
