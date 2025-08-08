@@ -22,9 +22,10 @@ def find_links_in_file(file_path):
         file_path: 文件路径
     
     Returns:
-        list: 找到的链接列表
+        tuple: (找到的链接列表, 链接出现次数字典)
     """
     links = []
+    link_counts = defaultdict(int)
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
@@ -32,10 +33,13 @@ def find_links_in_file(file_path):
             link_pattern = re.compile(r'https://doc-zh\.zego\.im/article/(\d+)')
             matches = link_pattern.findall(content)
             links.extend(matches)
+            # 统计每个链接出现的次数
+            for link_id in matches:
+                link_counts[link_id] += 1
     except Exception as e:
         print(f"读取文件 {file_path} 时出错: {e}")
     
-    return links
+    return links, link_counts
 
 def load_sidebar_info(sidebar_file):
     """
@@ -200,8 +204,9 @@ def generate_mapping(target_dir, exclude_dirs=None):
     if exclude_dirs is None:
         exclude_dirs = get_default_exclude_dirs()
     
-    # 收集所有链接
+    # 收集所有链接及其出现次数
     all_links = set()
+    total_link_counts = defaultdict(int)
     target_path = Path(target_dir)
     
     print("正在搜索文档链接...")
@@ -212,8 +217,11 @@ def generate_mapping(target_dir, exclude_dirs=None):
         for file in files:
             if file.endswith(('.md', '.mdx', '.txt', '.html', '.htm', '.js', '.jsx', '.ts', '.tsx')):
                 file_path = os.path.join(root, file)
-                links = find_links_in_file(file_path)
+                links, link_counts = find_links_in_file(file_path)
                 all_links.update(links)
+                # 累加每个链接的出现次数
+                for link_id, count in link_counts.items():
+                    total_link_counts[link_id] += count
     
     print(f"找到 {len(all_links)} 个不同的文档链接")
     
@@ -279,20 +287,40 @@ def generate_mapping(target_dir, exclude_dirs=None):
             if not check_article_in_console(article_id):
                 print(f"警告: 未找到文章 ID {article_id} 对应的路径 ID")
     
-    return mapping
+    return mapping, total_link_counts
 
-def save_mapping(mapping, output_file):
+def save_mapping(mapping, total_link_counts, output_file):
     """
-    保存映射关系到文件
+    保存映射关系和链接统计信息到文件
     
     Args:
         mapping: 映射关系字典
+        total_link_counts: 链接出现次数统计
         output_file: 输出文件路径
     """
     try:
+        # 准备要保存的数据
+        output_data = {
+            "mapping": mapping,
+            "link_statistics": []
+        }
+        
+        # 将链接统计信息按出现次数降序排序
+        sorted_links = sorted(total_link_counts.items(), key=lambda x: x[1], reverse=True)
+        
+        # 添加统计信息
+        for link_id, count in sorted_links:
+            stat_entry = {
+                "id": link_id,
+                "count": count,
+                "path": mapping.get(f"https://doc-zh.zego.im/article/{link_id}", None)
+            }
+            output_data["link_statistics"].append(stat_entry)
+        
+        # 保存到文件
         with open(output_file, 'w', encoding='utf-8') as f:
-            json.dump(mapping, f, ensure_ascii=False, indent=2)
-        print(f"\n映射关系已保存到: {output_file}")
+            json.dump(output_data, f, ensure_ascii=False, indent=2)
+        print(f"\n映射关系和统计信息已保存到: {output_file}")
     except Exception as e:
         print(f"保存映射文件时出错: {e}")
 
@@ -384,14 +412,14 @@ def main():
     print(f"目标目录: {target_dir}")
     print(f"输出文件: {output_file}")
     
-    # 生成映射关系
-    mapping = generate_mapping(target_dir, exclude_dirs)
+    # 生成映射关系和链接统计信息
+    mapping, total_link_counts = generate_mapping(target_dir, exclude_dirs)
     
     # 验证新链接
     verify_links(mapping)
     
-    # 保存映射关系
-    save_mapping(mapping, output_file)
+    # 保存映射关系和统计信息
+    save_mapping(mapping, total_link_counts, output_file)
     
     print(f"\n处理完成! 共生成 {len(mapping)} 个映射关系")
 
