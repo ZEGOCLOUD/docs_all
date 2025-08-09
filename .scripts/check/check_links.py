@@ -41,6 +41,7 @@ import urllib.parse
 import requests
 import subprocess
 from collections import defaultdict
+from datetime import datetime
 
 # 终端彩色输出
 try:
@@ -57,7 +58,9 @@ def choose_language():
         print('请选择文档语言:')
         print('1. 中文')
         print('2. 英文')
-        choice = input('输入数字选择(1/2): ').strip()
+        choice = input('输入数字选择(1/2)，直接回车默认 1: ').strip()
+        if choice == '':
+            choice = '1'
         if choice == '1':
             return 'zh'
         elif choice == '2':
@@ -179,9 +182,11 @@ def choose_instance(instances):
             display_name = label
         print(f'{idx}. {display_name}')
 
-    # 选择实例
+    # 选择实例（回车默认选择所有=0）
     while True:
-        instance_choice = input('输入数字选择实例 (0=所有): ').strip()
+        instance_choice = input('输入数字选择实例 (0=所有)，直接回车默认 0: ').strip()
+        if instance_choice == '':
+            instance_choice = '0'
         if instance_choice == '0':
             return sorted_instances  # 返回所有实例
         elif instance_choice.isdigit() and 1 <= int(instance_choice) <= len(sorted_instances):
@@ -294,11 +299,12 @@ def check_local_link(link, base_file_path):
     # 如果有锚点，检查锚点是否存在（大小写不敏感）
     if anchor:
         headings = extract_headings_from_file(abs_path)
-        # 将锚点和标题都转换为小写进行比较
-        anchor_lower = anchor.lower()
-        headings_lower = [h.lower() for h in headings]
-        if anchor_lower not in headings_lower:
-            return False
+        # 宽松匹配：统一小写并移除空格与短横线
+        anchor_norm = _normalize_for_anchor_compare(anchor)
+        headings_norm = [_normalize_for_anchor_compare(h) for h in headings]
+        if anchor_norm not in headings_norm:
+            # 文件存在但锚点不存在
+            return 'anchor_invalid'
 
     return True
 
@@ -360,19 +366,44 @@ def extract_headings_from_file(file_path):
     return headings
 
 def heading_to_anchor(heading_text):
-    """将标题文本转换为锚点格式"""
-    # 对于标题中的中文字符，所有字符不变
-    # 对于标题的英文字符，所有字符转小写
-    # 对于标题中的空格，转成横线（-）
+    """将标题文本转换为锚点格式
+
+    规则：
+    - 忽略冒号（: 与 ：）。
+    - 忽略括号字符本身（() 与 （）），但保留括号内的文字。
+    - 忽略空白（不保留、不替换）。
+    - ASCII 英文字母转小写；中文及其他字符保持。
+    """
+    # 1) 删除冒号（半角与全角）
+    cleaned = heading_text
+    cleaned = cleaned.replace(":", "").replace("：", "")
+
+    # 2) 删除括号字符但保留其中内容
+    cleaned = cleaned.replace("(", "").replace(")", "")
+    cleaned = cleaned.replace("（", "").replace("）", "")
+
+    # 3) 转换其他规则
     result = ""
-    for char in heading_text:
+    for char in cleaned:
         if char.isspace():
-            result += '-'
+            # 忽略空白，不添加任何字符
+            continue
         elif char.isascii() and char.isalpha():
             result += char.lower()
         else:
             result += char
     return result
+
+def _normalize_for_anchor_compare(value: str) -> str:
+    """用于宽松匹配锚点：统一小写，并移除空格与短横线。
+
+    解决例如“rtc-推流” 与 “rtc推流”的匹配问题。
+    """
+    if not isinstance(value, str):
+        return ''
+    lowered = value.lower()
+    # 去除空格与半角短横线
+    return lowered.replace(' ', '').replace('-', '')
 
 def check_root_link(link, config, instance, repo_root):
     """检查站内根路径链接是否有效
@@ -432,7 +463,7 @@ def check_root_link(link, config, instance, repo_root):
 
     # 遍历该目录下所有mdx文件，找file_id是否能对上
     found_file = None
-    
+
     # 修正后的文件ID转换逻辑
     for dirpath, _, filenames in os.walk(abs_path_dir):
         for fname in filenames:
@@ -441,13 +472,13 @@ def check_root_link(link, config, instance, repo_root):
                 full_path = os.path.join(dirpath, fname)
                 rel = os.path.relpath(full_path, abs_path_dir)
                 rel = rel.replace('\\', '/')
-                
+
                 # 去掉.mdx后缀
                 rel_without_ext = os.path.splitext(rel)[0]
-                
+
                 # 将路径转换为文件ID格式：小写+连接线
                 rel_id = '/'.join(part.lower().replace(' ', '-') for part in rel_without_ext.split('/'))
-                
+
                 if rel_id == file_id:
                     found_file = full_path
                     break
@@ -460,11 +491,12 @@ def check_root_link(link, config, instance, repo_root):
     # 如果有锚点，检查锚点是否存在（大小写不敏感）
     if anchor:
         headings = extract_headings_from_file(found_file)
-        # 将锚点和标题都转换为小写进行比较
-        anchor_lower = anchor.lower()
-        headings_lower = [h.lower() for h in headings]
-        if anchor_lower not in headings_lower:
-            return False
+        # 宽松匹配：统一小写并移除空格与短横线
+        anchor_norm = _normalize_for_anchor_compare(anchor)
+        headings_norm = [_normalize_for_anchor_compare(h) for h in headings]
+        if anchor_norm not in headings_norm:
+            # 路径存在但锚点不存在
+            return 'anchor_invalid'
 
     return True
 
@@ -473,6 +505,10 @@ def check_remote_link(link):
     if not re.match(r'https?://', link):
         return None
     if re.search(r'https?://[^/]*zego\.im', link) or re.search(r'https?://[^/]*zegocloud\.com', link):
+        return None
+
+    # old-doc 链接不发起请求
+    if is_old_doc_url_any(link):
         return None
 
     # 跳过特定格式的链接
@@ -512,6 +548,25 @@ def check_mdx_import(import_path, base_file_path, repo_root):
 
     return True
 
+def is_old_doc_url_any(url):
+    """判断是否为旧文档链接（不区分实例语言）"""
+    if not isinstance(url, str):
+        return False
+    # 包含 api?doc 的链接不计入 old-doc
+    if 'api?doc' in url.lower():
+        return False
+    # 中文旧文档
+    if url.startswith('https://doc-zh.zego.im/article'):
+        return True
+    # 英文旧文档
+    old_en_prefixes = [
+        'https://www.zegocloud.com/docs/video-call',
+        'https://www.zegocloud.com/docs/voice-call',
+        'https://www.zegocloud.com/docs/live-streaming',
+        'https://www.zegocloud.com/docs/admin-console',
+    ]
+    return any(url.startswith(p) for p in old_en_prefixes)
+
 def check_git_mode():
     """git模式：检查变更文件对应的实例"""
     print(f'{Fore.CYAN}Git模式：检查变更文件对应的实例{Style.RESET_ALL}')
@@ -526,7 +581,10 @@ def check_git_mode():
     for f in changed_files:
         print(f'  - {f}')
 
-    all_problems = defaultdict(list)
+    # 结构化结果：按实例名称 -> 错误类型 -> link_type -> 列表
+    structured_results = {}
+    # 额外聚合：按 URL 汇总
+    aggregated_by_url = {}
 
     # 加载主配置文件（包含所有实例）
     try:
@@ -578,18 +636,64 @@ def check_git_mode():
             mdx_files = find_mdx_files(instance_path)
             print(f'实例共有{len(mdx_files)}个mdx文件')
 
-            problems = check_instance_links(mdx_files, config, instance, repo_root, check_remote=True)
+            problems, collected_urls = check_instance_links(mdx_files, config, instance, repo_root, check_remote=True)
 
-            # 合并问题
+            # 将问题写入结构化结果（按实例名称、错误类型、link_type 归类）与 URL 汇总
+            if display_name not in structured_results:
+                structured_results[display_name] = {}
             for ptype, items in problems.items():
-                all_problems[ptype].extend(items)
+                if ptype not in structured_results[display_name]:
+                    structured_results[display_name][ptype] = {}
+                for it in items:
+                    abs_file = os.path.abspath(it.get('file', ''))
+                    line_num = it.get('line', 0)
+                    # 构造精简条目（不含 file_path/line/link_type）
+                    entry = {
+                        'url': it.get('url', ''),
+                        'line_content': it.get('line_content', ''),
+                        'file_with_line': f"{abs_file}:{line_num}",
+                    }
+                    if 'error' in it:
+                        entry['error'] = it['error']
+
+                    if abs_file not in structured_results[display_name][ptype]:
+                        structured_results[display_name][ptype][abs_file] = []
+                    structured_results[display_name][ptype][abs_file].append(entry)
+
+                    url_key = entry.get('url')
+                    if url_key:
+                        if url_key not in aggregated_by_url:
+                            aggregated_by_url[url_key] = []
+                        aggregated_by_url[url_key].append({
+                            'instance': display_name,
+                            'error_type': ptype,
+                            'file_path': abs_file,
+                            'file_with_line': f"{abs_file}:{line_num}",
+                            'line_content': entry.get('line_content', ''),
+                            **({'error': entry['error']} if 'error' in entry else {})
+                        })
+
+            # 将收集到的 old-doc 等外链（即使不算错误）也纳入 URL 汇总
+            for it in collected_urls:
+                abs_file = os.path.abspath(it.get('file', ''))
+                line_num = it.get('line', 0)
+                url_key = it.get('url', '')
+                if url_key:
+                    if url_key not in aggregated_by_url:
+                        aggregated_by_url[url_key] = []
+                    aggregated_by_url[url_key].append({
+                        'instance': display_name,
+                        'error_type': 'collected',
+                        'file_path': abs_file,
+                        'line_content': it.get('line_content', ''),
+                    })
 
     except Exception as e:
         print(f'{Fore.RED}加载配置失败: {e}{Style.RESET_ALL}')
         return False
 
-    # 输出总结
-    print_problems_summary(all_problems, is_warning=True)
+    # 写入结构化结果到 JSON 和 Markdown 文件
+    write_result_files(mode='git', structured_results=structured_results, aggregated_by_url=aggregated_by_url)
 
     # git模式只输出警告，不返回失败
     return True
@@ -604,6 +708,8 @@ def check_invalid_numeric_link(url):
 def check_instance_links(mdx_files, config, instance, repo_root, check_remote=False):
     """检查实例中的链接"""
     problems = defaultdict(list)
+    # 额外收集：仅用于聚合统计（例如 old-doc），不计入问题
+    collected_urls = []
 
     for file_path in mdx_files:
         links = extract_links_from_file(file_path)
@@ -663,6 +769,15 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
                 continue
             # 3. 检查本地链接
             local_result = check_local_link(url, file_path)
+            if local_result == 'anchor_invalid':
+                problems['锚点链接无效'].append({
+                    'file': file_path,
+                    'line': line,
+                    'url': url,
+                    'line_content': line_content,
+                    'link_type': link_type
+                })
+                continue
             if local_result is False:
                 problems['本地链接无效'].append({
                     'file': file_path,
@@ -676,6 +791,15 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
                 continue
             # 4. 检查根路径链接
             root_result = check_root_link(url, config, instance, repo_root)
+            if root_result == 'anchor_invalid':
+                problems['锚点链接无效'].append({
+                    'file': file_path,
+                    'line': line,
+                    'url': url,
+                    'line_content': line_content,
+                    'link_type': link_type
+                })
+                continue
             if root_result is False:
                 problems['根路径链接无效'].append({
                     'file': file_path,
@@ -687,8 +811,18 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
                 continue
             elif root_result is True:
                 continue
-            # 5. 检查远端链接（如果用户选择检查）
-            if check_remote:
+            # 5. old-doc 收集（无论是否检查外链）
+            if is_old_doc_url_any(url):
+                collected_urls.append({
+                    'file': file_path,
+                    'line': line,
+                    'url': url,
+                    'line_content': line_content,
+                    'link_type': link_type,
+                })
+
+            # 6. 检查远端链接（如果用户选择检查；old-doc 跳过请求）
+            if check_remote and not is_old_doc_url_any(url):
                 remote_result = check_remote_link(url)
                 if remote_result is not None and not remote_result.get('valid', True):
                     error_msg = remote_result.get('error', '未知错误')
@@ -702,7 +836,7 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
                     })
                     continue
 
-    return problems
+    return problems, collected_urls
 
 def print_problems_summary(problems, is_warning=False):
     """打印问题总结"""
@@ -741,7 +875,10 @@ def main():
         sys.exit(1)
     selected_instances = choose_instance(instances)
 
-    all_problems = defaultdict(list)
+    # 结构化结果：按实例名称 -> 错误类型 -> link_type -> 列表
+    structured_results = {}
+    # 额外聚合：按 URL 汇总
+    aggregated_by_url = {}
 
     # 处理选中的实例列表
     for instance in selected_instances:
@@ -765,15 +902,151 @@ def main():
         mdx_files = find_mdx_files(instance_path)
         print(f'共找到{len(mdx_files)}个mdx文件。')
 
-        problems = check_instance_links(mdx_files, config, instance, repo_root, check_remote)
+        problems, collected_urls = check_instance_links(mdx_files, config, instance, repo_root, check_remote)
 
-        # 合并问题
+        # 将问题写入结构化结果（按实例名称、错误类型、link_type 归类）与 URL 汇总
+        if display_name not in structured_results:
+            structured_results[display_name] = {}
         for ptype, items in problems.items():
-            all_problems[ptype].extend(items)
+            if ptype not in structured_results[display_name]:
+                structured_results[display_name][ptype] = {}
+            for it in items:
+                abs_file = os.path.abspath(it.get('file', ''))
+                line_num = it.get('line', 0)
+                # 构造精简条目（不含 file_path/line/link_type）
+                entry = {
+                    'url': it.get('url', ''),
+                    'line_content': it.get('line_content', ''),
+                    'file_with_line': f"{abs_file}:{line_num}",
+                }
+                if 'error' in it:
+                    entry['error'] = it['error']
 
-    # 输出总结
-    print('\n检查结果总结:')
-    print_problems_summary(all_problems)
+                if abs_file not in structured_results[display_name][ptype]:
+                    structured_results[display_name][ptype][abs_file] = []
+                structured_results[display_name][ptype][abs_file].append(entry)
+
+                url_key = entry.get('url')
+                if url_key:
+                    if url_key not in aggregated_by_url:
+                        aggregated_by_url[url_key] = []
+                    aggregated_by_url[url_key].append({
+                        'instance': display_name,
+                        'error_type': ptype,
+                        'file_path': abs_file,
+                        'file_with_line': f"{abs_file}:{line_num}",
+                        'line_content': entry.get('line_content', ''),
+                        **({'error': entry['error']} if 'error' in entry else {})
+                    })
+
+        # 将收集到的 old-doc 等外链（即使不算错误）也纳入 URL 汇总
+        for it in collected_urls:
+            abs_file = os.path.abspath(it.get('file', ''))
+            line_num = it.get('line', 0)
+            url_key = it.get('url', '')
+            if url_key:
+                if url_key not in aggregated_by_url:
+                    aggregated_by_url[url_key] = []
+                aggregated_by_url[url_key].append({
+                    'instance': display_name,
+                    'error_type': 'collected',
+                    'file_path': abs_file,
+                    'file_with_line': f"{abs_file}:{line_num}",
+                    'line_content': it.get('line_content', ''),
+                })
+
+    # 写入结构化结果到 JSON 和 Markdown 文件
+    write_result_files(mode='interactive', structured_results=structured_results, language=language, check_remote=check_remote, aggregated_by_url=aggregated_by_url)
+
+def write_result_files(mode, structured_results, language=None, check_remote=None, aggregated_by_url=None):
+    """将结果分别写入 JSON 和 Markdown 文件"""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    json_path = os.path.join(base_dir, 'check_link_result.json')
+    md_path = os.path.join(base_dir, 'check_link_result.md')
+
+    # 写 JSON
+    if aggregated_by_url is None:
+        aggregated_by_url = {}
+
+    # 计算 URL 分类别汇总（按 count 降序）
+    def categorize_url(u):
+        if u.startswith('#'):
+            return 'anchor'
+        if u.startswith('/'):
+            return 'internal'
+        if re.match(r'https?://', u):
+            return 'external'
+        if u.startswith('./') or u.startswith('../'):
+            return 'relative'
+        return 'other'
+
+    urls_by_category = {
+        'anchor': [],
+        'internal': {
+            'anchor': [],
+            'non_anchor': [],
+        },
+        'external': {
+            'anchor': [],
+            'non_anchor': [],
+        },
+        'relative': {
+            'anchor': [],
+            'non_anchor': [],
+        },
+        'other': [],
+    }
+    for url_key, occurrences in aggregated_by_url.items():
+        category = categorize_url(url_key)
+        is_old_doc = (category == 'external' and is_old_doc_url_any(url_key))
+        has_anchor_error = any((occ.get('error_type') == '锚点链接无效') for occ in occurrences)
+        item = {
+            'url': url_key,
+            'count': len(occurrences),
+        }
+        # 若为 internal/relative 且存在锚点错误，则归入顶级 anchor 分类
+        if (category in ('internal', 'relative')) and has_anchor_error:
+            urls_by_category['anchor'].append(item)
+            continue
+        if category == 'anchor':
+            urls_by_category['anchor'].append(item)
+        elif category in ('internal', 'external', 'relative'):
+            if category == 'external' and is_old_doc:
+                # external.old-doc 归类
+                urls_by_category['external'].setdefault('old-doc', [])
+                urls_by_category['external']['old-doc'].append(item)
+            else:
+                if '#' in url_key:
+                    urls_by_category[category]['anchor'].append(item)
+                else:
+                    urls_by_category[category]['non_anchor'].append(item)
+        else:
+            urls_by_category['other'].append(item)
+    # 各类内按 count 降序排序
+    urls_by_category['anchor'].sort(key=lambda x: x['count'], reverse=True)
+    for cat in ('internal', 'external', 'relative'):
+        urls_by_category[cat]['anchor'].sort(key=lambda x: x['count'], reverse=True)
+        urls_by_category[cat]['non_anchor'].sort(key=lambda x: x['count'], reverse=True)
+        if cat == 'external' and 'old-doc' in urls_by_category[cat]:
+            urls_by_category[cat]['old-doc'].sort(key=lambda x: x['count'], reverse=True)
+    urls_by_category['other'].sort(key=lambda x: x['count'], reverse=True)
+
+    output_obj = {
+        'mode': mode,
+        'language': language,
+        'check_remote': check_remote,
+        'generated_at': datetime.now().isoformat(),
+        'instances': structured_results,
+        'urls_by_category': urls_by_category,
+    }
+    try:
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(output_obj, f, ensure_ascii=False, indent=2)
+        print(f"结果已写入: {json_path}")
+    except Exception as e:
+        print(f"{Fore.RED}写入JSON结果失败: {e}{Style.RESET_ALL}")
+
+    # 按需可扩展写入 Markdown 的逻辑；当前按需求不输出 Markdown 文件
 
 if __name__ == '__main__':
     main()
