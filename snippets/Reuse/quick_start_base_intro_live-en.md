@@ -4,7 +4,7 @@
 
 
 
-![/Pics/in_app_chat/17395_2.png](//doc.oa.zego.im/Pics/in_app_chat/17395_2.png)
+![https://doc-media.zego.im/sdk-doc/Pics/in_app_chat/17395_2.png](//doc.oa.zego.imhttps://doc-media.zego.im/sdk-doc/Pics/in_app_chat/17395_2.png)
 
 
 

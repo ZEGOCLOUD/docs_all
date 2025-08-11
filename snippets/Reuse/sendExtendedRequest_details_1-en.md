@@ -293,7 +293,7 @@
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;└ channel</td>
     <td>Int</td>
-    <td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲，UI 界面无需展示“音速达” logo 标志。</li><li>若 channel 为 0，表示音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志。开发者可通过 <a href="https://storage.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。<br>UI 界面示例如下：<br><img src="https://storage.zego.im/sdk-doc/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
+    <td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲，UI 界面无需展示“音速达” logo 标志。</li><li>若 channel 为 0，表示音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志。开发者可通过 <a href="https://artifact-sdk.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。<br>UI 界面示例如下：<br><img src="https://doc-media.zego.im/sdk-doc/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
   </tr>
 </tbody></table>
 
@@ -494,7 +494,7 @@
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;└ channel</td>
     <td>Int</td>
-    <td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲，UI 界面无需展示“音速达” logo 标志。</li><li>若 channel 为 0，表示音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志。开发者可通过 <a href="https://storage.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。<br>UI 界面示例如下：<br><img src="https://storage.zego.im/sdk-doc/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
+    <td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲，UI 界面无需展示“音速达” logo 标志。</li><li>若 channel 为 0，表示音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志。开发者可通过 <a href="https://artifact-sdk.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。<br>UI 界面示例如下：<br><img src="https://doc-media.zego.im/sdk-doc/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
   </tr>
 </tbody></table>
 
@@ -804,7 +804,7 @@
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;└ channel</td>
     <td>Int</td>
-    <td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲，UI 界面无需展示“音速达” logo 标志。</li><li>若 channel 为 0，表示音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志。开发者可通过 <a href="https://storage.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。<br>UI 界面示例如下：<br><img src="https://storage.zego.im/sdk-doc/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
+    <td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲，UI 界面无需展示“音速达” logo 标志。</li><li>若 channel 为 0，表示音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志。开发者可通过 <a href="https://artifact-sdk.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。<br>UI 界面示例如下：<br><img src="https://doc-media.zego.im/sdk-doc/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
   </tr>
 </tbody></table>
 
@@ -1020,7 +1020,7 @@
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;└ channel</td>
     <td>Int</td>
-    <td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲，UI 界面无需展示“音速达” logo 标志。</li><li>若 channel 为 0，表示音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志。开发者可通过 <a href="https://storage.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。<br>UI 界面示例如下：<br><img src="https://storage.zego.im/sdk-doc/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
+    <td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲，UI 界面无需展示“音速达” logo 标志。</li><li>若 channel 为 0，表示音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志。开发者可通过 <a href="https://artifact-sdk.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。<br>UI 界面示例如下：<br><img src="https://doc-media.zego.im/sdk-doc/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
   </tr>
 </tbody></table>
 
@@ -1171,7 +1171,7 @@
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;└ channel</td>
     <td>Int</td>
-    <td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲，UI 界面无需展示“音速达” logo 标志。</li><li>若 channel 为 0，表示音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志。开发者可通过 <a href="https://storage.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。<br>UI 界面示例如下：<br><img src="https://storage.zego.im/sdk-doc/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
+    <td>歌曲渠道。<ul><li>若 channel 为 其他值，表示其他渠道歌曲，UI 界面无需展示“音速达” logo 标志。</li><li>若 channel 为 0，表示音速达渠道主推歌曲，需在 UI 界面展示“音速达” logo 标志。开发者可通过 <a href="https://artifact-sdk.zego.im/sdk-doc/doc/files/external/Yinsuda_logo.zip">本链接</a> 下载相关 logo 资源。<br>UI 界面示例如下：<br><img src="https://doc-media.zego.im/sdk-doc/Pics/CopyrightedMusic/Chart_songs.png"></li></ul></td>
   </tr>
 </tbody></table>
 

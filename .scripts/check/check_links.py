@@ -156,15 +156,16 @@ def choose_instance(instances):
 
     # 显示组列表
     print('请选择要检查的组:')
-    sorted_groups = sorted(groups.items(), key=lambda x: x[1]["name"])
-    for idx, (group_id, group_info) in enumerate(sorted_groups, 1):
+    # 按在 docuo.config.json 中出现的顺序排列（保持插入顺序）
+    ordered_groups = list(groups.items())
+    for idx, (group_id, group_info) in enumerate(ordered_groups, 1):
         print(f'{idx}. {group_info["name"]}')
 
     # 选择组
     while True:
         group_choice = input('输入数字选择组: ').strip()
-        if group_choice.isdigit() and 1 <= int(group_choice) <= len(sorted_groups):
-            selected_group = sorted_groups[int(group_choice)-1][1]
+        if group_choice.isdigit() and 1 <= int(group_choice) <= len(ordered_groups):
+            selected_group = ordered_groups[int(group_choice)-1][1]
             break
         else:
             print('输入无效，请重新输入。')

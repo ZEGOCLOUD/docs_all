@@ -10,20 +10,20 @@ export default function AudioTable() {
         <tr>
           <td rowSpan={4}>
             <audio
-              src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/original_voice.wav"
+              src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/original_voice.wav"
               controls
             />
           </td>
           <td>青年男性</td>
           <td>
             <audio
-              src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/young_male_target_voice.wav"
+              src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/young_male_target_voice.wav"
               controls
             />
           </td>
           <td>
             <audio
-              src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/young_male_changer_voice.wav"
+              src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/young_male_changer_voice.wav"
               controls
             />
           </td>
@@ -32,13 +32,13 @@ export default function AudioTable() {
           <td>成年男性</td>
           <td>
             <audio
-              src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/adult_male_target_voice.wav"
+              src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/adult_male_target_voice.wav"
               controls
             />
           </td>
           <td>
             <audio
-              src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/adult_male_changer_voice.wav"
+              src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/adult_male_changer_voice.wav"
               controls
             />
           </td>
@@ -47,13 +47,13 @@ export default function AudioTable() {
           <td>青年女性</td>
           <td>
             <audio
-              src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/young_female_target_voice.wav"
+              src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/young_female_target_voice.wav"
               controls
             />
           </td>
           <td>
             <audio
-              src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/young_female_changer_voice.wav"
+              src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/young_female_changer_voice.wav"
               controls
             />
           </td>
@@ -62,13 +62,13 @@ export default function AudioTable() {
           <td>成年女性</td>
           <td>
             <audio
-              src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/adult_female_target_voice.wav"
+              src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/adult_female_target_voice.wav"
               controls
             />
           </td>
           <td>
             <audio
-              src="https://storage.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/adult_female_changer_voice.wav"
+              src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/VoiceChanger/adult_female_changer_voice.wav"
               controls
             />
           </td>

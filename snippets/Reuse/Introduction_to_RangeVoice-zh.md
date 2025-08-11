@@ -10,7 +10,7 @@ ZEGO Express SDK 从 2.10.0 版本起，新增范围语音功能模块，可提�
 a. 当 X1 < X 时，表示音源在正常范围内，收听者可以听到声音
 b. 当 X1 > X 时，表示超出了最大范围，收听着无法听到声音。
 
-![](https://storage.zego.im/sdk-doc/Pics/Common/RangeAudio/AudioRange.png)
+![](https://doc-media.zego.im/sdk-doc/Pics/Common/RangeAudio/AudioRange.png)
 
 <div class="mk-hint">
 
