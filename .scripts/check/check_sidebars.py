@@ -11,7 +11,10 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 
 ROOT_DIR = Path(__file__).resolve().parent
-DOCUO_CONFIG_PATH = ROOT_DIR / "docuo.config.json"
+# 以项目根目录为基准（本脚本位于 .scripts/check/ 下，因此向上两级）
+PROJECT_ROOT = ROOT_DIR.parent.parent
+# 配置文件默认名，若不存在将于 main 中尝试回退到 en 版本
+DOCUO_CONFIG_PATH = (PROJECT_ROOT / "docuo.config.json").resolve()
 RESULT_PATH = ROOT_DIR / "sidebars_result.json"
 
 
@@ -205,12 +208,19 @@ def annotate_sidebars_file(sidebars_path: Path, invalid_ids: Set[str]) -> int:
 
 
 def main() -> int:
-    if not DOCUO_CONFIG_PATH.exists():
-        print(f"未找到配置文件: {DOCUO_CONFIG_PATH}")
-        return 1
+    # 优先使用 docuo.config.json，不存在时回退到 docuo.config.en.json
+    config_path = DOCUO_CONFIG_PATH
+    if not config_path.exists():
+        fallback_path = (PROJECT_ROOT / "docuo.config.en.json").resolve()
+        if fallback_path.exists():
+            config_path = fallback_path
+            print(f"未找到 docuo.config.json，已回退使用: {config_path}")
+        else:
+            print(f"未找到配置文件: {DOCUO_CONFIG_PATH} 或 {fallback_path}")
+            return 1
 
     try:
-        config = read_json(DOCUO_CONFIG_PATH)
+        config = read_json(config_path)
     except Exception as e:
         print(f"读取配置失败: {e}")
         return 1
@@ -231,7 +241,7 @@ def main() -> int:
         # 跳过 path 为 http(s) 的实例
         if isinstance(inst_rel_path, str) and inst_rel_path.strip().lower().startswith(("http://", "https://")):
             continue
-        inst_dir = (ROOT_DIR / inst_rel_path).resolve()
+        inst_dir = (PROJECT_ROOT / inst_rel_path).resolve()
 
         valid_ids = collect_valid_doc_ids(inst_dir)
 
@@ -300,7 +310,7 @@ def main() -> int:
 
     output = {
         "checkedAt": datetime.now(timezone.utc).isoformat(),
-        "root": str(ROOT_DIR),
+        "root": str(PROJECT_ROOT),
         "summary": {
             "totalInstances": total_instances,
             "instancesWithErrors": len(error_instances),
