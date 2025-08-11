@@ -13,7 +13,7 @@ To use your own business server instead of using the Firebase, refer to the [Use
 
 2. Create a new Realtime Database in Firebase. 
 
-    ![/Pics/ZEGOCall/rtd.png](https://storage.zego.im/sdk-doc/Pics/ZEGOCall/rtd.png)
+    ![/Pics/ZEGOCall/rtd.png](https://doc-media.zego.im/sdk-doc/Pics/ZEGOCall/rtd.png)
 
 3. Edit the rules of the Realtime Database by adding the following:
 
@@ -26,7 +26,7 @@ To use your own business server instead of using the Firebase, refer to the [Use
 }
 ```
 
-![/Pics/ZEGOCall/firebase_rules.png](/Pics/ZEGOCall/firebase_rules.png)
+![https://doc-media.zego.im/sdk-doc/Pics/ZEGOCall/firebase_rules.png](https://doc-media.zego.im/sdk-doc/Pics/ZEGOCall/firebase_rules.png)
 
 4. Install the CLI via npm.
     ```
@@ -39,11 +39,11 @@ To use your own business server instead of using the Firebase, refer to the [Use
 9. Copy the `firebase.json` and `functions\index.js` files in the sample code to your cloud function project, overwrite files with the same name.  
 10. Copy the `functions\token04` folder from the cloud function project directory, and put it in the same folder together with the `index.js`.
 
-    ![/Pics/ZEGOCall/copy_cf.png](/Pics/ZEGOCall/copy_cf.png)
+    ![https://doc-media.zego.im/sdk-doc/Pics/ZEGOCall/copy_cf.png](https://doc-media.zego.im/sdk-doc/Pics/ZEGOCall/copy_cf.png)
 
 11. Modify the `index.js` file, fill in the AppID and ServerSecret you get from [ZEGOCLOUD Admin Console](https://console.zegocloud.com) correctly.
 
-    ![/Pics/ZEGOCall/index_appid.png](/Pics/ZEGOCall/index_appid.png)
+    ![https://doc-media.zego.im/sdk-doc/Pics/ZEGOCall/index_appid.png](https://doc-media.zego.im/sdk-doc/Pics/ZEGOCall/index_appid.png)
 
 12. In Firebase CLI, run the `firebase deploy --only functions` command to deploy the cloud functions. 
 

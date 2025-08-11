@@ -8,7 +8,7 @@ ZEGO 提供基础美颜功能，为用户呈现出良好的肌肤状态，打造
 此功能为 ZEGO Express SDK 内置 ZEGO Effects SDK 的基础美颜功能，仅包含美白、红润、磨皮、锐化四种美颜效果。如需使用更多进阶的美颜功能，请参考 [实时音视频和AI视觉的搭配使用](!Best_Practice/Use_of_ExpressSDK_and_ZegoEffectsSDK)。
 </div>
 
-<video poster="https://storage.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/ExpressBeauty.png" src="https://zego-public.oss-cn-shanghai.aliyuncs.com/sdk-doc/doc/video/Express_Video_SDK/ExpressBeauty.mp4" width="65%" muted="true" loop="true" autoplay="autoplay" preload="auto" nocontrols></video>
+<video poster="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/ExpressBeauty.png" src="https://zego-public.oss-cn-shanghai.aliyuncs.com/sdk-doc/doc/video/Express_Video_SDK/ExpressBeauty.mp4" width="65%" muted="true" loop="true" autoplay="autoplay" preload="auto" nocontrols></video>
 
 
 

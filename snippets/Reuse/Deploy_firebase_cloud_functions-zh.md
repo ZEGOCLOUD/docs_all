@@ -17,7 +17,7 @@ ZEGO Call 默认使用  Firebase Cloud Functions 作为业务后台，因此我�
 4. 复制 "functions\token04" 到你的云函数项目目录下 “index.js” 的所在文件夹内。
 5. 修改 "index.js" 文件，将 appID 和 secret 的取值修改为您在 [ZEGOCLOUD Admin Console](https://console.zegocloud.com) 获取的 AppID 和 ServerSecret.
 
-    ![/Pics/ZEGOCall/index_appid.png](/Pics/ZEGOCall/index_appid.png)
+    ![https://doc-media.zego.im/sdk-doc/Pics/ZEGOCall/index_appid.png](https://doc-media.zego.im/sdk-doc/Pics/ZEGOCall/index_appid.png)
 
 6. 在 Firebase CLI 中运行 `firebase deploy --only functions` 命令部署云函数。
 

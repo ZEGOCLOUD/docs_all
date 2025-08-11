@@ -3,7 +3,7 @@ ZEGO Express SDK 从 3.0.0 版本起，新增多人状态实时同步功能，�
 
 在大型虚拟世界中，用户一般不需要感知较远的场景或远端用户，ZEGO 提供 AOI（Area Of Interest）能力，用于减免获取用户可见范围外的信息，极大减少客户流量成本、用户端流量及性能消耗。
 
-![](https://storage.zego.im/sdk-doc/Pics/Express/state_sync_aoi.jpg)
+![](https://doc-media.zego.im/sdk-doc/Pics/Express/state_sync_aoi.jpg)
 
 ### 概念解释
 

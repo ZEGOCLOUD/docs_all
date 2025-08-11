@@ -3,7 +3,7 @@ During the process of making video calls using the ZEGOCLOUD Express SDK, users 
 
 For example, when conducting multi-party video calls or singing sessions, we need to display the users' network quality in real-time. You can refer to this document to implement the corresponding functionality.
 
-![/Pics/Video_call/Call_quality_monitoring.png](//doc.oa.zego.im/Pics/Video_call/Call_quality_monitoring.png)
+![https://doc-media.zego.im/sdk-doc/Pics/Video_call/Call_quality_monitoring.png](//doc.oa.zego.imhttps://doc-media.zego.im/sdk-doc/Pics/Video_call/Call_quality_monitoring.png)
 
 
 

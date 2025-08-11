@@ -1,4 +1,4 @@
-![](/Pics/FAQ/ReconnectTimeSeq.png)
+![](https://doc-media.zego.im/sdk-doc/Pics/FAQ/ReconnectTimeSeq.png)
 
 <div class="mk-warning">
 
