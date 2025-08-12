@@ -215,8 +215,31 @@ def extract_links_from_file(file_path):
     mdx_import_pattern = re.compile(r'import\s+(?:{[^}]+}|\w+)\s+from\s+[\'"]([^\'"]+)[\'"]')
 
     links = []
+    in_code_block = False  # 是否在代码块内
+    code_block_indent = None  # 缩进代码块的缩进级别
+
     with open(file_path, 'r', encoding='utf-8') as f:
         for idx, line in enumerate(f, 1):
+            # 检查是否进入/退出代码块（```标记的代码块）
+            if line.strip().startswith('```'):
+                in_code_block = not in_code_block
+                continue
+            
+            # 检查缩进代码块
+            if not in_code_block:
+                # 计算当前行的缩进
+                current_indent = len(line) - len(line.lstrip())
+                if line.strip():  # 非空行
+                    if code_block_indent is None and current_indent >= 4:
+                        # 进入缩进代码块
+                        code_block_indent = current_indent
+                    elif code_block_indent is not None and current_indent < 4:
+                        # 退出缩进代码块
+                        code_block_indent = None
+            
+            # 如果在代码块内，跳过链接检查
+            if in_code_block or code_block_indent is not None:
+                continue
             line_content = line.strip()
 
             # 检查markdown链接
@@ -386,13 +409,15 @@ def extract_headings_from_file(file_path):
                         # 同时添加带-1后缀的版本（某些系统从-1开始）
                         headings.append(f"{anchor}-1")
 
-        # 2. 匹配HTML a标签的id属性 <a id="anchor"></a>
-        # 支持多种格式：<a id="anchor"></a>、<a id='anchor'></a>、<a id="anchor"/>等
-        a_tag_pattern = re.compile(r'<a[^>]*id\s*=\s*[\'"]([^\'"]+)[\'"][^>]*/?>', re.IGNORECASE)
-        for match in a_tag_pattern.finditer(content):
+
+        # 2. 匹配任意HTML标签的id属性
+        # 支持多种格式：<any id="anchor"></any>、<any id='anchor'></any>、<any id="anchor"/>等
+        tag_id_pattern = re.compile(r'<[^>]+id\s*=\s*[\'"]([^\'"]+)[\'"][^>]*/?>', re.IGNORECASE)
+        for match in tag_id_pattern.finditer(content):
             anchor_id = match.group(1).strip()
             if anchor_id:
                 headings.append(anchor_id)
+
 
     except Exception:
         pass
