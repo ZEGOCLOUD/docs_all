@@ -213,6 +213,8 @@ def extract_links_from_file(file_path):
     url_pattern = re.compile(r'https?://[^\s\'"<>()]+')
     # 4. MDX导入语句: import xxx from 'path' 或 import xxx from "path" 或 import { xxx } from 'path'
     mdx_import_pattern = re.compile(r'import\s+(?:{[^}]+}|\w+)\s+from\s+[\'"]([^\'"]+)[\'"]')
+    # 5. 通用import语句: import name from '/path' (以工作区根目录为基准的路径)
+    import_pattern = re.compile(r'import\s+[^\'"\s]+\s+from\s+[\'"]([^\'"]+)[\'"]')
 
     links = []
     in_code_block = False  # 是否在代码块内
@@ -224,7 +226,7 @@ def extract_links_from_file(file_path):
             if line.strip().startswith('```'):
                 in_code_block = not in_code_block
                 continue
-            
+
             # 检查缩进代码块
             if not in_code_block:
                 # 计算当前行的缩进
@@ -236,7 +238,7 @@ def extract_links_from_file(file_path):
                     elif code_block_indent is not None and current_indent < 4:
                         # 退出缩进代码块
                         code_block_indent = None
-            
+
             # 如果在代码块内，跳过链接检查
             if in_code_block or code_block_indent is not None:
                 continue
@@ -288,6 +290,18 @@ def extract_links_from_file(file_path):
                     'line_content': line_content,
                     'type': 'mdx_import'
                 })
+
+            # 检查通用import语句（以/开头的路径）
+            for match in import_pattern.finditer(line):
+                import_path = match.group(1).strip()
+                # 只检查以/开头的路径（相对于工作区根目录）
+                if import_path.startswith('/'):
+                    links.append({
+                        'url': import_path,
+                        'line': idx,
+                        'line_content': line_content,
+                        'type': 'import'
+                    })
 
     return links
 
@@ -669,6 +683,21 @@ def check_mdx_import(import_path, base_file_path, repo_root):
 
     return True
 
+def check_import_file(import_path, repo_root):
+    """检查import语句中的文件路径是否有效"""
+    # 移除开头的斜杠
+    if import_path.startswith('/'):
+        import_path = import_path[1:]
+
+    # 使用仓库根目录作为根目录
+    full_path = os.path.join(repo_root, import_path)
+
+    # 检查文件是否存在
+    if not os.path.exists(full_path):
+        return False
+
+    return True
+
 def is_old_doc_url_any(url):
     """判断是否为旧文档链接（不区分实例语言）"""
     if not isinstance(url, str):
@@ -845,6 +874,19 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
                 mdx_result = check_mdx_import(url, file_path, repo_root)
                 if mdx_result is False:
                     problems['MDX导入路径无效'].append({
+                        'file': file_path,
+                        'line': line,
+                        'url': url,
+                        'line_content': line_content,
+                        'link_type': link_type
+                    })
+                continue
+
+            # 检查通用import文件路径
+            if link_type == 'import':
+                import_result = check_import_file(url, repo_root)
+                if import_result is False:
+                    problems['Import文件路径无效'].append({
                         'file': file_path,
                         'line': line,
                         'url': url,
@@ -1115,9 +1157,15 @@ def write_result_files(mode, structured_results, language=None, check_remote=Non
             'anchor': [],
             'non_anchor': [],
         },
+        'import': [],
         'other': [],
     }
     for url_key, occurrences in aggregated_by_url.items():
+        # 检查是否为 import 类型的 URL
+        is_import = any(occ.get('error_type') == 'Import文件路径无效' or
+                       'import' in occ.get('error_type', '').lower()
+                       for occ in occurrences)
+
         category = categorize_url(url_key)
         is_old_doc = (category == 'external' and is_old_doc_url_any(url_key))
         has_anchor_error = any((occ.get('error_type') == '锚点链接无效') for occ in occurrences)
@@ -1125,6 +1173,12 @@ def write_result_files(mode, structured_results, language=None, check_remote=Non
             'url': url_key,
             'count': len(occurrences),
         }
+
+        # 如果是 import 类型，归入 import 分类
+        if is_import:
+            urls_by_category['import'].append(item)
+            continue
+
         # 若为 internal/relative 且存在锚点错误，则归入顶级 anchor 分类
         if (category in ('internal', 'relative')) and has_anchor_error:
             urls_by_category['anchor'].append(item)
@@ -1145,6 +1199,7 @@ def write_result_files(mode, structured_results, language=None, check_remote=Non
             urls_by_category['other'].append(item)
     # 各类内按 count 降序排序
     urls_by_category['anchor'].sort(key=lambda x: x['count'], reverse=True)
+    urls_by_category['import'].sort(key=lambda x: x['count'], reverse=True)
     for cat in ('internal', 'external', 'relative'):
         urls_by_category[cat]['anchor'].sort(key=lambda x: x['count'], reverse=True)
         urls_by_category[cat]['non_anchor'].sort(key=lambda x: x['count'], reverse=True)
