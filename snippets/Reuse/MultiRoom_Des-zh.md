@@ -38,7 +38,7 @@
 
 以同一用户加入两个房间为例，整体实现流程如下：
 
-![/Pics/LiveRoom/Common/MultiRoom.png](https://storage.zego.im/sdk-doc/Pics/LiveRoom/Common/MultiRoom.png)
+![/Pics/LiveRoom/Common/MultiRoom.png](https://doc-media.zego.im/sdk-doc/Pics/LiveRoom/Common/MultiRoom.png)
 
 1. 在初始化 SDK 之前，将房间模式设置为多房间。
 2. 初始化 SDK，根据实际需要，配置房间相关信息。

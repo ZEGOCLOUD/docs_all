@@ -44,13 +44,13 @@ Fill in the appId requested from the ZEGO console
 
 Fill in the serverSecret  requested from the ZEGO console
 
-![/Pics/zegocloud/mini_game/new1ServerSecret.jpeg](//doc.oa.zego.im/Pics/zegocloud/mini_game/new1ServerSecret.jpeg)
+![https://doc-media.zego.im/sdk-doc/Pics/zegocloud/mini_game/new1ServerSecret.jpeg](//doc.oa.zego.imhttps://doc-media.zego.im/sdk-doc/Pics/zegocloud/mini_game/new1ServerSecret.jpeg)
 3. In the `ZegoMiniGameServerDemo/utils/config.js` file, specify the `serverSecret` parameter.
    
  Fill in the appId requested from the ZEGO console
 
 Fill in the serverSecret  requested from the ZEGO console
-![/Pics/zegocloud/mini_game/new2ServerSecret.jpeg](//doc.oa.zego.im/Pics/zegocloud/mini_game/new2ServerSecret.jpeg)
+![https://doc-media.zego.im/sdk-doc/Pics/zegocloud/mini_game/new2ServerSecret.jpeg](//doc.oa.zego.imhttps://doc-media.zego.im/sdk-doc/Pics/zegocloud/mini_game/new2ServerSecret.jpeg)
 
 <div class="mk-warning">
 

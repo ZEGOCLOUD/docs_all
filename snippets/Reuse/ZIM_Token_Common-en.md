@@ -11,7 +11,7 @@ Before you log in to a room, your app clients request Tokens from your app serve
 
 The following diagram shows the process of room login privilege validation:
 
-![/Pics/ZIMChatRoom/en/tokenvalidation_EN.png](https://storage.zego.im/sdk-doc/Pics/ZIMChatRoom/en/tokenvalidation_EN.png)
+![/Pics/ZIMChatRoom/en/tokenvalidation_EN.png](https://doc-media.zego.im/sdk-doc/Pics/ZIMChatRoom/en/tokenvalidation_EN.png)
 
 
 

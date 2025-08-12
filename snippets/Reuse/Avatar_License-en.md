@@ -43,8 +43,8 @@
   </tr>
   <tr>
     <td>流程图</td>
-    <td><img src="https://storage.zego.im/sdk-doc/Pics/ZegoAvatar/avatar_flow_1.png" width="98%"></td>
-    <td><img src="https://storage.zego.im/sdk-doc/Pics/ZegoAvatar/avatar_flow_2.png" width="98%"></td>
+    <td><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoAvatar/avatar_flow_1.png" width="98%"></td>
+    <td><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoAvatar/avatar_flow_2.png" width="98%"></td>
   </tr>
   <tr>
     <td>优势</td>

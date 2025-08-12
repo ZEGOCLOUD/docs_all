@@ -83,21 +83,21 @@ ZEGO Express SDK 提供了 AI 降噪功能，开发者可以在使用麦克风�
 
 原始音频包含：鼠标点击声、键盘声、鼓掌声、摩擦声、办公室嘈杂声、空调声等。
 
-<audio src="https://zego-public.oss-cn-shanghai.aliyuncs.com/sdk-doc/doc/video/Express_Video_SDK/Audio/office_noise_original.mp3" controls>您的浏览器不支持 audio 标签。</audio>
+<audio src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/office_noise_original.mp3" controls>您的浏览器不支持 audio 标签。</audio>
 
 AI 降噪后：
 
-<audio src="https://zego-public.oss-cn-shanghai.aliyuncs.com/sdk-doc/doc/video/Express_Video_SDK/Audio/office_noise_AIDenoise.mp3" controls>您的浏览器不支持 audio 标签。</audio>
+<audio src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/office_noise_AIDenoise.mp3" controls>您的浏览器不支持 audio 标签。</audio>
 
 #### 公共场所
 
 原始音频包含：雨声、电车声、炒菜声、汽车呼啸声等。
 
-<audio src="https://zego-public.oss-cn-shanghai.aliyuncs.com/sdk-doc/doc/video/Express_Video_SDK/Audio/public_noise_original.mp3" controls>您的浏览器不支持 audio 标签。</audio>
+<audio src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/public_noise_original.mp3" controls>您的浏览器不支持 audio 标签。</audio>
 
 AI 降噪后：
 
-<audio src="https://zego-public.oss-cn-shanghai.aliyuncs.com/sdk-doc/doc/video/Express_Video_SDK/Audio/public_noise_AIDenoise.mp3" controls>您的浏览器不支持 audio 标签。</audio>
+<audio src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/Audio/public_noise_AIDenoise.mp3" controls>您的浏览器不支持 audio 标签。</audio>
 
 
 

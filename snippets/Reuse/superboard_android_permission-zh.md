@@ -9,7 +9,7 @@
 
 如图所示：
 
-![](/Pics/Android/WhiteBoard/new_project_4.png)
+![](https://doc-media.zego.im/sdk-doc/Pics/Android/WhiteBoard/new_project_4.png)
 
 权限说明如下：
 

@@ -19,9 +19,9 @@ ZEGO 提供两种低照度增强的方式：
 
 ### 效果展示
 - 增强前
-![/Pics/lowlightenhancement/lowlightenhancement_before.jpg](https://storage.zego.im/sdk-doc/Pics/lowlightenhancement/lowlightenhancement_before.jpg)
+![/Pics/lowlightenhancement/lowlightenhancement_before.jpg](https://doc-media.zego.im/sdk-doc/Pics/lowlightenhancement/lowlightenhancement_before.jpg)
 - 增强后
-![/Pics/lowlightenhancement/lowlightenhancement_after.jpg](https://storage.zego.im/sdk-doc/Pics/lowlightenhancement/lowlightenhancement_after.jpg)
+![/Pics/lowlightenhancement/lowlightenhancement_after.jpg](https://doc-media.zego.im/sdk-doc/Pics/lowlightenhancement/lowlightenhancement_after.jpg)
 
 ## 前提条件
 

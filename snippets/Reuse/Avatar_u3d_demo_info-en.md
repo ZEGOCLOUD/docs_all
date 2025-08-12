@@ -6,9 +6,9 @@
 2. 根据自身需要运行到的平台，勾选对应的 Plaforms 模块一同下载，以在 macOS 上安装为例；
     1. 打开 Unity Hub，单击左侧的“安装”选项，选择需要安装的 Unity 2021.3.2f1c1 版本。
     2. 单击右上角图标选择 “添加模块” 选项。
-    ![/Pics/ZegoAvatar/unity3d/20220922_115545.png](https://storage.zego.im/sdk-doc/Pics/ZegoAvatar/unity3d/20220922_115545.png)
+    ![/Pics/ZegoAvatar/unity3d/20220922_115545.png](https://doc-media.zego.im/sdk-doc/Pics/ZegoAvatar/unity3d/20220922_115545.png)
     3. 勾选需要需要的 Plaforms 模块，进行下载。
-    ![/Pics/ZegoAvatar/unity3d/20220922_115504.png](https://storage.zego.im/sdk-doc/Pics/ZegoAvatar/unity3d/20220922_115504.png)
+    ![/Pics/ZegoAvatar/unity3d/20220922_115504.png](https://doc-media.zego.im/sdk-doc/Pics/ZegoAvatar/unity3d/20220922_115504.png)
 
 ### 运行平台版本要求
 

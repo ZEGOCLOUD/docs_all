@@ -11,7 +11,7 @@ For security, CDN authentication is enabled by default when publishing streams t
 Forwarding streams to the CDN refers to forwarding streams from ZEGO's real-time streaming cloud to the ZEGO's CDN or third-party CDNs for large-scale distribution.
 
 
-![](/Pics/Common/ZegoExpressEngine/forward_streams_en.png)  
+![](https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/forward_streams_en.png)  
 
 There are three methods for forwarding streams to the CDN:
  
@@ -32,7 +32,7 @@ You can also forward the mixed output streams to the ZEGO's CDN, or third-party 
 Direct publishing streams to the CDN refers to the process of publishing audio and video streams directly from the client application to the designated CDN. Users can then play the streams directly from the CDN via a playback URL using a browser or a third-party player. However, as the streams are not transmitted over ZEGO's real-time streaming cloud, users will not be able to get the ultra-low latency streaming experience that ZEGO can provide with its optimized real-time network.
 The ZEGO's CDN or third-party CDN are supported.
 
-![/Pics/Common/ZegoExpressEngine/direct_publishing_en.png](https://storage.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/direct_publishing_en.png)
+![/Pics/Common/ZegoExpressEngine/direct_publishing_en.png](https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/direct_publishing_en.png)
 
 ####  Feature comparison 
 

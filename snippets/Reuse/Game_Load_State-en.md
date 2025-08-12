@@ -1,4 +1,4 @@
-![/Pics/zegocloud/mini_game/Game_status.jpg](//doc.oa.zego.im/Pics/zegocloud/mini_game/Game_status.jpg)
+![https://doc-media.zego.im/sdk-doc/Pics/zegocloud/mini_game/Game_status.jpg](//doc.oa.zego.imhttps://doc-media.zego.im/sdk-doc/Pics/zegocloud/mini_game/Game_status.jpg)
 
 The loading status of a game transits based on the loading progress of game resources. The following table describes the definitions, trigger events, and common business scenarios of different loading statuses.
 
