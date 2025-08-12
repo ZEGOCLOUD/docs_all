@@ -343,24 +343,56 @@ def extract_headings_from_file(file_path):
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
 
-            # 1. 匹配markdown标题 (# ## ### #### ##### ######)
-            for line in content.split('\n'):
-                line = line.strip()
-                if line.startswith('#'):
-                    # 提取标题文本
-                    heading_text = line.lstrip('#').strip()
-                    if heading_text:
-                        # 转换为锚点格式
-                        anchor = heading_to_anchor(heading_text)
-                        headings.append(anchor)
+        # 处理MDX导入：如果文件包含import Content from语句，则递归处理导入的文件
+        import_pattern = re.compile(r'import\s+\w+\s+from\s+[\'"]([^\'"]+\.mdx)[\'"]')
+        for match in import_pattern.finditer(content):
+            import_path = match.group(1)
+            # 处理相对路径
+            if import_path.startswith('/'):
+                # 绝对路径，从仓库根目录开始
+                repo_root = get_repo_root()
+                if repo_root:
+                    imported_file_path = os.path.join(repo_root, import_path.lstrip('/'))
+                else:
+                    continue
+            else:
+                # 相对路径
+                imported_file_path = os.path.normpath(os.path.join(os.path.dirname(file_path), import_path))
 
-            # 2. 匹配HTML a标签的id属性 <a id="anchor"></a>
-            # 支持多种格式：<a id="anchor"></a>、<a id='anchor'></a>、<a id="anchor"/>等
-            a_tag_pattern = re.compile(r'<a[^>]*id\s*=\s*[\'"]([^\'"]+)[\'"][^>]*/?>', re.IGNORECASE)
-            for match in a_tag_pattern.finditer(content):
-                anchor_id = match.group(1).strip()
-                if anchor_id:
-                    headings.append(anchor_id)
+            if os.path.exists(imported_file_path):
+                # 递归提取导入文件的标题
+                imported_headings = extract_headings_from_file(imported_file_path)
+                headings.extend(imported_headings)
+
+        # 1. 匹配markdown标题 (# ## ### #### ##### ######)
+        heading_counts = {}  # 用于跟踪重复标题
+        for line in content.split('\n'):
+            line = line.strip()
+            if line.startswith('#'):
+                # 提取标题文本
+                heading_text = line.lstrip('#').strip()
+                if heading_text:
+                    # 转换为锚点格式
+                    anchor = heading_to_anchor(heading_text)
+
+                    # 处理重复标题，添加数字后缀
+                    if anchor in heading_counts:
+                        heading_counts[anchor] += 1
+                        anchor_with_suffix = f"{anchor}-{heading_counts[anchor]}"
+                        headings.append(anchor_with_suffix)
+                    else:
+                        heading_counts[anchor] = 0
+                        headings.append(anchor)
+                        # 同时添加带-1后缀的版本（某些系统从-1开始）
+                        headings.append(f"{anchor}-1")
+
+        # 2. 匹配HTML a标签的id属性 <a id="anchor"></a>
+        # 支持多种格式：<a id="anchor"></a>、<a id='anchor'></a>、<a id="anchor"/>等
+        a_tag_pattern = re.compile(r'<a[^>]*id\s*=\s*[\'"]([^\'"]+)[\'"][^>]*/?>', re.IGNORECASE)
+        for match in a_tag_pattern.finditer(content):
+            anchor_id = match.group(1).strip()
+            if anchor_id:
+                headings.append(anchor_id)
 
     except Exception:
         pass
@@ -372,7 +404,10 @@ def heading_to_anchor(heading_text):
     规则：
     - 忽略冒号（: 与 ：）。
     - 忽略括号字符本身（() 与 （）），但保留括号内的文字。
-    - 忽略空白（不保留、不替换）。
+    - 忽略斜杠（/ 与 \）。
+    - 忽略逗号（, 与 ，）。
+    - 保留开头的数字（如"1 "、"2 "等），但删除点号。
+    - 空白转换为连字符（-）。
     - ASCII 英文字母转小写；中文及其他字符保持。
     """
     # 1) 删除冒号（半角与全角）
@@ -383,28 +418,49 @@ def heading_to_anchor(heading_text):
     cleaned = cleaned.replace("(", "").replace(")", "")
     cleaned = cleaned.replace("（", "").replace("）", "")
 
-    # 3) 转换其他规则
+    # 3) 删除斜杠
+    cleaned = cleaned.replace("/", "").replace("\\", "")
+
+    # 4) 删除逗号和顿号（半角与全角）
+    cleaned = cleaned.replace(",", "").replace("，", "").replace("、", "")
+
+    # 5) 删除开头的点号，但保留数字
+    cleaned = re.sub(r'^(\d+)\.\s*', r'\1 ', cleaned.strip())
+
+    # 6) 转换其他规则
     result = ""
     for char in cleaned:
         if char.isspace():
-            # 忽略空白，不添加任何字符
-            continue
+            # 空白转换为连字符
+            result += "-"
         elif char.isascii() and char.isalpha():
             result += char.lower()
         else:
             result += char
+
+    # 7) 清理多余的连字符
+    # 去除开头和结尾的连字符，并将连续的连字符合并为一个
+    result = re.sub(r'-+', '-', result)  # 合并连续连字符
+    result = result.strip('-')  # 去除首尾连字符
+
     return result
 
 def _normalize_for_anchor_compare(value: str) -> str:
-    """用于宽松匹配锚点：统一小写，并移除空格与短横线。
+    """用于宽松匹配锚点：统一小写，并移除空格、短横线、冒号、斜杠、逗号等。
 
     解决例如“rtc-推流” 与 “rtc推流”的匹配问题。
     """
     if not isinstance(value, str):
         return ''
     lowered = value.lower()
-    # 去除空格与半角短横线
-    return lowered.replace(' ', '').replace('-', '')
+    # 去除空格、半角短横线、冒号、括号、斜杠、逗号等
+    normalized = lowered.replace(' ', '').replace('-', '').replace(':', '').replace('：', '')
+    normalized = normalized.replace('(', '').replace(')', '').replace('（', '').replace('）', '')
+    normalized = normalized.replace('/', '').replace('\\', '')
+    normalized = normalized.replace(',', '').replace('，', '').replace('、', '')
+    # 去除开头的数字和点号（用于宽松匹配）
+    normalized = re.sub(r'^[\d\.\s]*', '', normalized)
+    return normalized
 
 def check_root_link(link, config, instance, repo_root):
     """检查站内根路径链接是否有效
@@ -429,7 +485,7 @@ def check_root_link(link, config, instance, repo_root):
 
     # 在所有实例中查找匹配的routeBasePath（支持跨实例链接）
     matched_base = None
-    matched_inst = None
+    matched_instances = []
 
     # 先尝试精确匹配，再尝试前缀匹配
     for inst in config['instances']:
@@ -443,46 +499,85 @@ def check_root_link(link, config, instance, repo_root):
             # 如果找到更长的匹配，替换之前的匹配
             if not matched_base or len(base_parts) > len(matched_base.split('/')):
                 matched_base = base
-                matched_inst = inst
+                matched_instances = [inst]
+            elif matched_base and len(base_parts) == len(matched_base.split('/')):
+                # 同样长度的匹配，添加到列表中（处理复用情况）
+                matched_instances.append(inst)
 
-    if not matched_base or not matched_inst:
+        # 如果精确匹配失败，尝试后缀匹配（处理ZIM等情况）
+        # 例如：链接 /zim-android/... 匹配配置 zh/zim-android
+        elif len(base_parts) > 1:
+            # 取routeBasePath的最后几个部分进行匹配
+            for i in range(1, len(base_parts)):
+                suffix_parts = base_parts[i:]
+                if len(parts) >= len(suffix_parts) and parts[:len(suffix_parts)] == suffix_parts:
+                    # 如果找到更长的匹配，替换之前的匹配
+                    if not matched_base or len(suffix_parts) > len(matched_base.split('/')[-len(suffix_parts):]):
+                        matched_base = base
+                        matched_instances = [inst]
+                    elif matched_base and len(suffix_parts) == len(matched_base.split('/')[-len(suffix_parts):]):
+                        # 同样长度的匹配，添加到列表中
+                        matched_instances.append(inst)
+                    break
+
+    if not matched_base or not matched_instances:
         return False
 
     # 提取文件id（去掉routeBasePath部分）
     base_parts = matched_base.split('/')
-    file_id_parts = parts[len(base_parts):]
+
+    # 确定实际匹配的部分长度
+    matched_length = len(base_parts)
+    # 检查是否是后缀匹配
+    if len(parts) >= len(base_parts) and parts[:len(base_parts)] == base_parts:
+        # 精确匹配
+        matched_length = len(base_parts)
+    else:
+        # 后缀匹配，找到实际匹配的长度
+        for i in range(1, len(base_parts)):
+            suffix_parts = base_parts[i:]
+            if len(parts) >= len(suffix_parts) and parts[:len(suffix_parts)] == suffix_parts:
+                matched_length = len(suffix_parts)
+                break
+
+    file_id_parts = parts[matched_length:]
     if not file_id_parts:
         # 如果没有文件id，可能是访问实例根路径，检查是否有index文件
         file_id = 'index'
     else:
         file_id = '/'.join(file_id_parts)
 
-    # 在匹配的实例路径下查找文件
-    path_dir = matched_inst['path']
-    abs_path_dir = os.path.join(repo_root, path_dir) if not os.path.isabs(path_dir) else path_dir
-    abs_path_dir = os.path.normpath(abs_path_dir)
-
-    # 遍历该目录下所有mdx文件，找file_id是否能对上
+    # 在所有匹配的实例路径下查找文件（处理复用情况）
     found_file = None
+    for matched_inst in matched_instances:
+        path_dir = matched_inst['path']
+        abs_path_dir = os.path.join(repo_root, path_dir) if not os.path.isabs(path_dir) else path_dir
+        abs_path_dir = os.path.normpath(abs_path_dir)
 
-    # 修正后的文件ID转换逻辑
-    for dirpath, _, filenames in os.walk(abs_path_dir):
-        for fname in filenames:
-            if fname.lower().endswith('.mdx'):
-                # 获取文件的完整相对路径
-                full_path = os.path.join(dirpath, fname)
-                rel = os.path.relpath(full_path, abs_path_dir)
-                rel = rel.replace('\\', '/')
+        # 遍历该目录下所有mdx文件，找file_id是否能对上
+        for dirpath, _, filenames in os.walk(abs_path_dir):
+            for fname in filenames:
+                if fname.lower().endswith('.mdx'):
+                    # 获取文件的完整相对路径
+                    full_path = os.path.join(dirpath, fname)
+                    rel = os.path.relpath(full_path, abs_path_dir)
+                    rel = rel.replace('\\', '/')
 
-                # 去掉.mdx后缀
-                rel_without_ext = os.path.splitext(rel)[0]
+                    # 去掉.mdx后缀
+                    rel_without_ext = os.path.splitext(rel)[0]
 
-                # 将路径转换为文件ID格式：小写+连接线
-                rel_id = '/'.join(part.lower().replace(' ', '-') for part in rel_without_ext.split('/'))
+                    # 将路径转换为文件ID格式：小写+连接线
+                    rel_id = '/'.join(part.lower().replace(' ', '-') for part in rel_without_ext.split('/'))
 
-                if rel_id == file_id:
-                    found_file = full_path
-                    break
+                    # 同时生成不带连字符的版本进行匹配
+                    rel_id_no_dash = '/'.join(part.lower().replace(' ', '').replace('-', '') for part in rel_without_ext.split('/'))
+                    file_id_no_dash = file_id.lower().replace('-', '').replace(' ', '')
+
+                    if rel_id == file_id or rel_id_no_dash == file_id_no_dash:
+                        found_file = full_path
+                        break
+            if found_file:
+                break
         if found_file:
             break
 
