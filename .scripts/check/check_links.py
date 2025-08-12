@@ -42,6 +42,7 @@ import requests
 import subprocess
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 
 # 终端彩色输出
 try:
@@ -74,6 +75,42 @@ def choose_check_remote():
     print('2. 否（仅检查内部链接）')
     choice = input('输入数字选择(1/2)，直接回车默认不检查: ').strip()
     return choice == '1'
+
+def load_whitelist():
+    """加载链接白名单"""
+    script_dir = Path(__file__).parent
+    whitelist_file = script_dir / 'link_whitelist.json'
+    
+    if not whitelist_file.exists():
+        # 如果白名单文件不存在，创建一个空的白名单文件
+        default_whitelist = {
+            "urls": [],  # 完整URL白名单
+            "patterns": []  # URL模式白名单（支持正则表达式）
+        }
+        whitelist_file.write_text(json.dumps(default_whitelist, indent=2, ensure_ascii=False), encoding='utf-8')
+        return default_whitelist
+    
+    try:
+        return json.loads(whitelist_file.read_text(encoding='utf-8'))
+    except Exception as e:
+        print(f'{Fore.YELLOW}警告：无法加载白名单文件：{e}{Style.RESET_ALL}')
+        return {"urls": [], "patterns": []}
+
+def is_url_whitelisted(url, whitelist):
+    """检查URL是否在白名单中"""
+    # 检查完整URL匹配
+    if url in whitelist.get('urls', []):
+        return True
+    
+    # 检查正则表达式模式匹配
+    for pattern in whitelist.get('patterns', []):
+        try:
+            if re.search(pattern, url):
+                return True
+        except re.error:
+            continue
+    
+    return False
 
 def get_repo_root():
     """获取仓库根目录路径"""
@@ -733,6 +770,9 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
     problems = defaultdict(list)
     # 额外收集：仅用于聚合统计（例如 old-doc），不计入问题
     collected_urls = []
+    
+    # 加载白名单
+    whitelist = load_whitelist()
 
     for file_path in mdx_files:
         links = extract_links_from_file(file_path)
@@ -741,6 +781,10 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
             line = link_info['line']
             line_content = link_info['line_content']
             link_type = link_info['type']
+            
+            # 检查链接是否在白名单中
+            if is_url_whitelisted(url, whitelist):
+                continue
 
             # 检查MDX导入
             if link_type == 'mdx_import':
