@@ -13,7 +13,7 @@ ZEGO 提供了[示例 Demo](#15769)，以供开发者进一步了解。
 
 ## 实现流程
 
-![/Pics/iOS/ZegoCopyrightedVideo/Third_Party_Video_Resource_Implementation_Audience_Android.png](https://storage.zego.im/sdk-doc/Pics/iOS/ZegoCopyrightedVideo/Third_Party_Video_Resource_Implementation_Audience_Android.png)
+![/Pics/iOS/ZegoCopyrightedVideo/Third_Party_Video_Resource_Implementation_Audience_Android.png](https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoCopyrightedVideo/Third_Party_Video_Resource_Implementation_Audience_Android.png)
 
 ### 1 开通服务
 

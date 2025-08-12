@@ -26,7 +26,7 @@ ZEGO 依托于在音视频分发领域多年的经验，孵化出实时有序数
 ### 1.3 功能架构
 
 实时有序数据功能的实现架构如下：
-![/Pics/Common/ZegoExpressEngine/ZegoRealTimeSequentialData.png](https://storage.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/ZegoRealTimeSequentialData.png)
+![/Pics/Common/ZegoExpressEngine/ZegoRealTimeSequentialData.png](https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/ZegoRealTimeSequentialData.png)
 
 1. 发送端开始推流，并在该流上附加实时有序数据；
 2. 通过 ZEGO MSDN 网络，将流信息和有序数据分发到接收端；

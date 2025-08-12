@@ -10,10 +10,10 @@ ZEGO 为一起看场景提供了两种解决方案，分别为` ZEGO 影视资�
 
 当房间内的一名用户（客户端）作为主持人，其余房间内用户作为观众时，主持人可同步自己的播放状态给观众端，并主动让所有观众向自己的进度同步，或观众可以主动让自己的视频进度向主持人对齐，以达到同步观看的效果，方案架构图如下：
 
-![/Pics/iOS/ZegoCopyrightedVideo/Client_Architecture.png](https://storage.zego.im/sdk-doc/Pics/iOS/ZegoCopyrightedVideo/Client_Architecture.png)
+![/Pics/iOS/ZegoCopyrightedVideo/Client_Architecture.png](https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoCopyrightedVideo/Client_Architecture.png)
 
 ### 服务端为主持人
 
 当业务服务端作为房间内主持人，房内用户均为观众时，服务端播放视频，观众端可以向服务器端同步进度。开发者通过服务器端 API 统一同步当前播放视频的状态与进度。
 
-![/Pics/iOS/ZegoCopyrightedVideo/Sever_Architecture.png](https://storage.zego.im/sdk-doc/Pics/iOS/ZegoCopyrightedVideo/Sever_Architecture.png)
+![/Pics/iOS/ZegoCopyrightedVideo/Sever_Architecture.png](https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoCopyrightedVideo/Sever_Architecture.png)

@@ -14,7 +14,7 @@ end
 ```
 
 <Frame width="512" height="auto" caption="">
-  <img src="https://storage.zego.im/sdk-doc/Pics/ZegoUIKit/Flutter/live/permission_podfile.png" />
+  <img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoUIKit/Flutter/live/permission_podfile.png" />
 </Frame>
 
 b. open the `your_project/ios/Runner/Info.plist` file, and add the following to the `dict` part:
@@ -27,6 +27,6 @@ b. open the `your_project/ios/Runner/Info.plist` file, and add the following to 
 ```
 
 <Frame width="512" height="auto" caption="">
-  <img src="https://storage.zego.im/sdk-doc/Pics/ZegoUIKit/Flutter/live/permission_ios.png" />
+  <img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoUIKit/Flutter/live/permission_ios.png" />
 </Frame>
 

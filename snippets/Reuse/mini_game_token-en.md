@@ -9,7 +9,7 @@ Before you initialize ZEGO MiniGameEngine SDK, your server needs to generate a t
 
 The following figure shows how to perform token-based authentication during initialization.
 
-![/Pics/zegocloud/mini_game/TokenAuthentication1.png](//doc.oa.zego.im/Pics/zegocloud/mini_game/TokenAuthentication1.png)
+![https://doc-media.zego.im/sdk-doc/Pics/zegocloud/mini_game/TokenAuthentication1.png](//doc.oa.zego.imhttps://doc-media.zego.im/sdk-doc/Pics/zegocloud/mini_game/TokenAuthentication1.png)
 
 1. A client applies for a token.
 2. The developer server generates a token and returns the token to the client.

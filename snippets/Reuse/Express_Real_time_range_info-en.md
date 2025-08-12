@@ -5,7 +5,7 @@ ZEGO Express SDK 从 3.0.0 版本起，新增万人范围音视频功能，支�
 
 大型虚拟世界中，用户一般不需要感知距离较远的远端用户，ZEGO 提供 AOI（Area Of Interest）能力，减免用户可见范围外的远端音视频信息，减少不必要的用户端流量及性能消耗。 
 
-![](https://storage.zego.im/sdk-doc/Pics/Express/express_AOI.png)
+![](https://doc-media.zego.im/sdk-doc/Pics/Express/express_AOI.png)
 
 ### 概念解释
 
