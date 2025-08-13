@@ -1,347 +1,224 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# 将版本信息的格式修改一下，要求如下：
+# 1. 将锚点放在2级标题这一行
+# 2. h5 标签改成**的粗体
+# 3. 列表的粗体移除，将列表下的普通文本缩进两次
+
+# 例如：
+# ```
+# ## 3.20.5 版本 <a id="3.20.5"></a>
+
+# **发布日期： 2025-04-25**
+
+# **问题修复**
+
+# 1. 修复部分 Android 6.0 及以下设备在外部采集或渲染场景下的崩溃问题
+#     修复了部分 Android 6.0 及以下设备在外部采集或渲染场景下可能出现的崩溃问题。
+# ---
+# ```
+
+# 调整版本信息格式
+# 使用方法:
+# python batch_replace.py <文件路径>                    # 处理单个文件
+# python batch_replace.py <文件模式> --batch            # 批量处理匹配的文件
+# python batch_replace.py --all                         # 处理所有release-notes.mdx文件
+# python batch_replace.py --list                        # 列出所有release-notes.mdx文件
+
+
 import re
 import os
+import glob
 
-def process_release_notes(file_path=None):
-    if file_path is None:
-        file_path = '/Users/zego/Documents/docs_all/core_products/low-latency-live-streaming/zh/rn-js/over-view/release-notes.mdx'
+def replace_h5_tags(file_path):
+    """替换文件中的h5标签格式"""
     
-    print(f"正在处理文件: {file_path}")
+    # 读取文件内容
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
     
-    # 创建备份文件
-    backup_path = file_path + '.backup'
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        with open(backup_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        print(f"已创建备份文件: {backup_path}")
-    except Exception as e:
-        print(f"处理文件失败: {e}")
-        return
-    
-    # 1. 给二级标题版本添加版本号 (从a标签name属性获取)
-    # 匹配模式: <a name="版本号"></a> 然后是 ## 版本
-    def replace_version_title(match):
-        version = match.group(1)
-        return f'<a name="{version}"></a>\n\n## {version} 版本'
-    
-    content = re.sub(r'<a name="([^"]+)"></a>\s*\n\s*## 版本', replace_version_title, content)
-    
-    # 2. 将<p class="hthree">改为<h5>标签
-    content = re.sub(r'<p class="hthree">([^<]+)</p>', r'<h5>\1</h5>', content)
-    
-    # 3. 改进的四级标题处理逻辑 - 按照3.21.0版本格式要求
-    content = process_headers_with_sections(content)
-    
-    # 4. 处理版本末尾的分隔符
-    content = process_version_separators(content)
-    
-    try:
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        print("批量替换完成！")
-    except Exception as e:
-        print(f"写入文件失败: {e}")
-
-def process_headers_with_sections(content):
-    """
-    改进的四级标题处理逻辑
-    处理所有四级标题，确保序号连贯，并在序号间添加空行
-    """
+    # 处理锚点位置：将独立的 <a id="版本号"></a> 移动到对应的 ## 版本号 版本 这一行的末尾
     lines = content.split('\n')
-    result_lines = []
-    current_section = None
-    section_counter = 0
-    
-    # 定义需要处理的分类
-    section_patterns = {
-        r'<h5>新增功能</h5>': '新增功能',
-        r'<h5>改进优化</h5>': '改进优化', 
-        r'<h5>问题修复</h5>': '问题修复',
-        r'<h5>废弃删除</h5>': '废弃删除',
-        r'<h5>其他变更</h5>': '其他变更',
-        r'<h5>兼容性变更</h5>': '兼容性变更'
-    }
-    
-    conversion_count = 0
-    
-    for i, line in enumerate(lines):
-        # 检查是否是新的分类标题
-        section_found = False
-        for pattern, section_name in section_patterns.items():
-            if re.match(pattern, line.strip()):
-                current_section = section_name
-                section_counter = 0
-                section_found = True
-                print(f"  进入分类: {section_name}")
-                break
-        
-        if section_found:
-            result_lines.append(line)
-            continue
-        
-        # 检查是否遇到新版本（重置分类）
-        if re.match(r'## \d+\.\d+\.\d+ 版本', line.strip()) or re.match(r'<a id=', line.strip()) or re.match(r'<a name=', line.strip()):
-            current_section = None
-            section_counter = 0
-            result_lines.append(line)
-            continue
-        
-        # 处理所有四级标题，不管是否在分类下
-        if line.strip().startswith('#### '):
-            # 提取标题内容
-            title = line.strip()[4:].strip()
-            
-            # 跳过已经是正确格式的条目（已经是**N. 格式的）
-            if re.match(r'^\*\*\d+\.', title):
-                # 检查是否需要更新计数器（处理序号不连贯的问题）
-                if current_section:
-                    match = re.match(r'^\*\*(\d+)\.', title)
-                    if match:
-                        existing_number = int(match.group(1))
-                        section_counter = max(section_counter, existing_number)
-                result_lines.append(line)
-                continue
-            
-            # 处理已经包含编号的条目（如"#### 1. 标题"）
-            if re.match(r'^\d+\.', title):
-                # 如果在分类下，使用分类计数器
-                if current_section:
-                    section_counter += 1
-                    indent = line[:len(line) - len(line.lstrip())]
-                    new_line = f'{indent}**{section_counter}. {title[title.find(".")+1:].strip()}**'
-                    
-                    # 在序号条目前添加空行（除非是第一个条目）
-                    if section_counter > 1 and result_lines and result_lines[-1].strip() != '':
-                        result_lines.append('')
-                    
-                    result_lines.append(new_line)
-                    conversion_count += 1
-                    print(f"    转换: #### {title} -> **{section_counter}. {title[title.find('.')+1:].strip()}**")
-                else:
-                    # 不在分类下，保持原有编号但改为粗体格式
-                    indent = line[:len(line) - len(line.lstrip())]
-                    new_line = f'{indent}**{title}**'
-                    result_lines.append(new_line)
-                    conversion_count += 1
-                    print(f"    转换: #### {title} -> **{title}**")
-                continue
-            
-            # 处理没有编号的条目
-            if current_section:
-                # 在分类下，使用分类计数器
-                section_counter += 1
-                indent = line[:len(line) - len(line.lstrip())]
-                new_line = f'{indent}**{section_counter}. {title}**'
-                
-                # 在序号条目前添加空行（除非是第一个条目）
-                if section_counter > 1 and result_lines and result_lines[-1].strip() != '':
-                    result_lines.append('')
-                
-                result_lines.append(new_line)
-                conversion_count += 1
-                print(f"    转换: #### {title} -> **{section_counter}. {title}**")
-            else:
-                # 不在分类下，直接转换为粗体格式
-                indent = line[:len(line) - len(line.lstrip())]
-                new_line = f'{indent}**{title}**'
-                result_lines.append(new_line)
-                conversion_count += 1
-                print(f"    转换: #### {title} -> **{title}**")
-        else:
-            # 处理已经是**N. 格式的行，确保序号连贯
-            if current_section and re.match(r'^\*\*\d+\.', line.strip()):
-                match = re.match(r'^\*\*(\d+)\.(.*)$', line.strip())
-                if match:
-                    existing_number = int(match.group(1))
-                    content_part = match.group(2)
-                    
-                    # 检查序号是否连贯
-                    expected_number = section_counter + 1
-                    if existing_number != expected_number:
-                        # 修正序号
-                        section_counter = expected_number
-                        indent = line[:len(line) - len(line.lstrip())]
-                        new_line = f'{indent}**{section_counter}.{content_part}**'
-                        
-                        # 在序号条目前添加空行（除非是第一个条目）
-                        if section_counter > 1 and result_lines and result_lines[-1].strip() != '':
-                            result_lines.append('')
-                        
-                        result_lines.append(new_line)
-                        conversion_count += 1
-                        print(f"    修正序号: **{existing_number}.{content_part}** -> **{section_counter}.{content_part}**")
-                    else:
-                        section_counter = existing_number
-                        
-                        # 在序号条目前添加空行（除非是第一个条目）
-                        if section_counter > 1 and result_lines and result_lines[-1].strip() != '':
-                            result_lines.append('')
-                        
-                        result_lines.append(line)
-                else:
-                    result_lines.append(line)
-            else:
-                result_lines.append(line)
-    
-    print(f"总共转换了 {conversion_count} 个标题")
-    return '\n'.join(result_lines)
-
-def process_version_separators(content):
-    """
-    处理版本末尾的分隔符
-    1. 替换现有的HTML格式分隔符为---
-    2. 为没有分隔符的版本添加---
-    """
-    lines = content.split('\n')
-    result_lines = []
-    separator_count = 0
-    
+    new_lines = []
     i = 0
+    
     while i < len(lines):
         line = lines[i]
         
-        # 检查是否是HTML格式的分隔符组合
-        if (line.strip() == '<br/>' or line.strip() == '<br>') and i + 1 < len(lines):
-            next_line = lines[i + 1]
-            if next_line.strip() == '<hr style="height:1px" />' or next_line.strip() == '<hr style="height:1px">':
-                # 替换为---
-                result_lines.append('---')
-                separator_count += 1
-                print(f"  替换HTML分隔符组合为---")
-                i += 2  # 跳过两行
-                continue
+        # 检查是否是独立的锚点行
+        anchor_match = re.match(r'^\s*<a id="([^"]+)"></a>\s*$', line)
+        if anchor_match:
+            version_id = anchor_match.group(1)
+            # 查找下一个版本标题行
+            j = i + 1
+            while j < len(lines):
+                next_line = lines[j]
+                # 检查是否是版本标题
+                version_match = re.match(r'^\s*## ([^<]+) 版本\s*$', next_line)
+                if version_match:
+                    # 将锚点移动到版本标题行末尾
+                    new_lines.append(f'## {version_match.group(1)} 版本 <a id="{version_id}"></a>')
+                    i = j  # 跳过原版本标题行
+                    break
+                elif next_line.strip() and not next_line.strip().startswith('**'):
+                    # 如果下一行不是版本标题，保持锚点独立
+                    new_lines.append(line)
+                    break
+                j += 1
+            else:
+                # 没找到版本标题，保持锚点独立
+                new_lines.append(line)
+        else:
+            new_lines.append(line)
         
-        # 检查是否是单独的hr标签
-        if re.match(r'<hr\s+style="height:1px"\s*/>', line.strip()) or re.match(r'<hr\s+style="height:1px">', line.strip()):
-            result_lines.append('---')
-            separator_count += 1
-            print(f"  替换HTML分隔符为---")
-            i += 1
-            continue
-        
-        result_lines.append(line)
         i += 1
     
-    # 第二步：为没有分隔符的版本添加分隔符
-    final_result = add_missing_separators(result_lines)
+    content = '\n'.join(new_lines)
     
-    print(f"总共处理了 {separator_count} 个版本分隔符")
-    return final_result
+    # 替换h5标签为粗体格式
+    content = re.sub(r'<h5>新增功能</h5>', '**新增功能**', content)
+    content = re.sub(r'<h5>改进优化</h5>', '**改进优化**', content)
+    content = re.sub(r'<h5>问题修复</h5>', '**问题修复**', content)
+    content = re.sub(r'<h5>废弃删除</h5>', '**废弃删除**', content)
+    
+    # 移除列表项的粗体，并缩进描述文本
+    # 匹配 **数字. 内容** 格式，将其改为 数字. 内容
+    content = re.sub(r'\*\*(\d+)\.\s*([^*]+)\*\*', r'\1. \2', content)
+    
+    # 写回文件
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+    
+    print(f"已处理文件: {file_path}")
 
-def add_missing_separators(lines):
-    """
-    为没有分隔符的版本添加分隔符
-    """
-    result_lines = []
-    version_positions = []
+def fix_indentation(file_path):
+    """专门修复列表项描述文本的缩进"""
     
-    # 找到所有版本的位置
-    for i, line in enumerate(lines):
-        if re.match(r'## \d+\.\d+\.\d+ 版本', line.strip()):
-            version_positions.append(i)
+    # 读取文件内容
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
     
-    # 如果没有版本，直接返回原内容
-    if not version_positions:
-        return '\n'.join(lines)
+    lines = content.split('\n')
+    new_lines = []
+    i = 0
     
-    # 添加第一个版本之前的内容（如果有的话）
-    if version_positions[0] > 0:
-        header_lines = lines[:version_positions[0]]
-        result_lines.extend(header_lines)
-    
-    # 处理每个版本
-    for i, version_pos in enumerate(version_positions):
-        # 确定当前版本的结束位置
-        if i < len(version_positions) - 1:
-            # 不是最后一个版本
-            version_end = version_positions[i + 1] - 1
-        else:
-            # 最后一个版本
-            version_end = len(lines) - 1
+    while i < len(lines):
+        line = lines[i]
+        new_lines.append(line)
         
-        # 添加版本标题和内容
-        version_lines = lines[version_pos:version_end + 1]
-        result_lines.extend(version_lines)
+        # 检查是否是列表项（数字. 开头）
+        if re.match(r'^\d+\.\s', line.strip()):
+            # 查找下一个列表项或标题，将中间的文本缩进
+            j = i + 1
+            while j < len(lines):
+                next_line = lines[j]
+                # 如果遇到新的列表项、标题或空行，停止缩进
+                if (re.match(r'^\d+\.\s', next_line.strip()) or 
+                    re.match(r'^##\s', next_line.strip()) or
+                    re.match(r'^\*\*[^*]+\*\*$', next_line.strip()) or
+                    next_line.strip() == '---'):
+                    break
+                # 缩进非空行
+                if next_line.strip():
+                    new_lines.append('    ' + next_line)
+                else:
+                    new_lines.append(next_line)
+                j += 1
+            i = j - 1
         
-        # 检查版本末尾是否有---分隔符
-        has_separator = False
-        for j in range(min(5, len(version_lines))):
-            if version_lines[-(j+1)].strip() == '---':
-                has_separator = True
-                break
-        
-        # 如果没有分隔符且不是最后一个版本，添加分隔符
-        if not has_separator and i < len(version_positions) - 1:
-            # 去除末尾的空行
-            while result_lines and result_lines[-1].strip() == '':
-                result_lines.pop()
-            
-            result_lines.append('')
-            result_lines.append('---')
-            print(f"  为版本添加分隔符: {lines[version_pos].strip()}")
+        i += 1
     
-    return '\n'.join(result_lines)
+    content = '\n'.join(new_lines)
+    
+    # 写回文件
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+    
+    print(f"已修复缩进: {file_path}")
 
-def batch_process_directory(directory):
-    """
-    批量处理目录下所有的release-notes.mdx文件
-    """
-    files = []
-    for root, dirs, filenames in os.walk(directory):
-        for filename in filenames:
-            if filename == 'release-notes.mdx':
-                files.append(os.path.join(root, filename))
+def process_single_file(file_path):
+    """处理单个文件"""
+    if os.path.exists(file_path):
+        print(f"\n正在处理文件: {file_path}")
+        # 先运行完整的替换
+        replace_h5_tags(file_path)
+        # 再专门修复缩进
+        fix_indentation(file_path)
+        print(f"✅ 完成处理: {file_path}")
+    else:
+        print(f"❌ 文件不存在: {file_path}")
+
+def process_multiple_files(file_pattern):
+    """批量处理多个文件"""
+    files = glob.glob(file_pattern, recursive=True)
     
     if not files:
-        print(f"在目录 {directory} 中没有找到 release-notes.mdx 文件")
+        print(f"❌ 没有找到匹配的文件: {file_pattern}")
         return
     
     print(f"找到 {len(files)} 个文件:")
     for file_path in files:
-        print(f"  {file_path}")
+        print(f"  - {file_path}")
     
-    confirm = input("\n确认要批量处理这些文件吗? (y/N): ")
+    confirm = input(f"\n确认要处理这 {len(files)} 个文件吗? (y/N): ")
     if confirm.lower() != 'y':
         print("已取消操作")
         return
     
     for file_path in files:
-        process_release_notes(file_path)
-        print()
+        process_single_file(file_path)
+    
+    print(f"\n🎉 批量处理完成！共处理了 {len(files)} 个文件")
 
-def main():
-    """主函数"""
-    import sys
+def find_release_notes_files():
+    """查找项目中的所有release-notes.mdx文件"""
+    pattern = "**/release-notes.mdx"
+    files = glob.glob(pattern, recursive=True)
     
-    if len(sys.argv) < 2:
-        print("使用方法:")
-        print("  python batch_replace.py <文件路径>           # 处理单个文件")
-        print("  python batch_replace.py <目录路径> --batch   # 批量处理目录下所有release-notes.mdx文件")
-        print("  python batch_replace.py                     # 处理默认文件")
-        return
+    if not files:
+        print("❌ 没有找到release-notes.mdx文件")
+        return []
     
-    path = sys.argv[1]
-    batch_mode = '--batch' in sys.argv
+    print(f"找到 {len(files)} 个release-notes.mdx文件:")
+    for i, file_path in enumerate(files, 1):
+        print(f"  {i:2d}. {file_path}")
     
-    if batch_mode:
-        if not os.path.isdir(path):
-            print(f"错误: {path} 不是一个有效的目录")
-            return
-        batch_process_directory(path)
-    else:
-        if not os.path.isfile(path):
-            print(f"错误: {path} 不是一个有效的文件")
-            return
-        process_release_notes(path)
+    return files
 
 if __name__ == "__main__":
-    if len(__import__('sys').argv) == 1:
-        # 没有参数时执行原来的默认逻辑
-        process_release_notes()
+    import sys
+    
+    if len(sys.argv) == 1:
+        # 没有参数时，查找并显示所有release-notes文件
+        files = find_release_notes_files()
+        if files:
+            print(f"\n使用方法:")
+            print(f"  python batch_replace.py <文件路径>                    # 处理单个文件")
+            print(f"  python batch_replace.py <文件模式> --batch            # 批量处理匹配的文件")
+            print(f"  python batch_replace.py --all                         # 处理所有release-notes.mdx文件")
+            print(f"  python batch_replace.py --list                        # 列出所有release-notes.mdx文件")
+    
+    elif len(sys.argv) == 2:
+        if sys.argv[1] == '--all':
+            # 处理所有release-notes.mdx文件
+            process_multiple_files("**/release-notes.mdx")
+        elif sys.argv[1] == '--list':
+            # 列出所有release-notes.mdx文件
+            find_release_notes_files()
+        else:
+            # 处理单个文件
+            file_path = sys.argv[1]
+            process_single_file(file_path)
+    
+    elif len(sys.argv) == 3 and sys.argv[2] == '--batch':
+        # 批量处理匹配的文件
+        file_pattern = sys.argv[1]
+        process_multiple_files(file_pattern)
+    
     else:
-        main()
+        print("使用方法:")
+        print(f"  python batch_replace.py <文件路径>                    # 处理单个文件")
+        print(f"  python batch_replace.py <文件模式> --batch            # 批量处理匹配的文件")
+        print(f"  python batch_replace.py --all                         # 处理所有release-notes.mdx文件")
+        print(f"  python batch_replace.py --list                        # 列出所有release-notes.mdx文件")
