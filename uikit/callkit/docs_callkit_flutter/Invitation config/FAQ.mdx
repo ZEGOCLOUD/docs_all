@@ -1,6 +1,6 @@
 # FAQ
 
-## How to configure offline push certificates two APPs
+<Accordion title="1. How to configure offline push certificates two APPs?" defaultOpen="false">
 
 
 I have two different apps that need to support offline calling with each other. How should I configure them?
@@ -29,9 +29,78 @@ await ZegoUIKitPrebuiltCallInvitationService().init(
   // ...
 )
 ```
+</Accordion>
 
-## How to fix app not opening call after answering offline invite
+<Accordion title="2. How to fix app not opening call after answering offline invite?" defaultOpen="false">
 
 Read [Delaying Auto-entry into Offline Calls After App Launch](./../Quick%20start%20(with%20call%20invitation).mdx#optional-delaying-auto-entry-into-offline-calls-after-app-launch) for solution.
 
 <Warning title="Warning">Please ensure that the certificates on the console correspond one-to-one with the certificateIndex in your code.</Warning>
+
+</Accordion>
+
+
+<Accordion title="3. How to solve the conflict when I integrate Firebase Cloud Message at the same time?" defaultOpen="false">
+When zego_uikit_prebuilt_call receives a message from FCM, it sends a broadcast to the current application with  action `com.zegocloud.zegouikit.call.fcm` when the message is not from Zego SDK, similar to the following code:
+
+```java
+Intent intent = new Intent("com.zegocloud.zegouikit.call.fcm");
+intent.putExtra("remoteMessage", remoteMessage);
+context.sendBroadcast(intent);
+```
+
+Therefore, if you have already integrated Firebase Messaging, you only need to follow these steps to complete the migration:
+
+1. Create and statically register a BroadcastReceiver in your application:
+   - Create a BroadcastReceiver, for example,`YourCustomBroadcastReceiver.java`.
+   - Register it to the `application` node of your application's `Manifest.xml` file, and set the action to `"com.zegocloud.zegouikit.call.fcm"`, for example:
+   ```xml
+   <receiver
+        android:name="com.zegocloud.uikit.demo.calloffline.YourCustomBroadcastReceiver"
+        android:enabled="true"
+        android:exported="false">
+        <intent-filter>
+          <action android:name="com.zegocloud.zegouikit.call.fcm"/>
+        </intent-filter>
+    </receiver>
+   ```
+2. Remove your original FCM Service in `Manifest.xml`,it looks like:
+    ```xml
+    <service
+        android:name=".java.MyFirebaseMessagingService"
+        android:exported="false">
+        <intent-filter>
+            <action android:name="com.google.firebase.MESSAGING_EVENT" />
+        </intent-filter>
+    </service>
+    ```
+   please remove it to avoid conflict with Zego SDK.
+
+3. Listen and handle the relevant events:
+   You have to migrate your logic from `MyFirebaseMessagingService` to `YourCustomBroadcastReceiver` as follow.
+
+   original code:
+   ```java
+   public class YourFirebaseMsgService extends FirebaseMessagingService {
+        @Override
+        public void onMessageReceived(RemoteMessage remoteMessage) {
+            // your custom logic
+        }
+    }
+   ```
+   please migrate like this,and delete YourFirebaseMsgService.java then:
+
+   ```java
+   public class YourCustomBroadcastReceiver extends BroadcastReceiver {
+
+        private static final String TAG = "CustomReceiver";
+
+        public void onReceive(Context context, Intent intent) {
+            com.google.firebase.messaging.RemoteMessage remoteMessage = intent.getParcelableExtra("remoteMessage");
+            //  your custom logic
+            Log.d(TAG, "onReceive.remoteMessage.getData: " + remoteMessage.getData());
+        }
+    }
+   ```
+With these steps, you should be able to receive and handle your own FCM messages.
+</Accordion>
