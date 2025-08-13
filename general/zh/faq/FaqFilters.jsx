@@ -4,7 +4,7 @@ const FilterContext = createContext();
 
 export const useFilters = () => useContext(FilterContext);
 
-export const FaqFilters = ({ children, productData, platformData, language = 'zh' }) => {
+export const FaqFilters = ({ children, productData, platformData, language = 'zh', initialProduct, initialPlatform, hideSelectors = false }) => {
     // 根据语言设置默认值和文案
     const getDefaultValues = () => {
         if (language === 'en') {
@@ -25,8 +25,8 @@ export const FaqFilters = ({ children, productData, platformData, language = 'zh
 
     const { allProducts, allPlatforms, productLabel, platformLabel } = getDefaultValues();
 
-    const [product, setProduct] = useState(allProducts);
-    const [platform, setPlatform] = useState(allPlatforms);
+    const [product, setProduct] = useState(initialProduct || allProducts);
+    const [platform, setPlatform] = useState(initialPlatform || allPlatforms);
     const [productOpen, setProductOpen] = useState(false);
     const [platformOpen, setPlatformOpen] = useState(false);
     const productRef = useRef(null);
@@ -132,6 +132,7 @@ export const FaqFilters = ({ children, productData, platformData, language = 'zh
 
     return (
         <FilterContext.Provider value={{ product, platform }}>
+            {!hideSelectors && (
             <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '14px', color: 'var(--docuo-color-primary)' }}>{productLabel}</span>
@@ -280,6 +281,7 @@ export const FaqFilters = ({ children, productData, platformData, language = 'zh
                     </div>
                 </div>
             </div>
+            )}
             {children}
         </FilterContext.Provider>
     );
