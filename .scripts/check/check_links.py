@@ -127,18 +127,37 @@ def find_instances_for_files(files, config, repo_root):
 
     return instances_map
 
+def _load_json_file(path):
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None
+
 def load_config(language):
     repo_root = get_repo_root()
     if not repo_root:
-        print(f'{Fore.RED}未找到仓库根目录（包含docuo.config.json的目录）{Style.RESET_ALL}')
+        print(f'{Fore.RED}未找到仓库根目录（包含docuo.config.*.json 的目录）{Style.RESET_ALL}')
         sys.exit(1)
 
-    config_file = os.path.join(repo_root, 'docuo.config.json')
-    if not os.path.exists(config_file):
-        print(f'{Fore.RED}未找到配置文件: {config_file}{Style.RESET_ALL}')
+    # 优先尝试 docuo.config.json；若不存在则按语言回退到 docuo.config.{zh|en}.json
+    main_path = os.path.join(repo_root, 'docuo.config.json')
+    lang_path = os.path.join(repo_root, f'docuo.config.{language}.json')
+
+    config = None
+    if os.path.exists(main_path):
+        config = _load_json_file(main_path)
+    elif os.path.exists(lang_path):
+        config = _load_json_file(lang_path)
+    else:
+        # 兼容场景：如果只存在 en/zh 两个文件，按语言加载失败后再尝试另一种语言
+        alt_lang = 'en' if language == 'zh' else 'zh'
+        alt_lang_path = os.path.join(repo_root, f'docuo.config.{alt_lang}.json')
+        config = _load_json_file(alt_lang_path)
+
+    if not config:
+        print(f'{Fore.RED}未找到配置文件: {main_path} 或 {lang_path}{Style.RESET_ALL}')
         sys.exit(1)
-    with open(config_file, 'r', encoding='utf-8') as f:
-        config = json.load(f)
     return config, repo_root
 
 def choose_instance(instances):
@@ -670,18 +689,29 @@ def check_remote_link(link):
 
 def check_mdx_import(import_path, base_file_path, repo_root):
     """检查MDX导入路径是否有效"""
-    # 只检查.mdx文件
-    if not import_path.lower().endswith('.mdx'):
-        return None
-
-    # 使用仓库根目录作为根目录
+    # 统一使用仓库根目录作为查找基准
+    if import_path.startswith('/'):
+        import_path = import_path[1:]
     full_path = os.path.join(repo_root, import_path)
 
-    # 检查文件是否存在
-    if not os.path.exists(full_path):
+    # 1) 明确以 .mdx 结尾：要求存在对应文件
+    if import_path.lower().endswith('.mdx'):
+        return os.path.isfile(full_path)
+
+    # 2) 可能是省略扩展名的文件：尝试同名 .mdx
+    candidate_file = full_path + '.mdx'
+    if os.path.isfile(candidate_file):
+        return True
+
+    # 3) 可能是目录写法：尝试目录下的 index.mdx
+    if os.path.isdir(full_path):
+        index_file = os.path.join(full_path, 'index.mdx')
+        if os.path.isfile(index_file):
+            return True
         return False
 
-    return True
+    # 4) 既不是文件也不是目录
+    return False
 
 def check_import_file(import_path, repo_root):
     """检查import语句中的文件路径是否有效"""
@@ -692,11 +722,18 @@ def check_import_file(import_path, repo_root):
     # 使用仓库根目录作为根目录
     full_path = os.path.join(repo_root, import_path)
 
-    # 检查文件是否存在
-    if not os.path.exists(full_path):
+    # 优先要求是实际文件
+    if os.path.isfile(full_path):
+        return True
+
+    # 若为目录，则仅当包含 index.mdx 时认为有效（与 MDX 目录导入的解析保持一致）
+    if os.path.isdir(full_path):
+        index_file = os.path.join(full_path, 'index.mdx')
+        if os.path.isfile(index_file):
+            return True
         return False
 
-    return True
+    return False
 
 def is_old_doc_url_any(url):
     """判断是否为旧文档链接（不区分实例语言）"""
@@ -716,6 +753,28 @@ def is_old_doc_url_any(url):
         'https://www.zegocloud.com/docs/admin-console',
     ]
     return any(url.startswith(p) for p in old_en_prefixes)
+
+def _load_all_instances_config(repo_root):
+    """合并 en / zh / main 的 instances，用于 git 模式跨实例检查。"""
+    merged = {'instances': []}
+    paths = [
+        os.path.join(repo_root, 'docuo.config.json'),
+        os.path.join(repo_root, 'docuo.config.en.json'),
+        os.path.join(repo_root, 'docuo.config.zh.json'),
+    ]
+    seen = set()
+    for p in paths:
+        if not os.path.exists(p):
+            continue
+        obj = _load_json_file(p) or {}
+        for inst in obj.get('instances', []):
+            # 根据 (id, path) 去重，避免重复合并
+            key = (inst.get('id'), inst.get('path'))
+            if key in seen:
+                continue
+            seen.add(key)
+            merged['instances'].append(inst)
+    return merged
 
 def check_git_mode():
     """git模式：检查变更文件对应的实例"""
@@ -743,13 +802,11 @@ def check_git_mode():
             print(f'{Fore.RED}未找到仓库根目录{Style.RESET_ALL}')
             return False
 
-        config_file = os.path.join(repo_root, 'docuo.config.json')
-        if not os.path.exists(config_file):
-            print(f'{Fore.RED}未找到配置文件: {config_file}{Style.RESET_ALL}')
+        # 合并加载全部实例配置（支持 docuo.config.json / .en.json / .zh.json）
+        config = _load_all_instances_config(repo_root)
+        if not config.get('instances'):
+            print(f'{Fore.RED}未找到任何实例，请检查配置文件。{Style.RESET_ALL}')
             return False
-
-        with open(config_file, 'r', encoding='utf-8') as f:
-            config = json.load(f)
 
         # 找到对应的实例
         instances_map = find_instances_for_files(changed_files, config, repo_root)
