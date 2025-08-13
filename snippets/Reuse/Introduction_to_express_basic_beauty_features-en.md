@@ -13,7 +13,7 @@ The basic face beautification features listed in this document (skin tone enhanc
 For more advanced beautification features, see [Add video filters with the AI Effects](!Best_Practice/Use_of_ExpressSDK_and_ZegoEffectsSDK).
 </div>
 
-<video poster="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/ExpressBeauty.png" src="https://zego-public.oss-cn-shanghai.aliyuncs.com/sdk-doc/doc/video/Express_Video_SDK/ExpressBeauty.mp4" width="65%" muted="true" loop="true" autoplay="autoplay" preload="auto" nocontrols></video>
+<video poster="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/ExpressBeauty.png" src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/ExpressBeauty.mp4" width="65%" muted="true" loop="true" autoplay="autoplay" preload="auto" nocontrols></video>
 
 
 

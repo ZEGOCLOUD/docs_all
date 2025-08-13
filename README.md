@@ -37,3 +37,7 @@ https://dashboard.algolia.com/
 ## 更新 AI 数据
 
 请参考 [更新AI数据说明](.scripts/ai_data/README.md)
+
+## 产品上架迁移
+
+请参考 [产品上架迁移说明](https://zegocloud.feishu.cn/wiki/NwKuwv5jYi7YBRkGthzcAxjBn6b)

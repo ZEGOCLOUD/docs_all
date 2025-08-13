@@ -42,7 +42,7 @@
 </tr>
 <tr>
 <td>Web</td>
-<td><ul><li>Chrome 58 或以上版本</li><li>Firefox 56 或以上版本</li><li>Safari 11 或以上版本</li><li>Opera 45 或以上版本</li><li>QQ 浏览器 Windows 10.1 或以上版本、macOS 4.4 或以上版本</li><li>360 安全浏览器极速模式</li></ul><p>更多兼容性要求，请参考 <a target="_blank" href="12047">限制说明 - 浏览器兼容性说明</a></p></td>
+<td><ul><li>Chrome 58 或以上版本</li><li>Firefox 56 或以上版本</li><li>Safari 11 或以上版本</li><li>Opera 45 或以上版本</li><li>QQ 浏览器 Windows 10.1 或以上版本、macOS 4.4 或以上版本</li><li>360 安全浏览器极速模式</li></ul><p>更多兼容性要求，请参考 <a target="_blank" href="/real-time-video-web/introduction/browser-restrictions">限制说明 - 浏览器兼容性说明</a></p></td>
 <td>-</td>
 </tr>
 <tr>

@@ -1,0 +1,204 @@
+---
+articleID: 18005
+---
+# 媒体补充增强信息（SEI）
+
+- - -
+
+## 功能简介
+
+在音视频流媒体应用中，除了可以流媒体通道推拉音视频内容外，还可以使用流 SEI（Supplemental Enhancement Information，媒体补充增强信息）通过流媒体通道将文本信息与音视频内容打包在一起，从主播端（推流端）推出，并从观众端（拉流端）接收，以此实现文本数据与音视频内容的精准同步的目的。
+
+一般可用于视频画面的精准布局、远端歌词同步、直播答题等应用场景。
+
+<Note title="说明">
+
+
+SEI 的相关概念及原理请参考 [如何理解和使用 SEI（媒体补充增强信息）](https://doc-zh.zego.im/faq/sei)。
+
+</Note>
+
+
+
+
+## 前提条件
+
+在实现 SEI 功能之前，请确保：
+
+- 已在项目中集成 ZEGO Express SDK，实现基本的实时语音功能，详情请参考 [快速开始 - 集成](!ExpressAudioSDK-Integration/SDK_Integration) 和 [快速开始 - 实现流程](!ExpressAudioSDK-Integration/Solution_Implementation)。
+- 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目管理](/console/project-info) 中的“项目信息”。
+
+## 使用步骤
+
+发送与接收 SEI 信息功能需要推流和拉流端配对使用才能展示效果，即需要在推流端发送 SEI 信息，拉流端接收 SEI 信息。以下内容将介绍各端如何使用发送与接收 SEI 信息功能。
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/send_and_recv_sei.png" /></Frame>
+
+主播推流发送 SEI 消息调用流程如下：
+
+1. 调用 [loginRoom](@loginRoom) 接口登录房间。
+2. 调用 [startPublishingStream](@startPublishingStream) 接口推流。
+3. 在推流成功后，调用 [sendSEI](@sendSEI) 接口发送 SEI 信息。
+
+观众拉流接收 SEI 消息调用流程如下：
+
+1. 创建 [IZegoEventHandler](@-IZegoEventHandler) 对象，并重写接收 SEI 信息的 [onPlayerRecvSEI](@onPlayerRecvSEI) 方法。
+2. 调用 [loginRoom](@loginRoom) 接口登录房间。
+3. 调用 [startPlayingStream](@startPlayingStream) 接口拉流。
+4. 在拉流成功后，接收到推流端发送的 SEI 信息之后触发 [onPlayerRecvSEI](@onPlayerRecvSEI) 回调。
+
+<Note title="说明">
+
+
+    拉流时，如果开发者通过调用 `mutePlayStreamVideo` 或 `muteAllPlayStreamVideo` 接口，设置了只拉音频流时，将无法接收 SEI 信息。
+
+</Note>
+
+
+
+### （可选）设置 SEI 类型
+
+<Accordion title="设置 SEI 类型" defaultOpen="false">
+由于 SDK 默认使用 ZEGO 自行定义的 SEI（nalu type = 6,payload type = 243）类型打包，且此类型是 SEI 标准未规定的类型，因此跟视频编码器或者视频文件中的 SEI 不存在冲突。但当开发者需要使用第三方解码器解码时（如 FFmpeg），会导致解不出正确的 SEI，此时需要在推流前调用 [setSEIConfig](@setSEIConfig) 接口更换 SDK 发送 SEI 的类型，使用 UserUnregister 的 SEI（nalu type = 6,payload type = 5）类型打包。
+
+<Note title="说明">
+
+
+仅当开发者使用第三方解码器解码 SEI 时需要执行该步骤。
+
+</Note>
+
+
+
+
+- 接口原型
+
+    ```cpp
+    /**
+     * 设置媒体增强补充信息（SEI）类型。
+     *
+     * 必须在推流之前设置。
+     *
+     * @param config SEI 配置属性。默认使用 Zego 定义的 SEI 类型。
+     */
+    virtual void setSEIConfig(ZegoSEIConfig config) = 0;
+    ```
+
+- 调用示例
+
+    ```cpp
+    ZegoSEIConfig seiConfig;
+    // 采用 H.264 的 SEI (nalu type = 6,payload type = 5) 类型打包，因为视频编码器自身会产生 payload type 为 5 的 SEI，或者使用视频文件推流时，视频文件中也可能存在这样的 SEI，所以使用此类型时，用户需要把 uuid + content 当作 buffer 塞给 SEI 发送接口；此时为了区别视频编码器自身产生的 SEI， App 在发送此类型 SEI 时，可以填写业务特定的 uuid（uuid长度为16字节），接收方使用 SDK 解析 payload type 为 5 的 SEI 时，会根据设置的过滤字符串过滤出 uuid相符的 SEI 抛给业务，如果没有设置过滤字符串，SDK 会把所有收到的 SEI 都抛给开发者。
+    seiConfig.type = ZEGO_SEI_TYPE_USER_UNREGISTER;
+
+    engine->setSEIConfig(seiConfig);
+
+    // 通过 advancedConfig 设置 uuid 过滤字段，设置之后 SDK 只会抛出前 12 个字节为开发者所设置 uuid 的 SEI。
+    ZegoEngineConfig engineConfig;
+    // 其他用户通过 [onPlayerRecvSEI] 收到的 SEI 信息前 12 个字节一定是 zegozegozego，其他会被过滤。
+    engineConfig.advancedConfig.put("unregister_sei_filter", "zegozegozego");
+    engineConfig.advancedConfig = {{"unregister_sei_filter", "zegozegozego"}};
+    ZegoExpressSDK::setEngineConfig(engineConfig);
+
+    // 开始推流。
+    engine->startPublishingStream("STREAM_ID");
+    ```
+</Accordion>
+
+
+### 推流方
+
+发送 SEI 信息的接口需要在推流成功之后调用，接口原型如下：
+
+- 接口原型
+
+    ```cpp
+    /**
+     * 发送媒体增强补充信息。
+     *
+     * 此接口可在开发者推流传输音视频流数据同时，发送流媒体增强补充信息来同步一些其他附加信息。
+     * 一般如同步音乐歌词或视频画面精准布局等场景，可选择使用发送 SEI。
+     * 当推流方发送 SEI 后，拉流方可通过监听 [onPlayerRecvSEI] 的回调获取 SEI 内容。
+     * 由于 SEI 信息跟随视频帧或音频帧，由于网络问题有可能丢帧，因此 SEI 信息也有可能丢，为解决这种情况，应该在限制频率内多发几次。
+     * 限制频率：1 秒钟不要超过 30 次。
+     * SEI 数据长度限制为 4096 字节。
+     *
+     * @param data SEI 内容。
+     * @param dataLength SEI 内容长度。
+     */
+    virtual void sendSEI(const unsigned char* data, unsigned int dataLength) = 0;
+    ```
+
+- 调用示例
+
+    ```cpp
+    ZegoEngineProfile profile;
+    // AppID 和 AppSign 由 ZEGO 分配给各 App；其中，为了安全考虑，建议将 AppSign 存储在 App 的业务后台，需要使用时从后台获取。
+    profile.appID = appID;
+    profile.appSign = appSign;
+    profile.scenario = ZegoScenario::ZEGO_SCENARIO_DEFAULT;
+    // 创建引擎实例。
+    auto engine = ZegoExpressSDK::createEngine(profile, nullptr);
+    // 登录房间。
+    engine->loginRoom(roomID, user);
+    // 推流。
+    engine->startPublishingStream(streamID);
+    // 开发者的其他业务逻辑。
+    ...;
+    // 在业务场景需要的时机发送 SEI 信息。
+    engine->sendSEI(test2,  seiLength);
+    ```
+
+### 拉流方
+
+接收 SEI 信息的回调接口需要在拉流成功之后触发，接口原型如下：
+
+- 接口原型
+
+    ```cpp
+    /**
+     * 收到远端流的 SEI 内容。
+     *
+     * 拉流成功后，当远端流调用 sendSEI 后，本端会收到此回调。
+     * 若只拉纯音频流，将收不到推流端发送的 SEI 信息。
+     *
+     * @param streamID 拉流的流 ID
+     * @param data SEI 内容。
+     * @param dataLength SEI 内容长度。
+     */
+    virtual void onPlayerRecvSEI(const std::string& /*streamID*/, const unsigned char* /*data*/, unsigned int /*dataLength*/);
+    ```
+
+- 调用示例
+
+    ```cpp
+    // 创建 IZegoEventHandler 对象, 并重写 onPlayerRecvSEI 方法。
+    class MyEventHandler :public IZegoEventHandler
+    {
+        public:
+        // 监听接收 SEI 信息的回调, 当发送端调用 sendSEI 发送信息时会触发此回调。
+        virtual void onPlayerRecvSEI(const std::string& /*streamID*/, const unsigned char* /*data*/, unsigned int /*dataLength*/) {
+         // 在这里实现业务场景相关的逻辑, 例如展现相关的 UI 等。
+        }
+         // 重写的其他回调。
+        ...
+    };
+    auto handler=std::make_shared<MyEventHandler>();
+
+    ZegoEngineProfile profile;
+    // AppID 和 AppSign 由 ZEGO 分配给各 App；其中，为了安全考虑，建议将 AppSign 存储在 App 的业务后台，需要使用时从后台获取。
+    profile.appID = appID;
+    profile.appSign = appSign;
+    profile.scenario = ZegoScenario::ZEGO_SCENARIO_DEFAULT;
+    // 创建引擎实例。
+    auto engine = ZegoExpressSDK::createEngine(profile, nullptr);
+
+    // 登录房间。
+    engine->loginRoom(roomID, user);
+    // 拉流, canvas 为 ZegoCanvas 类型的索引 UI 渲染控件的对象。
+    engine->startPlayingStream(streamID, &canvas);
+    ```
+
+## 相关文档
+
+[如何理解和使用 SEI（媒体补充增强信息）？](https://doc-zh.zego.im/faq/sei)
