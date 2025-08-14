@@ -12,20 +12,32 @@ echo -e "${BLUE}    ZEGO 文档项目环境设置脚本${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
+# 解析参数
+WITH_HOOK=false
+for arg in "$@"; do
+	case "$arg" in
+		--with-hook)
+			WITH_HOOK=true
+			;;
+		*)
+			;;
+	esac
+done
+
 # 1. 检查 Node.js 版本
 echo -e "${YELLOW}1. 检查 Node.js 版本...${NC}"
 if command -v node &> /dev/null; then
     NODE_VERSION=$(node -v | cut -d'v' -f2)
     NODE_MAJOR=$(echo $NODE_VERSION | cut -d'.' -f1)
-    
+
     echo -e "当前 Node.js 版本: ${GREEN}v$NODE_VERSION${NC}"
-    
+
     if [ "$NODE_MAJOR" -ge 19 ]; then
         echo -e "${GREEN}✓ Node.js 版本满足要求 (>= 19)${NC}"
     else
         echo -e "${RED}✗ Node.js 版本过低，需要 >= 19，当前版本: $NODE_VERSION${NC}"
         echo -e "${YELLOW}正在安装最新的 LTS 版本...${NC}"
-        
+
         # 检测操作系统并安装 Node.js
         if [[ "$OSTYPE" == "darwin"* ]]; then
             # macOS
@@ -51,7 +63,7 @@ if command -v node &> /dev/null; then
             echo -e "${RED}不支持的操作系统，请手动安装 Node.js >= 19${NC}"
             exit 1
         fi
-        
+
         # 验证安装
         if command -v node &> /dev/null; then
             NEW_VERSION=$(node -v)
@@ -64,7 +76,7 @@ if command -v node &> /dev/null; then
 else
     echo -e "${RED}✗ 未找到 Node.js${NC}"
     echo -e "${YELLOW}正在安装 Node.js...${NC}"
-    
+
     if [[ "$OSTYPE" == "darwin"* ]]; then
         if command -v brew &> /dev/null; then
             brew install node
@@ -95,7 +107,7 @@ if command -v docuo &> /dev/null; then
 else
     echo -e "${YELLOW}正在安装 Docuo CLI...${NC}"
     npm install -g @spreading/docuo
-    
+
     if command -v docuo &> /dev/null; then
         echo -e "${GREEN}✓ Docuo CLI 安装成功${NC}"
     else
@@ -106,10 +118,14 @@ fi
 
 echo ""
 
-# 3. 将.hooks下的脚本都复制到.git/hooks下
-echo -e "${YELLOW}3. 复制 Git Hooks...${NC}"
-cp -f .hooks/* .git/hooks/
-echo -e "${GREEN}✓ Git Hooks 复制成功${NC}"
+# 3. 将.hooks下的脚本在需要时复制到.git/hooks下
+if [ "$WITH_HOOK" = true ]; then
+	echo -e "${YELLOW}3. 复制 Git Hooks...${NC}"
+	cp -f .hooks/* .git/hooks/
+	echo -e "${GREEN}✓ Git Hooks 复制成功${NC}"
+else
+	echo -e "${YELLOW}3. 跳过 Git Hooks 复制（未使用 --with-hook）${NC}"
+fi
 echo ""
 
 # 4. 提醒安装 VS Code 插件
@@ -135,9 +151,9 @@ echo -e "${BLUE}环境设置完成！现在可以启动开发服务器:${NC}"
 echo -e "${GREEN}docuo dev${NC}"
 echo ""
 echo -e "${YELLOW}提示:${NC}"
-echo -e "• 首次运行后，可以使用 ${GREEN}docuo dev --noinstall${NC} 加快启动速度"
 echo -e "• 如果遇到问题，可以运行: ${GREEN}docuo clear && docuo dev${NC}"
+echo -e "• 如需拷贝 Git Hooks，请使用: ${GREEN}./setup.sh --with-hook${NC}"
 echo ""
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}    环境设置完成！${NC}"
-echo -e "${BLUE}========================================${NC}" 
+echo -e "${BLUE}========================================${NC}"
