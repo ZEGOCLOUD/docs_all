@@ -1,63 +1,45 @@
 import os
 import re
+import json
 
-def extract_title_from_mdx(file_path):
-    """从 MDX 文件中提取标题"""
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-            # 查找以 # 开头的第一行作为标题
-            match = re.search(r'^#\s+(.+?)(?:\n|$)', content, re.MULTILINE)
-            if match:
-                return match.group(1).strip()
-    except Exception as e:
-        print(f"Error reading file {file_path}: {e}")
-    return None
-
-def update_overview_file(overview_path, title_to_file):
-    """更新 overview.mdx 文件中的产品咨询部分的链接"""
+def update_overview_file(overview_path, sidebar_data):
+    """更新 overview.mdx 文件中的链接"""
     try:
         with open(overview_path, 'r', encoding='utf-8') as f:
             content = f.read()
 
-        # 找到产品咨询部分
-        product_section_pattern = r'(## 产品咨询\n<ul>)(.*?)(</ul>)'
-        product_section_match = re.search(product_section_pattern, content, re.DOTALL)
-        
-        if not product_section_match:
-            print("未找到产品咨询部分")
-            return
+        # 找到所有 FilteredLink 标签
+        link_pattern = r'<FilteredLink[^>]*>(.*?)</FilteredLink>'
+        links = re.finditer(link_pattern, content, re.DOTALL)
+        updated_content = content
 
-        # 获取产品咨询部分的内容
-        product_section = product_section_match.group(2)
-        updated_section = product_section
+        # 获取 sidebar 中的所有文档
+        faq_docs = {}
+        for item in sidebar_data["mySidebar"]:
+            if item.get("type") == "category" and item.get("label") == "常见问题":
+                for doc in item.get("items", []):
+                    if doc.get("type") == "doc":
+                        faq_docs[doc["label"].strip()] = doc["id"]
 
         # 对每个 FilteredLink 进行处理
-        link_pattern = r'<FilteredLink[^>]*>(.*?)</FilteredLink>'
-        for match in re.finditer(link_pattern, product_section, re.DOTALL):
+        for match in links:
             link_content = match.group(0)
             title = match.group(1).strip()
             
-            # 查找匹配的文件
-            if title in title_to_file:
-                file_id = os.path.splitext(title_to_file[title])[0]
-                # 只替换这个特定链接的 href
+            # 查找匹配的文档
+            if title in faq_docs:
+                doc_id = faq_docs[title]
+                # 替换这个特定链接的 href
                 new_link = re.sub(
                     r'href="[^"]*"',
-                    f'href="/faq/general-product-inquiry/{file_id}"',
+                    f'href="/faq/{doc_id}"',
                     link_content
                 )
-                updated_section = updated_section.replace(link_content, new_link)
-
-        # 替换产品咨询部分的内容
-        new_content = content.replace(
-            product_section_match.group(0),
-            f"## 产品咨询\n<ul>{updated_section}</ul>"
-        )
+                updated_content = updated_content.replace(link_content, new_link)
 
         # 写入文件
         with open(overview_path, 'w', encoding='utf-8') as f:
-            f.write(new_content)
+            f.write(updated_content)
             
         print("成功更新 overview.mdx 文件中的链接")
 
@@ -67,21 +49,19 @@ def update_overview_file(overview_path, title_to_file):
 def main():
     # 设置目录路径
     faq_dir = os.path.dirname(os.path.abspath(__file__))
-    product_inquiry_dir = os.path.join(faq_dir, 'general-product-inquiry')
     overview_path = os.path.join(faq_dir, 'overview.mdx')
+    sidebar_path = os.path.join(faq_dir, 'sidebars.json')
 
-    # 获取所有 MDX 文件的标题和文件名的映射
-    title_to_file = {}
-    for filename in os.listdir(product_inquiry_dir):
-        if filename.endswith('.mdx'):
-            file_path = os.path.join(product_inquiry_dir, filename)
-            title = extract_title_from_mdx(file_path)
-            if title:
-                title_to_file[title] = filename
-                print(f"找到文件: {filename} -> {title}")
+    try:
+        # 读取 sidebar.json
+        with open(sidebar_path, 'r', encoding='utf-8') as f:
+            sidebar_data = json.load(f)
 
-    # 更新 overview.mdx 文件中的链接
-    update_overview_file(overview_path, title_to_file)
+        # 更新 overview.mdx 文件
+        update_overview_file(overview_path, sidebar_data)
+
+    except Exception as e:
+        print(f"执行脚本时出错: {e}")
 
 if __name__ == '__main__':
     main()
