@@ -91,6 +91,7 @@ install_dependencies() {
     DEPENDENCIES=(
         "requests>=2.25.0"
         "crawl4ai"
+        "playwright>=1.35.0"
         "pathlib"
     )
 
@@ -102,6 +103,10 @@ install_dependencies() {
         print_info "安装 $dep..."
         pip install "$dep"
     done
+
+    # 安装 Playwright 浏览器
+    print_info "安装 Playwright 浏览器..."
+    playwright install
 
     print_success "依赖安装完成"
 }
@@ -119,6 +124,14 @@ try:
 except ImportError as e:
     print('❌ crawl4ai 导入失败:', e)
     sys.exit(1)
+
+try:
+    from playwright.sync_api import sync_playwright
+    print('✅ playwright 导入成功')
+except ImportError as e:
+    print('❌ playwright 导入失败:', e)
+    sys.exit(1)
+
 print('✅ 所有依赖验证通过')
 "
 
@@ -157,8 +170,33 @@ python -c "import requests; print('✅ requests 可用')" 2>/dev/null || {
 }
 
 python -c "import crawl4ai; print('✅ crawl4ai 可用')" 2>/dev/null || {
-    echo "⚠️  crawl4ai 未安装，页面下载功能将不可用"
-    echo "   如需使用页面下载功能，请运行: pip install crawl4ai"
+    echo "⚠️  crawl4ai 未安装，正在安装..."
+    pip install crawl4ai
+    echo "🔧 安装 Playwright 浏览器..."
+    playwright install
+    echo "✅ crawl4ai 和 Playwright 浏览器安装完成"
+}
+
+# 检查 Playwright 浏览器是否可用
+echo "🔍 检查 Playwright 浏览器..."
+python -c "
+import sys
+try:
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        # 尝试启动浏览器来检查是否安装
+        browser = p.chromium.launch(headless=True)
+        browser.close()
+    print('✅ Playwright 浏览器可用')
+except Exception as e:
+    print('❌ Playwright 浏览器不可用，正在安装...')
+    import subprocess
+    subprocess.run(['playwright', 'install'], check=True)
+    print('✅ Playwright 浏览器安装完成')
+" 2>/dev/null || {
+    echo "🔧 正在安装 Playwright 浏览器..."
+    playwright install
+    echo "✅ Playwright 浏览器安装完成"
 }
 
 # 检查配置文件
