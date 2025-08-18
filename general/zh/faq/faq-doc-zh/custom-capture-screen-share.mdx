@@ -3,11 +3,15 @@ date: "2023-03-03"
 ---
 # 如何通过自定义采集实现屏幕共享？
 
-<div class="mk-warning">
+<Warning title="注意">
 
 
-如果您是 3.1.0 版本及以上的 SDK，建议您使用最新的实现方式，请参考 [屏幕共享\|_blank](#10460) 文档。  
-</div>
+
+如果您是 3.1.0 版本及以上的 SDK，建议您使用最新的实现方式，请参考 [屏幕共享](https://doc-zh.zego.im/article/10460) 文档。  
+
+</Warning>
+
+
 
 ## 功能简介
 
@@ -22,103 +26,117 @@ date: "2023-03-03"
 ## iOS 实现流程
 
 
-### 1 前提条件
+### 前提条件
 
 在实现屏幕共享功能之前，请确保：
 - 已准备好 iOS 12.0 或以上版本且支持音视频的 iOS 设备或模拟器（推荐使用真机）。
-- 已在项目中集成 ZEGO Express SDK，实现基本的实时音视频功能，详情请参考 [快速开始 - 集成\|_blank](/article/196) 和 [快速开始 - 实现视频通话\|_blank](/article/7628)。
-- 已在 [ZEGO 控制台\|_blank](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目管理\|_blank](#12107) 中的“项目信息”。
+- 已在项目中集成 ZEGO Express SDK，实现基本的实时音视频功能，详情请参考 [快速开始 - 集成](/real-time-video-ios-oc/quick-start/integrating-sdk) 和 [快速开始 - 实现视频通话](https://doc-zh.zego.im/article/7628)。
+- 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目管理](https://doc-zh.zego.im/article/12107) 中的“项目信息”。
 
 
-### 2 实现流程
+### 实现流程
 
-iOS 平台是基于苹果的 [Replaykit\|_blank](https://developer.apple.com/documentation/ReplayKit) 框架实现屏幕录制，能够分享整个系统的屏幕内容。但需要当前 App （主 App 进程）额外提供一个 Extension 扩展组件（Extension 进程），用于录制屏幕，再结合 ZEGO Express SDK 相关 API 来实现屏幕共享功能。
+iOS 平台是基于苹果的 [Replaykit](https://developer.apple.com/documentation/ReplayKit) 框架实现屏幕录制，能够分享整个系统的屏幕内容。但需要当前 App （主 App 进程）额外提供一个 Extension 扩展组件（Extension 进程），用于录制屏幕，再结合 ZEGO Express SDK 相关 API 来实现屏幕共享功能。
 
-<div class="mk-warning">
+<Warning title="注意">
+
 
 
 主 App 进程和 Extension 进程是两个进程，因此 Extension 进程中的 userID 和 streamID 不能与主 App 进程中的相同。  
-</div>
+
+</Warning>
 
 
 
-![](https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_implementation.png)
+
+
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_implementation.png" /></Frame></Frame>
 
 
 实现屏幕共享的主要流程如下：
 
 1. 在您的工程中，新建一个 Broadcast Upload Extension 的 Target，并在其中集成 ZEGO Express SDK。
 2. 在 Broadcast Upload Extension 的 Target 中创建 App Groups，使 Extension 进程可以与主 App 进程同步配置数据。
-3. 使用 Extension 进程录制屏幕，通过 [handleReplayKitSampleBuffer\|_blank](/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine&jumpType=route#handle-replay-kit-sample-buffer-buffer-type) 将录制的屏幕缓存数据发送给 ZEGO Express SDK。 
+3. 使用 Extension 进程录制屏幕，通过 [handleReplayKitSampleBuffer](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine&jumpType=route#handle-replay-kit-sample-buffer-buffer-type) 将录制的屏幕缓存数据发送给 ZEGO Express SDK。 
 4. 手动触发屏幕共享。
 
 详细的操作请参考下文。
 
 
-### 3 使用步骤
+### 使用步骤
 
-#### 3.1 在工程中新建 Broadcast Upload Extension
+#### 在工程中新建 Broadcast Upload Extension
 
-<div class="mk-hint">
+<Note title="说明">
 
 
-- 若您没有现成的项目工程，可以参考 [快速开始 - 集成\|_blank](/article/196#2_1) 中的 “新建项目” 来创建。
+
+- 若您没有现成的项目工程，可以参考 [快速开始 - 集成](/real-time-video-ios-oc/quick-start/integrating-sdk#2_1) 中的 “新建项目” 来创建。
 - Broadcast Upload Extension 的内存使用限制为 50 MB，请确保屏幕共享的 Extension 内存使用不超过 50 MB。
-</div>
+
+</Note>
+
+
 
 
 1. 使用 Xcode 打开项目工程文件，在菜单栏中依次点击 “File > New > Target..."。
-![](https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_extension_ios1.png)
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_extension_ios1.png" /></Frame></Frame>
 2. 在弹出的窗口中选择 iOS 页的 “Broadcast Upload Extension” 后，单击 “Next”。
-![](https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_extension_ios.png)
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_extension_ios.png" /></Frame></Frame>
 3. 在弹出的对话框中的 “Product Name” 一栏填写 “Broadcast Upload Extension” 的名字，例如 “ScreenShare”。选择 “Team”、“Language” 等信息后，单击 “Finish” 。
 
-<div class="mk-hint">
+<Note title="说明">
+
 
 无需勾选 “Include UI Extension”。
-</div>
 
-![](https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_extension_ios3.png)
+</Note>
+
+
+
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_extension_ios3.png" /></Frame></Frame>
 
 创建完成后，您会在项目中看到该 Extension 的文件夹，结构类似如下，该文件夹用于存放屏幕共享功能的实现代码：
-![](https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_extension_project.png)
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_extension_project.png" /></Frame></Frame>
 
 
-#### 3.2 (可选) 通过 App Groups 同步配置数据
+#### (可选) 通过 App Groups 同步配置数据
 
-<details class="zg-primary">
-    <summary>创建 App Groups</summary>
-
+<Accordion title="创建 App Groups" defaultOpen="false">
 1. 在 Xcode 新建的 Target 中依次选择 “Signing & Capabilities > Capability > App Groups"。
-![/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_appgroups.png](https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_appgroups.png)
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_appgroups.png" /></Frame></Frame>
 
 2. 在弹出的窗口中添加 “App Groups ID”，将 Extension 进程与主 App 进程进行绑定。
-![](https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_appgroups_id.png)
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_appgroups_id.png" /></Frame></Frame>
 
-3. 使用 iOS 系统 API [NSUserDefaults\|_blank](https://developer.apple.com/documentation/foundation/nsuserdefaults) 在 Extension 进程和主 App 进程之间同步配置数据（例如 AppID、AppSign、roomID 等）。
+3. 使用 iOS 系统 API [NSUserDefaults](https://developer.apple.com/documentation/foundation/nsuserdefaults) 在 Extension 进程和主 App 进程之间同步配置数据（例如 AppID、AppSign、roomID 等）。
 
 ```objc
 NSUserDefaults *userDefaults = [[NSUserDefaults alloc] initWithSuiteName:appGroup];
 ```
-</details>
+</Accordion>
 
 
-#### 3.3 通过 Extension 获取屏幕数据并推流 
+#### 通过 Extension 获取屏幕数据并推流
 
-<div class="mk-hint">
+<Note title="说明">
 
-如下系统回调的实现可以在 [下载示例源码\|_blank](#3126) 中的 “/ZegoExpressExample-iOS-OC/Topics/ScreenCapture/ZegoExpressExample-iOS-OC-Broadcast/SampleHandler.m” 文件中查看：
 
-- [broadcastStartedWithSetupInfo\|_blank](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2143170-broadcaststartedwithsetupinfo?language=objc) 
-- [processSampleBuffer\|_blank](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2123045-processsamplebuffer?language=objc) 
-- [broadcastFinished\|_blank](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2143169-broadcastfinished?language=objc) 
+如下系统回调的实现可以在 [下载示例源码](https://doc-zh.zego.im/article/3126) 中的 “/ZegoExpressExample-iOS-OC/Topics/ScreenCapture/ZegoExpressExample-iOS-OC-Broadcast/SampleHandler.m” 文件中查看：
 
-</div>
+- [broadcastStartedWithSetupInfo](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2143170-broadcaststartedwithsetupinfo?language=objc) 
+- [processSampleBuffer](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2123045-processsamplebuffer?language=objc) 
+- [broadcastFinished](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2143169-broadcastfinished?language=objc) 
+
+
+</Note>
+
+
 
 
 1. 确保 Extension 的 “Info.plist” 文件中，将 “RPBroadcastProcessMode” 设置为 “RPBroadcastProcessModeSampleBuffer”。
-2. 在 Extension 中导入 ZEGO Express SDK，详情请参考 [快速开始 - 集成\|_blank](/article/196#2_2) 中的 “导入 SDK”。
-3. 系统通过 [broadcastStartedWithSetupInfo\|_blank](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2143170-broadcaststartedwithsetupinfo?language=objc) 回调通知 Extension 已开始录制屏幕，您需要在该回调中调用 ZEGO Express SDK 的如下接口实现相关功能：
+2. 在 Extension 中导入 ZEGO Express SDK，详情请参考 [快速开始 - 集成](/real-time-video-ios-oc/quick-start/integrating-sdk#2_2) 中的 “导入 SDK”。
+3. 系统通过 [broadcastStartedWithSetupInfo](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2143170-broadcaststartedwithsetupinfo?language=objc) 回调通知 Extension 已开始录制屏幕，您需要在该回调中调用 ZEGO Express SDK 的如下接口实现相关功能：
     1. 创建 ZegoExpressEngine。
 
     ```objc
@@ -163,13 +181,13 @@ NSUserDefaults *userDefaults = [[NSUserDefaults alloc] initWithSuiteName:appGrou
     ```
 
 
-4. 在 [processSampleBuffer\|_blank](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2123045-processsamplebuffer?language=objc) 系统回调中，通过 [handleReplayKitSampleBuffer\|_blank](/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine&jumpType=route#handle-replay-kit-sample-buffer-buffer-type) 将屏幕录制的缓存数据，发送给 ZEGO Express SDK。
+4. 在 [processSampleBuffer](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2123045-processsamplebuffer?language=objc) 系统回调中，通过 [handleReplayKitSampleBuffer](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine&jumpType=route#handle-replay-kit-sample-buffer-buffer-type) 将屏幕录制的缓存数据，发送给 ZEGO Express SDK。
 
     ```objc
     [[ZegoExpressEngine sharedEngine] handleReplayKitSampleBuffer:sampleBuffer bufferType:sampleBufferType];
     ```
 
-5. 系统通过 [broadcastFinished\|_blank](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2143169-broadcastfinished?language=objc) 回调通知 Extension 屏幕录制已结束，您可以在该回调中调用 ZEGO Express SDK 的如下接口停止屏幕共享：
+5. 系统通过 [broadcastFinished](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2143169-broadcastfinished?language=objc) 回调通知 Extension 屏幕录制已结束，您可以在该回调中调用 ZEGO Express SDK 的如下接口停止屏幕共享：
     
     ```objc
     // 1. 停止推送屏幕共享流。
@@ -180,12 +198,16 @@ NSUserDefaults *userDefaults = [[NSUserDefaults alloc] initWithSuiteName:appGrou
     [ZegoExpressEngine destroyEngine];
     ```
 
-#### 3.4 开始屏幕共享
+#### 开始屏幕共享
 
-<div class="mk-warning">
+<Warning title="注意">
+
 
 完成上述屏幕共享的准备代码后，还必须由用户手动触发屏幕共享才能真正启动屏幕共享功能。
-</div>
+
+</Warning>
+
+
 
 您可以通过如下两种方式触发：
 
@@ -193,27 +215,28 @@ NSUserDefaults *userDefaults = [[NSUserDefaults alloc] initWithSuiteName:appGrou
 
 您需要在 iOS 系统的控制中心，长按录屏按钮后选择对应的 Extension 来开启录制。
 
-![](https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_trigger.png)
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_trigger.png" /></Frame></Frame>
 
 - 方式二：
 
-<details class="zg-primary">
-    <summary>(可选) 在 App 中唤起屏幕共享</summary>
+<Accordion title="(可选) 在 App 中唤起屏幕共享" defaultOpen="false">
+<Warning title="注意">
 
-<div class="mk-warning">
 
-- 苹果在 iOS 12.0 中新增了 [RPSystemBroadcastPickerView\|_blank](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview)，可以从 App 应用弹出启动器，供用户确认启动屏幕分享。但目前 [RPSystemBroadcastPickerView\|_blank](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview) 还不支持自定义界面，也没有官方的唤起方法。
+- 苹果在 iOS 12.0 中新增了 [RPSystemBroadcastPickerView](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview)，可以从 App 应用弹出启动器，供用户确认启动屏幕分享。但目前 [RPSystemBroadcastPickerView](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview) 还不支持自定义界面，也没有官方的唤起方法。
 - 苹果官方不推荐该方案，并有可能在新一轮的系统更新中失效，因此只是一个可选方案，选用此方案您需要自行承担风险。
-</div>
 
-    1. 创建 [RPSystemBroadcastPickerView\|_blank](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview) 系统类，绑定 Extension 的 “BundleID”。
-    2. 遍历 [RPSystemBroadcastPickerView\|_blank](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview) 的子 view 寻找 UIButton， 并触发其点击事件。
+</Warning>
 
-</details>
 
-### 4 观看远端屏幕共享
 
-完成以上步骤之后，其他用户可以使用 [startPlayingStream](/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#start-playing-stream-canvas) 接口拉取屏幕共享流，详细操作可以参考 [快速开始](#195)。
+    1. 创建 [RPSystemBroadcastPickerView](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview) 系统类，绑定 Extension 的 “BundleID”。
+    2. 遍历 [RPSystemBroadcastPickerView](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview) 的子 view 寻找 UIButton， 并触发其点击事件。
+</Accordion>
+
+### 观看远端屏幕共享
+
+完成以上步骤之后，其他用户可以使用 [startPlayingStream](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#start-playing-stream-canvas) 接口拉取屏幕共享流，详细操作可以参考 [快速开始](https://doc-zh.zego.im/article/195)。
 
 ```objc
 // 同样的，拉流播放的用户首先需要初始化 SDK 并登录同一个房间 
@@ -228,27 +251,27 @@ NSUserDefaults *userDefaults = [[NSUserDefaults alloc] initWithSuiteName:appGrou
 ## Android 实现流程
 
 
-### 1 前提条件
+### 前提条件
 
 在实现屏幕共享功能之前，请确保：
 
-- 已在项目中集成 ZEGO Express SDK，实现基本的实时音视频功能，详情请参考 [快速开始 - 集成\|_blank](/article/195) 和 [快速开始 - 实现视频通话\|_blank](/article/7627)。
-- 已在 [ZEGO 控制台\|_blank](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目管理\|_blank](#12107) 中的“项目信息”。
+- 已在项目中集成 ZEGO Express SDK，实现基本的实时音视频功能，详情请参考 [快速开始 - 集成](https://doc-zh.zego.im/article/195) 和 [快速开始 - 实现视频通话](/real-time-video-android-java/quick-start/implementing-video-call)。
+- 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目管理](https://doc-zh.zego.im/article/12107) 中的“项目信息”。
 
-### 2 实现流程
+### 实现流程
 
 我们需要结合 Android 系统 API 和 ZEGO Express SDK 的自定义视频采集来进行屏幕分享。 
 
 下图展示了 Android 平台实现屏幕共享的数据流转：
 
-![/Pics/Express/screen_capture_android.png](https://doc-media.zego.im/sdk-doc/Pics/Express/screen_capture_android.png)
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/screen_capture_android.png" /></Frame></Frame>
 
-#### 2.1 获取用户录制屏幕授权
+#### 获取用户录制屏幕授权
 
 在录制屏幕前需要获取用户的授权，不同版本下需要获取的权限如下：
 - Android 4.4 及之前版本必须获取到 root 权限后才能实现屏幕录制，由于目前大部分设备的系统版本都高于 4.4，该场景此处不做赘述。
 - Android 5.0 及以上版本，可以使用系统提供的 MediaProjection 和 MediaProjectionManager 进行屏幕录制。该版本下可以不获取 root 权限，但会弹窗提示用户是否允许应用录制屏幕，需要用户授权。
-- Android 10.0 及以上版本，屏幕录制使用系统 API 时需要用到前台服务，详情请参考 [官方文档\|_blank](https://developer.android.google.cn/reference/kotlin/android/media/projection/MediaProjectionManager?hl=en)。
+- Android 10.0 及以上版本，屏幕录制使用系统 API 时需要用到前台服务，详情请参考 [官方文档](https://developer.android.google.cn/reference/kotlin/android/media/projection/MediaProjectionManager?hl=en)。
 
 ```java
 public static MediaProjectionManager mMediaProjectionManager;
@@ -263,15 +286,19 @@ if (Build.VERSION.SDK_INT < 21) {
     }
 ```
 
-#### 2.2 创建 MediaProjection 实例 
+#### 创建 MediaProjection 实例
 
-1. 在 AndroidManifest.xml 中添加相关配置。  
+1. 在 AndroidManifest.xml 中添加相关配置。
 
-<div class="mk-hint">
+<Note title="说明">
+
 
 
 为实现 Android 10.0 及以上版本应用的屏幕录制，需要在代码中开启前台服务，并在 AndroidManifest.xml 中注册 Service，添加 foregroundServiceType 属性。
-</div>
+
+</Note>
+
+
 
 ```xml
 <application>
@@ -331,7 +358,7 @@ public class CaptureScreenService extends Service {
 
 #### 2.3 开启 ZegoExpress SDK 的自定义视频采集功能
 
-调用 ZegoExpress SDK 的 [enableCustomVideoCapture\|_blank](/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine&jumpType=route#enable-custom-video-capture) 开启自定义采集功能，详情请参考 [自定义视频采集\|_blank](#3677)。
+调用 ZegoExpress SDK 的 [enableCustomVideoCapture](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine&jumpType=route#enable-custom-video-capture) 开启自定义采集功能，详情请参考 [自定义视频采集](https://doc-zh.zego.im/article/3677)。
 
 ```java
 //VideoCaptureScreen继承IZegoCustomVideoCaptureHandler，用于监听自定义采集onStart和onStop回调
@@ -345,11 +372,11 @@ videoCaptureConfig.bufferType=ZegoVideoBufferType.SURFACE_TEXTURE;
 mSDKEngine.enableCustomVideoCapture(true, videoCaptureConfig, ZegoPublishChannel.MAIN); 
 ```
 
-#### 2.4 登录房间并开始推流
+#### 登录房间并开始推流
 
-调用 [loginRoom \|_blank](/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#login-room) 接口，传入房间 ID 参数 “roomID” 和用户参数 “user”，登录房间。
+调用 [loginRoom ](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#login-room) 接口，传入房间 ID 参数 “roomID” 和用户参数 “user”，登录房间。
 
-调用 [startPublishingStream \|_blank](/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#start-publishing-stream) 接口，传入流 ID 参数 “streamID”，向远端用户发送本端的音视频流。
+调用 [startPublishingStream ](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#start-publishing-stream) 接口，传入流 ID 参数 “streamID”，向远端用户发送本端的音视频流。
 
 
 ```java
@@ -368,7 +395,7 @@ mSDKEngine.startPublishingStream("stream1");
 
 2、创建 VideoCaptureScreen 类继承 ZegoVideoCaptureCallback。
 
-当收到 [onStart \|_blank](/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-custom-video-capture-handler#on-start) 回调后，开发者可以通过 MediaProjection 创建 VirtualDisplay 实例，用于获取屏幕数据，并发送给 ZEGO Express SDK。
+当收到 [onStart ](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-custom-video-capture-handler#on-start) 回调后，开发者可以通过 MediaProjection 创建 VirtualDisplay 实例，用于获取屏幕数据，并发送给 ZEGO Express SDK。
 
 3、通过 createVirtualDisplay 系统 API 将虚拟显示器的内容渲染到 Surface。
 
@@ -396,9 +423,9 @@ class VideoCaptureScreen extends ZegoVideoCaptureCallback {
 
 至此，我们已完成采集屏幕数据并通过 ZegoExpress SDK 分享到远端的操作。
 
-### 3 观看远端屏幕共享
+### 观看远端屏幕共享
 
-完成以上步骤之后，其他用户可以使用 [startPlayingStream\|_blank](/article/api?doc=Express_Video_SDK_API~java_android~class~ZegoExpressEngine#start-playing-stream) 接口拉取屏幕共享流，详细步骤可以参考 [快速开始\|_blank](#195)。
+完成以上步骤之后，其他用户可以使用 [startPlayingStream](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~java_android~class~ZegoExpressEngine#start-playing-stream) 接口拉取屏幕共享流，详细步骤可以参考 [快速开始](https://doc-zh.zego.im/article/195)。
 
 ```java
 // 同样的，拉流播放的用户首先需要初始化 SDK 并登录同一个房间 
@@ -413,29 +440,32 @@ mSDKEngine.startPlayingStream(streamID, new ZegoCanvas(playView));
 
 ## Windows 实现流程
 
-
-<div class="mk-warning">
-
-该功能以插件形式提供，具体请参考 [ZegoScreenCapture-Windows |\blank](#3167)。其作为 [zego-express-video-windows |\blank](#2972) 的插件，二者结合使用才能实现屏幕共享的功能。
-
-</div>
-
-### 1 前提条件
-
-在使用屏幕共享前，请先下载 [ScreenCapture SDK ](#3167)插件，并在项目中集成该插件。
+<Warning title="注意">
 
 
-### 2 使用步骤
+该功能以插件形式提供，具体请参考 [ZegoScreenCapture-Windows |\blank](https://doc-zh.zego.im/article/3167)。其作为 [zego-express-video-windows |\blank](https://doc-zh.zego.im/article/2972) 的插件，二者结合使用才能实现屏幕共享的功能。
+
+
+</Warning>
+
+
+
+### 前提条件
+
+在使用屏幕共享前，请先下载 [ScreenCapture SDK ](https://doc-zh.zego.im/article/3167)插件，并在项目中集成该插件。
+
+
+### 使用步骤
 
 屏幕共享支持如下功能，详细实现流程请参考屏幕捕捉插件中相关文档：
 
 |功能|描述|实现流程|
 |-|-|-|
-|集成插件|集成屏幕采集的插件|请参考 [集成](#2371)|
-|采集整个屏幕|选择某个屏幕进行采集|请参考 [屏幕共享](#2351)|
-|采集指定区域|选择某个区域进行采集|请参考 [屏幕共享](#2363)|
-|采集指定窗口|选择某个窗口进行采集|请参考 [窗口共享](#2364)|
-|窗口缩略图|获取缩略图显示到 img 标签以方便选择采集目标|请参考 [窗口缩略图](#2365)|
+|集成插件|集成屏幕采集的插件|请参考 [集成](https://doc-zh.zego.im/article/2371)|
+|采集整个屏幕|选择某个屏幕进行采集|请参考 [屏幕共享](https://doc-zh.zego.im/article/2351)|
+|采集指定区域|选择某个区域进行采集|请参考 [屏幕共享](https://doc-zh.zego.im/article/2363)|
+|采集指定窗口|选择某个窗口进行采集|请参考 [窗口共享](https://doc-zh.zego.im/article/2364)|
+|窗口缩略图|获取缩略图显示到 img 标签以方便选择采集目标|请参考 [窗口缩略图](https://doc-zh.zego.im/article/2365)|
 
 
 ## macOS 实现流程
@@ -447,8 +477,8 @@ mSDKEngine.startPlayingStream(streamID, new ZegoCanvas(playView));
 
 |功能|描述|实现流程|
 |-|-|-|
-|集成插件|集成屏幕采集的插件|请参考 [集成](#2396)|
-|采集整个屏幕|选择某个屏幕进行采集|请参考 [屏幕共享](#2397)|
-|采集指定区域|选择某个区域进行采集|请参考 [区域共享](#2398)|
-|采集指定窗口|选择某个窗口进行采集|请参考 [窗口共享](#2395)|
-|窗口缩略图|获取缩略图显示到 img 标签以方便选择采集目标|请参考 [窗口缩略图](#2399)|
+|集成插件|集成屏幕采集的插件|请参考 [集成](https://doc-zh.zego.im/article/2396)|
+|采集整个屏幕|选择某个屏幕进行采集|请参考 [屏幕共享](https://doc-zh.zego.im/article/2397)|
+|采集指定区域|选择某个区域进行采集|请参考 [区域共享](https://doc-zh.zego.im/article/2398)|
+|采集指定窗口|选择某个窗口进行采集|请参考 [窗口共享](https://doc-zh.zego.im/article/2395)|
+|窗口缩略图|获取缩略图显示到 img 标签以方便选择采集目标|请参考 [窗口缩略图](https://doc-zh.zego.im/article/2399)|
