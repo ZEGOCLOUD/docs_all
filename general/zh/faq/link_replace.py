@@ -10,20 +10,14 @@ def load_transfer_conf(conf_file):
             line = line.strip()
             if not line or line.startswith('#'):
                 continue
-            try:
-                # 解析每一行的 JSON 格式
-                data = json.loads(line)
-                # 如果是旧文档链接格式，提取文章 ID 并建立映射
-                if isinstance(data, str) and 'doc-zh.zego.im/article/' in data:
-                    article_id = re.search(r'article/(\d+)', data)
-                    if article_id:
-                        article_id = article_id.group(1)
-                        # 下一行应该是新的路径
-                        new_path = json.loads(next(f).strip())
-                        if new_path.startswith('/'):
-                            mapping[article_id] = new_path
-            except (json.JSONDecodeError, StopIteration):
-                continue
+            
+            # 解析 rewrite 规则
+            match = re.search(r'rewrite \^/article/(\d+)\$ (https://doc-zh\.zego\.im)?([^?]+)', line)
+            if match:
+                article_id = match.group(1)
+                new_path = match.group(3)
+                mapping[article_id] = new_path
+    
     return mapping
 
 def process_file(file_path, mapping):
@@ -48,10 +42,10 @@ def process_file(file_path, mapping):
         print(f"已处理文件: {file_path}")
 
 def main():
+    # transfer.conf 的完整路径
+    transfer_conf = '/Users/zego/Documents/docs_all/transfer.conf'
     # 获取脚本所在目录的父目录路径
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    # 构建 transfer.conf 的完整路径
-    transfer_conf = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(base_dir))), 'transfer.conf')
     # 构建 faq-doc-zh 目录的完整路径
     faq_dir = os.path.join(base_dir, 'faq', 'faq-doc-zh')
     
