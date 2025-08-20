@@ -7,11 +7,11 @@ def extract_title_from_mdx(file_path):
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
-            # 查找以 # 开头的第一行作为标题
-            match = re.search(r'^#\s+(.+?)(?:\n|$)', content, re.MULTILINE)
+            # 查找 <Title> 标签中的内容
+            match = re.search(r'<Title>(.*?)</Title>', content, re.DOTALL)
             if match:
                 return match.group(1).strip()
-            # 如果没有找到 # 标题，使用文件名作为标题
+            # 如果没有找到 <Title> 标签，使用文件名作为标题
             filename = os.path.basename(file_path)
             return filename.replace('.mdx', '').replace('-', ' ').title()
     except Exception as e:

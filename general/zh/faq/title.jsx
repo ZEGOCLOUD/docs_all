@@ -3,7 +3,7 @@ import React from 'react';
 export const Title = ({ children }) => {
   return (
     <h1 style={{
-      fontSize: '24px',
+      fontSize: '26px',
       fontWeight: '700',
       lineHeight: '40px',
       marginTop: '24px',
