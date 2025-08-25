@@ -1,0 +1,229 @@
+---
+articleID: 17429
+---
+
+import { getPlatformData } from "/snippets/utils-content-parser.js"
+
+export const cancelSendingMessageMap = {
+  'Android': <a href='@cancelSendingMessage' target='_blank'>cancelSendingMessage</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/cancelSendingMessage.html' target='_blank'>cancelSendingMessage</a>,
+}
+
+# 取消媒体消息发送
+
+- - -
+
+## 功能简介
+
+当发送本地媒体文件消息时，通常由于文件上传耗时较久，开发者可以在离开当前会话聊天界面时，调用 {getPlatformData(props,cancelSendingMessageMap)} 取消发送，终止文件上传。取消成功后，消息状态变为发送失败。
+
+<Note title="注意">
+- 2.22.0 版本开始支持。
+- 仅支持发送消息类型为 `Multiple(10)、Image(11)、File(12)、Audio(13)、Video(14)` 且包含本地文件时消息，可以取消成功。
+</Note>
+
+
+:::if{props.platform=undefined}
+```java
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onMessageSentStatusChanged(ZIM zim, ArrayList<ZIMMessageSentStatusChangeInfo> infos) {
+        // 消息发送状态变更
+    }
+})
+
+// 用户 A 发送一条消息，以单聊文件消息为例
+
+String conversationID = "xxx" ; // 会话 ID
+
+ZIMFileMessage message = new ZIMFileMessage("/storage/emulated/0/Android/data/packagename/picture/xxx.zip");
+ZIMMessageSendConfig sendConfig = new ZIMMessageSendConfig();
+
+zim.sendMessage(message, conversationID, ZIMConversationType.PEER, sendConfig, new ZIMSendingMessageCancelledCallback() {
+            @Override
+            public void onMessageAttached(ZIMMessage message) {}
+
+            @Override
+            public void onMediaUploadingProgress(ZIMMediaMessage message, long currentFileSize, long totalFileSize) {
+                // 处于文件上传中时，取消发送
+                zim.cancelSendingMessage(message, new ZIMSendingMessageCancelConfig(), new ZIMMessageSentCallback() {
+                    @Override
+                    public  void onSendingMessageCancelled(ZIMError errorInfo) {}
+                });        
+            }
+        });
+```
+:::
+
+:::if{props.platform="ios"}
+```objc
+- (void)zim:(ZIM *)zim messageSentStatusChanged:(NSArray<ZIMMessageSentStatusChangeInfo *> *)infos{
+     // 消息发送状态变更
+}
+
+
+NSString *conversationID = @"xxx" ; // 会话 ID
+
+// 用户 A 发送一条消息，以单聊文件消息为例
+
+ZIMFileMessage *message = [[ZIMFileMessage alloc] init];
+//需填入 UTF-8 格式的本地路径
+//此处以文件选择器选中的某个文件地址为例
+message.fileLocalPath = @"/private/var/mobile/Containers/Shared/AppGroup/D5144D14-3FE8-4C6C-8527-01F368B8E49E/File Provider Storage/xxx.zip";
+
+ZIMMessageSendConfig *sendConfig = [[ZIMMessageSendConfig alloc]init];
+
+ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
+notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
+    // 开发者可以监听这个回调执行消息发送前的业务逻辑
+};
+        
+notification.onMediaUploadingProgress = ^(ZIMMediaMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+    // 处于文件上传中时，取消发送
+    ZIMSendingMessageCancelConfig *cancelConfig = [[ZIMSendingMessageCancelConfig alloc]init];
+    [[ZIM getInstance] cancelSendingMessage:message config:cancelConfig callback:^(ZIMError * _Nonnull errorInfo) {
+        
+    }];
+};
+
+[[ZIM getInstance] sendMessage:message toConversationID:conversationID conversationType:ZIMConversationTypePeer config:sendConfig notification:notification callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+        
+}];
+```
+:::
+
+:::if{props.platform="window"}
+```cpp
+
+void onMessageSentStatusChanged(zim::ZIM *zim, const std::vector<ZIMMessageSentStatusChangeInfo> &messageSentStatusChangeInfoList{
+    // 消息发送状态变更
+}
+
+
+// 用户 A 发送一条消息，以单聊文件消息为例
+
+zim::ZIMMediaMessage *message = nullptr;
+auto fileMessage = zim::ZIMFileMessage();
+// 需填入 UTF-8 格式的本地路径
+fileMessage.fileLocalPath = "D:\\file\\files.zip";
+// 如果此处填入了网络 URL，SDK 则会透传该路径，而不会经过 ZIM 后台服务处理。同时填入网络 URL 与本地路径，SDK 会优先认为用户想要使用网络 URL
+fileMessage.fileDownloadUrl = "";
+
+zim::ZIMMessageSendConfig sendConfig;
+sendConfig.priority = zim::ZIM_MESSAGE_PRIORITY_MEDIUM;
+
+message = &fileMessage;
+
+auto notification = std::make_shared<zim::ZIMMessageSendNotification>(
+            [=](const std::shared_ptr<zim::ZIMMessage> &message) { 
+                // 开发者可监听此回调，执行消息发送前的逻辑
+            },
+            [=](const std::shared_ptr<zim::ZIMMediaMessage> &message,
+                unsigned long long currentFileSize,
+                unsigned long long totalFileSize) { 
+                // 处于文件上传中时，取消发送
+                zim::ZIMSendingMessageCancelConfig cancelConfig;
+                zim_->cancelSendingMessage(message, cancelConfig, [=](const zim::ZIMError &errorInfo) {
+
+                });
+            });
+
+zim_->sendMessage(message, receiver_id, zim::ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER, sendConfig, notification,
+    [=](const std::shared_ptr<zim::ZIMMessage> &message, const zim::ZIMError &errorInfo) {
+
+    });
+```
+:::
+
+:::if{props.platform="flutter"}
+```dart
+ZIMEventHandler.onMessageSentStatusChanged = (ZIM zim, List<ZIMMessageSentStatusChangeInfo> messageSentStatusChangedInfoList) {
+    // 消息发送状态变更
+};
+
+
+
+// 用户 A 发送一条消息，以单聊文件消息为例
+
+String conversationID = "xxx" ; // 会话 ID
+
+ZIMFileMessage message = ZIMFileMessage('xxx/xxx.zip');
+ZIMMessageSendConfig sendConfig = ZIMMessageSendConfig();
+
+ZIMMessageSendNotification notification = ZIMMessageSendNotification(onMessageAttached: (message){
+    // 开发者可以监听这个回调执行消息发送前的业务逻辑
+},onMediaUploadingProgress: (message,currentFileSize,totalFileSize){
+    // 处于文件上传中时，取消发送
+    ZIM.getInstance()!.cancelSendingMessage(message, ZIMSendingMessageCancelConfig())
+        .then(() => {
+            //成功触发此处
+        })
+        .catchError((onError) {
+            //失败触发此处
+        });
+});
+
+ZIM.getInstance()!.sendMessage(
+        message,
+        conversationID,
+        ZIMConversationType.peer,
+        ZIMMessageSendConfig(), notification)
+    .then((value) => {
+        //成功触发此处
+    })
+    .catchError((onError) {
+        //失败触发此处
+    });
+```
+:::
+
+:::if{props.platform="Web"}
+```typescript
+zim.on('messageSentStatusChanged', (zim: ZIM, data: ZIMEventOfMessageSentStatusChangedResult) => {
+    // 消息发送状态变更
+});
+```
+:::
+:::if{props.platform="UTS"}
+```typescript
+zim.onMessageSentStatusChanged((data) => {
+    // 消息发送状态变更
+});
+```
+:::
+:::if{props.platform="Web|UTS"}
+```typescript
+// 用户 A 发送一条消息，以单聊文件消息为例
+
+const userID_A = "xxxx" ;    // 用户 A 的 ID
+const userID_B = "xxxx" ;    // 用户 B 的 ID
+
+const messageObj: ZIMFileMessage = { type: 12, fileLocalPath: file }
+const config: ZIMMessageSendConfig = {
+    priority: 1,    // 消息优先级，取值为 低:1 默认, 中:2, 高:3
+}
+const notification: ZIMMessageSendNotification = {
+    onMessageAttached: (message: ZIMMessage) => {
+        // todo: Loading
+    },
+    onMediaUploadingProgress: (message: ZIMMediaMessage, currentFileSize: number, totalFileSize: number) {
+        // 处于文件上传中时，取消发送
+        zim.cancelSendingMessage(message, {} as ZIMSendingMessageCancelConfig)
+            .then((res: ZIMMessageSentResult) => {
+                // 操作成功
+            })
+            .catch((err: ZIMError) => {
+                // 操作失败
+            });
+    }
+}
+
+zim.sendMessage(messageObj, userID_B, 0, config, notification)
+    .then((res: ZIMMessageSentResult) => {
+        // 发送成功
+    })
+    .catch((err: ZIMError) => {
+        // 发送失败
+    });
+```
+:::
