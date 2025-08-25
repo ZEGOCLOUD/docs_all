@@ -7,8 +7,7 @@ export const Title = ({ children }) => {
       fontWeight: '700',
       lineHeight: '40px',
       marginTop: '24px',
-      marginBottom: '16px',
-      color: '#28292e'
+      marginBottom: '16px'
     }}>
       {children}
     </h1>
