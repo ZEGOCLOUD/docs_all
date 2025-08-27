@@ -15,7 +15,10 @@ paths:
     get:
       tags: [cdn]
       summary: MediaThumbnails
-      description: 发起点播截图任务。
+      description:  |
+        本接口用于对点播中的音视频媒体（比如 CDN 录制后文件）发起截图处理任务，包括“指定时间点截图”和“按时间间隔截图”。
+        - 指定时间点截图：文件开始播放后，将在所设置的时间点进行截图。
+        - 按时间间隔截图：文件开始播放后，将会根据所设置的时间间隔，反复进行截图，直至文件播放结束。
       operationId: media-thumbnails
       parameters:
         - name: Action
@@ -38,26 +41,44 @@ paths:
           in: query
           required: true
           schema: { type: string, enum: [Tencent, Huawei] }
-          description: CDN 厂商。
+          description: 对应的 CDN 厂商：<br/><ul><li>Tencent：腾讯云。</li><li>Huawei：华为云。</li></ul>
         - name: FileId
           in: query
           required: true
           schema: { type: string }
-          description: 文件唯一标识。
+          description: |
+            文件唯一标识。各 CDN 厂商的录制文件唯一标识不同：<br/>
+            <ul>
+            <li>腾讯云：FileID。</li><li>华为云：ObsObject。</li>
+            </ul>
+            您可以通过以下方式获取：
+            <ul>
+            <li><a href="!Callback/Record_File_Create_Callback" target="blank">录制文件生成回调</a> 的参数 FileID 及 ObsObject。</li>
+            <li><a href="!Callback/compose" target="blank">媒体文件合并完成回调</a> 的参数 file_id。</li>
+            <li><a href="!Media_File/SearchMedia" target="blank">检索媒体信息</a> 的参数 FileId。</li>
+            </ul>
+       
+            >**注意**
+            >
+            > ZEGO 不会对“传入的 FileId 文件是否真实存在”进行验证，请您注意填写正确的 FileId；传入错误的 FileId，响应参数中的 Code 为 1000。
         - name: Type
           in: query
           required: true
           schema: { type: string, enum: [SnapshotByTimeOffset, SampleSnapshot] }
-          description: 截图方式。
+          description: |
+            截图方式。
+            <ul>
+            <li>指定时间点截图：SnapshotByTimeOffset。</li><li>按时间间隔截图：SampleSnapshot。</li>
+            </ul>
         - name: Definition
           in: query
           required: false
           schema: { type: integer, format: int32 }
-          description: 模板 ID，仅对 Vendor=Tencent 有效且必填。
+          description: 截图模板 ID，请联系 ZEGO 技术支持获取。<br/><b>仅对 Vendor 取值为 Tencent 有效且为必填项，取值为 Huawei 无效。</b><br/>
         - name: ExtTimeOffsetSet
           in: query
           required: false
-          description: 指定时间点截图的时间点，单位秒，Type=SnapshotByTimeOffset 时必填。
+          description: 需要截图的时间点，单位秒。<br/><b>Type 取值为 SnapshotByTimeOffset 时必填。</b><br/>
           schema:
             type: array
             items: { type: number }
@@ -67,7 +88,7 @@ paths:
           in: query
           required: false
           schema: { type: number }
-          description: 按时间间隔截图的间隔秒数，仅对 Vendor=Huawei 有效且必填。
+          description: 需要连续截图的时间间隔，单位秒。<br/><b>仅对 Vendor 取值为 Huawei 有效且为必填项，取值为 Tencent 时无效。</b><br/>
       responses:
         "200":
           description: 成功
@@ -81,19 +102,57 @@ components:
     MediaThumbnailsResponse:
       type: object
       properties:
-        Code: { type: integer, format: int32 }
-        Message: { type: string }
-        RequestId: { type: string }
+        Code: 
+          type: integer
+          format: int32
+          description: |
+            返回码。
+            以下仅列出了接口业务逻辑相关的部分返回码，完整返回码请参考 [全局返回码](!global_return_code)。
+            <table>
+              <thead>
+                <tr><th>返回码</th><th>说明</th><th>处理建议</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>0</td><td>请求成功。</td><td>-</td></tr>
+                <tr><td>2</td><td>输入参数错误。</td><td>-</td></tr>
+                <tr><td>3</td><td>未开通相关权限。</td><td>请联系 ZEGO 技术支持。</td></tr>
+                <tr><td>4</td><td>CDN 类型不匹配。</td><td>请检查参数。</td></tr>
+                <tr><td>5</td><td>配置错误。</td><td>请联系 ZEGO 技术支持。</td></tr>
+                <tr><td>6</td><td>请求过于频繁。</td><td>请稍后重试。</td></tr>
+                <tr><td>7</td><td>鉴权失败。</td><td>请检查鉴权参数是否正确。</td></tr>
+                <tr><td>1000</td><td>请求失败。</td><td>请联系 ZEGO 技术支持。</td></tr>
+                <tr><td>41003</td><td>文件不存在。</td><td>请确认文件格式、文件 ID 等是否正确。</td></tr>
+              </tbody>
+            </table>
+          example: 0
+        Message: 
+          type: string
+          description: 操作结果描述
+          example: "success"
+        RequestId: 
+          type: string
+          description: 请求 ID，由 ZEGO 服务端返回
         Data:
           type: object
+          description: 响应数据
           properties:
             Tencent:
               type: object
+              description: 腾讯云返回内容（Vendor 为 Tencent 时返回）
               properties:
-                TaskId: { type: string }
-                RequestId: { type: string }
+                TaskId: 
+                  type: string
+                  description: 全局唯一标识点播截图任务的任务 ID
+                  example: "1500030200-procedurev2-afc1fe7dfe51cd88a5d588cacba53393tt0"
+                RequestId: 
+                  type: string
+                  description: 唯一请求 ID。如需 ZEGO 技术支持定位问题，需要提供该 RequestId
+                  example: "474284b3-d722-490a-ba2c-de0b472eab83"
             Huawei:
               type: object
+              description: 华为云返回内容（Vendor 为 Huawei 时返回）
               properties:
-                task_id: { type: string }
+                task_id: 
+                  type: string
+                  description: 全局唯一标识点播截图任务的任务 ID
 
