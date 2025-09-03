@@ -15,7 +15,12 @@ paths:
     get:
       tags: [cdn]
       summary: SearchMedia
-      description: 检索媒体信息。
+      description: |
+        用户进行 CDN 录制时，会把录制好的媒体文件存放在 CDN 服务器上，用户可以调用本接口查询自己名下的媒体文件相关信息，例如媒体文件名、创建时间等。
+
+        <Warning title="注意">
+        首次使用本接口之前，请确认是否已经开通 CDN 直播服务。若未开通，请前往 [ZEGO 控制台](https://console.zego.im) 自助开通，详情请参考 [控制台 - 服务配置 - CDN](/console/service-configuration/activate-cdn-service)，或联系 ZEGO 技术支持开通。
+        </Warning>
       operationId: search-media
       parameters:
         - name: Action
@@ -38,31 +43,57 @@ paths:
           in: query
           required: true
           schema: { type: string, enum: [Tencent, Ws, Huawei] }
-          description: CDN 厂商。
+          description: |
+            <p>可能的取值及对应的 CDN 厂商：</p><ul><li>Tencent：腾讯云。</li><li>Ws：网宿。</li><li>Huawei：华为云。</li></ul>
         - name: NamePrefix
           in: query
           schema: { type: string }
           required: false
+          description: |
+            文件名前缀，前缀匹配媒体文件的文件名，最长支持 20 个字节。
+
+            > **注意：**
+            >
+            > 使用时，请对该参数内容进行 UrlEncode。
         - name: StartTime
           in: query
           required: false
           schema: { type: integer, format: int64 }
+          description: |
+            搜索文件的开始时间（文件创建时间），Unix 时间戳，精确到秒。
+
+            <b>该参数仅在 Vendor 取值为 Tencent 时有效。</b>
         - name: EndTime
           in: query
           required: false
           schema: { type: integer, format: int64 }
+          description: |
+            搜索文件的结束时间（文件创建时间），Unix 时间戳，精确到秒。
+
+            <b>该参数仅在 Vendor 取值为 Tencent 时有效。</b>
         - name: PageSize
           in: query
           required: false
           schema: { type: integer, format: int32 }
+          description: |
+            返回的记录条数，默认值为 10。取值范围：PageNumber * PageSize + PageSize 不超过 5000。
+
+            <b>该参数仅在 Vendor 取值为 Tencent 时有效。</b>
         - name: PageNumber
           in: query
           required: false
           schema: { type: integer, format: int32 }
+          description: |
+            取得第几页。取值范围：PageNumber * PageSize + PageSize 不超过 5000。
+
+            <b>该参数仅在 Vendor 取值为 Tencent 时有效。</b>
         - name: FileId
           in: query
           required: false
-          description: 文件 ID 列表，最多 10 个。
+          description: |
+            文件 ID 列表，最多支持输入 10 个 FileId，单个 FileId 的最大长度为 40 个字符。
+
+            <b>该参数仅在 Vendor 取值为 Tencent 时有效。</b>
           schema:
             type: array
             items: { type: string }
@@ -73,7 +104,10 @@ paths:
         - name: StreamId
           in: query
           required: false
-          description: CDN 录制流 ID 列表，最多 10 个。
+          description: |
+            CDN 录制的流 ID 列表，最多支持输入 10 个 StreamId，匹配集合中的任意元素。
+
+            <b>该参数仅在 Vendor 取值为 Tencent 时有效。</b>
           schema:
             type: array
             items: { type: string }
@@ -85,10 +119,21 @@ paths:
           in: query
           required: false
           schema: { type: string }
+          description: |
+            检索信息时的标记位，该参数不填写时，默认返回检索到的第一页信息列表。
+
+            <ol><li>第一次调用本接口，入参 Marker 传入为空。</li>
+            <li>再次调用本接口时，入参 Marker 取值为 NextMarker（返回结果中的标记位信息）。</li></ol><p>每次调用本接口发起请求时，响应结果中都会返回 NextMarker，开发者需要判断是否检索到最后一页。</p><p><b>该参数在 Vendor 取值为 Ws、Huawei 时有效。</b></p>
         - name: MaxKeys
           in: query
           required: false
           schema: { type: integer, format: int32, minimum: 1, maximum: 1000, default: 1000 }
+          description: |
+            调用一次本接口，返回记录的最大条数，取值范围 [1, 1000]，默认为 1000。
+            
+            超过 MaxKeys 取值的信息列表，需要根据前一次调用本接口时、返回结果中的 NextMarker 取值，再次调用本接口进行查询。
+
+            <b>该参数在 Vendor 取值为 Ws、Huawei 时有效。</b>
       responses:
         "200":
           description: 成功
@@ -96,120 +141,332 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SearchMediaResponse'
+              example:
+                {
+                  "Code": 0,
+                  "Message": "success",
+                  "Data": {
+                    "Tencent": {
+                      "TotalCount": 1,
+                      "MediaInfoSet": [
+                        {
+                          "BasicInfo": {
+                            "Name": "1690354361.mp4",
+                            "Description": "",
+                            "CreateTime": "2023-07-26T06:52:49Z",
+                            "UpdateTime": "2023-07-26T10:21:33Z",
+                            "ExpireTime": "9999-12-31T23:59:59Z",
+                            "ClassId": 0,
+                            "ClassName": "其他",
+                            "ClassPath": "其他",
+                            "CoverUrl": "",
+                            "Type": "mp4",
+                            "MediaUrl": "http://push.url/6cbbc436vodcq1500020831/03c1ada53270835011057780896/9e505713fb216f0b0232064f.mp4",
+                            "SourceInfo": {
+                              "SourceType": "VideoProcessing",
+                              "SourceContext": ""
+                            },
+                            "StorageRegion": "ap-chongqing",
+                            "Vid": "3270835011057780896",
+                            "Category": "Video",
+                            "Status": "Normal",
+                            "StorageClass": "STANDARD"
+                          },
+                          "TranscodeInfo": {
+                            "TranscodeSet": [
+                              {
+                                "Url": "http://push.url/6cbbc436vodcq1500020831/03c1ada53270835011057780896/9e505713fb216f0b0232064f.mp4",
+                                "Definition": 0,
+                                "Bitrate": 576721,
+                                "Height": 360,
+                                "Width": 640,
+                                "Size": 2239086,
+                                "Duration": 31.104,
+                                "Md5": "",
+                                "Container": "mov,mp4,m4a,3gp,3g2,mj2",
+                                "VideoStreamSet": [
+                                  {
+                                    "Bitrate": 530177,
+                                    "Height": 360,
+                                    "Width": 640,
+                                    "Codec": "h264",
+                                    "Fps": 14,
+                                    "CodecTag": "",
+                                    "DynamicRangeInfo": {
+                                      "Type": "SDR",
+                                      "HDRType": ""
+                                    }
+                                  }
+                                ],
+                                "AudioStreamSet": [
+                                  {
+                                    "Bitrate": 46544,
+                                    "SamplingRate": 16000,
+                                    "Codec": "aac"
+                                  }
+                                ],
+                                "DigitalWatermarkType": "None",
+                                "CopyRightWatermarkText": ""
+                              },
+                              {
+                                "Url": "http://push.url/43a5b1devodtranscq1500020831/03c1ada53270835011057780896/v.f100020.mp4",
+                                "Definition": 100020,
+                                "Bitrate": 427974,
+                                "Height": 540,
+                                "Width": 960,
+                                "Size": 1677353,
+                                "Duration": 31.151,
+                                "Md5": "4f51593ed8e28b5d35553f4977d39547",
+                                "Container": "mov,mp4,m4a,3gp,3g2,mj2",
+                                "VideoStreamSet": [
+                                  {
+                                    "Bitrate": 363857,
+                                    "Height": 540,
+                                    "Width": 960,
+                                    "Codec": "h264",
+                                    "Fps": 25,
+                                    "CodecTag": "avc1",
+                                    "DynamicRangeInfo": {
+                                      "Type": "SDR",
+                                      "HDRType": ""
+                                    }
+                                  }
+                                ],
+                                "AudioStreamSet": [
+                                  {
+                                    "Bitrate": 64117,
+                                    "SamplingRate": 44100,
+                                    "Codec": "aac"
+                                  }
+                                ],
+                                "DigitalWatermarkType": "None",
+                                "CopyRightWatermarkText": ""
+                              }
+                            ]
+                          },
+                          "FileId": "3270835011057780896"
+                        }
+                      ],
+                      "RequestId": "c827629f-08b4-406c-b063-b660126e922f"
+                    },
+                    "Huawei": {
+                      "Keys": [
+                        {
+                          "ETag": "\"ef4e0314095b8aae02d7a5adaa60c94f\"",
+                          "Key": "record/app/command_record/alinxu_test/2023-07-28-09-30-06.mp4",
+                          "LastModified": "2023-07-28T09:31:29.176Z",
+                          "Size": 2172786,
+                          "MediaUrl": "http://push.url/record/app/command_record/alinxu_test/2023-07-28-09-30-06.mp4"
+                        }
+                      ],
+                      "NextMarker": ""
+                    },
+                    "Ws": {
+                      "Keys": [
+                        {
+                          "ETag": "lv1tsU6T8r9hDZietipfSphc806Y",
+                          "Key": "app-alinxu_test--20230728181527.mp4",
+                          "LastModified": "2023-07-28T10:16:44Z",
+                          "Size": 6441553,
+                          "MediaUrl": "http://push.url/app-alinxu_test--20230728181527.mp4"
+                        }
+                      ],
+                      "NextMarker": ""
+                    }
+                  },
+                  "RequestId": "6877226848471811505"
+                }
+              
+                
 
 components:
   schemas:
     SearchMediaResponse:
       type: object
       properties:
-        Code: { type: integer, format: int32 }
-        Message: { type: string }
-        RequestId: { type: string }
+        Code:
+          type: integer
+          format: int32
+          description: |
+            以下仅列出了接口业务逻辑相关的部分返回码，完整返回码请参考 [全局返回码](/real-time-video-server/api-reference/return-codes)。
+
+            <table>
+              <thead>
+                <tr>
+                  <th>返回码</th>
+                  <th>说明</th>
+                  <th>处理建议</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>0</td>
+                  <td>请求成功。</td>
+                  <td>-</td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td>输出参数错误。</td>
+                  <td>-</td>
+                </tr>
+                <tr>
+                  <td>3</td>
+                  <td>未开通相关权限。</td>
+                  <td>请联系 ZEGO 技术支持。</td>
+                </tr>
+                <tr>
+                  <td>4</td>
+                  <td>CDN 类型不匹配。</td>
+                  <td>请检查参数。</td>
+                </tr>
+                <tr>
+                  <td>5</td>
+                  <td>配置错误。</td>
+                  <td>请联系 ZEGO 技术支持。</td>
+                </tr>
+                <tr>
+                  <td>6</td>
+                  <td>请求过于频繁。</td>
+                  <td>请稍后重试。</td>
+                </tr>
+                <tr>
+                  <td>7</td>
+                  <td>鉴权失败。</td>
+                  <td>请检查鉴权参数是否正确。</td>
+                </tr>
+                <tr>
+                  <td>8</td>
+                  <td>获取鉴权配置失败。</td>
+                  <td>请联系 ZEGO 技术支持是否开通此服务。</td>
+                </tr>
+                <tr>
+                  <td>1000</td>
+                  <td>请求失败。</td>
+                  <td>请联系 ZEGO 技术支持。</td>
+                </tr>
+              </tbody>
+            </table>
+          example: 0
+        Message: { type: string, description: 操作结果描述。, example: "success" }
+        RequestId: { type: string, description: 请求 ID，由 ZEGO 服务端返回。, example: "6877226848471811505" }
         Data:
           type: object
+          description: 响应数据。
           properties:
             Tencent:
               type: object
+              description: <code>腾讯云</code> 返回内容（Vendor 取 Tencent 时返回本参数）。
               properties:
-                RequestId: { type: string }
-                TotalCount: { type: integer, format: int32 }
+                RequestId: { type: string, description: 唯一请求 ID，由请求参数 Vendor 取值对应的 CDN 厂商（即 Tencent）返回，定位问题时需要提供该次请求的 RequestId。, example: "c827629f-08b4-406c-b063-b660126e922f" }
+                TotalCount: { type: integer, format: int32, description: 符合搜索条件的记录总数。最大值为 5000。当命中记录数超过 5000 时，该参数将返回 5000，而非实际命中总数。, example: 1 }
                 MediaInfoSet:
                   type: array
+                  description: 媒体文件信息列表。
                   items:
                     type: object
                     properties:
-                      FileId: { type: string }
+                      FileId: { type: string, description: 文件唯一标识，即 <a href="!Callback/Record_File_Create_Callback" target="blank">录制文件生成回调</a> 中的 FileID。, example: "3270835011057780896" }
                       BasicInfo:
                         type: object
+                        description: 基础信息。包括视频名称、分类、播放地址、封面图片等。
                         properties:
-                          Name: { type: string }
-                          Description: { type: string }
-                          CreateTime: { type: string }
-                          UpdateTime: { type: string }
-                          ExpireTime: { type: string }
-                          ClassId: { type: integer, format: int32 }
-                          ClassName: { type: string }
-                          ClassPath: { type: string }
-                          CoverUrl: { type: string }
-                          Type: { type: string }
-                          MediaUrl: { type: string }
-                          SourceInfo: { type: object }
-                          SourceType: { type: string }
-                          SourceContext: { type: string }
-                          StorageRegion: { type: string }
-                          Vid: { type: string }
-                          Category: { type: string }
-                          Status: { type: string }
-                          StorageClass: { type: string }
+                          Name: { type: string, description: 媒体名。, example: "1690354361.mp4" }
+                          Description: { type: string, description: 媒体文件描述。, example: "" }
+                          CreateTime: { type: string, description: 媒体文件的创建时间，使用 "ISO 日期格式"。, example: "2023-07-26T06:52:49Z" }
+                          UpdateTime: { type: string, description: 媒体文件的最近更新时间（如修改视频属性、发起视频处理等会触发更新媒体文件信息的操作），使用 "ISO 日期格式"。, example: "2023-07-26T10:21:33Z" }
+                          ExpireTime: { type: string, description: 媒体文件的过期时间，使用 "ISO 日期格式"。过期后该媒体文件及其相关资源（转码结果、雪碧图等）将被永久删除。"9999-12-31T23:59:59Z" 表示永不过期。, example: "9999-12-31T23:59:59Z" }
+                          ClassId: { type: integer, format: int32, description: 媒体文件的分类 ID。, example: 0 }
+                          ClassName: { type: string, description: 媒体文件的分类名称。, example: "其他" }
+                          ClassPath: { type: string, description: 媒体文件的分类路径，分类间以 "-" 分隔，如 "新的一级分类 - 新的二级分类"。, example: "其他" }
+                          CoverUrl: { type: string, description: 媒体文件的封面图片地址。, example: "" }
+                          Type: { type: string, description: 媒体文件的封装格式，例如 mp4、flv 等。, example: "mp4" }
+                          MediaUrl: { type: string, description: 原始媒体文件的 URL 地址。, example: "http://push.url/6cbbc436vodcq1500020831/03c1ada53270835011057780896/9e505713fb216f0b0232064f.mp4" }
+                          SourceInfo: { type: object, description: 该媒体文件的来源信息。, example: { "SourceType": "VideoProcessing", "SourceContext": "" } }
+                          SourceType: { type: string, description: 来源类型。, example: "VideoProcessing" }
+                          SourceContext: { type: string, description: 来源流。, example: "" }
+                          StorageRegion: { type: string, description: 媒体文件存储地区，如 ap-guangzhou。, example: "ap-chongqing" }
+                          Vid: { type: string, description: 直播录制文件的唯一标识。, example: "3270835011057780896" }
+                          Category: { type: string, description: <p>文件类型。</p><ul><li>Video：视频文件。</li><li>Audio：音频文件。</li><li>Image：图片文件。</li></ul>, example: "Video" }
+                          Status: { type: string, description: <p>文件状态。</p><ul><li>Normal：正常。</li><li>Forbidden：封禁。</li></ul>, example: "Normal" }
+                          StorageClass: { type: string, description: <p>文件的存储类型。</p><ul><li>STANDARD：标准存储。</li><li>STANDARD_IA：低频存储。</li><li>ARCHIVE：归档存储。</li><li>DEEP_ARCHIVE：深度归档存储。</li></ul> , example: "STANDARD" }
                       TranscodeInfo:
                         type: object
+                        description: 媒体文件转码结果的相关信息，包括该媒体文件转码后的文件地址、规格、码率、分辨率等。
                         properties:
                           TranscodeSet:
                             type: array
+                            description: 媒体文件转码信息集合，每个元素代表 1 个转码结果。
                             items:
                               type: object
                               properties:
-                                Url: { type: string }
-                                Definition: { type: integer, format: int32 }
-                                Bitrate: { type: integer, format: int32 }
-                                Height: { type: integer, format: int32 }
-                                Width: { type: integer, format: int32 }
-                                Size: { type: integer, format: int64 }
-                                Duration: { type: number }
-                                Md5: { type: string }
-                                Container: { type: string }
+                                Url: { type: string, description: 转码后的视频文件地址。, example: "http://push.url/6cbbc436vodcq1500020831/03c1ada53270835011057780896/9e505713fb216f0b0232064f.mp4" }
+                                Definition: { type: integer, format: int32, description: 转码规格 ID，取值 0 表示原始文件。, example: 0 }
+                                Bitrate: { type: integer, format: int32, description: “视频流码率”的平均值与“音频流码率”的平均值之和，单位：bps。, example: 576721 }
+                                Height: { type: integer, format: int32, description: 视频流高度的最大值，单位：px。, example: 360 }
+                                Width: { type: integer, format: int32, description: 视频流宽度的最大值，单位：px, example: 640 }
+                                Size: { type: integer, format: int64, description: 媒体文件总大小，单位：字节。当媒体文件为 HLS 时，大小是 m3u8 和 ts 文件大小的总和。, example: 2239086 }
+                                Duration: { type: number, description: 视频时长，单位：秒。, example: 31.104 }
+                                Md5: { type: string, description: 视频的 md5 值。, example: "" }
+                                Container: { type: string, description: 容器类型，例如 m4a，mp4 等。, example: "mov,mp4,m4a,3gp,3g2,mj2" }
                                 VideoStreamSet:
                                   type: array
+                                  description: 视频流信息。
                                   items:
                                     type: object
                                     properties:
-                                      Bitrate: { type: integer, format: int32 }
-                                      Height: { type: integer, format: int32 }
-                                      Width: { type: integer, format: int32 }
-                                      Codec: { type: string }
-                                      Fps: { type: integer, format: int32 }
-                                      CodecTag: { type: string }
+                                      Bitrate: { type: integer, format: int32, description: 视频流的码率，单位：bps。, example: 530177 }
+                                      Height: { type: integer, format: int32, description: 视频流的高度，单位：px。, example: 360 }
+                                      Width: { type: integer, format: int32, description: 视频流的宽度，单位：px。, example: 640 }
+                                      Codec: { type: string, description: 视频流的编码格式，例如 h264。, example: "h264" }
+                                      Fps: { type: integer, format: int32, description: 帧率，单位：hz。, example: 14 }
+                                      CodecTag: { type: string, description: 编码标签，仅当 Codec 为 hevc 时有效。, example: "" }
                                       DynamicRangeInfo:
                                         type: object
+                                        description: 画面动态范围信息。
                                         properties:
-                                          Type: { type: string }
-                                          HDRType: { type: string }
+                                          Type: { type: string, description: <p>画面动态范围信息。</p><ul><li>SDR：Standard Dynamic Range 标准动态范围。</li><li>HDR：High Dynamic Range 高动态范围。</li></ul>, example: "SDR" }
+                                          HDRType: { type: string, description: <p>高动态范围类型标准，当 Type 为 HDR 时有效。</p><ul><li>hdr10</li><li>hlg</li></ul>, example: "" }
                                 AudioStreamSet:
                                   type: array
+                                  description: 音频流信息。
                                   items:
                                     type: object
                                     properties:
-                                      Bitrate: { type: integer, format: int32 }
-                                      SamplingRate: { type: integer, format: int32 }
-                                      Codec: { type: string }
-                                      DigitalWatermarkType: { type: string }
-                                      CopyRightWatermarkText: { type: string }
+                                      Bitrate: { type: integer, format: int32, description: 音频流的码率，单位：bps。, example: 46544 }
+                                      SamplingRate: { type: integer, format: int32, description: 音频流的采样率，单位：hz。, example: 16000 }
+                                      Codec: { type: string, description: 音频流的编码格式，例如 aac。, example: "aac" }
+                                DigitalWatermarkType: { type: string, description: <p>数字水印类型。</p><ul><li>Trace：表示经过溯源水印处理。</li><li>CopyRight：表示经过版权水印处理。</li><li>None：表示没有经过任何水印处理。</li></ul>, example: "None" }
+                                CopyRightWatermarkText: { type: string, description: 版权信息。, example: "" }      
             Huawei:
               type: object
+              description: <code>华为云</code> 返回内容（Vendor 取 Huawei 时返回本参数）。
               properties:
-                NextMarker: { type: string }
+                NextMarker: { type: string, description: 下一次检索时的索引。在下次调用本接口时，传入到请求参数 Marker 中。, example: "" }
                 Keys:
                   type: array
+                  description: 媒体文件信息列表。
                   items:
                     type: object
                     properties:
-                      ETag: { type: string }
-                      Key: { type: string }
-                      LastModified: { type: string }
-                      Size: { type: integer, format: int64 }
-                      MediaUrl: { type: string }
+                      ETag: { type: string, description: 媒体文件的 md5 值。, example: "\"ef4e0314095b8aae02d7a5adaa60c94f\"" }
+                      Key: { type: string, description: 媒体文件的唯一标识，即 <a href="!Callback/Record_File_Create_Callback" target="blank">录制文件生成回调</a> 中的 ObsObject。, example: "record/app/command_record/alinxu_test/2023-07-28-09-30-06.mp4" }
+                      LastModified: { type: string, description: 媒体文件的最后一次修改时间。, example: "2023-07-28T09:31:29.176Z" }
+                      Size: { type: integer, format: int64, description: 媒体文件的大小。, example: 2172786 }
+                      MediaUrl: { type: string, description: 媒体文件的地址。, example: "http://push.url/record/app/command_record/alinxu_test/2023-07-28-09-30-06.mp4" }
             Ws:
               type: object
+              description: <code>网宿云</code> 返回内容（Vendor 取 Ws 时返回本参数）。
               properties:
-                NextMarker: { type: string }
+                NextMarker: { type: string, description: 下一次检索时的索引。在下次调用本接口时，传入到请求参数 Marker 中。, example: "" }
                 Keys:
                   type: array
+                  description: 媒体文件信息列表。
                   items:
                     type: object
                     properties:
-                      ETag: { type: string }
-                      Key: { type: string }
-                      LastModified: { type: string }
-                      Size: { type: integer, format: int64 }
-                      MediaUrl: { type: string }
+                      ETag: { type: string, description: 媒体文件的 md5 值。, example: "lv1tsU6T8r9hDZietipfSphc806Y" }
+                      Key: { type: string, description: 媒体文件的唯一标识，即 <a href="!Callback/Record_File_Create_Callback" target="blank">录制文件生成回调</a> 中的 PersistentId。, example: "app-alinxu_test--20230728181527.mp4" }
+                      LastModified: { type: string, description: 媒体文件的最后一次修改时间。, example: "2023-07-28T10:16:44Z" }
+                      Size: { type: integer, format: int64, description: 媒体文件的大小。, example: 6441553 }
+                      MediaUrl: { type: string, description: 媒体文件的地址。, example: "http://push.url/app-alinxu_test--20230728181527.mp4" }
 
