@@ -22,28 +22,24 @@ paths:
         ## 简介
 
         本文介绍如何调用服务端 API 接口，将指定的单路输入流，输出为不同分辨率、码率及帧率的视频流。
-        
+
         “客户端”基于转码模板触发的单流转码介绍，请参考 [单流转码](/real-time-video-android-java/live-streaming/single-stream-transcoding)；“服务端”的相关回调，请参考 [单流转码开始回调](/real-time-video-server/callback/transcoding/on-demand-transcoding-started) 和 [单流转码停止回调](/real-time-video-server/callback/transcoding/on-demand-transcoding-stopped)。
-        
-        
+
+
         ## 前提条件
-        
+
         在实现单流转码之前，请确保：
-        
+
         - 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppId 和 ServerSecret，详情请参考 [控制台 - 项目信息](/console/project-info)。
         - 已在 [ZEGO 控制台](https://console.zego.im) 自助接入服务开通“混流”服务权限，详情请参考 [控制台 - 服务配置 - 混流](/console/service-configuration/enable-stream-mixing-service)，或联系 ZEGO 技术支持开通。
-        <Note title="说明">
-        使用 POST 请求方法传递参数时：
-        - Body 中的参数直接传 JsonObject 格式即可，无需序列化为 String 格式。
-        - Headers 中，设置 “Content-type” 为 “application/json”。
-        </Note>
-        <Note title="调用频率限制">同一个 AppID 下所有房间：100 次/秒</Note>
+
+        <Note title="调用频率限制">100 次/秒</Note>
         <h4 id="template">单流转码的预设输出模板</h4>
 
         预设模版（TemplateId 取值为 0、1、2、3）的各项参数配置如下：
-        
+
         <table>
-        
+
         <tbody><tr>
         <th>模版 ID</th>
         <th>分辨率（短边）</th>
@@ -72,8 +68,7 @@ paths:
         <td>2000</td>
         </tr>
         </tbody></table>
-        以下请求参数列表仅列出了接口请求参数和部分公共参数，完整公共参数列表请参考 [调用方式](./../accessing-server-apis.mdx#公共请求参数) 中的 “公共请求参数”。
-        
+
         ***此接口中只有部分参数在开始混流后支持动态更新，未标注的则不支持动态更新，详情请参考下表中的参数描述。***
       operationId: start-cloud-transcode
       parameters:
@@ -102,6 +97,20 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/StartCloudTranscodeRequest'
+            example:
+              {
+                  "TaskId": "2213699902971205739",
+                  "UserId": "456",
+                  "TranscodeInput": {
+                      "StreamId": "stream1"
+                  },
+                  "TranscodeOutput": [
+                      {
+                          "StreamId": "stream3",
+                          "TemplateId": 3
+                      }
+                  ]
+              }
       responses:
         "200":
           description: 操作成功
@@ -116,69 +125,77 @@ components:
       type: object
       required: [TaskId, UserId, TranscodeInput, TranscodeOutput]
       properties:
-        TaskId: 
+        TaskId:
           type: string
+          required: true
           description: |
             任务 ID，单流转码任务的唯一标识，由开发者自定义。
-            
-            重复调用"开始单流转码"接口，传入相同的 TaskId，可以直接更新转码任务信息。
+
+            **重复调用"开始单流转码"接口，传入相同的 TaskId，可以直接更新转码任务信息。**
           example: "2213699902971205739"
-        UserId: 
+        UserId:
           type: string
+          required: true
           description: |
-            发起转码任务的用户 ID，由开发者自定义。同一个 TaskId 任务的用户 ID 需要一致，不同 TaskId 任务的用户 ID 需要保持不同。
-            
+            发起转码任务的用户 ID，由开发者自定义。**同一个 TaskId 任务的用户 ID 需要一致，不同 TaskId 任务的用户 ID 需要保持不同。**
+
             通过 UserId 可以实现转码任务的用户归属，也就是该用户才能更新或者停止对应 TaskId 的转码任务，该功能需要联系 ZEGO 技术支持开通。
           example: "456"
-        Sequence: 
+        Sequence:
           type: integer
-          format: int32
+          format: int
           description: 转码任务的序列号，用于保证时序，同个任务的参数修改需要保证序列号的递增。
         TranscodeInput:
           type: object
+          required: [StreamId, StreamUrl]
           description: 转码任务的输入流设置。
           properties:
-            StreamId: 
+            StreamId:
               type: string
               description: |
                 转码输入流 ID，该流 ID 来自 RTC 服务，仅支持数字、英文字符和 "-"、"_"。
-                
+
                 > **注意**
                 >
                 > StreamId 和 StreamUrl 二者取其一即可，若同时填写 StreamId 和 StreamUrl，则 StreamUrl 生效。
               example: "stream1"
-            StreamUrl: 
+            StreamUrl:
               type: string
+              example: ""
               description: |
                 转码输入流 URL，支持 RTMP 协议。
-                
+
                 > **注意**
                 >
                 > StreamId 和 StreamUrl 二者取其一即可，若同时填写 StreamId 和 StreamUrl，则 StreamUrl 生效。
-          example:
-            StreamId: "stream1"
         TranscodeOutput:
           type: array
           description: 转码任务的输出流信息。
           items:
             type: object
+            required: [StreamId, StreamUrl, TemplateId]
             properties:
-              StreamId: 
+              StreamId:
                 type: string
                 description: |
                   输出流 ID。
                   - 默认情况下，转码任务输出至 RTC 或低延迟直播产品。
                   - 您也可联系 ZEGO 技术支持，配置转码流输出至 ZEGO 代理的 CDN 直播产品，生效范围为整个 AppId。如果指定流输出至 CDN 直播产品，则必须设置 StreamUrl，不能配置转码默认输出至 ZEGO 代理 CDN。
-                  
-                  StreamId 和 StreamUrl 二者取其一即可，若填写了 StreamId，则 StreamUrl 不生效。
+
+                  > **注意**
+                  >
+                  > StreamId 和 StreamUrl 二者取其一即可，若同时填写 StreamId 和 StreamUrl，则 StreamUrl 生效。
                 example: "stream3"
-              StreamUrl: 
+              StreamUrl:
                 type: string
+                example: ""
                 description: |
                   仅支持 RTMP 协议，表示转码输出至 CDN 直播服务，观众可以从 CDN 直播拉转码流。
-                  
-                  StreamId 和 StreamUrl 二者取其一即可，若填写了 StreamId，则 StreamUrl 不生效。
-              TemplateId: 
+
+                  > **注意**
+                  >
+                  > StreamId 和 StreamUrl 二者取其一即可，若同时填写 StreamId 和 StreamUrl，则 StreamUrl 生效。
+              TemplateId:
                 type: integer
                 format: int32
                 enum: [0,1,2,3,4]
@@ -189,93 +206,109 @@ components:
                   - 2：输出分辨率为 720P 转码流
                   - 3：输出分辨率为 1080P 转码流
                   - 4：自定义模板。通用模板不能满足需求时，请使用自定义模板设置输出参数
-                  
+
                   请点击 [单流转码的预设输出模板](#template)，查看具体的预设模板配置参数。
-                example: 3
-          example:
-            - StreamId: "stream3"
-              TemplateId: 3
+                example: 4
               TemplateConfig:
                 type: object
-                description: 自定义设置输出流的视频参数，TemplateId 取值为 4 时，该参数必填。
+                description: 自定义模板配置。
                 properties:
-                  VideoEncId: 
+                  VideoEncId:
                     type: integer
-                    format: int32
+                    format: int
                     enum: [0,1,2]
+                    default: 0
                     description: |
-                      输出流的视频编码格式：
-                      - 0：默认值，表示输出流编码格式与输入流编码格保持一致
-                      - 1：H264
-                      - 2：H265
-                  Fps: 
+                      输出流的视频编码格式。
+
+                      - 0: 默认值，表示输出流编码格式与输入流编码格保持一致。
+                      - 1: H264
+                      - 2: H265
+                    example: 0
+                  Fps:
                     type: integer
-                    format: int32
+                    format: int
                     description: |
-                      视频帧率，取值必须大于或等于 0：
-                      - 0：默认值，表示输出流帧率与输入流帧率保持一致
-                      - 其他值：转码流的输出帧率，最大帧率默认限制在 20 fps 以内。如果需要输出更大帧率的流，请联系 ZEGO 技术支持进行配置
-                      
+                      视频帧率，取值必须大于或等于 0。
+
+                      - 0: 默认值，表示输出流帧率与输入流帧率保持一致。
+                      - 其他值: 转码流的输出帧率，最大帧率默认限制在 20 fps 以内。如果需要输出更大帧率的流，请联系 ZEGO 技术支持进行配置。
+
                       目前暂时不支持输出不同帧率的转码流，各个输出流的帧率设置必须保持一致。
-                  GOP: 
+                    example: 15
+                  GOP:
                     type: integer
-                    format: int32
+                    format: int
+                    default: 2
                     description: |
                       转码输出流的关键帧间隔，取值必须大于 0，默认值为 2，单位：秒。
-                      
+
                       如果需要自定义，请联系 ZEGO 技术支持开启支持自定义。
-                  ShortEdgeAdaption: 
+                    example: 2
+                  ShortEdgeAdaption:
                     type: integer
-                    format: int32
-                    enum: [0,1]
+                    format: int
+                    default: 0
                     description: |
-                      输出流的分辨率是否按照设置的 Width 作为短边，自适应横竖屏：
-                      - 0：默认值，直接按照设置的 Width 和 Height 输出
-                      - 1：按照设置的 Width 作为短边，并按照输入流的分辨率，等比例缩放后自适应横竖屏
-                  Width: 
+                      输出流的分辨率是否按照设置的 Width 作为短边，自适应横竖屏。
+
+                      - 0: 默认值，直接按照设置的 Width 和 Height 输出。
+                      - 1: 按照设置的 Width 作为短边，并按照输入流的分辨率，等比例缩放后自适应横竖屏。
+                  Height:
                     type: integer
-                    format: int32
+                    format: int
                     description: |
-                      宽，范围为 [0, 3000]，数值必须是 2 的倍数：
-                      - 0：默认值，与参数 Height 同时为 0，则表示输出流分辨率与输入流分辨率保持一致
-                      - 其他值：转码流自定义分辨率的宽
-                      
-                      支持转码过程中实时更新。再次调用本接口，即可动态更新该参数。
-                  Height: 
+                      高，范围为 [0, 3000]，数值必须是 2 的倍数。
+
+                      - 0: 默认值，与参数 Width 同时为 0，则表示输出流分辨率与输入流分辨率保持一致。
+                      - 其他值: 转码流自定义分辨率的高。
+
+                      **🔁支持转码过程中实时更新。再次调用本接口，即可动态更新该参数。**
+                    example: 720
+                  Width:
                     type: integer
-                    format: int32
+                    format: int
                     description: |
-                      高，范围为 [0, 3000]，数值必须是 2 的倍数：
-                      - 0：默认值，与参数 Width 同时为 0，则表示输出流分辨率与输入流分辨率保持一致
-                      - 其他值：转码流自定义分辨率的高
-                      
-                      支持转码过程中实时更新。再次调用本接口，即可动态更新该参数。
-                  VideoBitrate: 
+                      宽，范围为 [0, 3000]，数值必须是 2 的倍数。
+
+                      - 0: 默认值，与参数 Height 同时为 0，则表示输出流分辨率与输入流分辨率保持一致。
+                      - 其他值: 转码流自定义分辨率的宽。
+
+                      **🔁支持转码过程中实时更新。再次调用本接口，即可动态更新该参数。**
+                    example: 1280
+                  VideoBitrate:
                     type: integer
-                    format: int32
+                    format: int
+                    default: 0
                     description: |
-                      视频码率，取值必须大于或等于 0，单位为 bps：
-                      - 0：默认值，表示输出码率与输入流码率保持一致
-                      - 其他值：转码流的输出码率
-                  LowBitrateHD: 
+                      视频码率，取值必须大于或等于 0，单位为 bps。
+
+                      - 0: 默认值，表示输出码率与输入流码率保持一致。
+                      - 其他值: 转码流的输出码率。
+
+                      **🔁支持转码过程中实时更新。再次调用本接口，即可动态更新该参数。**
+                    example: 0
+                  LowBitrateHD:
                     type: integer
-                    format: int32
-                    enum: [0,1]
+                    format: int
+                    default: 0
                     description: |
-                      是否开启"高清低码"功能：
-                      - 0：默认值，不开启
-                      - 1：开启
-                      
-                      目前"高清低码"功能需要联系 ZEGO 技术支持开通权限，且仅在 VideoEncId 取值为 3（H265）时生效。
+                      是否开启“高清低码”功能。
+
+                      - 0: 默认值，不开启。
+                      - 1: 开启。
+
+                      目前"高清低码"功能需要联系 ZEGO 技术支持开通权限，且仅在 VideoEncId 取值为 2（H265）时生效。
+                    example: 0
     StartCloudTranscodeResponse:
       type: object
       properties:
-        Code: 
+        Code:
           type: integer
           format: int32
           description: |
             以下仅列出了接口业务逻辑相关的部分返回码，完整返回码请参考 [全局返回码](/real-time-video-server/api-reference/return-codes)。
-            
+
             <table>
             <thead>
               <tr><th>返回码</th><th>说明</th><th>处理建议</th></tr>
@@ -287,7 +320,7 @@ components:
             </tbody>
             </table>
           example: 0
-        Message: 
+        Message:
           type: string
           description: 操作结果描述。
           example: "success"
