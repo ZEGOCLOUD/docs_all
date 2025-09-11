@@ -1,0 +1,373 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: Real-time Voice/Video API Support
+    email: support@zegocloud.com
+
+tags:
+  - name: stream-mixing
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+paths:
+  /:
+    post:
+      tags:
+        - stream-mixing
+      summary: StartAutoMix
+      description: |
+        本文介绍如何调用服务端 API 接口，指定房间，自动将房间内的所有 `音频` 流进行混流。可以应用在语聊房、合唱等场景中。
+
+        在跨房间 PK 连麦等场景中，支持增加其他房间内的某条流，参与自动混流；或剔除当前房间的某条流，不参与自动混流，具体请参考请求参数中的 `ExtraMixInput` 参数说明。
+
+        <Note title="说明">
+        * 目前只支持自动混 `音频` 流。
+        * 后续房间内如果有流新增或删除，您都不需要做任何处理，ZEGO 服务端内部自动更新混流。
+        </Note>
+
+        “客户端”的混流功能，请参考 [混流 - 自动混流](/real-time-video-android-java/live-streaming/stream-mixing)；“服务端”的相关回调，请参考 [混流开始回调](/real-time-video-server/callback/stream-mixing/started) 和 [混流结束回调](/real-time-video-server/callback/stream-mixing/stopped)。
+        ## 前提条件
+
+        在实现混流之前，请确保：
+
+        - 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppId 和 ServerSecret，详情请参考 [控制台 - 项目信息](/console/project-info)。
+        - 已在 [ZEGO 控制台](https://console.zego.im) 自助接入服务开通“混流”服务权限，详情请参考 [控制台 - 服务配置 - 混流](/console/service-configuration/enable-stream-mixing-service)，或联系 ZEGO 技术支持开通。
+        - 已通过开发者自己的客户端，在房间内发起推拉流，详情请参考 [实现视频通话](/real-time-video-android-java/quick-start/implementing-video-call)。
+        - 若您希望创建自动混流时，如果房间不存在，可自动创建对应房间，请联系 ZEGO 技术支持开启相关功能。
+        <Note title="说明">
+        测试环境下（详见 IsTest 公共参数说明），`输入流`的流 ID 和`输出流`的流 ID：
+
+        - 如果是开发者自己输入的原始流 ID，需要加上 “zegotest-AppId-” 前缀，否则会导致混流失败（混流服务器拉不到输入流或拉不到混流输出流）。例如，开发者输入流 ID 为 “test”，在 AppId 为 “123456789” 的测试环境下，流 ID 应为 “zegotest-123456789-test”。
+        - 如果是通过 SDK 接口，或通过服务端 API 接口获取到的，此时不需要添加 “zegotest-AppId-” 的前缀。
+        </Note>
+
+        <Note title="调用频率限制">100 次/秒</Note>
+
+        **此接口中只有部分参数在开始混流后支持动态更新，未标注的则不支持动态更新，详情请参考下表中的参数描述。**
+      operationId: start-auto-mix
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://rtc-api.zego.im?Action=StartAutoMix
+          required: true
+          schema:
+            type: string
+            enum: [StartAutoMix]
+          style: form
+          explode: true
+        # 公共参数（Query）
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/IsTest'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartAutoMixRequest'
+            example:
+              {
+                "TaskId": "2213699902971205739",
+                "UserId": "123",
+                "RoomId": "room123",
+                "MixOutput": [{"StreamId": "stream3"}]
+              }
+      responses:
+        "200":
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartAutoMixResponse'
+
+components:
+  schemas:
+    StartAutoMixRequest:
+      type: object
+      required: [TaskId, UserId, RoomId, MixOutput]
+      properties:
+        TaskId:
+          type: string
+          description: |
+            任务 ID，混流任务的唯一标识。
+            - 重复调用"开始混流"接口，传入相同的 TaskId，可以直接更新混流任务信息。
+            - 发起"音视频"混流时，如果之前已发起过对应 TaskId 的"纯音频"混流任务，则需要先停止此任务，再重新发起"音视频"混流任务。
+          example: "2213699902971205739"
+        UserId:
+          type: string
+          description: |
+            发起混流任务的用户 ID，由开发者自定义。
+
+            **同一个任务的用户 ID 需要一致，不同任务的用户 ID 需要保持不同**。
+
+            通过 UserId 可以实现混流任务的用户归属，也就是该用户才能更新或者停止对应 TaskId 的混流任务，该功能需要联系 ZEGO 技术支持开通。
+          example: "123"
+        RoomId:
+          type: string
+          description: 房间 ID。
+          example: "room123"
+        ExtraMixInput:
+          type: array
+          description: |
+
+            额外的输入流列表（其他房间内的流），默认最多支持 9 条额外的输入流。
+
+            <br/>
+            **📌注意**
+            <br/>
+            开启自动混流时，最多支持 9 条输入流。即该房间内的流，增加、剔除（根据 ModifyType 取值判断增加或删除某条流）额外的输入流后，流的总数量不能超过 9 条。
+          items:
+            type: object
+            properties:
+              StreamId:
+                type: string
+                example: "room_other_stream1"
+                description: |
+                  混流输入流 ID，该流 ID 来自 RTC 服务。
+
+                  仅支持数字、英文字符和 "-"、"_"。
+
+                  > **注意**
+                  >
+                  > StreamId 和 StreamUrl 二者取其一即可，若同时填写 StreamId 和 StreamUrl：
+                  > - ModifyType 为 0（增加）时，StreamUrl 生效。
+                  > - ModifyType 为 1（剔除）时，StreamId 生效。
+              StreamUrl:
+                type: string
+                example: ""
+                description: |
+                  混流输入流 URL，支持 RTMP 和 HTTP-FLV 两种协议。
+
+                  > **注意**
+                  >
+                  > StreamId 和 StreamUrl 二者取其一即可，若同时填写 StreamId 和 StreamUrl：
+                  > - ModifyType 为 0（增加）时，StreamUrl 生效。
+                  > - ModifyType 为 1（剔除）时，StreamId 生效。
+              ModifyType:
+                type: integer
+                format: int
+                enum: [0,1]
+                description: |
+                  输入流列表的类型，表示在当前混流任务中"增加"或"剔除"该条输入流：
+                  - 0：开启自动混流时，在输入流列表中**增加**当前流，默认值
+                  - 1：开启自动混流时，在输入流列表中**剔除**当前流。此时只需要填写 StreamId 和本参数的取值即可
+              SoundLevelId:
+                type: integer
+                format: int
+                description: |
+                  声浪 ID。参数 SoundLevel（混流声浪）取值为 "1" 时，此参数必填。
+              Volume:
+                type: integer
+                format: int
+                default: 100
+                description: 音量，取值范围 [0, 200]，默认为 100。
+        MixOutput:
+          type: array
+          description: |
+            输出流信息，目前最多支持 3 个。当输出目标为 URL 格式时，目前只支持 RTMP URL 格式：rtmp://xxxxxxxx，且不能传入两个相同的混流输出的地址。
+          items:
+            type: object
+            properties:
+              StreamId:
+                type: string
+                example: "stream3"
+                description: |
+                  输出流 ID。默认情况下表示混流输出至 RTC 或低延迟直播产品，也可联系 ZEGO 技术支持配置混流输出至 ZEGO 代理的 CDN 直播产品，生效范围为整个 AppId。如果希望控制指定流输出至 CDN 直播产品，则不能配置混流默认输出至 ZEGO 代理 CDN，应按需设置 StreamUrl。
+
+                  **StreamId 和 StreamUrl 二者取其一即可，若填写了 StreamId，则 StreamUrl 不生效。**
+              StreamUrl:
+                type: string
+                example: ""
+                description: |
+                  仅支持 RTMP 协议，表示混流输出至 CDN 直播服务，观众可以从 CDN 直播拉混流。
+
+                  **StreamId 和 StreamUrl 二者取其一即可，若填写了 StreamUrl，则 StreamId 不生效。**
+              AudioCodec:
+                type: integer
+                format: int
+                enum: [0,1,2,3]
+                example: 0
+                description: |
+                  音频编码及采样率。如需修改采样率，请联系 ZEGO 技术支持配置：
+                  - 0：HE-AAC，采样率：44100 kHz，默认值
+                  - 1：AAC-LC，采样率：44100 kHz
+                  - 2：MP3，采样率：44100 kHz
+                  - 3：OPUS，采样率：48000 kHz
+              AudioBitrate:
+                type: integer
+                format: int
+                description: 混流输出音频码率，不填时默认值为 48000，单位为 bps。
+              SoundChannel:
+                type: integer
+                format: int
+                enum: [1,2]
+                description: |
+                  输出音频声道数，优先级比全局参数高：
+                  - 1：单声道，默认值
+                  - 2：双声道
+          example:
+            - StreamId: "stream3"
+        Sequence:
+          type: integer
+          format: int
+          description: |
+            混流请求的序列号，用于保证时序，同个任务的参数修改需要保证序列号的递增。例如："Sequence": 1。
+
+            **如果开启了混流任务的时序控制（如有需要，请联系 ZEGO 技术支持开启），此参数必填。**
+        UserData:
+          type: string
+          example: "base64_encoded_data"
+          description: |
+            自定义用户数据，使用时需要对此参数内容进行 base64 编码。长度限制为 4000 字节，建议不超过 850 字节。
+
+            自定义的用户数据将作为 SEI 信息传输给拉流方，拉流方可通过监听客户端的 <a href="https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~objective-c_ios~protocol~ZegoEventHandler#on-player-sync-recv-sei-stream-id" target="_blank">onPlayerSyncRecvSEI</a> 回调获取该数据。
+
+            **🔁再次调用本接口，即可动态更新该参数。**
+        SoundLevel:
+          type: integer
+          format: int
+          enum: [0,1]
+          example: 0
+          description: |
+            混流声浪，指混流的音量大小。支持混流过程中实时更新：
+            - 0：不开启，默认值
+            - 1：开启。开启后，客户端可以通过 <a href="https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~objective-c_ios~protocol~ZegoEventHandler#on-auto-mixer-sound-level-update" target="_blank">onAutoMixerSoundLevelUpdate</a> 回调来接收自动混流声浪更新的通知
+
+            **🔁再次调用本接口，即可动态更新该参数。**
+        ByPass:
+          type: integer
+          format: int
+          default: 0
+          enum: [0,1]
+          description: |
+            单流透传开关，即输入流就一个时是否按输出参数重新编码，该功能需要联系 ZEGO 技术支持开通：
+            - 0：不启用，默认值
+            - 1：启用
+        SoundChannel:
+          type: integer
+          format: int
+          default: 1
+          enum: [1,2]
+          description: |
+            输出音频声道数，当没有指定输出流时使用该配置：
+            - 1：单声道，默认值
+            - 2：双声道
+        AlignmentType:
+          type: integer
+          format: int
+          enum: [0,1,2]
+          description: |
+            控制播放的实时音视频流是否需要按照 NTP（网络时间）精准对齐后进行混流。**此参数主要应用于 KTV 场景中，会增加一定的混流延时；非 KTV 类似场景，不建议设置此参数。**
+            - 0：不对齐，默认值
+            - 1：指定流对齐
+            - 2：所有流强制对齐
+        RecvBufferLevel:
+          type: integer
+          format: int
+          minimum: 0
+          maximum: 4000
+          description: 控制拉流最小缓冲时间，取值范围 [0, 4000]，单位：毫秒；默认最小缓冲时间为 0。
+        ExPara:
+          type: array
+          description: 拓展参数，根据实际情况填入，常规任务可不填。
+          items:
+            type: object
+            properties:
+              Key:
+                type: string
+                example: "k1"
+                description: key 值。
+              Value:
+                type: string
+                example: "v1"
+                description: value 值。
+    StartAutoMixResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int
+          description: |
+            以下仅列出了接口业务逻辑相关的部分返回码，完整返回码请参考 [全局返回码](/real-time-video-server/api-reference/return-codes)。
+
+            <table>
+            <thead>
+              <tr><th>返回码</th><th>说明</th><th>处理建议</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>110200001</td><td>失败。</td><td>请重试。</td></tr>
+              <tr><td>110200002</td><td>输入参数错误。</td><td>请参考 Message 信息处理。</td></tr>
+              <tr><td>110200003</td><td>鉴权失败。</td><td>请确认鉴权信息是否正确或过期，详情请参考 <a href="!Making_API_Requests/Making_API_Requests#5" target="_blank">调用方式</a> 中的 "3 签名机制"。</td></tr>
+              <tr><td>110200004</td><td>解析输入参数失败。</td><td>请检查混流参数是否正确。</td></tr>
+              <tr><td>110200005</td><td>混流开始获取分布式锁失败。</td><td>同一个 UserId 开始混流请求过于频繁，请稍后再试。</td></tr>
+              <tr><td>110200006</td><td>混流结束获取分布式锁失败。</td><td>同一个 UserId 停止混流请求过于频繁，请稍后再试。</td></tr>
+              <tr><td>110200151</td><td>混流任务失败。</td><td>请重试，或联系 ZEGO 技术支持处理。</td></tr>
+              <tr><td>110200194</td><td>混流请求过载。</td><td>请求过于频繁，请稍后再试。</td></tr>
+            </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: 操作结果描述。
+          example: "success"
+        RequestId:
+          type: string
+          description: 请求 ID。
+          example: "8472822294336370476"
+        Data:
+          type: object
+          description: 响应数据。
+          properties:
+            UserId:
+              type: string
+              description: 用户 ID。
+              example: "123"
+            Sequence:
+              type: integer
+              format: int
+              description: 序列号。
+              example: 1
+            RoomId:
+              type: string
+              description: 房间 ID。
+              example: "room123"
+            PlayInfo:
+              type: array
+              description: 播放信息。
+              items:
+                type: object
+                properties:
+                  StreamId:
+                    type: string
+                    description: 输出流的流 ID。
+                    example: "test"
+                  RTMP:
+                    type: string
+                    description: RTMP 协议对应的 CDN 播放地址（如果指定混流输出地址是 CDN 并且配置了这个协议的拉流域名）。
+                    example: "rtmp://domain/appname/test"
+                  HLS:
+                    type: string
+                    description: HLS 协议对应的 CDN 播放地址（如果指定混流输出地址是 CDN 并且配置了这个协议的拉流域名）。
+                    example: "http://domain/appname/test/playlist.m3u8"
+                  FLV:
+                    type: string
+                    description: HTTP-FLV 协议对应的 CDN 播放地址（如果指定混流输出地址是 CDN 并且配置了这个协议的拉流域名）。
+                    example: "http://domain/appname/test.flv"
+                  Status:
+                    type: integer
+                    description: 流状态。
+                    example: 0
+                  UserName:
+                    type: string
+                    description: 用户名称。
+                    example: ""
+

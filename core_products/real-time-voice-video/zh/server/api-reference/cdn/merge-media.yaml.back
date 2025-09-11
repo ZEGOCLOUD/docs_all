@@ -1,0 +1,223 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact: { name: Real-time Voice/Video API Support, email: support@zegocloud.com }
+
+tags:
+  - name: cdn
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+paths:
+  /:
+    get:
+      tags: [cdn]
+      summary: MergeMedia
+      description: |
+        用户进行 CDN 录制时，会把录制好的媒体文件存放在 CDN 服务器上，用户可以调用本接口将多个媒体文件进行 `裁剪` 和 `合并`。
+
+        目前仅支持合并 MP3/MP4/M3U8 格式的媒体文件。
+
+        <Warning title="注意">
+
+        - 首次使用本接口之前，请确认是否已经开通 CDN 录制服务。若未开通，请前往 [ZEGO 控制台](https://console.zego.im) 自助开通，详情请参考 [控制台 - 服务配置 - CDN](/console/service-configuration/activate-cdn-service)，或联系 ZEGO 技术支持开通。
+        - 请联系 ZEGO 技术支持开通合并媒体文件功能，并配置回调地址，媒体文件合并完成后会通过 [媒体文件合并完成回调](/real-time-video-server/callback/cdn/merge-media-completed) 通知。
+        - 使用该功能合并后的录制文件会永久保存，不能通过配置来修改保存天数。若需要删除，可以使用 [删除媒体文件](/real-time-video-server/api-reference/cdn/delete-media) 接口进行删除。
+
+        </Warning>
+        <Note title="调用频率限制">同一个 AppID 下所有房间：20 次/秒</Note>
+      operationId: merge-media
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://rtc-api.zego.im?Action=MergeMedia
+          required: true
+          schema: { type: string, enum: [MergeMedia] }
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/IsTest'
+        - name: Vendor
+          in: query
+          required: true
+          schema: { type: string, enum: [Tencent, Huawei] }
+          description: |
+            可能的取值及对应的 CDN 厂商：
+            - Tencent：腾讯云。
+            - Huawei：华为云。
+        - name: Format
+          in: query
+          required: false
+          schema: { type: string }
+          description: |
+            合并后的文件格式，默认格式为 MP4。
+            - 腾讯云：MP3、MP4、M3U8。
+              > 使用的 CDN 厂商是 "腾讯云" 时，如果合并后的文件为 MP3 或 MP4 格式，您需要确保输入源文件的"音频格式"为 AAC-LC 编码，否则合并后的视频文件可能没有声音。
+            - 华为云：MP4、M3U8。
+        - name: Type
+          in: query
+          required: false
+          schema: { type: string, enum: ["0","1"] }
+          description: |
+            合并操作类型。
+            - 0：默认值，不裁剪，直接合并文件。
+            - 1：对媒体文件进行裁剪等操作后，再合并文件。此时 InputFileId[] 参数无效，此时必须传入 HandleMediaArgs.N.FileId 参数。
+
+            <b>该参数取值为 1 时，仅对 Vendor 取值为 Tencent 有效，取值为 Huawei 无效。</b>
+        - name: InputFileId
+          in: query
+          required: false
+          description: |
+            要合并的文件 ID 列表，按照文件列表的顺序进行合并。其中：
+            - 腾讯云：填写 <a href="!Callback/Record_File_Create_Callback" target="blank">录制文件生成回调</a> 返回的 **FilelD**，且最多支持 10 个文件合并。
+            - 华为云：填写 <a href="!Callback/Record_File_Create_Callback" target="blank">录制文件生成回调</a> 返回的 **ObsObject** ，且最多支持 5 个文件合并。
+
+            示例：InputFileId[]=5285890813221514958&InputFileId[]=5285890813221513290
+          schema:
+            type: array
+            items: { type: string }
+            minItems: 1
+          style: form
+          explode: true
+        - name: HandleMediaArgs.FileId
+          in: query
+          required: false
+          description: |
+            需要裁剪后、再进行合并的文件 ID 列表，按照字段名中 N 从小到大的顺序进行合并，最多支持合并 10 个文件。
+            - 腾讯云：填写 <a href="!Callback/Record_File_Create_Callback" target="blank">录制文件生成回调</a> 返回的 **FilelD**。
+            - 华为云：填写 <a href="!Callback/Record_File_Create_Callback" target="blank">录制文件生成回调</a> 返回的 **ObsObject**。
+
+            > N 必须从 0 开始，并依次递增，最大值为 9。不从 0 开始、或跳过某个数字，将无法正确裁剪合并文件。
+
+            例如，HandleMediaArgs.0.FileId=5285890813221514958&HandleMediaArgs.1.FileId=5285890813221513290
+          schema:
+            type: array
+            items: { type: string }
+            minItems: 1
+          style: form
+          explode: true
+        - name: HandleMediaArgs.StartTime
+          in: query
+          required: false
+          description: |
+            HandleMediaArgs.N.FileId 对应的媒体文件开始裁剪的时间偏移量，默认为 0，单位：秒。
+
+            例如，HandleMediaArgs.0.StartTime 对应的是 HandleMediaArgs.0.FileId 这个媒体文件的开始裁剪时间。
+          schema:
+            type: array
+            items: { type: number }
+          style: form
+          explode: true
+        - name: HandleMediaArgs.EndTime
+          in: query
+          required: false
+          description: |
+            HandleMediaArgs.N.FileId 对应的媒体文件结束裁剪的时间偏移量，默认为视频文件的结束时间，单位：秒。
+
+            例如，HandleMediaArgs.0.EndTime 对应的是 HandleMediaArgs.0.FileId 这个媒体文件的结束裁剪时间。
+          schema:
+            type: array
+            items: { type: number }
+          style: form
+          explode: true
+        - name: OutputFileName
+          in: query
+          required: false
+          schema: { type: string }
+          description: |
+            合并后的媒体文件名称，不包含文件格式。
+
+            使用时，需对其内容执行 URL 编码（UrlEncode）处理。
+        - name: ExpireTime
+          in: query
+          required: false
+          schema: { type: integer, format: int32 }
+          description: |
+            合并后媒体文件的有效保存时长（单位：小时），即文件过期时间 = 接口请求时间 + 有效保存时长。
+            - 取值为 0（默认值）：表示文件永久保存不过期。
+            - 取值大于 0：超过该时长文件将被删除。
+
+            > **注意**
+            > - 该字段，仅对 Vendor 取值为 Tencent 时有效。
+            > - 如果合并媒体文件的任务完成时长，大于其有效保存时长，文件将不会生成，[媒体文件合并完成回调](/real-time-video-server/callback/cdn/merge-media-completed) 在访问合成后的文件 URL 时会 404。
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MergeMediaResponse'
+
+components:
+  schemas:
+    MergeMediaResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int32
+          description: |
+            返回码。
+            <br/>
+            以下仅列出了接口业务逻辑相关的部分返回码，完整返回码请参考 [全局返回码](/real-time-video-server/api-reference/return-codes)。
+            <table>
+              <thead>
+                <tr><th>返回码</th><th>说明</th><th>处理建议</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>0</td><td>请求成功。</td><td>-</td></tr>
+                <tr><td>2</td><td>输入参数错误。</td><td>-</td></tr>
+                <tr><td>3</td><td>未开通相关权限。</td><td>请联系 ZEGO 技术支持。</td></tr>
+                <tr><td>4</td><td>CDN 类型不匹配。</td><td>请检查参数。</td></tr>
+                <tr><td>5</td><td>配置错误。</td><td>请联系 ZEGO 技术支持。</td></tr>
+                <tr><td>6</td><td>请求过于频繁。</td><td>请稍后重试。</td></tr>
+                <tr><td>7</td><td>鉴权失败。</td><td>请检查鉴权参数是否正确。</td></tr>
+                <tr><td>1000</td><td>请求失败。</td><td>请联系 ZEGO 技术支持。</td></tr>
+                <tr><td>41003</td><td>文件不存在。</td><td>请确认文件格式、文件 ID 等是否正确。</td></tr>
+              </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: 操作结果描述
+          example: "success"
+        RequestId:
+          type: string
+          description: 请求 ID，由 ZEGO 服务端返回
+          example: "3574501647605445341"
+        Data:
+          type: object
+          description: 响应数据
+          properties:
+            Tencent:
+              type: object
+              properties:
+                TaskId:
+                  type: string
+                  description: 任务 ID
+                  example: "1400341231-EditMedia-0d8b6f0a5c457f5722e6b27796ce1f2ctt0"
+                RequestId:
+                  type: string
+                  description: 唯一请求 ID，由 CDN 厂商返回，定位问题时需要提供该次请求的 RequestId
+                  example: "07f0bdbc-6a52-4ef9-ba7b-e96d6c81d6c3"
+            Huawei:
+              type: object
+              properties:
+                TaskId:
+                  type: string
+                  description: 任务 ID
+                  example: "112037345"
+                RequestId:
+                  type: string
+                  description: 唯一请求 ID，由 CDN 厂商返回，定位问题时需要提供该次请求的 RequestId
+                  example: "7a690e874857106ccfa5bed198cdsd79"
+

@@ -1,0 +1,157 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: Real-time Voice/Video API Support
+    email: support@zegocloud.com
+
+tags:
+  - name: room
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+paths:
+  /:
+    get:
+      tags:
+        - room
+      summary: DescribeUserList
+      description: |
+        调用本接口获取房间内用户列表。
+
+        <Note title="调用频率限制">同一个 AppID 下所有房间：200 次/秒; 单个房间：1 次/1秒</Note>
+
+      operationId: describe-user-list
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://rtc-api.zego.im?Action=DescribeUserList
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [DescribeUserList]
+          style: form
+          explode: true
+        # 公共参数
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/IsTest'
+        # 业务参数
+        - name: RoomId
+          in: query
+          description: 房间 ID。房间不存在会返回空列表。
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+        - name: Mode
+          in: query
+          description: 用户登录房间的时间排序，默认值为 0。0：按时间正序 1：按时间倒序
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 0
+            enum: [0, 1]
+        - name: Limit
+          in: query
+          description: |
+            单次请求返回的用户个数，取值范围 0-200，即调用本接口一次最多返回 200 个用户。房间内人数超过 200 时，需要根据前一次调用本接口时、返回结果中的 Marker（用户起始位标识）取值，再次调用本接口查询其余用户。
+
+            例如，房间内有 450 个用户，调用本接口查询用户列表时：
+            - (1) 第一次调用本接口，入参 Marker 传空，查询第 1 ～ 200 的用户；返回结果中 Marker 值假设为  “marker1”。
+            - (2) 第二次调用本接口，入参 Marker 取值为 “marker1”，查询第 201 ～ 400 的用户；返回结果中 Marker 值假设为 “marker2”。
+            - (3) 第三次调用本接口，入参 Marker 取值为 “marker2”，查询第 401 ～ 450 的用户；查询完毕，返回结果中 Marker 为空。
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+            maximum: 200
+            default: 200
+        - name: Marker
+          in: query
+          description: 查询用户起始位标识，每次请求的响应有返回，为空时从头开始返回用户信息。
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DescribeUserListResponse'
+              example:
+                Code: 0
+                Message: success
+                RequestId: TestRequestId1635940600561291000
+                Data:
+                  Marker: 1635940599950-user2
+                  UserList:
+                    - UserId: user1
+                      UserName: user1
+                      UserRole: 1
+                    - UserId: user2
+                      UserName: user2
+                      UserRole: 2
+
+components:
+  schemas:
+    DescribeUserListResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int32
+          description: 返回码。请参考 [全局返回码](/real-time-video-server/api-reference/return-codes)。
+        Message:
+          type: string
+          description: 操作结果描述。
+          example: success
+        RequestId:
+          type: string
+          description: 请求 ID。
+          example: TestRequestId1635940600561291000
+        Data:
+          type: object
+          properties:
+            Marker:
+              type: string
+              description: 用户起始位标识。
+              example: 1635940599950-user2
+            UserList:
+              type: array
+              description: 用户列表。
+              items:
+                type: object
+                properties:
+                  UserId:
+                    type: string
+                    description: 用户名。
+                    example: user1
+                  UserName:
+                    type: string
+                    description: 用户昵称。
+                    example: User1
+                  UserRole:
+                    type: integer
+                    format: uint32
+                    example: 2
+                    description: |
+                      用户角色。
+                      - 1：主播。
+                      - 2：观众。
+                      - 4：管理员，该类型用户主要存在于云录制、音视频流审核等场景中，客户端 SDK 的用户相关接口会过滤该类型用户。
+
+                      **该返回参数，仅在接入 LiveRoom 服务时有实际意义，接入 Express 服务时请忽略此参数。**
+

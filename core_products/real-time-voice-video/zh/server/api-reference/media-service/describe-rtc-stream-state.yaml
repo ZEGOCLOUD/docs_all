@@ -1,0 +1,127 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact: { name: Real-time Voice/Video API Support, email: support@zegocloud.com }
+
+tags:
+  - name: media-service
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+paths:
+  /:
+    get:
+      tags: [media-service]
+      summary: DescribeRTCStreamState
+      description: |
+        本接口支持查询指定流的实时状态（是否活跃或存在）。只支持查询推流到 ZEGO 媒体服务器（RTC 服务）的流，不支持查询直接推流到 CDN 或者混流服务输出的流。
+
+        推荐优先使用 [流创建回调](/real-time-video-server/callback/stream/created) 和 [流关闭回调](/real-time-video-server/callback/stream/destroyed) 异步获取当前推流信息。本接口一般作为流创建回调和流关闭回调的辅助接口，或者在业务后台查询指定单流是否活跃时使用。
+
+        <Note title="说明">
+        本接口默认支持在开始推流后，对流状态信息进行查询。
+        </Note>
+        <Note title="调用频率限制">同一个 AppID 下所有房间：40 次/秒（测试环境：10 次/秒）</Note>
+
+
+
+        <Note title="说明">
+        测试环境下（详见 IsTest 公共参数说明），流 ID 需要加上 “zegotest-AppId-” 前缀。例如，流 ID 为 “test”，在 AppId 为 “123456789” 的测试环境下，流 ID 应为 “zegotest-123456789-test”。
+        </Note>
+      operationId: describe-rtc-stream-state
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://rtc-api.zego.im?Action=DescribeRTCStreamState
+          required: true
+          schema: { type: string, enum: [DescribeRTCStreamState] }
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/IsTest'
+        - name: StreamId
+          in: query
+          required: true
+          description: 流 ID。
+          schema: { type: string }
+        - name: Sequence
+          in: query
+          required: true
+          description: |
+            请求序列号，由用户自定义。
+
+            > **注意**
+            >
+            > 对于同一个流 Streamld，连续 10 秒内，必须保证发出的该 Streamld 的请求序列号是严格递增的；避免服务端收到请求的时序不一致而导致操作错乱。
+
+            如果没有并发场景，推荐使用时间戳（毫秒级别）。
+          schema: { type: string }
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DescribeRTCStreamStateResponse'
+
+components:
+  schemas:
+    DescribeRTCStreamStateResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: number
+          description: |
+            返回码。
+            以下仅列出了接口业务逻辑相关的部分返回码，完整返回码请参考 [全局返回码](/real-time-video-server/api-reference/return-codes)。
+            <table>
+              <thead>
+                <tr><th>返回码</th><th>说明</th><th>处理建议</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>0</td><td>查询成功，查询的流存在、且是活跃状态。</td><td>-</td></tr>
+                <tr><td>3000</td><td>无效的 App。</td><td>请联系 ZEGO 技术支持处理。</td></tr>
+                <tr><td>3001、30003</td><td>内部错误。</td><td>请联系 ZEGO 技术支持处理。</td></tr>
+                <tr><td>3002</td><td>Timestamp 时间戳错误。</td><td>请重新生成新的 Timestamp。</td></tr>
+                <tr><td>3003</td><td>App 未配置 Token。</td><td>请联系 ZEGO 技术支持处理。</td></tr>
+                <tr><td>30002</td><td>接口调用频率过高。</td><td>请降低接口请求频率。</td></tr>
+                <tr><td>30004</td><td>参数 isTest 错误。</td><td>请检查公共请求参数 isTest 是否正确。</td></tr>
+                <tr><td>30005</td><td>无效的 AppId。</td><td>请检查 AppId 是否正确。</td></tr>
+                <tr><td>30009</td><td>无效的 StreamId，流名不规范。</td><td>请检查 StreamId 是否符合流名编码规范。</td></tr>
+                <tr><td>40005</td><td>鉴权失败。</td><td>请检查签名 Signature 是否正确。</td></tr>
+                <tr><td>41004</td><td>查询失败，StreamId 不存在。</td><td>请检查 StreamId 是否正确、或"查询流状态历史信息权限"是否过期。</td></tr>
+                <tr><td>41006</td><td>查询成功，查询的流存在、但是关闭状态。仅在开通了"查询流状态历史信息权限"的有效期内会返回。</td><td>-</td></tr>
+              </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: 操作结果描述
+          example: "ok"
+        RequestId:
+          type: string
+          description: 请求 ID
+          example: "98004"
+        Data:
+          type: object
+          description: 响应数据
+          properties:
+            create_time:
+              type: string
+              description: 流创建时间，UTC 时间
+              example: "1673334117"
+            close_time:
+              type: string
+              description: 流关闭时间，UTC 时间
+              example: ""
+
