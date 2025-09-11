@@ -1,0 +1,599 @@
+# Use AI Agent with RAG
+
+## Background
+
+In practical applications of large language models (LLMs), relying solely on a single LLM for input and output often fails to achieve the desired results. Common issues include AI errors, irrelevant or inaccurate answers, and even potential risks to business operations.
+
+Utilizing an "external knowledge base" can effectively address these challenges faced by LLMs. Retrieval-Augmented Generation (RAG) is one such technique.
+
+This article will introduce how to use AI Agent in combination with RAG to provide support for the external knowledge base of the AI Agent.
+
+## Solution
+
+The implementation is illustrated in the following diagram:
+1. The user speaks, and the audio stream is published to ZEGOCLOUD Real-Time Audio and Video Cloud via the ZEGO Express SDK.
+2. The AI Agent backend receives the audio stream, converts it to text, and then sends a ChatCompletion request to your custom LLM service following the OpenAI protocol.
+3. Your custom LLM service performs RAG retrieval upon receiving the request, combines the retrieved fragments with the user's latest question, and calls the LLM to generate a streaming response.
+4. The AI Agent backend converts the LLM's streaming response into an audio stream, pushes it to the client via the real-time audio and video cloud, and the user hears the AI Agent's answer.
+
+<Frame width="512" height="auto" caption="">
+  <img src="https://media-resource.spreading.io/docuo/workspace741/896bc39e2e65b82d5670b01b7c131c30/43c6461a50.png" alt="how-to-use-ai-agent-with-rag-en.png"/>
+</Frame>
+
+<Note title="Note">
+- The "Intent Recognition" and "Question Enhancement" steps in the diagram are not mandatory, but it is recommended to implement them to improve the accuracy of AI Agent's answers.
+- The diagram also shows "Search online" and other steps parallel to "RAG Query." These steps are optional, and you can implement them based on your business needs by following the RAG query process.
+- LLM_A, LLM_B, and LLM_C in the diagram illustrate that you can use different LLM provider models at each node based on performance and cost considerations. Of course, you can also use the same LLM provider model throughout.
+</Note>
+
+## Example Code
+The following is the example code for the business backend that integrates the real-time interactive AI Agent API. You can refer to the example code to implement your own business logic.
+
+<CardGroup cols={2}>
+<Card title="Business Backend Example Code (RAG Retrieval Implementation)"  href="https://github.com/ZEGOCLOUD/ai_agent_quick_start_server/tree/rag" target="_blank">
+<Warning title="Note">Please use the rag branch code</Warning>
+Includes the basic capabilities of obtaining ZEGO Token, registering an agent, creating an agent instance, and deleting an agent instance.
+</Card>
+</CardGroup>
+
+The following is the example code for the client that integrates the real-time interactive AI Agent API. You can refer to the example code to implement your own business logic.
+<CardGroup cols={2}>
+<Card title="Android" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/android" target="_blank">
+Includes the basic capabilities of login, publish stream, play stream, and exit room.
+</Card>
+<Card title="iOS" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/ios" target="_blank">
+Includes the basic capabilities of login, publish stream, play stream, and exit room.
+</Card>
+<Card title="Web" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/web" target="_blank">
+Includes the basic capabilities of login, publish stream, play stream, and exit room.
+</Card>
+<Card title="Flutter" href="https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/flutter" target="_blank">
+Includes the basic capabilities of login, publish stream, play stream, and exit room.
+</Card>
+</CardGroup>
+
+The following video demonstrates how to run the server and client (iOS) example code and interact with the agent in real-time voice.
+<Warning title="Note">
+- The server must be deployed to a public network environment that can be accessed, and do not use localhost or LAN addresses.
+- The environment variables must use the environment variables of the rag branch when deploying.
+</Warning>
+<Video src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/aaaa65c2d4.mp4" />
+
+
+## Implement Server Functionality
+
+<Steps titleSite="h3">
+<Step title="Implement RAG Retrieval" titleSize="h3">
+
+
+There are several ways to implement RAG retrieval. The following are some common solutions:
+- [LangChain](https://js.langchain.com/docs/integrations/retrievers/)
+- [LlamaIndex](https://www.llamaindex.ai/)
+- [LightRAG](https://lightrag.github.io/)
+- [RAGFlow](https://ragflow.io/)
+
+This article takes RAGFlow as examples to introduce the implementation methods.
+
+<Steps titleSite="p">
+<Step title="Deploy RAGFlow">
+
+Please refer to the [RAGFlow Deployment Documentation](https://ragflow.io/docs/dev/#start-up-the-server) to deploy RAGFlow.
+
+<Warning title="Note">Please do not use [RAGFlow Demo](https://demo.ragflow.io/) to create a database and make API requests. The interface of the RAGFlow Demo has been restricted to access, which will cause the retrieval to fail.</Warning>
+</Step>
+<Step title="Create Knowledge Base">
+Please refer to the [RAGFlow Create Knowledge Base Documentation](https://ragflow.io/docs/dev/#create-your-first-knowledge-base) to create a knowledge base.
+</Step>
+<Step title="Implement RAG Retrieval Interface">
+Please refer to the [RAGFlow Retrieve chunks](https://ragflow.io/docs/dev/http_api_reference#retrieve-chunks) interface documentation to implement the RAG retrieval interface.
+<Accordion title="Retrieval Interface Example Code" defaultOpen="false">
+Example code environment variable description:
+
+- RAGFLOW_KB_DATASET_ID: After clicking on the knowledge base, the ID value of the request parameter after the URL is the knowledge base ID.
+- RAGFLOW_API_ENDPOINT: Click the upper right corner to switch to the system settings page->API->API server
+- RAGFLOW_API_KEY: Click the upper right corner to switch to the system settings page->API->Click the "API KEY" button->Create a new key
+
+```js
+export async function retrieveFromRagflow({
+    question,
+    dataset_ids = [process.env.RAGFLOW_KB_DATASET_ID!],
+    document_ids = [],
+    page = 1,
+    page_size = 100,
+    similarity_threshold = 0.2,
+    vector_similarity_weight = 0.3,
+    top_k = 1024,
+    rerank_id,
+    keyword = true,
+    highlight = false,
+}: RetrieveParams): Promise<RagFlowResponse> {
+    // Check necessary environment variables
+    if (!process.env.RAGFLOW_API_KEY || !process.env.RAGFLOW_API_ENDPOINT) {
+        throw new Error('Missing necessary RAGFlow configuration information');
+    }
+
+    // Check necessary parameters
+    if (!dataset_ids?.length && !document_ids?.length) {
+        throw new Error('dataset_ids or document_ids must provide at least one');
+    }
+
+    // Build request body
+    const requestBody = {
+        question,
+        dataset_ids,
+        document_ids,
+        page,
+        page_size,
+        similarity_threshold,
+        vector_similarity_weight,
+        top_k,
+        rerank_id,
+        keyword,
+        highlight,
+    };
+
+    try {
+        // Use the correct endpoint format in the official documentation
+        // !mark
+        const response = await fetch(`${process.env.RAGFLOW_API_ENDPOINT}/api/v1/retrieval`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.RAGFLOW_API_KEY}`,
+            },
+            body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.text();
+            throw new Error(`RAGFlow API error: ${response.status} ${response.statusText}, detailed information: ${errorData}`);
+        }
+
+        const data: RagFlowRetrievalResponse = await response.json();
+
+
+        // Process the retrieval results and convert them into concatenated text
+        let kbContent = '';
+        // The returned chunk may be many, so it is necessary to limit the number of returned chunks
+        let kbCount = 0;
+
+        // !mark(1:6)
+        for (const chunk of data.data.chunks) {
+            if (kbCount < Number(process.env.KB_CHUNK_COUNT)) {
+                kbContent += `doc_name: ${chunk.document_keyword}\ncontent: ${chunk.content}\n\n`;
+                kbCount += 1;
+            }
+        }
+
+        return {
+            kbContent,
+            rawResponse: data
+        };
+
+    } catch (error) {
+        console.error('RAGFlow retrieval failed:', error);
+        throw error;
+    }
+}
+```
+</Accordion>
+</Step>
+</Steps>
+
+</Step>
+<Step title="Implement Custom LLM" titleSize="h3">
+Create an interface that conforms to the OpenAI API protocol.
+
+<Tabs>
+<Tab title="Interface Key Points">
+Provide a `chat/completions` interface compatible with [platform.openai.com](https://platform.openai.com/docs/api-reference/chat). The key points are as follows:
+
+- Interface path: The URL that can be called by AI Agent, such as `https://your-custom-llm-service/chat/completions`.
+- Request format: Accept request headers and request bodies compatible with the OpenAI protocol.
+- Response format: Return streaming response data compatible with the OpenAI protocol and conforming to the SSE specification.
+
+
+<Accordion title="AI Agent backend request body example code to the chat/completions interface" defaultOpen="false">
+```json
+{
+    "model": "your model name", // Corresponding to LLM.Model parameter
+    "temperature": 1, // Corresponding to LLM.Temperature parameter
+    "top_p": 0.7, // Corresponding to LLM.TopP parameter
+    "max_tokens": 16384, // Corresponding to LLM.Params.max_tokens parameter
+    "messages":[
+        {
+            "role": "system",
+            "content": "Please answer the user's question in a friendly manner based on the knowledge base content provided by the user. If the user's question is not in the knowledge base, please politely tell the user that we do not have related knowledge base content." // Corresponding to LLM.SystemPrompt parameter
+        },
+        ... // Other messages
+    ],
+    ... // Other parameters
+    // If the LLM.AddAgentInfo parameter is true, it will contain agent_info information
+    "agent_info": {
+        "room_id": "Room id",
+        "agent_instance_id" : "Agent instance id",
+        "agent_user_id" : "Agent user id",
+        "user_id": "User id",
+        "round_id": 1, // Round id
+        "time_stamp": 193243200 // Millisecond level timestamp
+    }
+}
+```
+</Accordion>
+
+<Accordion title="Chat Completion Streaming Response Object Block Example" defaultOpen="false">
+```json
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"您"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":1,"total_tokens":84}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"好"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":2,"total_tokens":85}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"！"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":3,"total_tokens":86}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"即"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":4,"total_tokens":87}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"构"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":5,"total_tokens":88}}
+...
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"更多的"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":147,"total_tokens":230}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"价值"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":148,"total_tokens":231}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"。"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":149,"total_tokens":232}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":""},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":150,"total_tokens":233}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":83,"completion_tokens":150,"total_tokens":233}}
+data: [DONE]
+```
+</Accordion>
+<Warning title="Note">
+The custom LLM streaming data format notes are as follows:
+- Each line of data must start with `data: ` (note: there is a space after the colon).
+- Each line of data is a single line or has a line break at the end.
+- The last valid data must contain `"finish_reason":"stop"`.
+- Finally, a termination data must be sent: `data: [DONE]`.
+
+If the format is incorrect, the AI Agent may not output or output incomplete.
+</Warning>
+</Tab>
+<Tab title="Interface Implementation Process and Example">
+<Steps titleSite="p">
+<Step title="Parse Request Parameters">
+Parse the request parameters and get the necessary information.
+```js
+export async function POST(request: NextRequest) {
+    try {
+        // !mark
+        const requestData: ChatCompletionCreateParams = await request.json();
+        console.log("requestData", requestData);
+        // Check necessary fields
+        if (!requestData.messages || requestData.messages.length === 0) {
+            return NextResponse.json(
+                { error: 'Messages are required' },
+                { status: 400 }
+            );
+        }
+        // Read the latest User Message (the latest is at the end of the array)
+        // When AIAgent requests your interface, it will carry the Messages parameter. This parameter also includes SystemPrompt.
+        // !mark
+        const latestUserMessage = [...requestData.messages].reverse().find(message => message.role === 'user');
+
+        // ... other code
+    } catch (error) {
+        // ... other code
+    }
+}
+```
+</Step>
+<Step title="Retrieve from Knowledge Base">
+Retrieve the knowledge base based on the latest User Message.
+```js
+let kbContent = "";
+// !mark
+const ragflowResponse = await retrieveFromRagflow({
+    question: latestUserMessage?.content as string,
+});
+kbContent = ragflowResponse.kbContent;
+```
+<Note title="Note">
+Usually, intent recognition and question enhancement are used to improve the answer quality before querying the knowledge base.
+- Intent recognition: Identify user intent. If the user does not need to query the knowledge base, answer the user's question directly. Otherwise, continue. For example: User says "Hello".
+- Question enhancement: Supplement and enhance the user's latest question based on historical conversations and preset conditions. For example: User asks "How about 2024?" then enhance to "What is the net profit of the company in 2024?"
+</Note>
+</Step>
+<Step title="Merge the user's latest question and knowledge base fragments and call LLM to answer">
+
+<Note title="Note">Some models provide context disk cache capabilities, so the price calculation has a cheaper cache price. Keeping the SystemPrompt unchanged and only replacing the User Message can effectively improve the cache hit probability and reduce the cost and shorten the inference time.</Note>
+```js
+// !mark(1:4)
+requestData.messages[requestData.messages.length - 1] = {
+    role: 'user',
+    content: `${latestUserMessage?.content}\nHere is the knowledge base retrieval result:\n${kbContent}`,
+};
+// Call LLM to answer (using OpenAI SDK)
+// LLM_BASE_URL_REAL is the URL of the real LLM service
+const openai = new OpenAI({
+    apiKey: apiKey,
+    baseURL: process.env.LLM_BASE_URL_REAL
+});
+// Process the streaming response
+const completion = await openai.chat.completions.create({
+    model: model,
+    stream: true,
+    messages: requestData.messages
+});
+console.log("completion created successfully");
+// Create a streaming response
+const stream = new TransformStream();
+const writer = stream.writable.getWriter();
+const encoder = new TextEncoder();
+for await (const chunk of completion) {
+    // Note⚠️: AIAgent requires that the last valid data must contain "finish_reason":"stop" and a termination data must be sent: data: [DONE]. If it is not sent, the AI Agent may not answer or answer incomplete.
+    // Some models do not return finish_reason in the streaming response, in this case, you need to modify the chunk content and then return it to AIAgent.
+    const ssePart = `data: ${JSON.stringify(chunk)}\n`;
+    // Write the streaming response data until the streaming data ends
+    // !mark
+    writer.write(encoder.encode(ssePart));
+}
+// Send the termination mark
+// !mark
+writer.write(encoder.encode('data: [DONE]\n\n'));
+writer.close();
+```
+</Step>
+</Steps>
+<Accordion title="Complete example code for the chat/completions interface" defaultOpen="false">
+<CodeGroup>
+```json title="Node.js(Next.js)"
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { retrieveFromRagflow } from '@/lib/rag/ragflow';
+import OpenAI from 'openai';
+import type { ChatCompletionCreateParams } from 'openai/resources/chat';
+import { retrieveFromBailian } from '@/lib/rag/bailian';
+
+
+export async function POST(request: NextRequest) {
+    // Authentication check
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return NextResponse.json(
+            { error: 'Unauthorized' },
+            { status: 401 }
+        );
+    }
+
+    try {
+        const requestData: ChatCompletionCreateParams = await request.json();
+        console.log("requestData", requestData);
+        console.log("requestData", JSON.stringify(requestData));
+
+        // Read the API key, which is the value of apiKey when using the following method. The AIAgent server also uses the following method.
+        // const openai = new OpenAI({
+        //     apiKey: "xxx",
+        //     baseURL: "xxx"
+        // });
+        // After reading the apiKey, you can do the necessary business verification. It is not necessarily the apiKey of the LLM, because it is transparent, so you can pass any content.
+        // !mark
+        const apiKey = authHeader.split(' ')[1];
+
+        // Check necessary fields
+        if (!requestData.messages || requestData.messages.length === 0) {
+            return NextResponse.json(
+                { error: 'Messages are required' },
+                { status: 400 }
+            );
+        }
+
+        // Check if streaming response is required
+        if (requestData.stream) {
+            // Read Model
+            // Since the Model is fixed when registering AIAgent or creating AIAgent instance, you can pass a normal Model to LLM here.
+            // You can also pass some additional business information through this value. For example, this Model is actually a business flag, indicating live/chat room, etc.
+            // !mark
+            const model = requestData.model;
+
+            // Read SystemPrompt
+            // Since the SystemPrompt is fixed when registering AIAgent or creating AIAgent instance, you can pass a normal SystemPrompt to LLM here.
+            // You can also pass some additional business information through this value. For example, include user information, level, preferences, etc. Then modify the actual SystemPrompt of LLM when calling LLM.
+            // !mark
+            const systemMessage = requestData.messages.find(message => message.role === 'system');
+
+            // Read the latest User Message (the latest is at the end of the array)
+            // When AIAgent requests your interface, it will carry the Messages parameter. This parameter also includes SystemPrompt.
+            // !mark
+            const latestUserMessage = [...requestData.messages].reverse().find(message => message.role === 'user');
+
+            // Read other LLM parameters compatible with the OpenAI protocol, which are not repeated here.
+
+            // Create a streaming response
+            // !mark(1:3)
+            const stream = new TransformStream();
+            const writer = stream.writable.getWriter();
+            const encoder = new TextEncoder();
+            try {
+                let kbContent = "";
+                // Call the knowledge base retrieval interface to get the knowledge base query result
+                // !mark(1:11)
+                if (process.env.KB_TYPE === "ragflow") {
+                    console.log("Call Ragflow knowledge base retrieval interface");
+                    const ragflowResponse = await retrieveFromRagflow({
+                        question: latestUserMessage?.content as string,
+                    });
+                    kbContent = ragflowResponse.kbContent;
+                } else if (process.env.KB_TYPE === "bailian") {
+                    console.log("Call Bailian knowledge base retrieval interface");
+                    const bailianResponse = await retrieveFromBailian({ query: latestUserMessage?.content as string });
+                    kbContent = bailianResponse.kbContent;
+                }
+
+                // Merge the user's latest User Message and knowledge base retrieval result, replace the last element of the messages array, and then call LLM to answer
+                // Note🔔: Some models provide context disk cache capabilities, so the price calculation has a cheaper cache price. Keeping the SystemPrompt unchanged and only replacing the User Message can effectively improve the cache hit probability and reduce the cost and shorten the inference time.
+                // !mark(1:4)
+                requestData.messages[requestData.messages.length - 1] = {
+                    role: 'user',
+                    content: `${latestUserMessage?.content}\nHere is the knowledge base retrieval result:\n${kbContent}`,
+                };
+
+                // Call LLM to answer (using OpenAI SDK)
+                const openai = new OpenAI({
+                    apiKey: apiKey,
+                    baseURL: process.env.LLM_BASE_URL_REAL
+                });
+                // Process the streaming response
+                const completion = await openai.chat.completions.create({
+                    model: model,
+                    stream: true,
+                    messages: requestData.messages
+                });
+                console.log("completion created successfully");
+                for await (const chunk of completion) {
+                    // Note⚠️: AIAgent requires that the last valid data must contain "finish_reason":"stop" and a termination data must be sent: data: [DONE]. If it is not sent, the AI Agent may not answer or answer incomplete.
+                    // Some models do not return finish_reason in the streaming response, in this case, you need to modify the chunk content and then return it to AIAgent.
+                    const ssePart = `data: ${JSON.stringify(chunk)}\n`;
+                    // Write the streaming response data until the streaming data ends
+                    // !mark
+                    writer.write(encoder.encode(ssePart));
+                }
+
+            } catch (error) {
+                console.error('Stream processing error:', error);
+            } finally {
+                // Send the termination mark
+                // !mark
+                writer.write(encoder.encode('data: [DONE]\n\n'));
+                writer.close();
+                console.log("writer closed");
+            }
+
+
+            return new Response(stream.readable, {
+                headers: {
+                    'Content-Type': 'text/event-stream',
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive',
+                    'Access-Control-Allow-Origin': '*',
+                },
+            });
+        } else {
+            // AIAgent does not support non-streaming response, return error code directly
+            return NextResponse.json(
+                { error: 'Streaming is required' },
+                { status: 400 }
+            );
+        }
+    } catch (error) {
+        console.error('Error processing request:', error);
+        return NextResponse.json(
+            { error: 'Internal server error' },
+            { status: 500 }
+        );
+    }
+}
+
+// Add OPTIONS method to support CORS preflight
+export async function OPTIONS() {
+    return NextResponse.json({}, {
+        headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        },
+    });
+}
+```
+</CodeGroup>
+</Accordion>
+</Tab>
+
+</Tabs>
+
+</Step>
+<Step title="Register Agent and Use Custom LLM" titleSize="h3">
+
+When registering the agent ([RegisterAgent](./../api-reference/agent-configuration-management/register-agent.mdx)), set the custom LLM URL, and require the LLM to answer the user's question based on the knowledge base content in the `SystemPrompt`.
+
+```javascript title="Register Agent Call Example"
+// Please replace the LLM and TTS authentication parameters such as ApiKey, appid, token, etc. with your actual authentication parameters.
+async registerAgent(agentId: string, agentName: string) {
+    // Request interface: https://aigc-aiagent-api.zegotech.cn?Action=RegisterAgent
+    const action = 'RegisterAgent';
+    // !mark(4:9)
+    const body = {
+        AgentId: agentId,
+        Name: agentName,
+        LLM: {
+            Url: "https://your-custom-llm-service/chat/completions",
+            ApiKey: "your_api_key",
+            Model: "your_model",
+            SystemPrompt: "Please answer the user's question in a friendly manner based on the knowledge base content provided by the user. If the user's question is not in the knowledge base, please politely tell the user that we do not have related knowledge base content."
+        },
+        TTS: {
+            Vendor: "ByteDance",
+            Params: {
+                "app": {
+                    "appid": "zego_test",
+                    "token": "zego_test",
+                    "cluster": "volcano_tts"
+                },
+                "audio": {
+                    "voice_type": "zh_female_wanwanxiaohe_moon_bigtts"
+                }
+            }
+        }
+    };
+    // The sendRequest method encapsulates the request URL and public parameters. For details, please refer to: https://doc-zh.zego.im/aiagent-server/api-reference/accessing-server-apis
+    return this.sendRequest<any>(action, body);
+}
+```
+
+</Step>
+<Step title="Create Agent Instance" titleSize="h3">
+
+Use the registered agent as a template to [create multiple agent instances](./api-reference/agent-instance-management/create-agent-instance.mdx) to join different rooms and interact with different users in real time. After creating the agent instance, the agent instance will automatically login the room and push the stream, at the same time, it will also pull the real user's stream.
+
+After creating the agent instance successfully, the real user can interact with the agent in real time by listening to the stream change event and pulling the stream in the client.
+
+<Warning title="Note">By default, there can be at most 10 agent instances at the same time under one account. If the limit is exceeded, the agent instance creation will fail. Please contact ZEGOCloud business if you need to adjust.</Warning>
+
+Here is an example of calling the create agent instance interface:
+
+```javascript Server(NodeJS)
+async createAgentInstance(agentId: string, userId: string, rtcInfo: RtcInfo, messages?: any[]) {
+    // Request interface: https://aigc-aiagent-api.zegotech.cn?Action=CreateAgentInstance
+    const action = 'CreateAgentInstance';
+    const body = {
+        AgentId: agentId,
+        UserId: userId,
+        RTC: rtcInfo,
+        MessageHistory: {
+            SyncMode: 1, // Change to 0 to use history messages from ZIM
+            Messages: messages && messages.length > 0 ? messages : [],
+            WindowSize: 10
+        }
+    };
+    // The sendRequest method encapsulates the request URL and public parameters. For details, please refer to: https://doc-zh.zego.im/aiagent-server/api-reference/accessing-server-apis
+    const result = await this.sendRequest<any>(action, body);
+    console.log("create agent instance result", result);
+    // In the client, you need to save the returned AgentInstanceId, which is used for subsequent deletion of the agent instance.
+    return result.AgentInstanceId;
+}
+```
+
+After completing this step, you have successfully created an agent instance. After integrating the client, you can interact with the agent instance in real time.
+
+</Step>
+</Steps>
+
+
+## Implement Client Functionality
+
+Please refer to the following documents to complete the integration development of the client:
+
+<CardGroup cols={2}>
+<Card title="Android" href="/aiagent-android/quick-start" target="_blank">
+Quick Start
+</Card>
+<Card title="iOS"  href="/aiagent-ios/quick-start" target="_blank">
+Quick Start
+</Card>
+<Card title="Web"  href="/aiagent-web/quick-start" target="_blank">
+Quick Start
+</Card>
+<Card title="Flutter"  href="/aiagent-flutter/quick-start" target="_blank">
+Quick Start
+</Card>
+</CardGroup>
+
+Congratulations🎉! After completing this step, you have successfully integrated the client SDK and can interact with the agent instance in real time. You can ask the agent any question, and the agent will answer your question after **querying the knowledge base**!

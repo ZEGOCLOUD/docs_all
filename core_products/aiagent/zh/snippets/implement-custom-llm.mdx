@@ -1,0 +1,322 @@
+创建符合 OpenAI API 协议的接口。
+
+<Tabs>
+<Tab title="接口关键点说明">
+提供一个兼容 [platform.openai.com](https://platform.openai.com/docs/api-reference/chat) 的 `chat/completions` 接口。关键点如下：
+
+- 接口路径：可以被 AI Agent 调用的 Url，例如 `https://your-custom-llm-service/chat/completions`。
+- 请求格式：接受兼容 OpenAI 协议的请求头和请求体。
+- 响应格式：返回与 OpenAI 协议兼容、且符合 SSE 规范的流式响应数据。
+
+
+<Accordion title="AI Agent 后台向 chat/completions 接口发起请求的请求体示例" defaultOpen="false">
+```json
+{
+    "model": "your model name", // 对应 LLM.Model 参数
+    "temperature": 1, // 对应 LLM.Temperature 参数
+    "top_p": 0.7, // 对应 LLM.TopP 参数
+    "max_tokens": 16384, // 对应 LLM.Params.max_tokens 参数
+    "messages":[
+        {
+            "role": "system",
+            "content": "请根据用户提供的知识库内容用友好的语气回答用户问题，如果用户的问题不在知识库中，请礼貌的告诉用户我们没有相关的知识库内容。" // 对应 LLM.SystemPrompt 参数
+        },
+        ... // 其他消息
+    ],
+    ... // 其他参数
+    // 如果 LLM.AddAgentInfo 参数为 true，则会包含 agent_info 信息
+    "agent_info": {
+        "room_id": "所在roomid",
+        "agent_instance_id" : "智能体实例 id",
+        "agent_user_id" : "智能体的user id",
+        "user_id": "用户的user id",
+        "round_id": 1, //轮次id
+        "time_stamp": 193243200 //毫秒级别时间戳
+    }
+}
+```
+</Accordion>
+
+<Accordion title="Chat Completion 流式响应对象块示例" defaultOpen="false">
+```json
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"您"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":1,"total_tokens":84}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"好"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":2,"total_tokens":85}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"！"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":3,"total_tokens":86}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"即"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":4,"total_tokens":87}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"构"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":5,"total_tokens":88}}
+...
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"更多的"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":147,"total_tokens":230}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"价值"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":148,"total_tokens":231}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":"。"},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":149,"total_tokens":232}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":""},"finish_reason":""}],"usage":{"prompt_tokens":83,"completion_tokens":150,"total_tokens":233}}
+data: {"id":"d7ae7c4a-1524-4fe5-9d58-e4d59b89d8f0","object":"chat.completion.chunk","created":1709899323,"model":"step-1-8k","choices":[{"index":0,"delta":{"role":"","content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":83,"completion_tokens":150,"total_tokens":233}}
+data: [DONE]
+```
+</Accordion>
+<Warning title="注意">
+自定义 LLM 流式数据格式注意事项如下：
+- 每条数据必须以 `data: ` 开头（注意冒号后有空格）。
+- 每条数据为单独一行或者行尾有换行符。
+- 最后一个有效数据必须包含 `"finish_reason":"stop"`。
+- 最后必须发送一条结束数据：`data: [DONE]`。
+
+如果格式不正确可能会导致智能体不输出或者输出不完整。
+</Warning>
+</Tab>
+<Tab title="接口实现流程及示例">
+<Steps titleSite="p">
+<Step title="解析请求参数">
+解析请求参数并获取必要信息。
+```js
+export async function POST(request: NextRequest) {
+    try {
+        // !mark
+        const requestData: ChatCompletionCreateParams = await request.json();
+        console.log("requestData", requestData);
+        // 检查必需字段
+        if (!requestData.messages || requestData.messages.length === 0) {
+            return NextResponse.json(
+                { error: 'Messages are required' },
+                { status: 400 }
+            );
+        }
+        // 读取最新一条 User Message（最新的在数组最后）
+        // AIAgent 在向你的接口发起请求时，会带上 Messages 参数。这个参数也包括 SystemPrompt。
+        // !mark
+        const latestUserMessage = [...requestData.messages].reverse().find(message => message.role === 'user');
+
+        // ... 其他代码
+    } catch (error) {
+        // ... 其他代码
+    }
+}
+```
+</Step>
+<Step title="查询知识库">
+根据最新一条 User Message 查询知识库。
+```js
+let kbContent = "";
+// 调用知识库查询接口，获取知识库查询结果
+if (process.env.KB_TYPE === "ragflow") {
+    console.log("调用 Ragflow 知识库查询接口");
+    // !mark
+    const ragflowResponse = await retrieveFromRagflow({
+        question: latestUserMessage?.content as string,
+    });
+    kbContent = ragflowResponse.kbContent;
+} else if (process.env.KB_TYPE === "bailian") {
+    console.log("调用 Bailian 知识库查询接口");
+    // !mark
+    const bailianResponse = await retrieveFromBailian({ query: latestUserMessage?.content as string });
+    kbContent = bailianResponse.kbContent;
+}
+```
+<Note title="小提示">
+通常在查询知识库之前会配合意图识别和问题增强提高回答质量。
+- 意图识别：识别用户意图，如果不需要查询知识库的则直接回答用户问题，否则继续。比如：用户说“你好”。
+- 问题增强：根据历史对话及预设条件，对用户最新的问题进行补充增强。比如：用户问“2024年呢？”，则增强为“2024年公司净利润是多少？”。
+</Note>
+</Step>
+<Step title="将用户最新问题及知识库片段合并后调用 LLM 进行回答">
+
+<Note title="小提示">部分厂商的模型提供上下文硬盘缓存能力，所以计算价格时有缓存的计价会便宜很多。保持 SystemPrompt 不变，只替换 User Message 可有效提升缓存命中概率从而降低成本并且缩短推理时间。</Note>
+```js
+// !mark(1:4)
+requestData.messages[requestData.messages.length - 1] = {
+    role: 'user',
+    content: `${latestUserMessage?.content}\n以下是知识库查询结果:\n${kbContent}`,
+};
+// 调用 LLM 进行回答（使用 OpenAI 的 SDK）
+// LLM_BASE_URL_REAL 是真实 LLM 服务的 URL
+const openai = new OpenAI({
+    apiKey: apiKey,
+    baseURL: process.env.LLM_BASE_URL_REAL
+});
+// 处理流式响应
+const completion = await openai.chat.completions.create({
+    model: model,
+    stream: true,
+    messages: requestData.messages
+});
+console.log("completion created successfully");
+// 创建流式响应
+const stream = new TransformStream();
+const writer = stream.writable.getWriter();
+const encoder = new TextEncoder();
+for await (const chunk of completion) {
+    // 注意⚠️：AIAgent 要求最后一个有效数据必须包含 "finish_reason":"stop"且最后必须发送一条结束数据：data: [DONE]，如果不发送可能会导致智能体不回答或者回答不完整。
+    // 某些模型不会在流式响应中返回 finish_reason，这种情况需要自己根据修改一下chunk内容再传回给 AIAgent。
+    const ssePart = `data: ${JSON.stringify(chunk)}\n`;
+    // 持续写入流式响应数据，直到流式数据结束
+    // !mark
+    writer.write(encoder.encode(ssePart));
+}
+// 发送结束标记
+// !mark
+writer.write(encoder.encode('data: [DONE]\n\n'));
+writer.close();
+```
+</Step>
+</Steps>
+<Accordion title="chat/completions 接口的完整示例代码" defaultOpen="false">
+```json title="Node.js(Next.js)"
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { retrieveFromRagflow } from '@/lib/rag/ragflow';
+import OpenAI from 'openai';
+import type { ChatCompletionCreateParams } from 'openai/resources/chat';
+import { retrieveFromBailian } from '@/lib/rag/bailian';
+
+
+export async function POST(request: NextRequest) {
+    // 认证检查
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return NextResponse.json(
+            { error: 'Unauthorized' },
+            { status: 401 }
+        );
+    }
+
+    try {
+        const requestData: ChatCompletionCreateParams = await request.json();
+        console.log("requestData", requestData);
+        console.log("requestData", JSON.stringify(requestData));
+
+        // 读取API密钥，即在使用以下方式请求时带上的 apiKey 的值。AIAgent 服务端也使用以下方式请求。
+        // const openai = new OpenAI({
+        //     apiKey: "xxx",
+        //     baseURL: "xxx"
+        // });
+        // 您在读取到 apiKey 后，可以做必要的业务校验。它不一定是 LLM 的 apiKey，因为是透传的，所以你可以传任意内容。
+        // !mark
+        const apiKey = authHeader.split(' ')[1];
+
+        // 检查必需字段
+        if (!requestData.messages || requestData.messages.length === 0) {
+            return NextResponse.json(
+                { error: 'Messages are required' },
+                { status: 400 }
+            );
+        }
+
+        // 检查是否要求流式响应
+        if (requestData.stream) {
+            // 读取 Model
+            // 由于在注册 AIAgent 或者创建 AIAgent 实例时，会传入固定的 Model 所以 这里可以传一个普通给 LLM 的 Model。
+            // 同时你也可以通过这个值传递一些额外的业务信息。比如 这个 Model 实际是业务标志，标识是直播/语聊房等等。
+            // !mark
+            const model = requestData.model;
+
+            // 读取 SystemPrompt
+            // 由于在注册 AIAgent 或者创建 AIAgent 实例时，会传入固定的 SystemPrompt 所以 这里可以传一个普通给 LLM 的 SystemPrompt。
+            // 同时你也可以通过这个值传递一些额外的业务信息。比如带上用户的信息、等级、偏好等等。然后依此再调用 LLM 时针对性的修改实际给 LLM 的 SystemPrompt。
+            // !mark
+            const systemMessage = requestData.messages.find(message => message.role === 'system');
+
+            // 读取最新一条 User Message（最新的在数组最后）
+            // AIAgent 在向你的接口发起请求时，会带上 Messages 参数。这个参数也包括 SystemPrompt。
+            // !mark
+            const latestUserMessage = [...requestData.messages].reverse().find(message => message.role === 'user');
+
+            // 读取其他符合 OpenAI 协议的 LLM 参数类似，这里不再赘述。
+
+            // 创建流式响应
+            // !mark(1:3)
+            const stream = new TransformStream();
+            const writer = stream.writable.getWriter();
+            const encoder = new TextEncoder();
+            try {
+                let kbContent = "";
+                // 调用知识库查询接口，获取知识库查询结果
+                // !mark(1:11)
+                if (process.env.KB_TYPE === "ragflow") {
+                    console.log("调用 Ragflow 知识库查询接口");
+                    const ragflowResponse = await retrieveFromRagflow({
+                        question: latestUserMessage?.content as string,
+                    });
+                    kbContent = ragflowResponse.kbContent;
+                } else if (process.env.KB_TYPE === "bailian") {
+                    console.log("调用 Bailian 知识库查询接口");
+                    const bailianResponse = await retrieveFromBailian({ query: latestUserMessage?.content as string });
+                    kbContent = bailianResponse.kbContent;
+                }
+
+                // 将用户最新一条 User Message 和知识库查询结果进行合并，在替换 messages 数组最后一个元素，然后调用 LLM 进行回答
+                // 小提示🔔：部分厂商的模型是提供上下文硬盘缓存的，所以计算价格时有缓存的计价会便宜很多。保持 SystemPrompt 不变，只替换 User Message 可有效提升缓存命中概率从而降低成本并且缩短推理时间。
+                // !mark(1:4)
+                requestData.messages[requestData.messages.length - 1] = {
+                    role: 'user',
+                    content: `${latestUserMessage?.content}\n以下是知识库查询结果:\n${kbContent}`,
+                };
+
+                // 调用 LLM 进行回答（使用 OpenAI 的 SDK）
+                const openai = new OpenAI({
+                    apiKey: apiKey,
+                    baseURL: process.env.LLM_BASE_URL_REAL
+                });
+                // 处理流式响应
+                const completion = await openai.chat.completions.create({
+                    model: model,
+                    stream: true,
+                    messages: requestData.messages
+                });
+                console.log("completion created successfully");
+                for await (const chunk of completion) {
+                    // 注意⚠️：AIAgent 要求最后一个有效数据必须包含 "finish_reason":"stop"且最后必须发送一条结束数据：data: [DONE]，如果不发送可能会导致智能体不回答或者回答不完整。
+                    // 某些模型不会在流式响应中返回 finish_reason，这种情况需要自己根据修改一下chunk内容再传回给 AIAgent。
+                    const ssePart = `data: ${JSON.stringify(chunk)}\n`;
+                    // 持续写入流式响应数据，直到流式数据结束
+                    // !mark
+                    writer.write(encoder.encode(ssePart));
+                }
+
+            } catch (error) {
+                console.error('Stream processing error:', error);
+            } finally {
+                // 发送结束标记
+                // !mark
+                writer.write(encoder.encode('data: [DONE]\n\n'));
+                writer.close();
+                console.log("writer closed");
+            }
+
+
+            return new Response(stream.readable, {
+                headers: {
+                    'Content-Type': 'text/event-stream',
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive',
+                    'Access-Control-Allow-Origin': '*',
+                },
+            });
+        } else {
+            // AIAgent 不支持非流式响应，直接返回错误码
+            return NextResponse.json(
+                { error: 'Streaming is required' },
+                { status: 400 }
+            );
+        }
+    } catch (error) {
+        console.error('Error processing request:', error);
+        return NextResponse.json(
+            { error: 'Internal server error' },
+            { status: 500 }
+        );
+    }
+}
+
+// 添加OPTIONS方法支持CORS预检
+export async function OPTIONS() {
+    return NextResponse.json({}, {
+        headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        },
+    });
+}
+```
+
+</Accordion>
+</Tab>
