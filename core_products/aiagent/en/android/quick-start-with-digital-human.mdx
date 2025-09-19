@@ -1323,6 +1323,7 @@ engineConfig.advancedConfig = @{
 <div>
 - Enable traditional audio 3A processing (Acoustic Echo Cancellation AEC, Automatic Gain Control AGC, and Noise Suppression ANS)
 - Set the room usage scenario to High Quality Chatroom, as the SDK will adopt different optimization strategies for different scenarios
+- Configure volume ducking to avoid sound conflicts
 - When pushing streams, configure the push parameters to automatically switch to available `videoCodec`
 </div>
 
@@ -1330,6 +1331,10 @@ engineConfig.advancedConfig = @{
 // Import necessary modules
 import { ZegoExpressEngine } from "zego-express-engine-webrtc";
 import { VoiceChanger } from "zego-express-engine-webrtc/voice-changer";
+
+// Import the volume ducking plugin package. Please contact technical support to obtain the plugin package.
+import { AudioRendererManager } from "/AudioRendererManager/AudioRendererManager";
+import { MediaElementRenderer } from "/AudioRendererManager/mediaElementRenderer";
 
 // Load audio processing module, must be called before new ZegoExpressEngine
 ZegoExpressEngine.use(VoiceChanger);
@@ -1341,6 +1346,37 @@ const zg = new ZegoExpressEngine(appid, server, { scenario: 7 })
 
 // Create local media stream
 const localStream = await zg.createZegoStream();
+
+// Configure volume ducking
+zg.callExperimentalAPI({
+  method: "enableVolumeDucking",
+  params: {
+    localStream,
+    enable: true
+  }
+});
+
+// Pass the player into the volume ducking plugin package
+let renderer;
+zg.callExperimentalAPI({ method: "getAudioContext" }).then((ac) => {
+  const audioMgr = AudioRendererManager.create(ac);
+  // Get the audio element
+  const audio = document.querySelector("audio");
+  renderer = audioMgr.getMediaElementRenderer(audio);
+});
+
+// Register volume ducking update callback
+zg.callExperimentalAPI({ method: "onVolumeDuckingUpdate", params: {} });
+zg.on("recvExperimentalAPI", (result) => {
+ const { method, content } = result;
+ if (method === "onVolumeDuckingUpdate") {
+  console.warn("onVolumeDuckingUpdate", content.gain);
+  // Set the agent stream volume to content.gain returned by the callback. Assume remoteView is the remoteView you created in the step of pulling the agent stream.
+  remoteView.setVolume(content.gain * 100); // volume range [0,100]
+  // Set the player volume to content.gain returned by the callback
+  renderer.setVolume(content.gain * 100); // volume range [0,100]
+ }
+});
 
 // Push local media stream, need to set automatic switching to available videoCodec
 await zg.startPublishingStream(userStreamId, localStream, {

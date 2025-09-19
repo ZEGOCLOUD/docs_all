@@ -1016,6 +1016,7 @@ engineConfig.advancedConfig = @{
 <div>
 - 开启传统音频 3A 处理（回声消除AEC、自动增益控制AGC、噪声抑制ANS）
 - 设置房间的使用场景为高品质语聊房场景，SDK 会针对不同的场景采取不同的优化策略
+- 配置音量闪避，避免声音冲突
 - 推流时，设置推流参数配置自动切换为可用的 `videoCodec`
 </div>
 
@@ -1023,6 +1024,10 @@ engineConfig.advancedConfig = @{
 // 引入必要的模块
 import { ZegoExpressEngine } from "zego-express-engine-webrtc";
 import { VoiceChanger } from "zego-express-engine-webrtc/voice-changer";
+
+// 引入音量闪避插件包，插件包联系技术支持获取
+import { AudioRendererManager } from "/AudioRendererManager/AudioRendererManager";
+import { MediaElementRenderer } from "/AudioRendererManager/mediaElementRenderer";
 
 // 加载音频处理模块，需要在 new ZegoExpressEngine 前调用
 ZegoExpressEngine.use(VoiceChanger);
@@ -1034,6 +1039,37 @@ const zg = new ZegoExpressEngine(appid, server, { scenario: 7 })
 
 // 创建本地媒体流
 const localStream = await zg.createZegoStream();
+
+// 开启音量闪避
+zg.callExperimentalAPI({
+  method: "enableVolumeDucking",
+  params: {
+    localStream,
+    enable: true
+  }
+});
+
+// 将播放器传入音量闪避插件包
+let renderer;
+zg.callExperimentalAPI({ method: "getAudioContext" }).then((ac) => {
+  const audioMgr = AudioRendererManager.create(ac);
+  // 获取播放器元素
+  const audio = document.querySelector("audio");
+  renderer = audioMgr.getMediaElementRenderer(audio);
+});
+
+// 注册音量闪避更新回调
+zg.callExperimentalAPI({ method: "onVolumeDuckingUpdate", params: {} });
+zg.on("recvExperimentalAPI", (result) => {
+ const { method, content } = result;
+ if (method === "onVolumeDuckingUpdate") {
+  console.warn("onVolumeDuckingUpdate", content.gain);
+  // 设置智能体流音量为回调返回的 content.gain，假设 remoteView 为你在步骤 拉智能体流 时创建的 remoteView
+  remoteView.setVolume(content.gain * 100); // volume 取值范围 [0,100]
+  // 设置播放器音量为回调返回的 content.gain
+  renderer.setVolume(content.gain * 100); // volume 取值范围 [0,100]
+ }
+});
 
 // 推送本地媒体流，需要设置自动切换为可用的 videoCodec
 await zg.startPublishingStream(userStreamId, localStream, {
