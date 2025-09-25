@@ -15,7 +15,240 @@
 
 已按照 [快速开始](./../quick-start.mdx) 文档集成 ZEGO Express SDK 和 AI Agent 并实现基本的语音通话功能。
 
+### 使用字幕组件
+
+:::if{props.platform=undefined}
+您可以直接下载[字幕处理类源码](https://github.com/ZEGOCLOUD/ai_agent_quick_start/blob/master/android/QuickStart/app/src/main/java/im/zego/aiagent/express/quickstart/voice/AudioChatMessageParser.java)到您的项目中直接使用。
+<Accordion title="字幕处理类使用示例" defaultOpen="true">
+```java
+private AudioChatMessageParser audioChatMessageParser = new AudioChatMessageParser();
+
+ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onRecvExperimentalAPI(String content) {
+        super.onRecvExperimentalAPI(content);
+        try {
+            // 第一步：将 content 解析为 JSONObject
+            JSONObject json = new JSONObject(content);
+
+            // 第二步：检查 method 字段的值
+            if (json.has("method") && json.getString("method")
+                .equals("liveroom.room.on_recive_room_channel_message")) {
+                // 第三步：获取 params 并解析
+                JSONObject paramsObject = json.getJSONObject("params");
+                String msgContent = paramsObject.getString("msg_content");
+
+                // AudioChatTextMessage 会解析 JSON 字符串
+                audioChatMessageParser.parseAudioChatMessage(msgContent);
+            }
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+});
+
+audioChatMessageParser.setAudioChatMessageListListener(new AudioChatMessageListListener() {
+    @Override
+    public void onMessageListUpdated(List<AudioChatMessage> messagesList) {
+        // 更新 UI 列表
+        binding.messageList.onMessageListUpdated(messagesList);
+    }
+});
+
+```
+</Accordion>
+
+:::
+:::if{props.platform="iOS"}
+您可以直接下载[字幕组件源码](https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/ios/ai_agent_quickstart/aiagent/audio/subtitles)到您的项目中直接使用。
+<Accordion title="字幕组使用示例" defaultOpen="true">
+<CodeGroup>
+```objectivec YourView.h
+#import <UIKit/UIKit.h>
+#import "ZegoAIAgentSubtitlesEventHandler.h"
+
+NS_ASSUME_NONNULL_BEGIN
+
+@interface YourView : UIView <ZegoAIAgentSubtitlesEventHandler>
+
+@end
+```
+
+```objectivec YourView.m
+#import "YourView.h"
+
+#import <Masonry/Masonry.h>
+
+#import "ZegoAIAgentSubtitlesTableView.h"
+#import "ZegoAIAgentSubtitlesMessageDispatcher.h"
+
+@interface YourView() <ZegoEventHandler, ZegoAIAgentSubtitlesEventHandler>
+
+// 智能体字幕
+@property (nonatomic, strong, readwrite) ZegoAIAgentSubtitlesTableView *subtitlesTableView;
+
+@end
+
+@implementation YourView
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        // 注册事件
+        [self registerEventHandler];
+
+        [self setupSubtitles];
+    }
+    return self;
+}
+
+- (void)dealloc {
+    // 反注册事件
+    [self unregisterEventHandler];
+}
+
+- (void)setupSubtitles {
+    // 添加聊天视图 - 占据屏幕下半部分
+    CGRect chatFrame = CGRectMake(0,
+                                 self.bounds.size.height / 2,
+                                 self.bounds.size.width,
+                                 self.bounds.size.height / 2);
+    self.subtitlesTableView = [[ZegoAIAgentSubtitlesTableView alloc] initWithFrame:chatFrame style:UITableViewStylePlain];
+
+    [self addSubview:self.subtitlesTableView];
+
+    // 使用Masonry添加约束
+    [self.subtitlesTableView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.right.bottom.equalTo(self);
+        make.height.equalTo(self.mas_height).multipliedBy(0.5);
+    }];
+}
+
+#pragma mark - ZegoEventHandler
+- (void)onRecvExperimentalAPI:(NSString *)content{
+    [[ZegoAIAgentSubtitlesMessageDispatcher sharedInstance] handleExpressExperimentalAPIContent:content];
+}
+
+#pragma mark - ZegoAIAgentSubtitlesEventHandler
+
+- (void)registerEventHandler {
+    [[ZegoAIAgentSubtitlesMessageDispatcher sharedInstance] registerEventHandler:self];
+}
+
+- (void)unregisterEventHandler {
+    [[ZegoAIAgentSubtitlesMessageDispatcher sharedInstance] unregisterEventHandler:self];
+}
+
+- (void)onRecvAsrChatMsg:(ZegoAIAgentAudioSubtitlesMessage *)message {
+    [self.subtitlesTableView handleRecvAsrMessage:message];
+}
+
+- (void)onRecvLLMChatMsg:(ZegoAIAgentAudioSubtitlesMessage *)message {
+    [self.subtitlesTableView handleRecvLLMMessage:message];
+}
+
+@end
+```
+</CodeGroup>
+</Accordion>
+:::
+:::if{props.platform="flutter"}
+您可以直接下载[字幕组件源码](https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/flutter/lib/audio/subtitles)到您的项目中直接使用。
+<Accordion title="字幕组使用示例" defaultOpen="true">
+<CodeGroup>
+```dart
+import 'package:flutter/material.dart';
+
+import 'subtitles/view/view.dart';
+import 'subtitles/view/model.dart';
+import 'subtitles/protocol/message_protocol.dart';
+import 'subtitles/protocol/message_dispatcher.dart';
+import 'package:zego_express_engine/zego_express_engine.dart';
+
+class ZegoAudioPage extends StatefulWidget {
+  const ZegoAudioPage({super.key});
+
+  @override
+  State<ZegoAudioPage> createState() => _ZegoAudioPageState();
+}
+
+class _ZegoAudioPageState extends State<ZegoAudioPage>
+    implements ZegoSubtitlesEventHandler {
+  late ZegoSubtitlesViewModel subtitlesModel;
+
+  @override
+  void initState() {
+    super.initState();
+
+    subtitlesModel = ZegoSubtitlesViewModel();
+
+    ZegoExpressEngine.onRecvExperimentalAPI = _onRecvExperimentalAPI;
+    ZegoSubtitlesMessageDispatcher().registerEventHandler(this);
+  }
+
+  @override
+  void dispose() {
+    ZegoExpressEngine.onRecvExperimentalAPI = null;
+    ZegoSubtitlesMessageDispatcher().unregisterEventHandler(this);
+
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: ZegoSubtitlesView(model: subtitlesModel),
+    );
+  }
+
+  @override
+  void onRecvAsrChatMsg(ZegoSubtitlesMessageProtocol message) {
+    subtitlesModel.handleRecvAsrMessage(message);
+  }
+
+  @override
+  void onRecvLLMChatMsg(ZegoSubtitlesMessageProtocol message) {
+    subtitlesModel.handleRecvLLMMessage(message);
+  }
+
+  void _onRecvExperimentalAPI(String content) {
+    ZegoSubtitlesMessageDispatcher.handleExpressExperimentalAPIContent(content);
+  }
+}
+
+```
+</CodeGroup>
+</Accordion>
+:::
+:::if{props.platform="Web"}
+如果您是 Vue 项目，可以直接下载[字幕处理hook](https://github.com/ZEGOCLOUD/ai_agent_quick_start/blob/master/web/src/hooks/useChat.ts)到您的项目中直接使用。
+<Accordion title="Vue 项目字幕处理hook使用示例" defaultOpen="true">
+```javascript
+// 使用字幕组件示例代码
+// 在页面中引入chatHook
+import { useChat } from "useChat";
+import { onMounted, onBeforeUnmount } from 'vue';
+
+// 调用useChat方法，传入 Express SDK 实例，messages为消息列表，放入你的字幕组件中进行渲染
+const { messages, setupEventListeners, clearMessages } = useChat(zg);
+
+onMounted(() => {
+  // 页面加载时，注册事件监听
+  setupEventListeners()
+})
+
+onBeforeUnmount(() => {
+ // 页面销毁时，清空消息
+ clearMessages()
+})
+
+```
+</Accordion>
+:::
+
 ## 快速实现
+
+如果您不想使用字幕组件，也可以自行实现字幕组件的功能。详细如下：
 
 用户与智能体进行语音对话期间，AI Agent 服务端通过 RTC 房间自定义消息下发 ASR 识别文本和 LLM 回答的文本。客户端可以监听房间自定义消息，解析对应的状态事件来渲染 UI 。
 
@@ -37,8 +270,7 @@ flowchart TD
 ### 监听房间自定义消息
 
 :::if{props.platform=undefined}
-客户端可通过监听 `onRecvExperimentalAPI` 回调获取 `method` 为 `liveroom.room.on_recive_room_channel_message` 的房间自定义消息。以下是监听回调的示例代码：
-
+客户端可通过监听 `onRecvExperimentalAPI` 回调获取 `method` 为 `liveroom.room.on_recive_room_channel_message` 的房间自定义消息。以下是监听回调的示例代码（[点击查看完整示例代码](https://github.com/ZEGOCLOUD/ai_agent_quick_start/blob/master/android/QuickStart/app/src/main/java/im/zego/aiagent/express/quickstart/voice/VoiceChatActivity.java#L299)）：
 ```java {2,4,15}
 // 注意！！！：通过房间自定义消息收到的数据可能会乱序，需要根据 SeqId 字段进行排序。
 ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
@@ -104,7 +336,7 @@ ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
 ```
 :::
 :::if{props.platform="iOS"}
-客户端可以通过实现ZegoEventHandler协议，监听 `onRecvExperimentalAPI` 回调获取 `method` 为 `liveroom.room.on_recive_room_channel_message` 的房间自定义消息。以下是监听回调的示例代码：
+客户端可以通过实现ZegoEventHandler协议，监听 `onRecvExperimentalAPI` 回调获取 `method` 为 `liveroom.room.on_recive_room_channel_message` 的房间自定义消息。以下是监听回调的示例代码（[点击查看完整示例代码](https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/f4a5b30b42a6fe9e1a3b5b9dc0c4f8c6860cfc85/ios/ai_agent_quickstart/aiagent/audio/subtitles)）：
 <CodeGroup>
 ```objectivec YourService.h/m
 // 实现ZegoEventHandler协议
@@ -199,6 +431,7 @@ ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
 </CodeGroup>
 :::
 :::if{props.platform="flutter"}
+客户端可以监听 `onRecvExperimentalAPI` 回调获取 `method` 为 `liveroom.room.on_recive_room_channel_message` 的房间自定义消息。以下是监听回调的示例代码（[点击查看完整示例代码](https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/flutter/lib/audio/subtitles)）：
 ```dart
 import 'dart:convert';
 
@@ -286,7 +519,7 @@ class _YourPageState extends State<YourPage> {
 ```
 :::
 :::if{props.platform="Web"}
-客户端可通过监听 `recvExperimentalAPI` 回调获取 `method` 为 `onRecvRoomChannelMessage` 的房间自定义消息。以下是监听回调的示例代码：
+客户端可通过监听 `recvExperimentalAPI` 回调获取 `method` 为 `onRecvRoomChannelMessage` 的房间自定义消息。以下是监听回调的示例代码（[点击查看完整示例代码](https://github.com/ZEGOCLOUD/ai_agent_quick_start/blob/master/web/src/hooks/useChat.ts)）：
 
 ```javascript {2,4,15}
 // 注意！！！：通过房间自定义消息收到的数据可能会乱序，需要根据 SeqId 字段进行排序。
@@ -487,236 +720,7 @@ function handleAgentMessage(data, seqId, round) {
 </Tab>
 </Tabs>
 
-### 使用字幕组件
 
-:::if{props.platform=undefined}
-您还可以直接下载[字幕处理类源码](https://github.com/ZEGOCLOUD/ai_agent_quick_start/blob/master/android/QuickStart/app/src/main/java/im/zego/aiagent/express/quickstart/voice/AudioChatMessageParser.java)到您的项目中直接使用。
-<Accordion title="字幕处理类使用示例" defaultOpen="false">
-```java
-private AudioChatMessageParser audioChatMessageParser = new AudioChatMessageParser();
-
-ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
-    @Override
-    public void onRecvExperimentalAPI(String content) {
-        super.onRecvExperimentalAPI(content);
-        try {
-            // 第一步：将 content 解析为 JSONObject
-            JSONObject json = new JSONObject(content);
-
-            // 第二步：检查 method 字段的值
-            if (json.has("method") && json.getString("method")
-                .equals("liveroom.room.on_recive_room_channel_message")) {
-                // 第三步：获取 params 并解析
-                JSONObject paramsObject = json.getJSONObject("params");
-                String msgContent = paramsObject.getString("msg_content");
-
-                // AudioChatTextMessage 会解析 JSON 字符串
-                audioChatMessageParser.parseAudioChatMessage(msgContent);
-            }
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
-    }
-});
-
-audioChatMessageParser.setAudioChatMessageListListener(new AudioChatMessageListListener() {
-    @Override
-    public void onMessageListUpdated(List<AudioChatMessage> messagesList) {
-        // 更新 UI 列表
-        binding.messageList.onMessageListUpdated(messagesList);
-    }
-});
-
-```
-</Accordion>
-
-:::
-:::if{props.platform="iOS"}
-您还可以直接下载[字幕组件源码](https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/ios/ai_agent_quickstart/aiagent/audio/subtitles)到您的项目中直接使用。
-<Accordion title="字幕组使用示例" defaultOpen="false">
-<CodeGroup>
-```objectivec YourView.h
-#import <UIKit/UIKit.h>
-#import "ZegoAIAgentSubtitlesEventHandler.h"
-
-NS_ASSUME_NONNULL_BEGIN
-
-@interface YourView : UIView <ZegoAIAgentSubtitlesEventHandler>
-
-@end
-```
-
-```objectivec YourView.m
-#import "YourView.h"
-
-#import <Masonry/Masonry.h>
-
-#import "ZegoAIAgentSubtitlesTableView.h"
-#import "ZegoAIAgentSubtitlesMessageDispatcher.h"
-
-@interface YourView() <ZegoEventHandler, ZegoAIAgentSubtitlesEventHandler>
-
-// 智能体字幕
-@property (nonatomic, strong, readwrite) ZegoAIAgentSubtitlesTableView *subtitlesTableView;
-
-@end
-
-@implementation YourView
-
-- (instancetype)initWithFrame:(CGRect)frame {
-    self = [super initWithFrame:frame];
-    if (self) {
-        // 注册事件
-        [self registerEventHandler];
-
-        [self setupSubtitles];
-    }
-    return self;
-}
-
-- (void)dealloc {
-    // 反注册事件
-    [self unregisterEventHandler];
-}
-
-- (void)setupSubtitles {
-    // 添加聊天视图 - 占据屏幕下半部分
-    CGRect chatFrame = CGRectMake(0,
-                                 self.bounds.size.height / 2,
-                                 self.bounds.size.width,
-                                 self.bounds.size.height / 2);
-    self.subtitlesTableView = [[ZegoAIAgentSubtitlesTableView alloc] initWithFrame:chatFrame style:UITableViewStylePlain];
-
-    [self addSubview:self.subtitlesTableView];
-
-    // 使用Masonry添加约束
-    [self.subtitlesTableView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.right.bottom.equalTo(self);
-        make.height.equalTo(self.mas_height).multipliedBy(0.5);
-    }];
-}
-
-#pragma mark - ZegoEventHandler
-- (void)onRecvExperimentalAPI:(NSString *)content{
-    [[ZegoAIAgentSubtitlesMessageDispatcher sharedInstance] handleExpressExperimentalAPIContent:content];
-}
-
-#pragma mark - ZegoAIAgentSubtitlesEventHandler
-
-- (void)registerEventHandler {
-    [[ZegoAIAgentSubtitlesMessageDispatcher sharedInstance] registerEventHandler:self];
-}
-
-- (void)unregisterEventHandler {
-    [[ZegoAIAgentSubtitlesMessageDispatcher sharedInstance] unregisterEventHandler:self];
-}
-
-- (void)onRecvAsrChatMsg:(ZegoAIAgentAudioSubtitlesMessage *)message {
-    [self.subtitlesTableView handleRecvAsrMessage:message];
-}
-
-- (void)onRecvLLMChatMsg:(ZegoAIAgentAudioSubtitlesMessage *)message {
-    [self.subtitlesTableView handleRecvLLMMessage:message];
-}
-
-@end
-```
-</CodeGroup>
-</Accordion>
-:::
-:::if{props.platform="flutter"}
-您还可以直接下载[字幕组件源码](https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/flutter/lib/audio/subtitles)到您的项目中直接使用。
-<Accordion title="字幕组使用示例" defaultOpen="false">
-<CodeGroup>
-```dart
-import 'package:flutter/material.dart';
-
-import 'subtitles/view/view.dart';
-import 'subtitles/view/model.dart';
-import 'subtitles/protocol/message_protocol.dart';
-import 'subtitles/protocol/message_dispatcher.dart';
-import 'package:zego_express_engine/zego_express_engine.dart';
-
-class ZegoAudioPage extends StatefulWidget {
-  const ZegoAudioPage({super.key});
-
-  @override
-  State<ZegoAudioPage> createState() => _ZegoAudioPageState();
-}
-
-class _ZegoAudioPageState extends State<ZegoAudioPage>
-    implements ZegoSubtitlesEventHandler {
-  late ZegoSubtitlesViewModel subtitlesModel;
-
-  @override
-  void initState() {
-    super.initState();
-
-    subtitlesModel = ZegoSubtitlesViewModel();
-
-    ZegoExpressEngine.onRecvExperimentalAPI = _onRecvExperimentalAPI;
-    ZegoSubtitlesMessageDispatcher().registerEventHandler(this);
-  }
-
-  @override
-  void dispose() {
-    ZegoExpressEngine.onRecvExperimentalAPI = null;
-    ZegoSubtitlesMessageDispatcher().unregisterEventHandler(this);
-
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: ZegoSubtitlesView(model: subtitlesModel),
-    );
-  }
-
-  @override
-  void onRecvAsrChatMsg(ZegoSubtitlesMessageProtocol message) {
-    subtitlesModel.handleRecvAsrMessage(message);
-  }
-
-  @override
-  void onRecvLLMChatMsg(ZegoSubtitlesMessageProtocol message) {
-    subtitlesModel.handleRecvLLMMessage(message);
-  }
-
-  void _onRecvExperimentalAPI(String content) {
-    ZegoSubtitlesMessageDispatcher.handleExpressExperimentalAPIContent(content);
-  }
-}
-
-```
-</CodeGroup>
-</Accordion>
-:::
-:::if{props.platform="Web"}
-如果您是 Vue 项目，可以直接下载[字幕处理hook](https://github.com/ZEGOCLOUD/ai_agent_quick_start/blob/master/web/src/hooks/useChat.ts)到您的项目中直接使用。
-<Accordion title="Vue 项目字幕处理hook使用示例" defaultOpen="false">
-```javascript
-// 使用字幕组件示例代码
-// 在页面中引入chatHook
-import { useChat } from "useChat";
-import { onMounted, onBeforeUnmount } from 'vue';
-
-// 调用useChat方法，传入 Express SDK 实例，messages为消息列表，放入你的字幕组件中进行渲染
-const { messages, setupEventListeners, clearMessages } = useChat(zg);
-
-onMounted(() => {
-  // 页面加载时，注册事件监听
-  setupEventListeners()
-})
-
-onBeforeUnmount(() => {
- // 页面销毁时，清空消息
- clearMessages()
-})
-
-```
-</Accordion>
-:::
 
 ## 注意事项
 
