@@ -1,0 +1,26 @@
+---
+
+date: "2025-09-25"
+---
+import { Title } from './title';
+
+<Title>ZIM SDK 中的 onRoomAttributesUpdated 回调与 onRoomAttributesBatchUpdated 回调的区别是什么？分别在什么情况下触发？</Title>
+
+- - -
+
+## 回调差异
+
+两个回调均用于接收房间属性（key-value）的更新通知，核心差异在于单次更新操作中包含的操作类型是否单一。
+
+| 回调名称 | 触发场景-30% | 参数特征-30% |
+| --- | --- | --- |
+| [onRoomAttributesUpdated](https://doc-zh.zego.im/article/api?doc=zim_API~java_android~class~ZIMEventHandler#on-room-attributes-updated) | 单次更新中所有 key-value 的变化为同一操作类型（全部是新增 / 修改，或全部是删除） | 回调携带的 ZIMRoomAttributesUpdateInfo 中，action 字段明确为 add（新增或修改 key-value）或 delete（删除 key-value），仅包含该单一操作类型的更新信息 |
+| [onRoomAttributesBatchUpdated](https://doc-zh.zego.im/article/api?doc=zim_API~java_android~class~ZIMEventHandler#on-room-attributes-batch-updated) | 单次更新中同时包含两种操作类型（既有新增 / 修改的 key-value，也有删除的 key-value） | 回调携带 `List<ZIMRoomAttributesUpdateInfo>`，列表中必包含两个元素：一个 action 为 add 的更新信息，一个 action 为 delete 的更新信息，分别对应两种操作的具体内容 |
+
+## 推荐处理流程
+
+1. 初始化监听：先注册 `onRoomAttributesUpdated` 和 `onRoomAttributesBatchUpdated` 两个回调，确保不遗漏任何更新通知。
+2. 全量基准查询：通过 `queryRoomAttributes` 接口查询房间属性的全量数据，将结果存储在内存中，作为初始基准值。
+3. 增量更新合并：
+    - 收到 `onRoomAttributesUpdated` 时，根据回调中 action（add/delete），直接对内存中的全量数据进行对应操作（新增 / 修改或删除 key-value）。
+    - 收到 `onRoomAttributesBatchUpdated` 时，遍历列表中的两个 [ZIMRoomAttributesUpdateInfo](https://doc-zh.zego.im/article/api?doc=zim_API~java_android~struct~ZIMRoomAttributesUpdateInfo)，分别按 add 和 delete 动作对内存数据进行合并，最终保持内存数据与实际房间属性一致。
