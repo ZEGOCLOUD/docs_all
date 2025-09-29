@@ -15,7 +15,15 @@ declare interface ZegoCloudRoomConfig {
     height?: number;
     frameRate?: number;
     maxBitRate?: number;
+    onError?: (errorCode: number) => string | undefined // Screen sharing failure callback. If custom prompt text is required, the corresponding string can be returned based on the error code. If custom UI is required, an empty string will be returned.
   }; // Screen sharing settings, resolution settings
+  language?: ZegoUIKitLanguage; // UIKit language setting.
+  sendMessageChannel?: "RTC" | "ZIM"; // Message sending channel configuration.
+  videoScreenConfig?: {
+		objectFit?: "cover" | "contain" | "fill" // Video display mode, default "contact".
+		localMirror?: boolean // Whether the local video image is mirrored, default to true.
+		pullStreamMirror?: boolean // Whether the video image on the streaming end is mirrored, default false.
+	}
 
   // 1.2 Prejoin view
   showPreJoinView?: boolean; // Whether to display the prejoin view. Displayed by default.
@@ -36,6 +44,7 @@ declare interface ZegoCloudRoomConfig {
   showMyCameraToggleButton?: boolean; // Whether to display the button for toggling my camera. Displayed by default.
   showMyMicrophoneToggleButton?: boolean; // Whether to display the button for toggling my microphone. Displayed by default.
   showAudioVideoSettingsButton?: boolean; // Whether to display the button for audio and video settings. Displayed by default.
+  showBackgroundProcessButton?: boolean; // Whether to display the button for background process settings. Not displayed by default.
   showTextChat?: boolean; // Whether to display the text chat on the right side. Displayed by default.
   showUserList?: boolean; // Whether to display the participant list. Displayed by default. 
   showRemoveUserButton?: boolean; // Whether to display the button for removing participants. Not displayed by default.
@@ -83,6 +92,14 @@ declare interface ZegoCloudRoomConfig {
     waitingSelectUsers: ZegoUser[]; // Waiting for selected members
     defaultChecked?: boolean; // Whether it is selected by default, the default value is true
   };
+  // Member List Configuration
+  memberViewConfig?: {
+		operationListCustomButton?: () => Element // Customize the operation list button.
+	}
+  showRotatingScreenButton?: boolean; // Whether to display the rotation screen button, it is not displayed by default.
+  requireRoomForegroundView?: () => HTMLElement; // Custom view in the room, located above the video.
+  addInRoomMessageAttributes?: () => any // add in room message message attribute. return custom message attribute.
+  customMessageUI?: (msg: InRoomMessageInfo) => HTMLElement // Customize message UI
 
   // 1.4 Leaving view
   showLeavingView?: boolean; // Whether to display the leaving view. Displayed by default.
@@ -100,6 +117,15 @@ declare interface ZegoCloudRoomConfig {
   onInRoomMessageReceived?: (messageInfo: InRoomMessageInfo) => void; // Callback for in-room chat message received.
   onInRoomCustomCommandReceived?: (command: ZegoSignalingInRoomCommandMessage[]) => void;
   onReturnToHomeScreenClicked?: () => void; // When the "Return to home screen" button is clicked, this callback is triggered. After setting up this callback, clicking the button will not navigate to the home screen; instead, you can add your own page navigation logic here.
+  onSendMessageResult?: (response: { errCode: number, message: string, timestamp?: string, fromUser?: ZegoUser, sendTime?: number, messageID?: number }) => void // Send message callback.
+  onScreenRotation?: (currentScreen: 'landscape' | 'portrait') => void; // Screen rotation callback.
+  onUserStateUpdated?: (status: ZegoUserState) => void // User status update callback.
+  onStreamUpdate?: (streamId: string) => void // Stream add callback, which can obtain the stream ID when the stream is added.
+	onLocalStreamUpdated?: (state: "created" | "published" | "stopped", streamId: string, stream?) => void // Local stream status update callback.
+	onScreenSharingStreamUpdated?: (state: "created" | "published" | "closed", streamId: string, stream?) => void // Screen sharing stream status update callback.
+	onWhiteboardUpdated?: (state: "created" | "closed", whiteboardId: string) => void // Whiteboard status update callback.
+	onCameraStateUpdated?: (state: "ON" | "OFF") => void // Camera status update callback.
+	onMicrophoneStateUpdated?: (state: "ON" | "OFF") => void // Microphone status update callback.
 }
 
 // Here’s an example that hides the prejoin view page:
