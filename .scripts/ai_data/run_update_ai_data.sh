@@ -155,8 +155,6 @@ if [ ! -d "venv" ]; then
     print_info "虚拟环境不存在，开始创建..."
     create_virtual_env
     source venv/bin/activate
-    install_dependencies
-    verify_installation
 else
     source venv/bin/activate
     print_success "虚拟环境已激活"
@@ -169,35 +167,6 @@ python -c "import requests; print('✅ requests 可用')" 2>/dev/null || {
     pip install requests
 }
 
-python -c "import crawl4ai; print('✅ crawl4ai 可用')" 2>/dev/null || {
-    echo "⚠️  crawl4ai 未安装，正在安装..."
-    pip install crawl4ai
-    echo "🔧 安装 Playwright 浏览器..."
-    playwright install
-    echo "✅ crawl4ai 和 Playwright 浏览器安装完成"
-}
-
-# 检查 Playwright 浏览器是否可用
-echo "🔍 检查 Playwright 浏览器..."
-python -c "
-import sys
-try:
-    from playwright.sync_api import sync_playwright
-    with sync_playwright() as p:
-        # 尝试启动浏览器来检查是否安装
-        browser = p.chromium.launch(headless=True)
-        browser.close()
-    print('✅ Playwright 浏览器可用')
-except Exception as e:
-    print('❌ Playwright 浏览器不可用，正在安装...')
-    import subprocess
-    subprocess.run(['playwright', 'install'], check=True)
-    print('✅ Playwright 浏览器安装完成')
-" 2>/dev/null || {
-    echo "🔧 正在安装 Playwright 浏览器..."
-    playwright install
-    echo "✅ Playwright 浏览器安装完成"
-}
 
 # 检查配置文件
 echo "🔍 检查配置文件..."
@@ -226,13 +195,12 @@ fi
 # 显示使用说明
 echo ""
 echo "=== AI数据更新脚本 ==="
-echo "本脚本将完整执行：页面下载 -> Dataset更新 -> Assistant更新"
+echo "本脚本将完整执行：页面下载 -> Dataset更新"
 echo ""
 echo "使用说明："
-echo "1. 脚本会询问处理中文还是英文（默认中文）"
-echo "2. 选择要处理的产品组"
-echo "3. 选择要处理的实例（可选择全部）"
-echo "4. 自动执行完整流程"
+echo "1. 普通模式：直接选择产品组与实例后执行 下载->Dataset更新（不再询问下载模式）"
+echo "2. 全量模式：传入 --all，遍历所有产品的所有实例；每个实例 下载->更新->清理本地文件"
+echo "3. 脚本会自动读取 .scripts/ai_data/.env 中的 RAGFLOW_* 配置"
 echo ""
 
 # 运行AI数据更新脚本
@@ -245,7 +213,6 @@ if [ $? -eq 0 ]; then
     echo "🎉 AI数据更新脚本执行完成！"
     echo ""
     echo "📁 数据文件位置: .scripts/ai_data/data/"
-    echo "🔧 配置文件位置: static/data/ai_search_mapping.json"
     echo ""
 else
     echo ""

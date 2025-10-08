@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 全新的AI数据更新脚本
-整合页面下载、dataset创建/更新、assistant创建/更新功能
+整合页面下载、dataset创建/更新功能
 """
 
 import json
@@ -10,16 +10,15 @@ import re
 import asyncio
 import sys
 import os
-import time
 import shutil
 import requests
 import xml.etree.ElementTree as ET
 import subprocess
 import logging
+import argparse
 from pathlib import Path
 from urllib.parse import urlparse
-from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
 # 导入现有模块
@@ -32,13 +31,6 @@ except ImportError as e:
     print(f"❌ 需要安装 requests: pip install requests")
     requests = None
 
-try:
-    from crawl4ai import AsyncWebCrawler
-    CRAWL4AI_AVAILABLE = True
-except ImportError:
-    print("需要安装 crawl4ai: pip install crawl4ai")
-    CRAWL4AI_AVAILABLE = False
-    AsyncWebCrawler = None
 
 # 常量定义
 CHINESE_SITEMAP_URL = "https://doc-zh.zego.im/sitemap.xml"
@@ -54,42 +46,68 @@ class Config:
     max_retries: int = 3
     retry_delay: int = 1
     concurrent_downloads: int = 5
-    
+
     def __post_init__(self):
-        self.ragflow_base_url = os.getenv('RAGFLOW_BASE_URL', '')
+        # 优先尝试加载同目录下的 .env（无第三方依赖），仅设置未在环境中存在的键
+        try:
+            env_path = Path(__file__).parent / ".env"
+            if env_path.exists():
+                for line in env_path.read_text(encoding='utf-8').splitlines():
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    if '=' in line:
+                        k, v = line.split('=', 1)
+                        k = k.strip()
+                        v = v.strip().strip('"').strip("'")
+                        if k and k not in os.environ:
+                            os.environ[k] = v
+        except Exception:
+            pass
+
+        # 读取并规范化 RAGFlow 基础地址
+        base = os.getenv('RAGFLOW_BASE_URL', '').strip().rstrip('/')
+        if base:
+            if not (base.startswith('http://') or base.startswith('https://')):
+                base = 'https://' + base
+            # 确保包含 /api/v1 前缀
+            if not re.search(r"/api/v\d+($|/)", base):
+                base = base + '/api/v1'
+        self.ragflow_base_url = base
+
+        # API Key
         self.api_key = os.getenv('RAGFLOW_API_KEY', '')
 
 class UpdateAIDataManager:
     """AI数据更新管理器"""
-    
+
     def __init__(self):
         self.config = Config()
         self.data_dir = Path("data")
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.static_data_dir = Path("../../static/data")
         self.static_data_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # 设置日志
         self.setup_logging()
-        
+
         # 语言相关配置
         self.language = None
         self.config_file = None
         self.sitemap_url = None
         self.base_url = None
         self.faq_dataset_name = None
-        
+
         # 错误记录
         self.download_errors = {}
         self.dataset_errors = {}
-        self.assistant_errors = {}
-    
+
     def setup_logging(self):
         """设置日志记录"""
         # 获取脚本所在目录
         script_dir = Path(__file__).parent
         log_file = script_dir / "update.log"
-        
+
         # 配置日志格式
         logging.basicConfig(
             level=logging.INFO,
@@ -99,29 +117,29 @@ class UpdateAIDataManager:
                 logging.StreamHandler()  # 同时输出到控制台
             ]
         )
-        
+
         self.logger = logging.getLogger(__name__)
         self.logger.info("=== AI数据更新脚本启动 ===")
-    
+
     def log_error(self, message: str):
         """记录错误信息，同时输出到控制台和日志文件"""
         print(f"❌ {message}")
         self.logger.error(message)
-    
+
     def log_warning(self, message: str):
         """记录警告信息"""
         print(f"⚠️  {message}")
         self.logger.warning(message)
-        
+
     def select_language(self) -> str:
         """选择处理语言"""
         print("\n=== 选择处理语言 ===")
         print("请选择要处理的语言:")
         print("1. 中文 (默认)")
         print("2. 英文")
-        
+
         choice = input("\n请选择 (直接回车默认中文): ").strip()
-        
+
         if choice == "2":
             self.language = "en"
             self.config_file = "../../docuo.config.en.json"
@@ -138,7 +156,7 @@ class UpdateAIDataManager:
             self.faq_dataset_name = "FAQ-ZH"
             print("✅ 已选择中文")
             self.logger.info("选择语言: 中文")
-            
+
         return self.language
 
     def get_git_commits(self, limit: int = 10) -> List[Dict]:
@@ -281,7 +299,7 @@ class UpdateAIDataManager:
             error_msg = f"配置文件不存在: {self.config_file}"
             self.log_error(error_msg)
             raise FileNotFoundError(error_msg)
-        
+
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
@@ -294,13 +312,13 @@ class UpdateAIDataManager:
         """从配置中提取group信息"""
         groups = {}
         instances = config_data.get('instances', [])
-        
+
         for instance in instances:
             nav_info = instance.get('navigationInfo', {})
             group_info = nav_info.get('group', {})
             group_id = group_info.get('id')
             group_name = group_info.get('name')
-            
+
             if group_id and group_name:
                 if group_id not in groups:
                     groups[group_id] = {
@@ -309,7 +327,7 @@ class UpdateAIDataManager:
                         'instances': []
                     }
                 groups[group_id]['instances'].append(instance)
-        
+
         return groups
 
     def select_groups_and_instances(self, groups: Dict[str, Dict]) -> List[Dict]:
@@ -479,9 +497,14 @@ class UpdateAIDataManager:
         return affected_instances, instance_files
 
     def get_sitemap_urls(self, route_base_path: str) -> List[str]:
-        """从sitemap获取匹配的URLs"""
+        """从sitemap获取匹配的URLs（严格匹配一级 /{routeBasePath}/）"""
         try:
             print(f"正在获取sitemap: {self.sitemap_url}")
+
+            # 英文暂未启用，预留逻辑
+            if self.language == 'en':
+                self.log_warning("英文 sitemap 暂未启用，先跳过。")
+                return []
 
             if requests is None:
                 self.log_error("requests 模块不可用，无法获取sitemap")
@@ -493,25 +516,32 @@ class UpdateAIDataManager:
             root = ET.fromstring(response.content)
             namespaces = {'ns': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
 
-            urls = []
+            urls: List[str] = []
             url_elements = root.findall('.//ns:url', namespaces)
             if len(url_elements) == 0:
                 url_elements = root.findall('.//url')
 
-            # 构建匹配模式
-            pattern = f"{self.base_url}{route_base_path}"
+            rb = (route_base_path or '').strip('/')
+            want_netloc = urlparse(self.base_url).netloc
 
             for url_elem in url_elements:
                 loc_elem = url_elem.find('ns:loc', namespaces)
                 if loc_elem is None:
                     loc_elem = url_elem.find('loc')
 
-                if loc_elem is not None and loc_elem.text:
-                    url = loc_elem.text.strip()
-                    if url.startswith(pattern):
-                        urls.append(url)
+                if loc_elem is None or not loc_elem.text:
+                    continue
 
-            print(f"匹配到 {len(urls)} 个URLs (模式: {pattern})")
+                u = loc_elem.text.strip()
+                parsed = urlparse(u)
+                if parsed.netloc != want_netloc:
+                    continue
+
+                path = parsed.path or '/'
+                if path == f"/{rb}" or path == f"/{rb}/" or path.startswith(f"/{rb}/"):
+                    urls.append(f"{parsed.scheme}://{parsed.netloc}{path}")
+
+            print(f"匹配到 {len(urls)} 个URLs (route: /{rb}/)")
             return urls
 
         except Exception as e:
@@ -523,6 +553,8 @@ class UpdateAIDataManager:
         parsed = urlparse(url)
 
         if title:
+            # 去除标题中的 HTML/JSX 标签
+            title = re.sub(r'<[^>]*>', '', title)
             clean_title = re.sub(r'[^\w\s-]', '', title).strip()
             clean_title = re.sub(r'[-\s]+', '-', clean_title)
             base_name = f"{clean_title}---{parsed.netloc}{parsed.path}"
@@ -532,47 +564,87 @@ class UpdateAIDataManager:
         filename = base_name.replace("/", ">").replace("&", "^^").replace('=', '^^^')
         return f"{filename}.md"
 
-    async def download_url_content(self, url: str, target_dir: Path) -> bool:
-        """下载单个URL的内容，支持重试"""
-        if not CRAWL4AI_AVAILABLE:
-            self.log_error(f"crawl4ai 未安装: {url}")
-            return False
+    def _to_md_url(self, page_url: str) -> str:
+        parsed = urlparse(page_url)
+        path = parsed.path.rstrip('/')
+        if path.endswith('.md'):
+            md_path = path
+        else:
+            md_path = f"{path}.md"
+        return f"{parsed.scheme}://{parsed.netloc}{md_path}"
+
+    def _extract_title_from_markdown(self, content: str) -> str:
+        if not content:
+            return ""
+        # 优先匹配 Markdown 的一级标题
+        m = re.search(r'(?im)^\s*#\s+(.+)$', content)
+        if m:
+            text = re.sub(r'<[^>]+>', '', m.group(1)).strip()
+            if text:
+                return text
+        # 尝试匹配 HTML 的 <h1>
+        m = re.search(r'(?is)<h1[^>]*>(.*?)</h1>', content)
+        if m:
+            text = re.sub(r'<[^>]+>', '', m.group(1)).strip()
+            if text:
+                return text
+        # 顺延匹配二级到六级标题
+        for level in range(2, 7):
+            m = re.search(rf'(?im)^\s*#{{{level}}}\s+(.+)$', content)
+            if m:
+                text = re.sub(r'<[^>]+>', '', m.group(1)).strip()
+                if text:
+                    return text
+        # 兜底：返回第一行非空文本（移除可能存在的标签）
+        for line in content.splitlines():
+            if line.strip():
+                text = re.sub(r'<[^>]+>', '', line).strip()
+                if text:
+                    return text[:80]
+        return ""
+
+
+    async def download_url_content(self, url: str, target_dir: Path, instance_label: str) -> bool:
+        """直接下载对应 .md 内容并保存，标题取 instance.label + 首个 H1（无 H1 顺延 H2/H3...）"""
+        page_url = url  # 用于生成最终文件名（不带 .md）
+        md_url = self._to_md_url(page_url)
 
         for attempt in range(self.config.max_retries):
             try:
-                async with AsyncWebCrawler(verbose=False) as crawler:
-                    result = await crawler.arun(
-                        url=url,
-                        word_count_threshold=10,
-                        extraction_strategy="NoExtractionStrategy",
-                        chunking_strategy="RegexChunking",
-                        bypass_cache=True
-                    )
+                if requests is None:
+                    self.log_error("requests 模块不可用，无法下载")
+                    return False
 
-                    if result.success:
-                        title = result.metadata.get('title', '') if result.metadata else ''
-                        filename = self.get_filename_from_url(url, title)
-                        file_path = target_dir / filename
+                loop = asyncio.get_running_loop()
 
-                        with open(file_path, 'w', encoding='utf-8') as f:
-                            f.write(f"# {title}\n\n")
-                            f.write(f"**URL:** {url}\n\n")
-                            f.write("---\n\n")
-                            f.write(result.markdown)
+                def _fetch():
+                    return requests.get(md_url, timeout=30)
 
-                        print(f"✅ 下载成功: {url}")
-                        return True
-                    else:
-                        self.log_error(f"下载失败 (尝试 {attempt + 1}/{self.config.max_retries}): {url} - {result.error_message}")
-                        if attempt < self.config.max_retries - 1:
-                            await asyncio.sleep(self.config.retry_delay * (2 ** attempt))  # 指数退避
+                response = await loop.run_in_executor(None, _fetch)
+
+                if response.status_code == 200:
+                    content = response.text
+                    md_title = self._extract_title_from_markdown(content)
+                    combined_title = f"{instance_label} {md_title}".strip() if (instance_label or md_title) else md_title
+
+                    filename = self.get_filename_from_url(page_url, combined_title)
+                    file_path = target_dir / filename
+
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(content)
+
+                    print(f"✅ 下载成功: {md_url}")
+                    return True
+                else:
+                    self.log_warning(f"HTTP {response.status_code}: {md_url} (尝试 {attempt + 1}/{self.config.max_retries})")
 
             except Exception as e:
-                self.log_error(f"下载异常 (尝试 {attempt + 1}/{self.config.max_retries}): {url} - {str(e)}")
-                if attempt < self.config.max_retries - 1:
-                    await asyncio.sleep(self.config.retry_delay * (2 ** attempt))  # 指数退避
+                self.log_warning(f"下载异常 (尝试 {attempt + 1}/{self.config.max_retries}): {md_url} - {e}")
 
-        self.log_error(f"下载最终失败: {url}")
+            if attempt < self.config.max_retries - 1:
+                await asyncio.sleep(self.config.retry_delay * (2 ** attempt))  # 指数退避
+
+        self.log_error(f"下载最终失败: {md_url}")
         return False
 
     async def download_instance_files(self, instance: Dict, group_id: str) -> bool:
@@ -599,18 +671,10 @@ class UpdateAIDataManager:
             print(f"📁 发现已存在 {len(existing_files)} 个文件在目录: {target_dir}")
             print(f"⚠️  重新下载将删除现有文件并重新获取所有内容")
 
-            while True:
-                choice = input(f"是否重新下载所有文件? (y/n, 默认y): ").strip().lower()
-                if choice in ['', 'y', 'yes']:
-                    print(f"🗑️  删除已存在的目录: {target_dir}")
-                    shutil.rmtree(target_dir)
-                    target_dir.mkdir(parents=True, exist_ok=True)
-                    break
-                elif choice in ['n', 'no']:
-                    print(f"✅ 跳过下载，使用现有文件")
-                    return True
-                else:
-                    print("请输入 y 或 n")
+            # 默认直接重新下载并覆盖
+            print(f"🗑️  删除已存在的目录: {target_dir}")
+            shutil.rmtree(target_dir)
+            target_dir.mkdir(parents=True, exist_ok=True)
         else:
             target_dir.mkdir(parents=True, exist_ok=True)
 
@@ -630,7 +694,7 @@ class UpdateAIDataManager:
 
         for i in range(0, len(urls), batch_size):
             batch = urls[i:i + batch_size]
-            tasks = [self.download_url_content(url, target_dir) for url in batch]
+            tasks = [self.download_url_content(url, target_dir, instance.get('label', '')) for url in batch]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             for result in results:
@@ -716,7 +780,7 @@ class UpdateAIDataManager:
 
             for i in range(0, len(urls_to_download), batch_size):
                 batch = urls_to_download[i:i + batch_size]
-                tasks = [self.download_url_content(url, target_dir) for url in batch]
+                tasks = [self.download_url_content(url, target_dir, instance.get('label', '')) for url in batch]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
                 for result in results:
@@ -760,7 +824,9 @@ class UpdateAIDataManager:
             # 获取dataset中的所有文档
             response = requests.get(
                 f"{self.config.ragflow_base_url}/datasets/{dataset_id}/documents",
-                headers=headers
+                headers=headers,
+                params={"page": 1, "page_size": 200},
+                timeout=30,
             )
 
             if response.status_code != 200:
@@ -891,46 +957,84 @@ class UpdateAIDataManager:
             self.log_error("requests 未安装，无法处理知识库")
             return None
 
+        # 基础校验
+        if not self.config.ragflow_base_url:
+            self.log_error("RAGFLOW_BASE_URL 未设置或无效，请设置环境变量 RAGFLOW_BASE_URL（如：http://<host>:<port>/api/v1）")
+            return None
+
         headers = {
             'Authorization': f'Bearer {self.config.api_key}',
             'Content-Type': 'application/json'
         }
 
         try:
-            # 先查找是否存在
+            # 先查找是否存在（带分页，page_size=200）
+            params = {"page": 1, "page_size": 200, "name": dataset_name}
+            print(f"🔎 列举 Datasets 请求: url={self.config.ragflow_base_url}/datasets, params={params}")
             response = requests.get(
-                f"{self.config.ragflow_base_url}/datasets?name={dataset_name}",
-                headers=headers
+                f"{self.config.ragflow_base_url}/datasets",
+                headers=headers,
+                params=params,
+                timeout=30,
             )
+            print(f"🔎 列举 Datasets 响应: status={response.status_code}, body={response.text[:400]}")
             data = response.json()
 
             if data.get('code') == 0 and data.get('data'):
-                dataset_id = data['data'][0]['id']
-                print(f"✅ 找到已存在的知识库: {dataset_id}")
-                return dataset_id
+                items = data['data']
+                for it in items:
+                    if it.get('name', '').lower() == dataset_name.lower():
+                        dataset_id = it['id']
+                        print(f"✅ 找到已存在的知识库: {dataset_id}")
+                        return dataset_id
 
-            # 创建新的dataset
+            # 创建新的dataset（按文档：不传 language；确保 embedding_model 满足 name@factory；parser_config.chunk_token_num 为整数）
+            # 计算 embedding_model
+            if self.language == 'zh':
+                default_model = 'BAAI/bge-large-zh-v1.5@BAAI'
+                embedding_model = os.getenv('RAGFLOW_EMBEDDING_MODEL_ZH', default_model)
+            else:
+                default_model = 'bce-embedding-base_v1@maidalun1020'
+                embedding_model = os.getenv('RAGFLOW_EMBEDDING_MODEL_EN', default_model)
+            # 如果缺少 @factory，尽量补 @BAAI（兜底）
+            if '@' not in embedding_model:
+                embedding_model = embedding_model + '@BAAI'
+
+            # 解析 chunk_token_num 为 int
+            ctn_raw = os.getenv('RAGFLOW_CHUNK_TOKEN_NUM', '512')
+            try:
+                chunk_token_num = int(str(ctn_raw).strip())
+            except Exception:
+                print(f"⚠️  RAGFLOW_CHUNK_TOKEN_NUM 无法解析为整数，使用默认 512，原始值: {ctn_raw}")
+                chunk_token_num = 512
+
             config = {
                 'name': dataset_name,
-                'language': 'Chinese' if self.language == 'zh' else 'English',
                 'permission': 'team',
-                'embedding_model': os.getenv('RAGFLOW_EMBEDDING_MODEL_ZH', 'BAAI/bge-small-zh-v1.5') if self.language == 'zh' else os.getenv('RAGFLOW_EMBEDDING_MODEL_EN', 'BAAI/bge-small-en-v1.5'),
-                'parser_config': {'chunk_token_num': os.getenv('RAGFLOW_CHUNK_TOKEN_NUM', 512)}
+                'embedding_model': embedding_model,
+                'parser_config': {
+                    'chunk_token_num': chunk_token_num
+                }
             }
+            print(f"🔧 创建 Dataset 请求: url={self.config.ragflow_base_url}/datasets, body={config}")
 
             response = requests.post(
                 f"{self.config.ragflow_base_url}/datasets",
                 headers=headers,
-                json=config
+                json=config,
+                timeout=30,
             )
-            data = response.json()
+            try:
+                data = response.json()
+            except Exception:
+                data = {"code": -1, "message": response.text[:500]}
 
             if data.get('code') == 0:
                 dataset_id = data['data']['id']
                 print(f"✅ 创建知识库成功: {dataset_id}")
                 return dataset_id
             else:
-                self.log_error(f"创建知识库失败: {data.get('message')}")
+                self.log_error(f"创建知识库失败: HTTP {response.status_code}, code={data.get('code')}, message={data.get('message')}")
                 return None
 
         except Exception as e:
@@ -953,7 +1057,7 @@ class UpdateAIDataManager:
                 response = requests.delete(
                     f"{self.config.ragflow_base_url}/datasets/{dataset_id}/documents",
                     headers={**headers, 'Content-Type': 'application/json'},
-                    json={'ids': []}
+                    json={'ids': None}
                 )
                 print("🗑️  已清空知识库中的现有文档")
             else:
@@ -1005,315 +1109,9 @@ class UpdateAIDataManager:
             self.log_error(f"上传文档异常: {e}")
             return False
 
-    def get_group_questions(self, config_data: Dict, group_id: str) -> List[str]:
-        """从同一group的其他实例中获取questions"""
-        all_questions = []
-        instances = config_data.get('instances', [])
 
-        for instance in instances:
-            nav_info = instance.get('navigationInfo', {})
-            instance_group_id = nav_info.get('group', {}).get('id')
 
-            if instance_group_id == group_id:
-                questions = instance.get('askAi', {}).get('questions', [])
-                if questions:
-                    all_questions.extend(questions)
 
-        # 去重并保持顺序
-        unique_questions = []
-        for q in all_questions:
-            if q not in unique_questions:
-                unique_questions.append(q)
-
-        return unique_questions
-
-    def generate_ai_search_mapping(self, selected_instances: List[Dict], group_id: str, config_data: Dict) -> Dict:
-        """生成或更新AI搜索映射配置"""
-        print(f"\n🔧 生成AI搜索映射配置...")
-
-        # 加载现有配置
-        mapping_file = self.static_data_dir / "ai_search_mapping.json"
-        if mapping_file.exists():
-            with open(mapping_file, 'r', encoding='utf-8') as f:
-                mapping_config = json.load(f)
-        else:
-            mapping_config = {}
-
-        # 确保group存在
-        if group_id not in mapping_config:
-            mapping_config[group_id] = {}
-
-        # 获取同group的questions作为默认值
-        group_questions = self.get_group_questions(config_data, group_id)
-        print(f"📋 从同group获取到 {len(group_questions)} 个默认问题")
-
-        # 为每个instance生成配置
-        for instance in selected_instances:
-            instance_id = instance.get('id')
-            platform = instance.get('navigationInfo', {}).get('platform', 'Unknown')
-            instance_questions = instance.get('askAi', {}).get('questions', [])
-
-            # 如果实例没有questions，使用同group的questions
-            questions = instance_questions if instance_questions else group_questions
-
-            # dataset_names包含instance_id和FAQ
-            dataset_names = [instance_id, self.faq_dataset_name]
-
-            assistant_name = instance_id
-
-            mapping_config[group_id][platform] = {
-                "dataset_names": dataset_names,
-                "assistant_name": assistant_name,
-                "questions": questions,
-                "chat_id": ""  # 将在创建assistant后更新
-            }
-
-            questions_source = "实例自有" if instance_questions else "同group默认"
-            print(f"📝 {platform}: 使用了 {len(questions)} 个问题 ({questions_source})")
-
-        # 保存配置
-        with open(mapping_file, 'w', encoding='utf-8') as f:
-            json.dump(mapping_config, f, ensure_ascii=False, indent=2)
-
-        print(f"✅ AI搜索映射配置已更新: {mapping_file}")
-        return mapping_config
-
-    def create_or_update_assistant(self, assistant_name: str, dataset_names: List[str]) -> Optional[str]:
-        """创建或更新assistant，支持对code 102错误进行重试"""
-        print(f"🤖 处理Assistant: {assistant_name}")
-
-        if not requests:
-            self.log_error("requests 未安装，无法处理Assistant")
-            return None
-
-        headers = {
-            'Authorization': f'Bearer {self.config.api_key}',
-            'Content-Type': 'application/json'
-        }
-
-        max_retries_for_102 = 3
-        retry_delay_for_102 = 10  # 10秒
-
-        for attempt in range(max_retries_for_102 + 1):  # 0, 1, 2, 3 共4次尝试（1次初始 + 3次重试）
-            try:
-                # 获取datasets映射
-                dataset_ids = []
-                for dataset_name in dataset_names:
-                    dataset_id = self.create_or_get_dataset(dataset_name)
-                    if dataset_id:
-                        dataset_ids.append(dataset_id)
-                    else:
-                        self.log_error(f"无法获取dataset: {dataset_name}")
-                        return None
-
-                if not dataset_ids:
-                    self.log_error("没有有效的dataset IDs")
-                    return None
-
-                # 检查是否已存在
-                response = requests.get(
-                    f"{self.config.ragflow_base_url}/chats",
-                    headers=headers,
-                    params={"name": assistant_name}
-                )
-                data = response.json()
-
-                existing_id = None
-                if data.get('code') == 0 and data.get('data'):
-                    existing_id = data['data'][0]['id']
-                    print(f"找到已存在的Assistant: {existing_id}")
-
-                # 准备payload
-                is_chinese = self.language == 'zh'
-                empty_response = "非常抱歉，知识库中暂时找不到相关信息，请尝试更详细描述你的问题或者尝试其他问题。" if is_chinese else "Sorry, no relevant information found in the knowledge base. Please try to describe your question in more detail or try other questions."
-
-                # 简化的prompt模板
-                prompt_template = """
-# 角色
-你是一个智能助手，名字叫Miss Z。你的主要职责是基于知识库中的信息来总结并回答用户的问题。
-
-## 技能
-### 技能1: 回答简单问题
-- 如果问题可以用一个接口、一个配置或者一句简短的话回答则是简单问题
-- 简单明确的问题则直接用最简短的答案回答即可
-- 简单问题不需要提供示例代码
-- 如果一些操作有前提条件或者其他要求则也需要明确告知用户
-
-### 技能2: 回答复杂问题
-- 如果问题需要通过多个步骤或者多个接口配合实现的那么就是复杂问题
-- 先根据知识库内容简要总结说明实现步骤
-- 每个步骤配合最简洁且必要的示例代码说明
-
-### 技能3: 多语言支持
-- 使用中文进行回答，确保沟通无障碍
-
-### 技能4: 提示
-- 每次回答最后都提示用户：如果有任何疑问，请联系 ZEGO 技术支持。
-
-## 限制
-- 绝对不能捏造信息，特别是涉及到数字和代码时，必须保证信息的准确性
-- 回答格式需遵循Markdown规范，使答案结构清晰、易读
-- 当知识库中的信息与用户问题无关时，直接回复："{empty_response}"
-- 所有回答都应基于知识库中的现有资料，不得超出其范围
-
-## 知识库
-{{knowledge}}
-
-以上就是相关的知识。
-""" if is_chinese else """
-# Role
-You are an intelligent assistant named Miss Z. Your primary duty is to summarize and answer user questions based on the information in the knowledge base.
-
-## Skills
-### Skill 1: Answering Simple Questions
-- A simple question is one that can be answered with a single interface, configuration, or a brief statement
-- For straightforward questions, provide the most concise answer possible
-- Simple questions do not require example code
-- If there are prerequisites or other requirements, make sure to inform the user clearly
-
-### Skill 2: Answering Complex Questions
-- A complex question requires multiple steps or interfaces to be addressed
-- Begin by briefly summarizing the implementation steps based on the knowledge base content
-- Provide the most concise and necessary example code for each step
-
-### Skill 3: Multilingual Support
-- Answer in English to ensure smooth communication
-
-### Skill 4: Reminder
-- End each response with: If you have any questions, please contact ZEGOCLOUD technical support.
-
-## Limitations
-- Never fabricate information, especially when it involves numbers and code; accuracy is crucial
-- Follow Markdown format for clear and readable answers
-- When the knowledge base information is irrelevant to the user's question, reply: "{empty_response}"
-- All responses should be based on existing materials in the knowledge base and should not exceed its scope
-
-## Knowledge Base
-{{knowledge}}
-
-Above is the relevant knowledge.
-"""
-
-                payload = {
-                    "name": assistant_name,
-                    "dataset_ids": dataset_ids,
-                    "llm": {
-                        "model_name": "qwen-plus",
-                        "frequency_penalty": 0.7,
-                        "max_tokens": 4096,
-                        "presence_penalty": 0.4,
-                        "temperature": 0.1,
-                        "top_p": 0.3
-                    },
-                    "prompt": {
-                        "empty_response": empty_response,
-                        "prompt": prompt_template.format(empty_response=empty_response)
-                    }
-                }
-
-                if existing_id:
-                    # 更新
-                    response = requests.put(
-                        f"{self.config.ragflow_base_url}/chats/{existing_id}",
-                        headers=headers,
-                        json=payload
-                    )
-                    action = "更新"
-                    assistant_id = existing_id
-                else:
-                    # 创建
-                    response = requests.post(
-                        f"{self.config.ragflow_base_url}/chats",
-                        headers=headers,
-                        json=payload
-                    )
-                    action = "创建"
-
-                data = response.json()
-                
-                # 检查响应码
-                if data.get('code') == 0:
-                    # 成功
-                    if existing_id:
-                        assistant_id = existing_id
-                    else:
-                        assistant_id = data.get('data', {}).get('id')
-                    
-                    if assistant_id:
-                        print(f"✅ {action}Assistant成功: {assistant_name} (ID: {assistant_id})")
-                        return assistant_id
-                    else:
-                        self.log_error(f"{action}Assistant失败，未获取到ID: {assistant_name}")
-                        return None
-                        
-                elif data.get('code') == 102:
-                    # code 102 错误，需要重试
-                    if attempt < max_retries_for_102:
-                        print(f"⚠️  {action}Assistant遇到code 102错误 (尝试 {attempt + 1}/{max_retries_for_102 + 1}): {assistant_name} {data}")
-                        print(f"⏳ 等待 {retry_delay_for_102} 秒后重试...")
-                        time.sleep(retry_delay_for_102)
-                        continue
-                    else:
-                        self.log_error(f"{action}Assistant失败，code 102 重试 {max_retries_for_102} 次后仍然失败: {assistant_name}")
-                        return None
-                else:
-                    # 其他错误码，直接失败不重试
-                    self.log_error(f"{action}Assistant失败，错误码 {data.get('code')}: {assistant_name} - {data.get('message', '未知错误')}")
-                    return None
-
-            except Exception as e:
-                if attempt < max_retries_for_102:
-                    self.log_error(f"处理Assistant异常 (尝试 {attempt + 1}/{max_retries_for_102 + 1}): {assistant_name} - {e}")
-                    print(f"⏳ 等待 {retry_delay_for_102} 秒后重试...")
-                    time.sleep(retry_delay_for_102)
-                    continue
-                else:
-                    self.log_error(f"处理Assistant异常，重试 {max_retries_for_102} 次后仍然失败: {assistant_name} - {e}")
-                    return None
-
-        # 如果到达这里，说明所有重试都失败了
-        return None
-
-    def update_mapping_with_chat_ids(self, mapping_config: Dict, group_id: str, selected_instances: List[Dict]) -> List[str]:
-        """更新映射配置中的chat_id，返回失败的Assistant列表"""
-        print(f"\n🔄 更新映射配置中的chat_id...")
-
-        failed_assistants = []
-
-        for instance in selected_instances:
-            platform = instance.get('navigationInfo', {}).get('platform', 'Unknown')
-            instance_id = instance.get('id')
-
-            if group_id in mapping_config and platform in mapping_config[group_id]:
-                assistant_name = mapping_config[group_id][platform]['assistant_name']
-                dataset_names = mapping_config[group_id][platform]['dataset_names']
-
-                print(f"🤖 处理Assistant: {assistant_name}")
-
-                # 创建或更新assistant
-                chat_id = self.create_or_update_assistant(assistant_name, dataset_names)
-                if chat_id:
-                    mapping_config[group_id][platform]['chat_id'] = chat_id
-                    print(f"✅ Assistant处理成功: {assistant_name}")
-                else:
-                    failed_assistants.append(assistant_name)
-                    self.log_error(f"Assistant处理失败: {assistant_name}")
-            else:
-                print(f"⚠️  未找到映射配置: {group_id}/{platform}")
-                failed_assistants.append(f"{instance_id}-{platform}")
-
-        # 保存更新后的配置
-        mapping_file = self.static_data_dir / "ai_search_mapping.json"
-        with open(mapping_file, 'w', encoding='utf-8') as f:
-            json.dump(mapping_config, f, ensure_ascii=False, indent=2)
-
-        if failed_assistants:
-            print(f"⚠️  {len(failed_assistants)} 个Assistant处理失败")
-        else:
-            print(f"✅ 所有Assistant处理成功")
-
-        print(f"✅ 映射配置已更新完成")
-        return failed_assistants
 
     def log_download_errors(self, failed_instances: List[str], failed_files: Dict[str, List[str]]):
         """记录下载错误"""
@@ -1326,7 +1124,7 @@ Above is the relevant knowledge.
                     print("    失败文件:")
                     for file in failed_files[instance]:
                         print(f"      - {file}")
-    
+
     def log_dataset_errors(self, failed_datasets: List[str], error_details: Dict[str, str]):
         """记录Dataset处理错误"""
         if failed_datasets:
@@ -1336,27 +1134,23 @@ Above is the relevant knowledge.
                 print(f"  - {dataset}")
                 if dataset in error_details:
                     print(f"    错误原因: {error_details[dataset]}")
-    
-    def log_assistant_errors(self, failed_assistants: List[str], error_details: Dict[str, str]):
-        """记录Assistant处理错误"""
-        if failed_assistants:
-            print("\n=== Assistant处理错误总结 ===")
-            print(f"❌ 以下Assistant处理失败:")
-            for assistant in failed_assistants:
-                print(f"  - {assistant}")
-                if assistant in error_details:
-                    print(f"    错误原因: {error_details[assistant]}")
+
 
 async def main():
     """主函数"""
     manager = UpdateAIDataManager()
 
     print("=== AI数据更新脚本 ===")
-    print("本脚本将完整执行：页面下载 -> Dataset更新 -> Assistant更新")
+    print("本脚本将完整执行：页面下载 -> Dataset更新")
 
     try:
-        # 1. 选择语言
-        manager.select_language()
+        # 1. 语言固定为中文（英文 sitemap 暂未启用）
+        manager.language = 'zh'
+        manager.config_file = "../../docuo.config.zh.json"
+        manager.sitemap_url = CHINESE_SITEMAP_URL
+        manager.base_url = CHINESE_BASE_URL
+        manager.faq_dataset_name = "FAQ-ZH"
+        print("✅ 已选择中文")
 
         # 2. 加载配置文件
         print(f"\n📖 加载配置文件: {manager.config_file}")
@@ -1370,44 +1164,127 @@ async def main():
 
         print(f"✅ 找到 {len(groups)} 个产品组")
 
-        # 4. 选择下载模式
-        download_mode = manager.select_download_mode()
+        # 4. 解析命令行参数；支持 --all 全量模式
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument("--all", dest="all_mode", action="store_true", help="全量模式：遍历所有产品的所有实例")
+        args, _ = parser.parse_known_args()
 
-        selected_instances = []
-        instance_files = {}
-        group_id = None
+        if args.all_mode:
+            print("\n=== 全量模式: 遍历所有产品的所有实例 ===")
+            all_instances = []
+            for grp in groups.values():
+                all_instances.extend(grp.get('instances', []))
 
-        if download_mode == "git_changes":
-            # 根据git变更记录下载
-            affected_instances, instance_files = manager.select_git_commit_and_get_changes(config_data)
-            if not affected_instances:
-                manager.log_error("没有找到受影响的实例")
-                return
+            total = len(all_instances)
+            print(f"📦 共发现 {total} 个实例，将逐个下载并更新对应知识库（完成后删除本地文件）")
 
-            selected_instances = affected_instances
-            group_id = selected_instances[0].get('navigationInfo', {}).get('group', {}).get('id')
+            success_cnt, fail_cnt, skipped_cnt = 0, 0, 0
+            failure_details = {}
+            success_groups = set()
+            # 在全量模式下跳过冗余产品
+            skip_ids = {"real_time_voice_zh", "live_streaming_zh"}
 
-        elif download_mode == "select_instances":
-            # 选择指定实例更新
-            selected_instances = manager.select_groups_and_instances(groups)
-            if not selected_instances:
-                manager.log_error("没有选择任何实例")
-                return
+            for idx, instance in enumerate(all_instances, 1):
+                instance_id = instance.get('id')
+                if instance_id in skip_ids:
+                    print(f"⏭️ 跳过冗余产品: {instance_id}")
+                    skipped_cnt += 1
+                    continue
+                group_id_each = instance.get('navigationInfo', {}).get('group', {}).get('id')
+                print(f"\n[{idx}/{total}] 实例 {instance_id} 开始")
 
-            group_id = selected_instances[0].get('navigationInfo', {}).get('group', {}).get('id')
+                ok = await manager.download_instance_files(instance, group_id_each)
+                if not ok:
+                    reason = "页面下载失败"
+                    print(f"❌ {reason}，跳过 Dataset 处理: {instance_id}")
+                    failure_details[instance_id] = reason
+                    fail_cnt += 1
+                    continue
 
-        elif download_mode == "skip_download":
-            # 跳过下载，但仍需要选择实例进行后续处理
-            selected_instances = manager.select_groups_and_instances(groups)
-            if not selected_instances:
-                manager.log_error("没有选择任何实例")
-                return
+                # 收集文件
+                target_dir = manager.data_dir / group_id_each / instance_id
+                md_files = list(target_dir.glob("*.md"))
+                if not md_files:
+                    reason = "未找到markdown文件"
+                    print(f"❌ {reason}，跳过: {instance_id}")
+                    failure_details[instance_id] = reason
+                    fail_cnt += 1
+                    # 清理空目录
+                    shutil.rmtree(target_dir, ignore_errors=True)
+                    continue
 
-            group_id = selected_instances[0].get('navigationInfo', {}).get('group', {}).get('id')
+                file_paths = [str(f) for f in md_files]
 
-        if not group_id:
-            print("❌ 无法获取group_id")
+                # 创建/获取 dataset
+                dataset_id = manager.create_or_get_dataset(instance_id)
+                if not dataset_id:
+                    reason = "无法创建或获取dataset"
+                    print(f"❌ {reason}: {instance_id}")
+                    failure_details[instance_id] = reason
+                    fail_cnt += 1
+                    shutil.rmtree(target_dir, ignore_errors=True)
+                    continue
+
+                # 全量模式：清空并重新上传
+                upload_success = manager.upload_and_parse_documents(dataset_id, file_paths, clear_existing=True)
+                if not upload_success:
+                    reason = "文档上传失败"
+                    print(f"❌ {reason}: {instance_id}")
+                    failure_details[instance_id] = reason
+                    fail_cnt += 1
+                    shutil.rmtree(target_dir, ignore_errors=True)
+                    continue
+
+                print(f"✅ 实例完成: {instance_id}，开始清理本地文件")
+                shutil.rmtree(target_dir, ignore_errors=True)
+                # 若 group 目录为空，则一并删除
+                group_dir = manager.data_dir / group_id_each
+                try:
+                    if group_dir.exists() and not any(group_dir.iterdir()):
+                        shutil.rmtree(group_dir, ignore_errors=True)
+                except Exception:
+                    pass
+
+                success_cnt += 1
+                if group_id_each:
+                    success_groups.add(group_id_each)
+
+            # 全量模式完成后，如有 webhook 则发送飞书通知
+            try:
+                webhook = os.getenv('RUN_COMPLETED_NOTE_FEISHU_WEBHOOK', '').strip()
+                if webhook:
+                    total_attempted = total - skipped_cnt
+                    products_updated = len(success_groups)
+                    failed_list = ", ".join(list(failure_details.keys())[:20])
+                    text = (
+                        f"AI数据全量更新完成\n"
+                        f"- 产品数(成功): {products_updated}\n"
+                        f"- 实例：成功 {success_cnt} / 失败 {fail_cnt} / 跳过 {skipped_cnt} / 总计(尝试) {total_attempted}\n"
+                        f"- 失败实例({len(failure_details)}): {failed_list}{' 等' if len(failure_details) > 20 else ''}\n"
+                    )
+                    payload = {"msg_type": "text", "content": {"text": text}}
+                    try:
+                        resp = requests.post(webhook, json=payload, timeout=15)
+                        print(f"📣 飞书通知已发送: status={resp.status_code}, body={resp.text[:200]}")
+                    except Exception as ne:
+                        print(f"⚠️ 飞书通知发送失败: {ne}")
+                else:
+                    print("ℹ️ 未配置 RUN_COMPLETED_NOTE_FEISHU_WEBHOOK，跳过飞书通知")
+            except Exception as e:
+                print(f"⚠️ 汇总与通知阶段发生异常: {e}")
+
+            print(f"\n🎉 全量模式完成：成功 {success_cnt}，失败 {fail_cnt}，跳过 {skipped_cnt}")
             return
+
+        # 非 all 模式：默认进入“指定实例更新”（不再询问下载模式）
+        download_mode = "select_instances"
+        selected_instances = manager.select_groups_and_instances(groups)
+        if not selected_instances:
+            manager.log_error("没有选择任何实例")
+            return
+
+        group_id = selected_instances[0].get('navigationInfo', {}).get('group', {}).get('id')
+        instance_files = {}
 
         print(f"\n🚀 开始处理 {len(selected_instances)} 个实例...")
 
@@ -1442,8 +1319,8 @@ async def main():
             print("❌ 由于下载失败，终止执行流程")
             return
 
-        # 6. 选择是否处理datasets
-        process_datasets = manager.select_dataset_mode()
+        # 6. 默认处理datasets（不再交互）
+        process_datasets = True
 
         # 7. 创建或更新datasets
         failed_datasets = []
@@ -1515,50 +1392,13 @@ async def main():
                 return
         else:
             print(f"\n=== 第2步: 跳过Dataset处理 ===")
-            print(f"⏭️  跳过Dataset处理步骤，直接进入Assistant处理")
+            print(f"⏭️  跳过Dataset处理步骤")
 
-        # 8. 生成AI搜索映射配置
-        print(f"\n=== 第3步: 生成AI搜索映射配置 ===")
-        mapping_config = manager.generate_ai_search_mapping(selected_instances, group_id, config_data)
-
-        # 9. 创建或更新Assistants
-        print(f"\n=== 第4步: 创建或更新Assistants ===")
-        failed_assistants = []
-        assistant_errors = {}
-
-        for instance in selected_instances:
-            platform = instance.get('navigationInfo', {}).get('platform', 'Unknown')
-            instance_id = instance.get('id')
-
-            if group_id in mapping_config and platform in mapping_config[group_id]:
-                assistant_name = mapping_config[group_id][platform]['assistant_name']
-                dataset_names = mapping_config[group_id][platform]['dataset_names']
-
-                print(f"🤖 处理Assistant: {assistant_name}")
-
-                # 创建或更新assistant
-                chat_id = manager.create_or_update_assistant(assistant_name, dataset_names)
-                if chat_id:
-                    mapping_config[group_id][platform]['chat_id'] = chat_id
-                    print(f"✅ Assistant处理成功: {assistant_name}")
-                else:
-                    failed_assistants.append(assistant_name)
-                    assistant_errors[assistant_name] = "创建或更新失败"
-                    print(f"❌ Assistant处理失败: {assistant_name}")
-            else:
-                print(f"⚠️  未找到映射配置: {group_id}/{platform}")
-                failed_assistants.append(f"{instance_id}-{platform}")
-                assistant_errors[f"{instance_id}-{platform}"] = "未找到映射配置"
-
-        if failed_assistants:
-            manager.log_assistant_errors(failed_assistants, assistant_errors)
-            print("⚠️  部分Assistant处理失败，但不影响其他功能的正常使用")
 
         print(f"\n🎉 所有步骤执行完成!")
         print(f"✅ 成功处理了 {len(selected_instances)} 个实例")
 
         print(f"📁 文件保存在: {manager.data_dir / group_id}")
-        print(f"🔧 配置文件: {manager.static_data_dir / 'ai_search_mapping.json'}")
 
     except KeyboardInterrupt:
         print("\n\n⚠️  用户中断执行")
