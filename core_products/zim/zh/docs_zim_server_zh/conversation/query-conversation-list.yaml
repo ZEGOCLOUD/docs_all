@@ -1,0 +1,129 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+tags:
+  - conversation
+
+paths:
+  /:
+    post:
+      tags: [conversation]
+      summary: 查询会话列表
+      description: |
+        调用此接口，分页拉取指定用户的全量会话列表，最多返回 1000 个最新会话（单聊与群聊）。
+
+        <Note title="说明">即便用户被踢出会话，本接口返回结果仍包含该会话；但是如果会话解散，则无法通过本接口获取该会话相关信息。</Note>
+
+        <Note title="说明">调用频率限制：20 次/秒。</Note>
+      operationId: query-conversation-list
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://zim-api.zego.im/?Action=QueryConversationList
+          required: true
+          schema:
+            type: string
+            enum: [QueryConversationList]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryConversationListRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryConversationListResponse'
+
+components:
+  schemas:
+    QueryConversationListRequest:
+      type: object
+      required: [FromUserId]
+      properties:
+        FromUserId:
+          type: string
+          description: 查询该用户的会话列表。
+          maxLength: 32
+          example: "user123"
+        Limit:
+          type: integer
+          format: int32
+          description: 单次获取会话数量，默认 100，范围 (0, 500]。
+          minimum: 1
+          maximum: 500
+          default: 100
+          example: 100
+        Next:
+          type: integer
+          format: int32
+          description: 分页拉取标志，第一次 0，之后填上一次返回的 Next 值；为 0 表示已获取完毕。
+          example: 0
+    QueryConversationListResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          description: |
+            返回码。
+            <table>
+            <thead><tr><th>返回码</th><th>说明</th><th>处理建议</th></tr></thead>
+            <tbody>
+            <tr><td>660000002</td><td>输入参数错误。</td><td>请检查输入的参数。</td></tr>
+            <tr><td>660300005</td><td>调用接口的频率超出了 AppID 级别限制。</td><td>请稍后再试。</td></tr>
+            <tr><td>660500002</td><td>FromUserId 未注册。</td><td>请检查 FromUserId 是否正确。</td></tr>
+            <tr><td>660800053</td><td>查询会话列表失败。</td><td>请联系 ZEGO 技术支持。</td></tr>
+            </tbody>
+            </table>
+        Message:
+          type: string
+          description: 请求结果的说明信息。
+        RequestId:
+          type: string
+          description: 请求 ID。
+        Data:
+          type: object
+          properties:
+            TotalCount:
+              type: integer
+              description: 当前的会话总数。
+            Next:
+              type: integer
+              description: 分页拉取标志。
+            List:
+              type: array
+              description: 会话列表。按 UpdateTime 升序返回结果。
+              items:
+                type: object
+                properties:
+                  ConvId:
+                    type: string
+                    description: 会话 ID（单聊为对端用户 ID，群聊为群组 ID）。
+                  ConvType:
+                    type: integer
+                    description: 会话类型。0 单聊；2 群聊。
+                  UpdateTime:
+                    type: integer
+                    format: int64
+                    description: 会话最后修改时间，毫秒时间戳。
