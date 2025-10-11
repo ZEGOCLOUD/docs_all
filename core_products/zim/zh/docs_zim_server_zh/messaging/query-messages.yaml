@@ -1,0 +1,146 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+tags:
+  - messaging
+
+paths:
+  /:
+    post:
+      tags: [messaging]
+      summary: 查询消息
+      description: |
+        本接口支持查询单个指定会话（群聊、单聊）中的多条消息。
+
+        <Warning title="注意">本接口的频率限制是 20 条消息/秒，而非 20 次/秒。</Warning>
+      operationId: query-messages
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://zim-api.zego.im/?Action=QueryMessagesByMsgSeq
+          required: true
+          schema:
+            type: string
+            enum: [QueryMessagesByMsgSeq]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryMessagesRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryMessagesResponse'
+
+components:
+  schemas:
+    QueryMessagesRequest:
+      type: object
+      required: [FromUserId, ConvId, ConvType, MsgSeqList]
+      properties:
+        FromUserId:
+          type: string
+          description: 用户的 UserID。查询单聊可填任一参与用户；查询群聊可填任意已注册用户。
+          maxLength: 32
+          example: "user123"
+        ConvId:
+          type: string
+          description: 会话 ID。单聊填另一参与用户的 userID；群聊填目标群组的 groupID。
+          maxLength: 32
+          example: "conv123"
+        ConvType:
+          type: integer
+          format: int32
+          description: 会话类型：0 单聊；2 群聊。
+          enum: [0, 2]
+          example: 0
+        MsgSeqList:
+          type: array
+          description: 待查询消息的 seq 列表，长度上限 20。
+          maxItems: 20
+          items:
+            type: integer
+            format: int64
+            example: 1
+          example: [1, 2, 3]
+    QueryMessagesResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          description: |
+            返回码。
+            <table>
+            <thead><tr><th>返回码</th><th>说明</th><th>处理建议</th></tr></thead>
+            <tbody>
+            <tr><td>660000001</td><td>服务端出错。</td><td>请重试，或联系 ZEGO 技术支持。</td></tr>
+            <tr><td>660000002</td><td>输入的参数缺失或不合法。</td><td>请检查输入的参数。</td></tr>
+            <tr><td>660300005</td><td>调用接口的频率超出了 AppID 级别限制。</td><td>请稍后再试，或参考相关文档了解调用频率。</td></tr>
+            <tr><td>660700008</td><td>获取用户信息出错。</td><td>请检查用户 ID 是否正确。</td></tr>
+            <tr><td>660700015</td><td>用户未注册。</td><td>请先注册用户。</td></tr>
+            </tbody>
+            </table>
+        Message:
+          type: string
+        RequestId:
+          type: string
+        Data:
+          type: object
+          properties:
+            MessageList:
+              type: array
+              description: 返回的消息内容列表。
+              items:
+                type: object
+                properties:
+                  Sender:
+                    type: string
+                    description: 消息发送者。
+                  MsgType:
+                    type: integer
+                    description: 消息类型；1 文本；10 组合；11 图片；12 文件；13 音频；14 视频；31 撤回；32 Tips；200 自定义。
+                  SubMsgType:
+                    type: integer
+                    description: 自定义消息具体类型，仅当 MsgType=200 时有效，范围 [0,200]。
+                  MsgBody:
+                    type: string
+                    description: 消息内容或 JSON 字符串（见不同类型解析）。
+                  MsgId:
+                    type: integer
+                    format: int64
+                    description: 消息 ID。
+                  MsgSeq:
+                    type: integer
+                    description: 消息 Seq。
+                  Payload:
+                    type: string
+                    description: 消息扩展字段。
+                  MsgTime:
+                    type: integer
+                    format: int64
+                    description: 服务端收到消息的时间（毫秒）。
+                  IsEmpty:
+                    type: integer
+                    description: 是否空消息：0 否；1 已被删除；2 已被撤回。

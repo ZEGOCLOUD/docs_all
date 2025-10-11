@@ -1,0 +1,156 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+tags:
+  - conversation
+
+paths:
+  /:
+    post:
+      tags: [conversation]
+      summary: 查询单聊会话消息列表
+      description: |
+        调用此接口，分页拉取指定用户的某个单聊会话的消息列表。
+
+        <Note title="说明">以下 FromUserId 和 ToUserId 对应的用户需已登录或已注册。</Note>
+
+        <Note title="说明">调用频率限制：20 次/秒。</Note>
+      operationId: query-the-message-list-of-one-on-one-chats
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://zim-api.zego.im/?Action=QueryPeerMsg
+          required: true
+          schema:
+            type: string
+            enum: [QueryPeerMsg]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryPeerMsgRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryPeerMsgResponse'
+
+components:
+  schemas:
+    QueryPeerMsgRequest:
+      type: object
+      required: [FromUserId, ToUserId]
+      properties:
+        FromUserId:
+          type: string
+          description: 查询用户 A 与用户 B 的单聊会话消息列表时，填入用户 A 的 UserID。
+          maxLength: 32
+          example: "userA"
+        ToUserId:
+          type: string
+          description: 填入用户 B 的 UserID。
+          maxLength: 32
+          example: "userB"
+        Limit:
+          type: integer
+          format: int32
+          description: 单次获取消息数量，默认 10，范围 (0, 100]。
+          minimum: 1
+          maximum: 100
+          default: 10
+          example: 10
+        Next:
+          type: integer
+          format: int32
+          description: 分页拉取标志，第一次 0，之后填上一次返回的 Next；为 0 表示获取完毕。
+          example: 0
+        WithEmptyMsg:
+          type: integer
+          format: int32
+          description: 是否包含撤回或服务端删除的消息。0 不包含；1 包含。
+          enum: [0, 1]
+          default: 0
+          example: 0
+    QueryPeerMsgResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          description: |
+            返回码。
+            <table>
+            <thead><tr><th>返回码</th><th>说明</th><th>处理建议</th></tr></thead>
+            <tbody>
+            <tr><td>660000002</td><td>输入参数错误。</td><td>请检查输入的参数。</td></tr>
+            <tr><td>660300005</td><td>调用接口的频率超出了 AppID 级别限制。</td><td>请稍后再试。</td></tr>
+            <tr><td>660500002</td><td>FromUserId 未注册。</td><td>请检查 FromUserId 是否正确。</td></tr>
+            </tbody>
+            </table>
+        Message:
+          type: string
+          description: 请求结果的说明信息。
+        RequestId:
+          type: string
+          description: 请求 ID。
+        Data:
+          type: object
+          properties:
+            Next:
+              type: integer
+              description: 分页拉取标志。
+            List:
+              type: array
+              description: 消息列表。按 MsgTime 降序返回。
+              items:
+                type: object
+                properties:
+                  Sender:
+                    type: string
+                    description: 消息发送者 ID。
+                  MsgType:
+                    type: integer
+                    description: 消息类型。
+                  SubMsgType:
+                    type: integer
+                    description: 自定义消息具体类型（仅 MsgType=200 有意义）。
+                  MsgBody:
+                    type: string
+                    description: 消息内容。当为多媒体或组合消息时，为 JSON 字符串（URLDecode 后解析）。
+                  MsgId:
+                    type: integer
+                    format: int64
+                    description: 消息 ID。
+                  MsgSeq:
+                    type: integer
+                    description: 消息 Seq。
+                  Payload:
+                    type: string
+                    description: 扩展字段。
+                  MsgTime:
+                    type: integer
+                    format: int64
+                    description: 服务端收到消息的时间，毫秒时间戳。
+                  IsEmpty:
+                    type: integer
+                    description: 是否是空消息：0 非空；1 删除或过期；2 撤回。
