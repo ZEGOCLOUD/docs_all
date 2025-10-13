@@ -1,0 +1,515 @@
+import { getPlatformData } from "/snippets/utils-content-parser.js"
+
+export const ZIMMessageMap = {
+  'Android': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~java_android~struct~ZIMMessage' target='_blank'>ZIMMessage</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMMessage-class.html' target='_blank'>ZIMMessage</a>,
+  'iOS': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~objective-c_ios~class~ZIMMessage' target='_blank'>ZIMMessage</a>,
+  'mac': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~objective-c_macos~class~ZIMMessage' target='_blank'>ZIMMessage</a>,
+  'window': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~cpp_windows~class~ZIMMessage' target='_blank'>ZIMMessage</a>,
+  'web': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~javascript_web~interface~ZIMMessage' target='_blank'>ZIMMessage</a>,
+}
+export const queryHistoryMessageMap = {
+  'Android': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~java_android~class~ZIM#query-history-message' target='_blank'>queryHistoryMessage</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/queryHistoryMessage.html' target='_blank'>queryHistoryMessage</a>,
+  'iOS': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~objective-c_ios~protocol~ZIM#query-history-message-by-conversation-id-conversation-type-config-callback' target='_blank'>queryHistoryMessageByConversationID</a>,
+  'mac': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~objective-c_macos~protocol~ZIM#query-history-message-by-conversation-id-conversation-type-config-callback' target='_blank'>queryHistoryMessageByConversationID</a>,
+  'window': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~cpp_windows~class~ZIM#query-history-message' target='_blank'>queryHistoryMessage</a>,
+  'web': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~javascript_web~class~ZIM#query-history-message' target='_blank'>queryHistoryMessage</a>,
+}
+export const peerMessageReceivedMap= {
+  'Android': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~java_android~class~ZIMEventHandler#on-peer-message-received' target='_blank'>onPeerMessageReceived</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onPeerMessageReceived.html' target='_blank'>onPeerMessageReceived</a>,
+  'iOS': <a href='http://doc-zh.zego.im/article/api?doc=zim_API~objective-c_ios~protocol~ZIMEventHandler#zim-peer-message-received-info-from-user-id' target='_blank'>peerMessageReceived</a>,
+  'mac': <a href='http://doc-zh.zego.im/article/api?doc=zim_API~objective-c_macos~protocol~ZIMEventHandler#zim-peer-message-received-info-from-user-id' target='_blank'>peerMessageReceived</a>,
+  'window': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~cpp_windows~class~ZIMEventHandler#on-group-message-received' target='_blank'>onPeerMessageReceived</a>,
+  'web': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~javascript_web~interface~ZIMEventHandler#peer-message-received' target='_blank'>peerMessageReceived</a>,
+}
+
+export const messageSentStatusChangedMap= {
+  'Android': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~java_android~class~ZIMEventHandler#on-message-sent-status-changed' target='_blank'>onMessageSentStatusChanged</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onMessageSentStatusChanged.html' target='_blank'>onMessageSentStatusChanged</a>,
+  'iOS': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~objective-c_ios~protocol~ZIMEventHandler#zim-message-sent-status-changed' target='_blank'>messageSentStatusChanged</a>,
+  'mac': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~objective-c_macos~protocol~ZIMEventHandler#zim-message-sent-status-changed' target='_blank'>messageSentStatusChanged</a>,
+  'window': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~cpp_windows~class~ZIMEventHandler#on-message-sent-status-changed' target='_blank'>onMessageSentStatusChanged</a>,
+  'web': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~javascript_web~interface~ZIMEventHandler#message-sent-status-changed' target='_blank'>messageSentStatusChanged</a>,
+}
+
+
+# 在 App 中显示消息
+
+---
+
+## 功能简介
+
+本文介绍了如何使用 ZIM SDK 在 App 中显示消息。
+
+## 前提条件
+
+已在项目中集成了 ZIM SDK 并实现了基本收发消息的功能，详情请参考 [快速开始 - 实现基本收发消息](../Send%20and%20receive%20messages.mdx)。
+
+## 实现步骤
+
+以单聊会话为例，跳转到聊天页面时，需要保存对应单聊的 **conversationID**（对方的 userID）并维护一个用于保存当前会话的消息列表 `myMessageList`。
+
+在获取消息数据前，还需要实现一个 `addMessage` 工具方法用于合并消息数据。
+
+
+:::if{props.platform="undefined"}
+```java
+public void addMessage(List<ZIMMessage> addList) {
+    if (addList == null || addList.isEmpty()) return;
+
+    List<ZIMMessage> mutableList = new ArrayList<>();
+    if (myMessageList != null) {
+        mutableList.addAll(myMessageList);
+    }
+
+    for (ZIMMessage newMsg : addList) {
+        boolean replaced = false;
+        for (int i = 0; i < mutableList.size(); i++) {
+            ZIMMessage oldMsg = mutableList.get(i);
+            if ((newMsg.getMessageID() != null && newMsg.getMessageID().equals(oldMsg.getMessageID())) ||
+                (newMsg.getLocalMessageID() != null && newMsg.getLocalMessageID().equals(oldMsg.getLocalMessageID()))) {
+                mutableList.set(i, newMsg);
+                replaced = true;
+                break;
+            }
+        }
+        if (!replaced) {
+            mutableList.add(newMsg);
+        }
+    }
+
+    mutableList.sort(Comparator.comparingLong(ZIMMessage::getOrderKey));
+    myMessageList = mutableList;
+}
+
+```
+:::
+:::if{props.platform="iOS|mac"}
+```oc
+// 有新消息时，通过该方法将消息更新到消息列表中
+- (void)addMessage:(NSArray<ZIMMessage *> *)addList {
+    if (!addList || addList.count == 0) return;
+    
+    NSMutableArray<ZIMMessage *> *mutableList = [self.myMessageList mutableCopy];
+    if (!mutableList) {
+        mutableList = [NSMutableArray array];
+    }
+    
+    for (ZIMMessage *newMsg in addList) {
+        BOOL replaced = NO;
+        for (NSInteger i = 0; i < mutableList.count; i++) {
+            ZIMMessage *oldMsg = mutableList[i];
+            if ((newMsg.messageID && oldMsg.messageID && [newMsg.messageID isEqualToString:oldMsg.messageID]) ||
+                (newMsg.localMessageID && oldMsg.localMessageID && [newMsg.localMessageID isEqualToString:oldMsg.localMessageID])) {
+                // 替换已有消息
+                mutableList[i] = newMsg;
+                replaced = YES;
+                break;
+            }
+        }
+        if (!replaced) {
+            [mutableList addObject:newMsg];
+        }
+    }
+    
+    // 根据 orderKey 从小到大排序
+    [mutableList sortUsingComparator:^NSComparisonResult(ZIMMessage *msg1, ZIMMessage *msg2) {
+        if (msg1.orderKey < msg2.orderKey) return NSOrderedAscending;
+        if (msg1.orderKey > msg2.orderKey) return NSOrderedDescending;
+        return NSOrderedSame;
+    }];
+    
+    self.myMessageList = [mutableList copy];
+}
+```
+:::
+
+:::if{props.platform="window"}
+```cpp
+void addMessage(const std::vector<std::shared_ptr<ZIMMessage>>& addList) {
+    if (addList.empty()) return;
+
+    std::vector<std::shared_ptr<ZIMMessage>> mutableList = myMessageList;
+
+    for (auto& newMsg : addList) {
+        bool replaced = false;
+        for (size_t i = 0; i < mutableList.size(); ++i) {
+            auto& oldMsg = mutableList[i];
+            if ((!newMsg->messageID.empty() && newMsg->messageID == oldMsg->messageID) ||
+                (!newMsg->localMessageID.empty() && newMsg->localMessageID == oldMsg->localMessageID)) {
+                mutableList[i] = newMsg;
+                replaced = true;
+                break;
+            }
+        }
+        if (!replaced) {
+            mutableList.push_back(newMsg);
+        }
+    }
+
+    std::sort(mutableList.begin(), mutableList.end(),
+              [](const std::shared_ptr<ZIMMessage>& a, const std::shared_ptr<ZIMMessage>& b) {
+                  return a->orderKey < b->orderKey;
+              });
+
+    myMessageList = mutableList;
+}
+
+```
+:::
+:::if{props.platform="web"}
+```ts
+function addMessage(addList: ZIMMessage[]) {
+    if (!addList || addList.length === 0) return;
+
+    const mutableList: ZIMMessage[] = myMessageList ? [...myMessageList] : [];
+
+    for (const newMsg of addList) {
+        let replaced = false;
+        for (let i = 0; i < mutableList.length; i++) {
+            const oldMsg = mutableList[i];
+            if ((newMsg.messageID && oldMsg.messageID && newMsg.messageID === oldMsg.messageID) ||
+                (newMsg.localMessageID && oldMsg.localMessageID && newMsg.localMessageID === oldMsg.localMessageID)) {
+                mutableList[i] = newMsg;
+                replaced = true;
+                break;
+            }
+        }
+        if (!replaced) {
+            mutableList.push(newMsg);
+        }
+    }
+
+    mutableList.sort((a, b) => a.orderKey - b.orderKey);
+    myMessageList = mutableList;
+}
+
+```
+:::
+:::if{props.platform="Flutter"}
+```dart
+
+void addMessage(List<ZIMMessage>? addList) {
+  if (addList == null || addList.isEmpty) return;
+
+  List<ZIMMessage> mutableList = myMessageList != null ? List.from(myMessageList!) : [];
+
+  for (var newMsg in addList) {
+    bool replaced = false;
+    for (var i = 0; i < mutableList.length; i++) {
+      var oldMsg = mutableList[i];
+      if ((newMsg.messageID != null && oldMsg.messageID != null && newMsg.messageID == oldMsg.messageID) ||
+          (newMsg.localMessageID != null && oldMsg.localMessageID != null && newMsg.localMessageID == oldMsg.localMessageID)) {
+        mutableList[i] = newMsg;
+        replaced = true;
+        break;
+      }
+    }
+    if (!replaced) {
+      mutableList.add(newMsg);
+    }
+  }
+
+  mutableList.sort((a, b) => a.orderKey.compareTo(b.orderKey));
+  myMessageList = mutableList;
+}
+```
+:::
+
+
+<Note title="说明">
+
+每次调用消息相关的接口时（比如以下展示的接口），会得到一个消息列表 `ZIMMessage[]`。获得的消息列表需要进行合并数据的操作，从而得到一个无重复消息、有序的消息列表用于在消息页面进行渲染。消息排序规则为根据 {getPlatformData(props,ZIMMessageMap)} 中的 `orderkey` 属性进行排序（orderkey 越大表示当前消息越新）；去重规则为根据消息的 `localMessageID` 判断消息对象是否为同一条消息，重复时新数据替换旧数据。
+
+</Note>
+
+### 获取消息数据渲染到聊天界面
+
+1. 查询历史消息展示在聊天界面。
+
+调用 {getPlatformData(props,queryHistoryMessageMap)} 接口从新分页到旧分页进行查询，获取双方历史发送的消息。
+
+:::if{props.platform=undefined}
+```java
+
+ZIMMessageQueryConfig queryConfig = new ZIMMessageQueryConfig();
+queryConfig.count = 20;
+queryConfig.nextMessage = null; // 首次查询时为空，需要更多历史消息时传入最早消息
+
+zim.queryHistoryMessage(
+        myConversationID,
+        ZIMConversationType.PEER,
+        queryConfig,
+        (conversationID, conversationType, messageList, errorInfo) -> {
+            addMessage(messageList);
+            // 更新 UI
+        });
+```
+:::
+:::if{props.platform="iOS|mac"}
+```oc
+ZIMMessageQueryConfig *queryConfig = [[ZIMMessageQueryConfig alloc] init];
+queryConfig.count = 20;//
+queryConfig.nextMessage = nil;//首次查询时传空，需要更多历史消息时，传入消息列表中最早的消息再次调用
+[zim queryHistoryMessageByConversationID:myConversationID 
+            conversationType:ZIMConversationTypePeer 
+            config:queryConfig 
+            callback:callback:^(NSString * _Nonnull conversationID, ZIMConversationType conversationType, NSArray<ZIMMessage *> * _Nonnull messageList, ZIMError * _Nonnull errorInfo){
+    [self addMessage:messageList];            
+    // update UI
+}];
+```
+:::
+:::if{props.platform="window|mac"}
+```cpp
+
+ZIMMessageQueryConfig queryConfig;
+queryConfig.count = 20;
+queryConfig.nextMessage = nullptr; // 首次查询为空
+
+zim->queryHistoryMessage(
+    myConversationID,
+    ZIMConversationType::Peer,
+    queryConfig,
+    [this](const std::string& conversationID, ZIMConversationType type,
+           const std::vector<ZIMMessage>& messageList, const ZIMError& errorInfo) {
+        addMessage(messageList);
+        refreshUI(); // 自定义 UI 刷新函数
+    });
+    
+```
+:::
+:::if{props.platform="web"}
+```ts
+const queryConfig: ZIMMessageQueryConfig = {
+  count: 20,
+  nextMessage: null // 首次查询
+};
+
+zim.queryHistoryMessage(
+  myConversationID,
+  ZIMConversationType.Peer,
+  queryConfig,
+  (conversationID, conversationType, messageList, errorInfo) => {
+    addMessage(messageList);
+    updateUI(); // 自定义刷新消息列表函数
+  }
+);
+
+```
+:::
+:::if{props.platform="Flutter"}
+
+```dart
+
+final queryConfig = ZIMMessageQueryConfig();
+queryConfig.count = 20;
+queryConfig.nextMessage = null; // 首次查询
+
+zim.queryHistoryMessage(
+  myConversationID,
+  ZIMConversationType.peer,
+  queryConfig,
+  (String conversationID, ZIMConversationType conversationType,
+      List<ZIMMessage> messageList, ZIMError errorInfo) {
+    addMessage(messageList);
+
+    // 更新 UI
+  },
+);
+```
+:::
+
+2. 监听收到的实时消息并展示在聊天界面。
+
+监听 {getPlatformData(props,peerMessageReceivedMap)}，获取实时的聊天消息，并更新消息到聊天界面。
+
+:::if{props.platform=undefined}
+
+```java
+ public void onPeerMessageReceived(ZIM zim, List<ZIMMessage> messageList, 
+                                  ZIMMessageReceivedInfo info, String fromUserID) {
+    // 只处理当前会话的消息
+    if (!fromUserID.equals(myConversationID)) {
+        return; // 非当前会话的消息忽略
+    }
+
+    // 合并消息到消息列表
+    addMessage(messageList);
+
+    // 更新 UI，比如刷新 RecyclerView
+    runOnUiThread(() -> {
+        myAdapter.notifyDataSetChanged();
+        if (!myMessageList.isEmpty()) {
+            recyclerView.scrollToPosition(myMessageList.size() - 1);
+        }
+    });
+}
+
+```
+:::
+:::if{props.platform="iOS|mac"}
+```oc
+
+- (void)zim:(ZIM *)zim
+    peerMessageReceived:(NSArray<ZIMMessage *> *)messageList
+                   info:(ZIMMessageReceivedInfo *)info
+             fromUserID:(NSString *)fromUserID{
+     if(fromUserID != myConversationID){
+         return;// 非当前会话收到的聊天消息，忽略
+     }
+     [self addMessage: messageList];
+     // update UI
+ }
+```
+:::
+:::if{props.platform="window"}
+```cpp
+
+void onPeerMessageReceived(ZIM* zim, const std::vector<ZIMMessage>& messageList, 
+                           const ZIMMessageReceivedInfo& info, const std::string& fromUserID) {
+    // 只处理当前会话消息
+    if (fromUserID != myConversationID) {
+        return; // 非当前会话消息忽略
+    }
+
+    // 合并消息到消息列表
+    addMessage(messageList);
+
+    // 更新 UI
+    // 假设有刷新函数 refreshUI()
+    refreshUI();
+}
+
+```
+:::
+:::if{props.platform="web"}
+```ts
+
+function onPeerMessageReceived(
+    zim: ZIM,
+    messageList: ZIMMessage[],
+    info: ZIMMessageReceivedInfo,
+    fromUserID: string
+) {
+    // 只处理当前会话消息
+    if (fromUserID !== myConversationID) return;
+
+    // 合并消息到消息列表
+    addMessage(messageList);
+
+    // 更新 UI，例如重新渲染消息列表
+    updateUI();
+}
+
+
+```
+:::
+:::if{props.platform="Flutter"}
+```dart
+
+void onPeerMessageReceived(
+    ZIM zim,
+    List<ZIMMessage> messageList,
+    ZIMMessageReceivedInfo info,
+    String fromUserID,
+) {
+  // 只处理当前会话消息
+  if (fromUserID != myConversationID) return;
+
+  // 合并消息到消息列表
+  addMessage(messageList);
+
+  // 更新 UI
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    setState(() {});
+    if (myMessageList.isNotEmpty) {
+      scrollController.jumpTo(scrollController.position.maxScrollExtent);
+    }
+  });
+}
+```
+:::
+3. 发送消息时将消息展示到聊天页面，并监听消息发送的状态。
+
+监听 {getPlatformData(props,messageSentStatusChangedMap)} ，获取当前用户发送的消息发送状态的变化（发送中、发送成功、发送失败），并更新 UI。
+
+:::if{props.platform=undefined}
+```java
+
+@Override
+public void onMessageSentStatusChanged(List<ZIMMessageSentStatusChangeInfo> messageSentStatusChangeInfoList) {
+    for (ZIMMessageSentStatusChangeInfo info : messageSentStatusChangeInfoList) {
+        if (!info.getMessage().getConversationID().equals(myConversationID)) {
+            continue;
+        }
+        addMessage(Collections.singletonList(info.getMessage()));
+    }
+    // 更新 UI
+    runOnUiThread(() -> {
+        myAdapter.notifyDataSetChanged();
+        if (!myMessageList.isEmpty()) {
+            recyclerView.scrollToPosition(myMessageList.size() - 1);
+        }
+    });
+}
+
+
+```
+:::
+:::if{props.platform="iOS|mac"}
+```oc
+- (void)zim:(ZIM *)zim
+    messageSentStatusChanged:
+        (NSArray<ZIMMessageSentStatusChangeInfo *> *)messageSentStatusChangeInfoList{
+       for(ZIMMessageSentStatusChangeInfo *info in messageSentStatusChangeInfoList){
+           if(info.message.conversationID != myConversationID){
+               continue;
+           }
+           [self addMessage:info.message];
+       }
+       // update UI
+}
+
+```
+:::
+:::if{props.platform="window"}
+```cpp
+void onMessageSentStatusChanged(const std::vector<ZIMMessageSentStatusChangeInfo>& messageSentStatusChangeInfoList) {
+    for (const auto& info : messageSentStatusChangeInfoList) {
+        if (info.message.conversationID != myConversationID) continue;
+        addMessage({info.message}); // 假设 addMessage 支持 vector 或 list
+    }
+    refreshUI(); // 自定义刷新 UI 函数
+}
+
+
+```
+:::
+:::if{props.platform="web"}
+```ts
+zim.onMessageSentStatusChanged = (messageSentStatusChangeInfoList: ZIMMessageSentStatusChangeInfo[]) => {
+    for (const info of messageSentStatusChangeInfoList) {
+        if (info.message.conversationID !== myConversationID) continue;
+        addMessage([info.message]);
+    }
+    updateUI(); // 自定义刷新 UI 函数
+};
+
+
+```
+:::
+:::if{props.platform="Flutter"}
+```dart
+void onMessageSentStatusChanged(List<ZIMMessageSentStatusChangeInfo> messageSentStatusChangeInfoList) {
+  for (var info in messageSentStatusChangeInfoList) {
+    if (info.message.conversationID != myConversationID) continue;
+    addMessage([info.message]);
+  }
+  
+  // 更新 UI
+}
+```
+:::
