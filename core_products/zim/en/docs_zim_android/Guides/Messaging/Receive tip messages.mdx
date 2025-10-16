@@ -237,12 +237,20 @@ public void onGroupMessageReceived(ZIM zim, List<ZIMMessage> messageList, ZIMMes
                     // ...  The business logic.
                 } else if (tipsMessage.event == ZIMTipsMessageEvent.GROUP_MEMBER_INFO_CHANGED) {
                     ZIMTipsMessageGroupMemberChangeInfo memberInfo = (ZIMTipsMessageGroupMemberChangeInfo) tipsMessage.changeInfo;
-                    if (memberInfo.type == ZIMTipsMessageChangeInfoType.GROUP_OWNER_TRANSFERRED) {
-                        ZIMGroupMemberSimpleInfo newOwnerInfo = memberInfo.groupNewOwner;
+
+                    // ... The business logic.
+                } else if (tipsMessage.getEvent() == ZIMTipsMessageEvent.GROUP_LEFT ||
+                    tipsMessage.getEvent() == ZIMTipsMessageEvent.GROUP_KICKED_OUT) {
+                    ZIMTipsMessageGroupMemberChangeInfo info = (ZIMTipsMessageGroupMemberChangeInfo) tipsMessage.getChangeInfo();
+                    if (info != null && info.groupNewOwner != null) {
+                        ZIMUserInfo newOwnerInfo = info.groupNewOwner;
+                        // When the user leaves or is kicked out as the group owner, this logic will be executed.
+                        // The new owner information can be obtained from newOwnerInfo.
+                        // It can be used to show that the target user has left/been removed from the group, and the new owner has become the new group owner.
+                        // ... The business logic.
                     }
-                    // ...  The business logic. 
                 }
-                // ... Other business logic.
+                // ... Other logic.
             }
         }
     }
@@ -282,69 +290,89 @@ void zim_event_handler::onGroupMessageReceived(
                         auto new_group_avatar_url = info->getGroupAvatarUrl();
                     }
                 }
-            
+
                 ......//  The business logic.
             } else if (tips_message->getEvent() == zim::ZIMTipsMessageEvent::ZIM_TIPS_MESSAGE_EVENT_GROUP_MEMBER_INFO_CHANGED) {
                 // It is a group member information change event.
                 auto info = std::static_pointer_cast<zim::ZIMTipsMessageGroupMemberChangeInfo>(tips_message->getChangeInfo());
                 if (info->type == ZIM_TIPS_MESSAGE_CHANGE_INFO_TYPE_GROUP_OWNER_TRANSFERRED) {
-                    // 群主转移
+                    // Group ownership transfer.
                     auto new_owner_info = info->groupNewOwner;
                 }
                 ......// The business logic.
+            } else if (tips_message->getEvent() == ZIMTipsMessageEvent.ZIM_TIPS_MESSAGE_EVENT_GROUP_LEFT ||
+                       tips_message->getEvent() == ZIMTipsMessageEvent.ZIM_TIPS_MESSAGE_EVENT_GROUP_KICKED_OUT) {
+                auto info = std::static_pointer_cast<zim::ZIMTipsMessageGroupMemberChangeInfo>(tips_message->getChangeInfo());
+                if (info && info->groupNewOwner) {
+                    auto new_owner_info = info->groupNewOwner;
+                    // When the user leaves or is kicked out as the group owner, this logic will be executed.
+                    // The new owner information can be obtained from newOwnerInfo.
+                    // It can be used to show that the target user has left/been removed from the group, and the new owner has become the new group owner.
+                    ......
+                }
             }
             ......
         }
     }
 
 }
+
 ```
 :::
+
 :::if{props.platform="Flutter"}
 ```dart
 // Receive group messages
 ZIMEventHandler.onGroupMessageReceived = (ZIM zim, List<ZIMMessage> messageList, ZIMMessageReceivedInfo info, String fromGroupID){
     for (ZIMMessage message in messageList) {
         // Message is a tip
-        if(message.type == ZIMMessageType.tips){
-            ZIMTipsMessage tipsMessage = message as ZIMTipsMessage;
+      if(message.type == ZIMMessageType.tips){
+        ZIMTipsMessage tipsMessage = message as ZIMTipsMessage;
             // If the tip message type is group info changed
             if (tipsMessage.event == ZIMTipsMessageEvent.groupInfoChanged) {
-                ZIMTipsMessageGroupChangeInfo info = tipsMessage.changeInfo as ZIMTipsMessageGroupChangeInfo;
+          ZIMTipsMessageGroupChangeInfo info = tipsMessage.changeInfo as ZIMTipsMessageGroupChangeInfo;
                 if (info.type == ZIMTipsMessageChangeInfoType.groupDataChanged) {
                     if ((info.groupDataFlag & ZIMGroupDataFlag.groupName) != 0) {
                         // Group name changed
-                        String newGroupName = info.groupName;
-                    }
+              String newGroupName = info.groupName;
+            }
                     if ((info.groupDataFlag & ZIMGroupDataFlag.groupNotice) != 0) {
                         // Group notice changed
-                        String groupNotice = info.groupNotice;
-                    }
+              String groupNotice = info.groupNotice;
+            }
 
                     if ((info.groupDataFlag & ZIMGroupDataFlag.avatarUrl) != 0) {
                         // Group avatar changed
-                        String newGroupAvatarUrl = info.groupAvatarUrl;
-                    }
-                }
-            } else if (tipsMessage.event == ZIMTipsMessageEvent.groupMemberInfoChanged) {
-                ZIMTipsMessageGroupMemberChangeInfo memberInfo = tipsMessage.changeInfo as ZIMTipsMessageGroupMemberChangeInfo;
-                if (memberInfo.type == ZIMTipsMessageChangeInfoType.groupOwnerTransferred) {
-                  ZIMGroupMemberSimpleInfo newOwnerInfo = memberInfo.groupNewOwner;
-                }
-                // ... Business logic
+              String newGroupAvatarUrl = info.groupAvatarUrl;
             }
-            // ... Other logic
+          }
+        } else if (tipsMessage.event == ZIMTipsMessageEvent.groupMemberInfoChanged){
+          ZIMTipsMessageGroupMemberChangeInfo memberInfo =  tipsMessage.changeInfo as ZIMTipsMessageGroupMemberChangeInfo;
+          // ... The business logic.
+        } else if (tipsMessage.event == ZIMTipsMessageEvent.groupLeft ||
+            tipsMessage.event == ZIMTipsMessageEvent.groupKickedOut) {
+            ZIMTipsMessageGroupMemberChangeInfo info = tipsMessage.changeInfo as ZIMTipsMessageGroupMemberChangeInfo;
+            if (info != null && info.groupNewOwner != null) {
+                ZIMUserInfo newOwnerInfo = info.groupNewOwner;
+                // When the user leaves or is kicked out as the group owner, this logic will be executed.
+                // The new owner information can be obtained from newOwnerInfo.
+                // It can be used to show that the target user has left/been removed from the group, and the new owner has become the new group owner.
+                // ... The business logic.
+            }
         }
+            // ... Other logic
+      }
     }
 };
 ```
 :::
+
 :::if{props.platform="Web"}
 ```typescript
-// Receive a group message.
-zim.on('groupMessageReceived', (zim, { messageList, info, fromConversationID }) => {
-    messageList.forEach((message) => {
-        // It is a tip message.
+// Receive group messages
+zim.on('groupMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
+    data.messageList.forEach((message) => {
+        // The message is a Tips message
         if (message.type == 32) {
             // It is a group profile change event.
             if (message.event == 7) {
@@ -370,10 +398,63 @@ zim.on('groupMessageReceived', (zim, { messageList, info, fromConversationID }) 
             } else if (message.event == 8) {
                 // It is a group member information change event.
                 const info = message.changeInfo;
-                if (info.type == 10) {
+                // The business logic.
+            } else if (tipsMessage.event === 5 || tipsMessage.event === 6) {
+                const info = tipsMessage.changeInfo as ZIMTipsMessageGroupMemberChangeInfo;
+                if (info && info.groupNewOwner) {
                     const newOwnerInfo = info.groupNewOwner;
+                    // When the user leaves or is kicked out as the group owner, this logic will be executed.
+                    // The new owner information can be obtained from newOwnerInfo.
+                    // It can be used to show that the target user has left/been removed from the group, and the new owner has become the new group owner.
+                    // ... The business logic.
+                }
+            }
+        }
+    });
+});
+```
+:::
+:::if{props.platform="UTS"}
+```typescript
+// Receive group messages
+zim.onGroupMessageReceived((data) => {
+    data.messageList.forEach((message) => {
+        // The message is a Tips message
+        if (message.type == 32) {
+            // It is a group profile change event.
+            if (message.event == 7) {
+                const info = message.changeInfo;
+                // Server API modifies multiple attributes of group data.
+                if (info.type == 1 && info.groupDataFlag) {
+                    if (info.groupDataFlag & 1 == 1) {
+                        // Group name change.
+                        const groupName = info.groupName;
+                    }
+
+                    if (info.groupDataFlag & 2 == 2) {
+                        // Group notice change.
+                        const groupNotice = info.groupNotice;
+                    }
+
+                    if (info.groupDataFlag & 4 == 4) {
+                        // Group avatar change.
+                        const groupAvatarUrl = info.groupAvatarUrl;
+                    }
                 }
                 // The business logic.
+            } else if (message.event == 8) {
+                // It is a group member information change event.
+                const info = message.changeInfo;
+                // The business logic.
+            } else if (tipsMessage.event === 5 || tipsMessage.event === 6) {
+                const info = tipsMessage.changeInfo as ZIMTipsMessageGroupMemberChangeInfo;
+                if (info && info.groupNewOwner) {
+                    const newOwnerInfo = info.groupNewOwner;
+                    // When the user leaves or is kicked out as the group owner, this logic will be executed.
+                    // The new owner information can be obtained from newOwnerInfo.
+                    // It can be used to show that the target user has left/been removed from the group, and the new owner has become the new group owner.
+                    // ... The business logic.
+                }
             }
         }
     });
@@ -381,13 +462,13 @@ zim.on('groupMessageReceived', (zim, { messageList, info, fromConversationID }) 
 ```
 :::
 :::if{props.platform="iOS|mac"}
-```objc
+```oc
 // Receive a group message.
 - (void)groupMessageReceived:(ZIM *)zim 
-                 messageList:(NSArray<ZIMMessage *> *)messageList
-                  info:(ZIMMessageReceivedInfo *)info 
+                 messageList:(NSArray<ZIMMessage *> *)messageList 
+                  info:(ZIMMessageReceivedInfo *)info
                   fromGroupID:(NSString *)fromGroupID {
-    
+
     for (ZIMMessage *message in messageList) {
         // It is a tip message.
         if (message.type == ZIMMessageTypeTips) {
@@ -395,24 +476,24 @@ zim.on('groupMessageReceived', (zim, { messageList, info, fromConversationID }) 
             // It is a group profile change event.
             if (tipsMessage.event == ZIMTipsMessageEventGroupInfoChanged) {
                 ZIMTipsMessageGroupChangeInfo *info = (ZIMTipsMessageGroupChangeInfo *)tipsMessage.changeInfo;
-                
+
                 if (info.type == ZIMTipsMessageChangeInfoTypeGroupDataChanged) {
                     if (info.groupDataFlag & ZIMGroupDataFlagName) {
                         // Group name change.
                         NSString *newGroupName = info.groupName;
                     }
-                    
+
                     if (info.groupDataFlag & ZIMGroupDataFlagNotice) {
                         // Group notice change.
                         NSString *newGroupNotice = info.groupNotice;
                     }
-                    
+
                     if (info.groupDataFlag & ZIMGroupDataFlagAvatarUrl) {
                         // Group avatar change.
                         NSString *newGroupAvatarUrl = info.groupAvatarUrl;
                     }
                 }
-                
+
                 // The business logic.
             } else if (tipsMessage.event == ZIMTipsMessageEventGroupMemberInfoChanged) {
                 // It is a group member information change event.
@@ -421,9 +502,19 @@ zim.on('groupMessageReceived', (zim, { messageList, info, fromConversationID }) 
                     ZIMGroupMemberSimpleInfo *newOwnerInfo = info.groupNewOwner;
                 }
                 // The business logic.
+            } else if (tipsMessage.event == ZIMTipsMessageEventGroupLeft ||
+                tipsMessage.event == ZIMTipsMessageEventGroupKickedOut) {
+                ZIMTipsMessageGroupMemberChangeInfo *info = (ZIMTipsMessageGroupMemberChangeInfo *)tipsMessage.changeInfo;
+                if (info != nil && info.groupNewOwner != nil) {
+                    ZIMUserInfo *newOwnerInfo = info.groupNewOwner;
+                    // When the user leaves or is kicked out as the group owner, this logic will be executed.
+                    // The new owner information can be obtained from newOwnerInfo.
+                    // It can be used to show that the target user has left/been removed from the group, and the new owner has become the new group owner.
+                    // ... The business logic.
+                }
             }
-            
-            // Other business logic.
+
+            // Other logic.
         }
     }
 }
