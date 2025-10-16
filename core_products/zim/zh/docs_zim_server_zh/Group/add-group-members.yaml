@@ -34,11 +34,12 @@ paths:
         |---------|---------|---------|
         | [OnGroupMemberStateChanged](https://doc-zh.zego.im/article/api?doc=zim_API~cs_unity3d~class~ZIMEventHandler#on-group-member-state-changed) | [groupMemberStateChanged](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_uni-app~interface~ZIMEventHandler#group-member-state-changed) | [groupMemberStateChanged](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_harmony~interface~ZIMEventHandler#group-member-state-changed) |
 
-        <Note title="说明">`UserIds` 与 `GroupMemberInfos` 作用相同，二者选其一；当 `GroupMemberInfos` 为空时，`UserIds` 生效；若列表包含 `FromUserId`，会被剔除。</Note>
-
-        <Note title="说明">FromUserId、GroupId 和 UserIds 仅支持数字、英文字符和 {'!','#','$','%','&','(',')','+','\'',':',';','<','=','.','>','?','@','[',']','^','_','{','}','|','~'}。</Note>
-
         <Note title="说明">调用频率限制：1 次/秒，群级别限制。如需调整，请联系 ZEGO 技术支持。</Note>
+        <Note title="说明">以下 `FromUserId` 和 `UserId` 对应的用户已在客户端调用 `login` 方法登录 ZIM 服务，或已调用 [服务端 API](./batch-register-users.mdx) 完成注册。</Note>
+        <Note title="说明">
+        FromUserId、GroupId、NewOwner 仅支持数字，英文字符和 `'!'，'#'，'$'，'%'，'&'，'('，')'，'+'，''，':'，';'，'<'，'='，'.'，'>'，'?'
+        ，'@'，'['，']'，'^'，'_'，'{'，'}'，'|'，'~'`。
+        </Note>
       operationId: add-group-members
       parameters:
         - name: Action
@@ -64,6 +65,14 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/InviteUsersIntoGroupRequest'
+            example:
+              FromUserId: "zego_user"
+              GroupId: "groupA"
+              GroupMemberInfos:
+                - UserId: "user_a"
+                  EnterGroupTime: 123
+                - UserId: "user_b"
+                  EnterGroupTime: 0
       responses:
         '200':
           description: OK
@@ -76,35 +85,62 @@ components:
   schemas:
     InviteUsersIntoGroupRequest:
       type: object
-      required: [FromUserId, GroupId]
+      required: [FromUserId, GroupId, UserIds, GroupMemberInfos]
       properties:
         FromUserId:
           type: string
-          description: 操作者用户 ID。
+          description: 操作者用户 ID。用户需已注册 ZIM 服务。
+          example: "zego_user"
         GroupId:
           type: string
           description: 群 ID。
+          example: "groupA"
         UserIds:
           type: array
-          description: 加入群的用户 ID 列表，默认最大支持 100 个。
+          description: |
+            加入群的用户 ID 列表，默认最大支持 100 个用户 ID。
+            > 说明
+            >
+            > 若数组包含与 FromUserId 一样的值，该值会被剔除。
+            >
+            > 此参数与 GroupMemberInfos 作用相同，二者选其一即可。
+            >
+            > 此参数仅在 GroupMemberInfos 长度为 0 时有效。
           items:
             type: string
         GroupMemberInfos:
           type: array
-          description: 加入群的用户信息列表，默认最大支持 100 个。
+          description: |
+            加入群的用户信息列表，默认最大支持 100 个用户信息。
+
+            此参数与 UserIds 作用相同，二者选其一即可。
           items:
             type: object
+            required: [UserId]
             properties:
               UserId:
                 type: string
-                description: 加入群组的用户 ID。
+                description: |
+                  加入群组的用户 ID。
+                  > 说明
+                  >
+                  > 若此参数与 FromUserId 相同，则会被剔除。
+                  example: "userA"
               EnterGroupTime:
-                type: integer
-                format: int64
-                description: 进群时间戳（毫秒），0或不传为当前时间；不得大于当前时间。
+                type: number
+                description: |
+                  进群时间戳（毫秒级别）。
+
+                  - 0 或不传：使用当前时间戳。
+                  - 其他：不可以大于当前时间。
+                example: 123
               IsInvite:
-                type: integer
-                description: 入群模式：0 直接拉入；1 需要同意。
+                type: number
+                description: |
+                  用户的入群模式。
+
+                  - 0：（默认）邀请用户即可直接将对方拉入群组，无需对方同意。
+                  - 1：用户收到邀请后，需要同意才能入群。
                 enum: [0, 1]
     InviteUsersIntoGroupResponse:
       type: object
@@ -113,6 +149,8 @@ components:
           type: integer
           description: |
             返回码。
+
+            以下仅列出了接口业务逻辑相关的返回码，完整返回码请参考 [全局返回码](/zim-server/return-codes)。
             <table>
             <thead><tr><th>返回码</th><th>说明</th><th>处理建议</th></tr></thead>
             <tbody>
@@ -133,15 +171,23 @@ components:
           example: "343649807833778782"
         ErrorUsers:
           type: array
-          description: 失败列表（部分失败时返回）。
+          description: |
+            失败列表。
+            <ul>
+            <li>Code 为 0：</li>
+            <li>ErrorUsers 为空，全部指定用户邀请成功。</li>
+            <li>ErrorUsers 不为空，表示部分指定用户邀请失败，请参考 SubCode 处理。</li>
+            <li>Code 不为 0：</li>
+            <li>ErrorUsers 为空，表示参数错误、接口频率限制、系统错误。</li>
+            <li>ErrorUsers 不为空，表示全部指定用户邀请失败。</li></ul>
           items:
             type: object
             properties:
               UserId:
                 type: string
-                description: 加入失败的用户 ID。
+                description: 邀请失败的用户 ID。
                 example: "usera"
               SubCode:
                 type: integer
-                description: 具体失败返回码。
+                description: 邀请失败返回码。
                 example: 660000002
