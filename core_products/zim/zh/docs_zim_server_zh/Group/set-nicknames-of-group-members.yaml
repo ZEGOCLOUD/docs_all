@@ -20,9 +20,27 @@ paths:
       description: |
         通过该接口批量修改群内成员在该群中的昵称。默认单次最多可修改 20 名用户的昵称，如需调整，请联系 ZEGO 技术支持。
 
-        <Note title="说明">以下 FromUserId 和 UserId 对应的用户需已登录或已注册。</Note>
+        昵称设置成功后，群内成员通过以下 ZIM SDK 的回调接口，收到相关通知：
+        | iOS-25% | Android-25% | macOS-25% | Windows-25% |
+        |-----|---------|--------|---------|
+        | [groupMemberInfoUpdated](https://doc-zh.zego.im/article/api?doc=zim_API~objective-c_ios~protocol~ZIMEventHandler#zim-group-member-info-updated-operated-info-group-id) | [onGroupMemberInfoUpdated](https://doc-zh.zego.im/article/api?doc=zim_API~java_android~class~ZIMEventHandler#on-group-member-info-updated) | [groupMemberInfoUpdated](https://doc-zh.zego.im/article/api?doc=zim_API~objective-c_macos~protocol~ZIMEventHandler#zim-group-member-info-updated-operated-info-group-id) | [onGroupMemberInfoUpdated](https://doc-zh.zego.im/article/api?doc=zim_API~cpp_windows~class~ZIMEventHandler#on-group-member-info-updated) |
+        
+        | Web-25% | 小程序-25% | Flutter-25% | React Native-25% |
+        |---------|-----|---------|---------|
+        | [groupMemberInfoUpdated](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_web~interface~ZIMEventHandler#group-member-info-updated) | [groupMemberInfoUpdated](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_wxxcx~interface~ZIMEventHandler#group-member-info-updated) | [onGroupMemberInfoUpdated](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onGroupMemberInfoUpdated.html) | [groupMemberInfoUpdated](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_react-native~interface~ZIMEventHandler#group-member-info-updated) |
+        
+        | Unity3D-25% | uni-app \| uni-app x-25% | HarmonyOS-25% |
+        |---------|---------|---------|
+        | [OnGroupMemberInfoUpdated](https://doc-zh.zego.im/article/api?doc=zim_API~cs_unity3d~class~ZIMEventHandler#on-group-member-info-updated) | [groupMemberInfoUpdated](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_uni-app~interface~ZIMEventHandler#group-member-info-updated) | [groupMemberInfoUpdated](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_harmony~interface~ZIMEventHandler#group-member-info-updated) |
 
-        <Note title="说明">调用频率限制：1 次/秒（群级别）。</Note>
+
+        <Note title="说明">以下 `FromUserId` 和 `UserId` 对应的用户已在客户端调用 `login` 方法登录 ZIM 服务，或已调用 [服务端 API](./batch-register-users.mdx) 完成注册。</Note>
+
+        <Note title="说明">1 次/秒，群级别限制。如需调整，请联系 ZEGO 技术支持。</Note>
+        <Note title="说明">
+        FromUserId、GroupId、UserIds 和 Nickname 仅支持数字，英文字符和 `'!'，'#'，'$'，'%'，'&'，'('，')'，'+'，''，':'，';'，'<'，'='，'.'，'>'，'?'
+        ，'@'，'['，']'，'^'，'_'，'{'，'}'，'|'，'~'`。
+        </Note>
       operationId: set-nicknames-of-group-members
       parameters:
         - name: Action
@@ -48,6 +66,14 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SetGroupMembersNicknameRequest'
+            example:
+              FromUserId: "zego_user"
+              GroupId: "groupA"
+              UserIds:
+                - UserId: "usera"
+                  Nickname: "nicknamea"
+                - UserId: "userb"
+                  Nickname: "nicknameb"
       responses:
         '200':
           description: OK
@@ -66,12 +92,12 @@ components:
           type: string
           description: 操作者用户 ID。用户需已注册 ZIM 服务。
           maxLength: 32
-          example: "operator_user"
+          example: "zego_user"
         GroupId:
           type: string
           description: 群组 ID。
           maxLength: 32
-          example: "group123"
+          example: "groupA"
         UserIds:
           type: array
           description: 需要被设置昵称的用户列表。
@@ -83,19 +109,21 @@ components:
                 type: string
                 description: 用户 ID。
                 maxLength: 32
-                example: "user1"
+                example: "usera"
               Nickname:
                 type: string
-                description: 群昵称。
+                description: 用户在群组的昵称。
                 maxLength: 256
-                example: "User Nickname"
+                example: "nicknamea"
     SetGroupMembersNicknameResponse:
       type: object
       properties:
         Code:
-          type: integer
+          type: number
           description: |
             返回码。
+
+            以下仅列出了接口业务逻辑相关的返回码，完整返回码请参考 [全局返回码](/zim-server/return-codes)。
             <table>
             <thead><tr><th>返回码</th><th>说明</th><th>处理建议</th></tr></thead>
             <tbody>
@@ -106,17 +134,33 @@ components:
             <tr><td>660600001</td><td>群组不存在。</td><td>请确认输入的 GroupID 是否正确。</td></tr>
             </tbody>
             </table>
+          example: 0
         Message:
           type: string
+          description: 操作结果描述。
+          example: "success"
         RequestId:
           type: string
+          description: 请求 ID。
+          example: "343649807833778782"
         ErrorUsers:
           type: array
-          description: 昵称设置失败用户信息。部分失败时返回。
+          description: |
+            昵称设置失败用户信息。
+            <ul>
+            <li>Code 为 0：</li>
+            <li>ErrorUsers 为空，全部指定用户昵称设置成功。</li>
+            <li>ErrorUsers 不为空，表示部分指定用户昵称设置失败，请参考 SubCode 处理。</li>
+            <li>Code 不为 0：</li>
+            <li>ErrorUsers 为空，表示参数错误、接口频率限制、系统错误。</li>
+            <li>ErrorUsers 不为空，表示全部指定用户昵称设置失败。</li>
+            </ul>
           items:
             type: object
             properties:
               UserId:
                 type: string
+                description: 失败用户 ID。
               SubCode:
-                type: integer
+                type: number
+                description: 昵称设置失败的具体返回码。

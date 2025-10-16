@@ -34,12 +34,13 @@ paths:
         |---------|-----------|
         | [groupMutedInfoUpdated](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_uni-app~interface~ZIMEventHandler#group-muted-info-updated) | [groupMutedInfoUpdated](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_harmony~interface~ZIMEventHandler#group-muted-info-updated) |
 
-        <Note title="说明">由于禁言操作会触发群 tips 消息，因此当 FromUserId 不是群组成员时，开发者需要隐藏该消息或实现其他处理，避免群内用户产生困惑。</Note>
 
-        <Note title="说明">IsAllMuted、MuteRoleList、Duration 都不传，则解除群组内所有用户的禁言状态。若 Duration 非 0 且 IsAllMuted 为 false，则传入的 MuteRoleList 会覆盖之前设置的禁言角色列表。</Note>
-
-        <Note title="说明">FromUserId 仅支持数字，英文字符和 {'!','#','$','%','&','(',')','+','\'',':',';','<','=','.','>','?','@','[',']','^','_','{','}','|','~'}。若 FromUserId 为管理员，则 MuteRoleList[] 不能包含 1（群主）。</Note>
-
+        <Note title="说明">
+        - IsAllMuted、MuteRoleList、Duration 都不传，则解除群组内所有用户的禁言状态。
+        - 如果 Duration 非 0，IsAllMuted 传了 false，则传入的 MuteRoleList 会覆盖之前设置的禁言角色列表。
+        - FromUserId 仅支持数字，英文字符和 `'!'，'#'，'$'，'%'，'&'，'('，')'，'+'，''，':'，';'，'<'，'='，'.'，'>'，'?'，'@'，'['，']'，'^'，'_'，'{'，'}'，'|'，'~'`。
+        - 若 FromUserId 为管理员，则 MuteRoleList[] 不能包含 1（群主）。
+        </Note>
         <Note title="说明">调用频率限制：20 次/秒</Note>
       operationId: mute-a-group
       parameters:
@@ -63,7 +64,11 @@ paths:
         - name: FromUserId
           in: query
           required: true
-          description: 操作用户 ID。
+          description: |
+            操作用户 ID（已在客户端调用 login 方法登录 ZIM 服务，或已调用 [服务端 API](./batch-register-users.mdx) 完成注册）。
+            > 说明
+            >
+            > 由于禁言操作会触发群 tips 消息，因此当 FromUserId 不是群组成员时，开发者需要隐藏该消息或实现其他处理，避免群内用户产生困惑。
           schema:
             type: string
             maxLength: 32
@@ -82,23 +87,35 @@ paths:
           schema:
             type: boolean
             default: false
-          description: 是否全员禁言。
+          description: 是否全员禁言。不传则默认 false。
         - name: MuteRoleList
           in: query
           required: false
           schema:
             type: array
             items:
-              type: integer
+              type: number
           style: form
           explode: true
-          description: 禁言角色列表，最多 20 个；1 群主，2 管理员，3 群成员，其他为自定义角色。
+          description: |
+            禁言角色列表，单次请求最多禁言 20 个群角色。枚举如下：
+            - 1: 群主。
+            - 2: 管理员。
+            - 3: 群成员。
+            - 其他: 开发者自定义的群角色，建议大于 100。
+
+            仅当 IsAllMuted 为 false 或不传时有意义
         - name: Duration
           in: query
           required: false
           schema:
-            type: integer
-          description: 禁言时长：-1 永久；0 取消群级别禁言；>0 为秒，最大 2592000。
+            type: number
+          description: |
+            禁言时长，不传默认为 0。
+            - -1：永久。
+            - 0：取消群组级别的所有禁言。
+            - 大于 0：禁言时长，单位为秒。最大支持 30 天（2592000 秒）。
+            禁言有效期内，若再次设置禁言时长，以最近一次请求设置的时长延长禁言状态。
       responses:
         '200':
           description: OK
@@ -113,9 +130,11 @@ components:
       type: object
       properties:
         Code:
-          type: integer
+          type: number
           description: |
             返回码。
+
+            以下仅列出了接口业务逻辑相关的返回码，完整返回码请参考 [全局返回码](/zim-server/return-codes)。
             <table>
             <thead><tr><th>返回码</th><th>说明</th><th>处理建议</th></tr></thead>
             <tbody>
@@ -123,12 +142,16 @@ components:
             <tr><td>660000002</td><td>参数错误。</td><td>请检查请求参数。</td></tr>
             <tr><td>660300005</td><td>调用接口的频率超出了 AppID 级别限制。</td><td>请稍后再试。</td></tr>
             <tr><td>660600001</td><td>群组不存在。</td><td>请确认 GroupID 是否正确。</td></tr>
-            <tr><td>660600009</td><td>获取群相关信息失败。</td><td>请先确认 GroupID 是否正确。如正确请联系技术支持。</td></tr>
-            <tr><td>660600024</td><td>FromUserId 不在群内。</td><td>请检查或添加为群成员。</td></tr>
-            <tr><td>660600032</td><td>FromUserId 没权限。</td><td>需为群主或管理员。</td></tr>
+            <tr><td>660600009</td><td>获取群相关信息失败。</td><td>请先确认 GroupID 是否正确。如果正确，请联系 ZEGO 技术支持。</td></tr>
+            <tr><td>660600024</td><td>FromUserId 不在群内。</td><td>请检查 FromUserId 或添加 FromUserId 为群成员</td></tr>
+            <tr><td>660600032</td><td>FromUserId 没权限。</td><td>FromUserId 需为群主或管理员。</td></tr>
             </tbody>
             </table>
         Message:
           type: string
+          description: 操作结果描述。
+          example: "success"
         RequestId:
           type: string
+          description: 请求 ID。
+          example: "343649807833778782"
