@@ -1,4 +1,4 @@
-# Proactive Invocation of LLM and TTS
+# AI Proactive Speech: Proactively Invoke LLM or TTS
 
 Large Language Models (LLMs) do not output text and voice proactively. Therefore, developers need to trigger the AI agent to speak based on certain rules, thereby making the real-time interactions more engaging. For example, if the user has not spoken for 5 seconds, the AI agent can speak a sentence through Text-to-Speech (TTS).
 
@@ -7,7 +7,24 @@ Ways for AI Agents to speak proactively:
 - Trigger LLM: You can simulate a user to initiate a message, thereby enabling the AI agent to output text and voice based on context.
 - Trigger TTS: You can make the AI agent speak a segment of text content, usually in a fixed pattern, such as "Hello, welcome to use ZEGOCLOUD AI Agent service."
 
-## Trigger LLM
+AI agent can set the priority to achieve different effects by setting two parameters (not-required):
+
+- Priority（High、Medium、Low）.
+- SamePriorityOption（ClearAndInterupt、Enqueue）.
+
+<Frame width="auto" height="auto" caption="">
+  <img src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/eb2f510fe5.png" alt="whiteboard_exported_image-2.png"/>
+</Frame>
+
+## Prerequisites
+Completed the basic process by referring to [Quick Start](./../quick-start.mdx).
+
+## Usage
+
+[Trigger LLM](#trigger-llm) and [Trigger TTS](#trigger-tts) sections contain all related parameters, but the example code only demonstrates the usage of required parameters.
+
+
+### Trigger LLM
 
 Call the [SendAgentInstanceLLM](./../api-reference/agent-instance-control/send-agent-instance-llm.mdx) API to trigger the LLM to output text and voice.
 
@@ -28,6 +45,8 @@ The interface parameters are as follows:
 | SystemPrompt    | String | No       | The temporary system prompt for this conversation. If not provided, it will use the `SystemPrompt` in the LLM parameters from [Register An Agent](./../api-reference/agent-configuration-management/register-agent.mdx) or [Create An Agent Instance](./../api-reference/agent-instance-management/create-agent-instance.mdx). |
 | AddQuestionToHistory | Boolean | No | Whether to add the question to the context. The default value is `false`. |
 | AddAnswerToHistory | Boolean | No | Whether to add the answer to the context. The default value is `false`. |
+| Priority         | String | No       | Task priority, the default value is `Medium`.<br/>Optional values:<br/>1. `Low`: Low priority<br/>2. `Medium`: Medium priority<br/>3. `High`: High priority |
+| SamePriorityOption | String | No     | The interruption strategy when the same priority occurs, the default value is `ClearAndInterrupt`.<br/>Optional values:<br/>- `ClearAndInterrupt`: Clear and interrupt<br/>- `Enqueue`: Queue up to wait, the maximum number of queues is 5 |
 
 Example request:
 ```json
@@ -37,7 +56,7 @@ Example request:
 }
 ```
 
-## Trigger TTS
+### Trigger TTS
 
 Call the [SendAgentInstanceTTS](./../api-reference/agent-instance-control/send-agent-instance-tts.mdx) API to make the agent speak a segment of text content.
 
@@ -50,13 +69,207 @@ The interface parameters are as follows:
 | AgentInstanceId| String  | Yes      | The unique identifier of the agent instance, obtained through the response parameter of the [Create An Agent Instance](./../api-reference/agent-instance-management/create-agent-instance.mdx) interface. |
 | Text           | String  | Yes      | The text content for TTS, with a maximum length of no more than 300 characters.                                                                                    |
 | AddHistory     | Boolean | No       | Whether to record the text message in the conversation message history as context input for the LLM. The default value is `true`.                                                                                    |
-| InterruptMode | Int | No | The mode for interrupting the AI agent's speech when the user speaks: <ul><li>0: Immediate interruption. If the user speaks while the AI is speaking, the AI will be immediately interrupted and stop speaking (default).</li><li>1: No interruption. If the user speaks while the AI is speaking, the AI will not be affected and will continue speaking until finished.</li></ul> |
+| Priority         | String | No       | Task priority, the default value is `Medium`.<br/>Optional values:<br/>1. `Low`: Low priority<br/>2. `Medium`: Medium priority<br/>3. `High`: High priority |
+| SamePriorityOption | String | No     | The interruption strategy when the same priority occurs, the default value is `ClearAndInterrupt`.<br/>Optional values:<br/>- `ClearAndInterrupt`: Clear and interrupt<br/>- `Enqueue`: Queue up to wait, the maximum number of queues is 5 |
 
 Example request:
 ```json
 {
     "AgentInstanceId": "1907780504753553408",
-    "Text": "Hello, welcome to use ZEGOCLOUD AI Agent service.",
-    "InterruptMode": 1
+    "Text": "Hello, welcome to use ZEGOCLOUD AI Agent service."
 }
 ```
+
+## Usage Example
+
+### Scenario 1: AI plays welcome message
+
+Hope to play a welcome message when the user starts a voice or digital human conversation with AI.
+
+1. Ensure the user has pulled the RTC stream of the Agent instance
+<Accordion title="Listen for the successful pull stream event example code" defaultOpen="false">
+<CodeGroup>
+```java (Android)Listen for the successful pull stream event example
+// Set the event handler after creating the engine
+engine.setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onPlayerStateUpdate(String streamID, ZegoPlayerState state,
+                                  int errorCode, JSONObject extendedData) {
+        super.onPlayerStateUpdate(streamID, state, errorCode, extendedData);
+        if (errorCode != 0) {
+            Log.d("Zego", "Pull stream error: " + streamID);
+            return;
+        }
+        // Listen for the pull stream status change
+        switch (state) {
+            // !mark
+            case PLAYING:
+                Log.d("Zego", "Pull stream successfully, can call the interface to play the welcome message");
+                break;
+            case PLAY_REQUESTING:
+                Log.d("Zego", "Pulling stream: " + streamID);
+                break;
+            case NO_PLAY:
+                Log.d("Zego", "Pull stream stopped: " + streamID);
+                break;
+        }
+    }
+});
+```
+```oc (iOS)Listen for the successful pull stream event example
+- (void)onPlayerStateUpdate:(ZegoPlayerState)state errorCode:(int)errorCode extendedData:(NSDictionary *)extendedData streamID:(NSString *)streamID {
+    if (errorCode != 0) {
+        NSLog(@"Pull stream error streamID: %@, errorCode:%d", streamID, errorCode);
+    } else {
+        switch (state) {
+            // !mark
+            case ZegoPlayerStatePlaying:
+                NSLog(@"Pull stream successfully, can call the interface to play the welcome message");
+                break;
+            case ZegoPlayerStatePlayRequesting:
+                NSLog(@"Pulling stream");
+                break;
+            case ZegoPlayerStateNoPlay:
+                NSLog(@"Pull stream stopped");
+                break;
+        }
+    }
+}
+```
+```javascript (Web)Listen for the successful pull stream event example
+// const zg = new ZegoExpressEngine(appID, server);
+zg.on('playerStateUpdate', result => {
+    // Pull stream status update callback
+    var state = result['state']
+    var streamID = result['streamID']
+    var errorCode = result['errorCode']
+    var extendedData = result['extendedData']
+    if (errorCode != 0) {
+        console.log('Pull stream error: ' + streamID);
+        return;
+    }
+    // !mark
+    if (state == 'PLAYING') {
+        console.log('Pull stream successfully, can call the interface to play the welcome message');
+    } else if (state == 'NO_PLAY') {
+        console.log('Pull stream stopped');
+    } else if (state == 'PLAY_REQUESTING') {
+        console.log('Pulling stream: ' + streamID);
+    }
+    console.log('Error code:', errorCode,' Extended data:', extendedData)
+})
+```
+```dart (Flutter)Listen for the successful pull stream event example
+// Listen for the pull stream status update
+ZegoExpressEngine.onPlayerStateUpdate = (String streamID, ZegoPlayerState state, int errorCode, Map<String, dynamic>extendedData)  {
+  switch (state) {
+    // !mark
+    case ZegoPlayerState.Playing:
+      print('Pull stream successfully, can call the interface to play the welcome message');
+      break;
+    case ZegoPlayerState.PlayRequesting:
+      print('Pulling stream: ' + streamID);
+      break;
+    case ZegoPlayerState.NoPlay:
+      print('Pull stream stopped: ' + streamID);
+      break;
+  }
+};
+```
+</CodeGroup>
+</Accordion>
+
+2. Call the interface to start playing the welcome message, there are two implementation ways:
+
+- SendAgentInstanceLLM: Combine context, let LLM play the welcome message.
+```json
+{
+    "AgentInstanceId": "1907755175297171456",
+    "Text": "Say one welcome message"
+}
+```
+- SendAgentInstanceTTS: Use a fixed script to make the AI play the welcome message.
+```json
+{
+    "AgentInstanceId": "1907755175297171456",
+    "Text": "hello"
+}
+```
+
+<Warning title="Note">
+If the user starts speaking when playing the welcome message, the AI can be directly interrupted, and there is a probability that the AI will not be able to play the welcome message. If you want to ensure that the user can hear the welcome message, you can set:
+
+ - `Priority=High`
+
+For example, if you want to send the welcome message through `SendAgentInstanceTTS`, you can set:
+```json
+{
+    "AgentInstanceId": "1907755175297171456",
+    "Text": "hello",
+    "Priority": "High"
+}
+```
+</Warning>
+
+### Scenario 2: Cold开场时，AI 主动发言可被用户说话打断
+
+When both the user and AI are not speaking, the AI is expected to initiate a topic actively, and when the AI speaks, the user's speech is expected to take precedence, that is, the AI's broadcast can be interrupted by the user's speech. This can be achieved by directly calling `SendAgentInstanceLLM` or `SendAgentInstanceTTS`.
+
+There are two ways to initiate the topic:
+
+- Combine context, let LLM output one active speech.
+Request example:    for example, call the `SendAgentInstanceLLM` interface, `text` is "Now the user has not spoken for a while, please主动说一句话"
+```json
+{
+    "AgentInstanceId": "1907755175297171456",
+    "Text": "Now the user has not spoken for a while, please say something？",
+    "Priority": "Medium"
+}
+```
+
+- Use a fixed script to make the AI speak.
+Request example: for example, call the `SendAgentInstanceTTS` interface, `text` is "Why don't you speak？"
+```json
+{
+    "AgentInstanceId": "1907755175297171456",
+    "Text": "Why don't you speak？",
+    "Priority": "Medium"
+}
+```
+
+### Scenario 3: Trigger the critical node, need AI to broadcast immediately and complete all content
+
+For example, when it is found that the time limit has been reached, regardless of whether the user and AI are speaking, it is necessary to broadcast immediately to remind the user.
+
+Besides configuring the prompt word or TTS content of the LLM, you need to additionally configure:
+- Priority=High
+- SamePriorityOption=ClearAndInterrupt
+
+Request example: for example, call the `SendAgentInstanceTTS` interface, `text` is "Time's up, please check immediately."
+```json
+{
+    "AgentInstanceId": "1907755175297171456",
+    "Text": "Time's up, please check immediately.",
+    "Priority": "High",
+    "SamePriorityOption": "ClearAndInterrupt"
+}
+```
+
+### Scenario 4: AI is broadcasting, needs to broadcast additional content after broadcasting the current content
+
+For example, when the AI is replying to the user's question, it is hoped that after answering the current question, the AI will immediately ask the user if there are any other ideas.
+
+Besides configuring the prompt word or TTS content of the LLM, you need to additionally configure:
+- Priority=Medium
+- SamePriorityOption=Enqueue
+
+Request example: for example, call the `SendAgentInstanceTTS` interface, `text` is "Do you have any other ideas？"
+```json
+{
+    "AgentInstanceId": "1907755175297171456",
+    "Text": "Do you have any other ideas？",
+    "Priority": "Medium",
+    "SamePriorityOption": "Enqueue"
+}
+```
+

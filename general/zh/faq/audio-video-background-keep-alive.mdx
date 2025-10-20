@@ -1,0 +1,177 @@
+---
+date: "2025-09-28"
+---
+import { Title } from './title';
+
+<Title>如何在应用退到后台时保持 ZEGO SDK 的音视频功能正常运行？</Title>
+
+---
+本文介绍如何在应用退到后台时保持 ZEGO SDK 的音视频功能正常运行。
+
+## 系统限制
+
+### Android 9.0 及以上系统的隐私限制
+
+随着用户对隐私保护要求的提高，Android 9.0 及以后版本对后台应用的音视频权限进行了限制：
+
+- 麦克风限制
+  - 应用退后台一分钟后，麦克风将返回静音数据
+  - 回到前台后会自动恢复，无需额外操作
+
+- 摄像头限制
+  - 应用退后台一分钟后，摄像头将被系统释放
+  - 回到前台后，SDK 会自动恢复摄像头
+
+### 耗电管理限制
+
+为了优化设备续航能力，Android 9.0 及以上系统增加了后台应用管理功能：
+
+- 应用退后台一段时间后，系统会限制网络访问
+- 网络受限后，音视频数据无法正常收发
+- 再过一段时间，应用进程可能被系统挂起
+
+## 对音视频服务的影响
+
+1. 推流端退后台一分钟后:
+   - 音频和视频数据无法正常发送
+   - 由于网络限制，与服务器的心跳可能断开
+   - 拉流端可能收到流删除通知
+
+2. 拉流端退后台后:
+   - 由于网络限制，无法正常接收音视频数据
+
+## 解决方案
+
+要让应用在后台保持音视频功能正常运行，可以使用前台服务。以下是具体实现步骤：
+
+### 1. 声明权限
+
+在 AndroidManifest.xml 中添加前台服务权限：
+
+```xml
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+```
+
+### 2. 注册服务
+
+在 AndroidManifest.xml 的 application 节点下注册服务：
+
+```xml
+<application>
+    ...
+    <service android:name=".ForegroundNotificationService"
+    android:foregroundServiceType="microphone"
+    android:enabled="true"
+    android:exported="false"/>
+</application>
+```
+
+### 3. 创建前台服务类
+
+```java
+public class ForegroundNotificationService extends Service {
+    public static final String FOREGROUND_NOTIFICATION_CHANNEL_ID = "foreground_channel_id";
+    public static final String FOREGROUND_NOTIFICATION_CHANNEL_NAME = "前台服务通知";
+    public static final int FOREGROUND_NOTIFICATION_CHANNEL_IMPORTANCE = NotificationManagerCompat.IMPORTANCE_LOW;
+    private static final int FOREGROUND_NOTIFICATION_PENDING_INTENT_REQUEST_CODE = 0x10;
+    private static final int FOREGROUND_NOTIFICATION_ID = 0xc000;
+    private NotificationManager mNotificationManager;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        mNotificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        showNotification();
+    }
+
+    @Nullable
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        return super.onStartCommand(intent, flags, startId);
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        mNotificationManager.cancel(FOREGROUND_NOTIFICATION_ID);
+    }
+
+    private void showNotification() {
+        PendingIntent pendingIntent = PendingIntent.getActivity(this,
+            FOREGROUND_NOTIFICATION_PENDING_INTENT_REQUEST_CODE,
+            new Intent(this, MainActivity.class),
+            PendingIntent.FLAG_UPDATE_CURRENT);
+
+        Notification notification = new NotificationCompat.Builder(this, FOREGROUND_NOTIFICATION_CHANNEL_ID)
+            .setContentText("应用正在后台运行")
+            .setContentIntent(pendingIntent)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .build();
+
+        mNotificationManager.notify(FOREGROUND_NOTIFICATION_ID, notification);
+        startForeground(FOREGROUND_NOTIFICATION_ID, notification);
+    }
+}
+```
+
+### 4. 创建通知渠道
+
+在 Application 类中创建通知渠道：
+
+```java
+public class YourApplication extends Application {
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        createNotificationChannel();
+    }
+
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                ForegroundNotificationService.FOREGROUND_NOTIFICATION_CHANNEL_ID,
+                ForegroundNotificationService.FOREGROUND_NOTIFICATION_CHANNEL_NAME,
+                ForegroundNotificationService.FOREGROUND_NOTIFICATION_CHANNEL_IMPORTANCE);
+            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+            notificationManager.createNotificationChannel(channel);
+        }
+    }
+}
+```
+
+### 5. 启动和关闭前台服务
+
+在需要保持后台运行的 Activity 中：
+
+```java
+public class YourActivity extends AppCompatActivity {
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        startForegroundNotificationService();
+    }
+
+    private void startForegroundNotificationService() {
+        startService(new Intent(this, ForegroundNotificationService.class));
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        stopService(new Intent(this, ForegroundNotificationService.class));
+    }
+}
+```
+
+## 注意事项
+
+1. 前台服务需要在通知栏显示持续性通知，这是系统要求
+2. 该方案适用于 Android 6.0 及以上版本
+3. 即使使用前台服务，仍需遵守系统的隐私限制
+4. 建议仅在必要时启用前台服务，以减少电量消耗
