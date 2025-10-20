@@ -2375,12 +2375,12 @@ void onPeerMessagedReceived(ZIM *zim*,
 
             // 下载富媒体文件消息
             auto mediaMessage = std::dynamic_pointer_cast<zim::ZIMMediaMessage>(it);
-            zim_->downloadMediaFile(
+            zim->downloadMediaFile(
                 mediaMessage.get(),
                 zim::ZIMMediaFileType::ZIM_MEDIA_FILE_TYPE_ORIGINAL_FILE,
                 download_config,
-                [=](const std::shared_ptr<zim::ZIMMessage> &message, unsigned int currentSize,
-                    unsigned int totalSize) {
+                [=](const std::shared_ptr<zim::ZIMMessage> &message, unsigned long long currentSize,
+                    unsigned long long totalSize) {
                     // 下载进度
                 },
                 [=](const std::shared_ptr<zim::ZIMMessage> &message,
@@ -2390,6 +2390,37 @@ void onPeerMessagedReceived(ZIM *zim*,
         } else if (type == zim::ZIM_MESSAGE_TYPE_MULTIPLE) {
             // 下载组合消息中的富媒体文件
             auto multipleMessage = std::dynamic_pointer_cast<zim::ZIMMultipleMessage>(it);
+            const auto &infoList = multipleMessage->messageInfoList;
+            for (size_t i = 0; i < infoList.size(); ++i) {
+                auto &infoItem = infoList[i];
+
+                zim::ZIMMessageType subType = infoItem->type;
+                if (subType == zim::ZIM_MESSAGE_TYPE_IMAGE ||
+                    subType == zim::ZIM_MESSAGE_TYPE_FILE ||
+                    subType == zim::ZIM_MESSAGE_TYPE_AUDIO ||
+                    subType == zim::ZIM_MESSAGE_TYPE_VIDEO) {
+
+                    zim::ZIMMediaDownloadConfig itemConfig;
+                    // 设置为 item 的序号
+                    itemConfig.messageInfoIndex = static_cast<int>(i);
+
+                    zim->downloadMediaFile(
+                        multipleMessage.get(),
+                        zim::ZIMMediaFileType::ZIM_MEDIA_FILE_TYPE_ORIGINAL_FILE,
+                        itemConfig,
+                        // 下载进度
+                        [&](const std::shared_ptr<zim::ZIMMessage> &message,
+                            unsigned long long currentSize,
+                            unsigned long long totalSize) {
+                            // TODO: 处理组合消息子项的下载进度
+                        },
+                        // 下载完成
+                        [&](const std::shared_ptr<zim::ZIMMessage> &message,
+                            const zim::ZIMError &errorInfo) {
+                            // TODO: 组合消息子项下载完成
+                        });
+                }
+            }
         } 
     }
 }
