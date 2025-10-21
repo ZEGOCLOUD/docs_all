@@ -214,9 +214,21 @@ private func requestToken() {
 // !mark
 preloadDigitalmobileRes(userToken: userToken, digitalHumanID: digitalHumanID)
 ```
+```javascript title="Web(JavaScript)"
+import axios from 'axios';
+/**
+* 此处省略axios配置
+**/
+// 注意使用的 user id 与服务端创建数字人智能体实例时填写的一致
+const userID = '';
+// !mark
+const { token } = await axios.get(`${base_url}/api/zego-token?userid=${userID}`)
+```
 </CodeGroup>
 
 - 预下载数字人资源
+
+<Note title="说明">Web 端不需要预加载数字人资源</Note>
 <CodeGroup>
 ```java Android(Java)
 private fun preloadDigitalmobileRes(token: String, digitalHumanID: String) {
@@ -304,8 +316,6 @@ private fun startDiagitalAgentRoom() {
         //移动端配置(需要端上数字人SDK合成视频)
         // !mark
         jsonObject.put("config_id", "mobile");
-        //web端配置(直接拉数字人流，不需要端上处理)
-        //jsonObject.put("config_id", "web");
         jsonObject.toString()
     } catch (e: JSONException) {
         Log.e(TAG, "startDigitalHumanChat json error: " + e.message)
@@ -429,10 +439,33 @@ private func startDiagitalAgentRoom() {
     }.resume()
 }
 ```
+```javascript title="Web(JavaScript)"
+//web端配置(直接拉数字人流，不需要端上处理)
+// !mark
+const digitalHuman = {id: '', configId: 'web'}
+// 该接口实际会调用 AI Agent 的 CreateDigitalHumanAgentInstance 接口（https://doc-zh.zego.im/aiagent-server/api-reference/agent-instance-management/create-digital-human-agent-instance）。
+const { agent_id,
+        agent_instance_id,
+        agent_name,
+        agent_stream_id,
+        agent_user_id,
+        code,
+        digital_human_config,
+        message
+} = await axios.post(`${base_url}/api/start-digital-human`, {
+    "room_id": roomID,
+    "user_id": userID,
+    "user_stream_id": userStreamId,
+    "digital_human_id": digitalHuman.id,
+    "config_id": digitalHuman.configId
+});
+```
 </CodeGroup>
 
 </Step>
 <Step title="初始化数字人 SDK">
+
+<Note title="说明">Web 端不需要初始化数字人 SDK</Note>
 <CodeGroup>
 ```java title="Android(Java)"
 private fun initDigitalMobileSDK(digitalHumanConfig: String) {
@@ -555,6 +588,14 @@ ZegoExpressEngine.shared?.enableCamera(true) //允许开启摄像头
 ZegoExpressEngine.shared?.muteMicrophone(false) //允许开启麦克风
 ZegoExpressEngine.shared?.mutePublishStreamVideo(true) //用户端仅推音频流
 ```
+```javascript title="Web(JavaScript)"
+// 初始化 ZEGO Express SDK
+const appID = 0; // 从zego控制台获取的 AppID
+const server = ''; // 从zego控制台获取的 Server 地址
+const express = new ZegoExpressEngine(appID, server, {
+    scenario: ZegoScenario.HighQualityChatroom, // HighQualityChatroom = 7
+});
+```
 </CodeGroup>
 
 </Step>
@@ -655,6 +696,7 @@ ZegoExpressEngine.shared?.loginRoom(
     //拉数字人流。显示数字人画面。
     let zegoCanvas2 = ZegoCanvas(view: renderView)
     zegoCanvas2.viewMode = .aspectFill
+    // !mark
     ZegoExpressEngine.shared?.startPlayingStream(agentStreamID, canvas: zegoCanvas2)
 }
 
@@ -688,6 +730,55 @@ class CustomVideoRenderHandler: IZegoCustomVideoRenderHandler {
         }
     }
 }
+```
+```javascript title="Web(JavaScript)"
+// 以下 ID 填写实际值
+const userID = '';
+const userName = '';
+const roomID = '';
+const userStreamId = '';
+
+async function startPublishingStream(userStreamId: string) {
+    try {
+      const customAudioStream = {
+        camera: {
+          video: false,
+          audio: true,
+        },
+      };
+      const localStream = await express.createZegoStream(customAudioStream);
+      // 开启推流，智能体实例就可以通过拉取真实用户的音频流并识别后进行回答。
+      // 注意这里的userStreamId要与服务端创建智能体实例时填写的一致
+      await express.startPublishingStream(userStreamId, localStream);
+    } catch (error) {
+      throw Error(error);
+    }
+}
+async function startPlayingStream(streamID: string) {
+    const mediaStream = await express.startPlayingStream(streamID);
+    remoteView = await express.createRemoteStreamView(mediaStream);
+    if (remoteView) {
+      remoteView.playAudio();
+    }
+}
+
+const loginRoom = async (roomId: string, userID: string, userName: string, userStreamId: string) => {
+  // !mark
+  const login = await zg.loginRoom(roomId, token, {
+     userID,
+     userName,
+  });
+  if (!login) {
+    throw Error("登录RTC房间失败");
+  }
+  // !mark
+  await startPublishingStream(userStreamId);
+  // agentStreamID 跟服务端约定，或者监听回调获取：express.on("roomStreamUpdate", async (roomID: string,updateType: "DELETE" | "ADD", streamList: ZegoStreamList[]) => {...}
+  // !mark
+  await startPlayingStream(agentStreamID);
+}
+
+loginRoom(roomID, userID, userName, userStreamId);
 ```
 </CodeGroup>
 
@@ -798,6 +889,23 @@ private func destroyEngine() {
 private func unInitDigitalMobileSDK() {
     digitalMobileSDK?.stop()
 }
+```
+```javascript title="Web(JavaScript)"
+// 该接口实际会调用 AI Agent 的 DeleteAgentInstance 接口（https://doc-zh.zego.im/aiagent-server/api-reference/agent-instance-management/delete-agent-instance）。
+// !mark
+await axiox.post(`${base_user}/api/stop`, {
+    "agent_instance_id": agent_instance_id,
+  });
+
+ // 停止拉数字人流
+ express.stopPlayingStream(streamID); // streamID为roomStreamUpdate回调的AI数字人流
+ // 停止推流
+ express.stopPublishingStream(userStreamId); // userStreamId为真实用户人声流
+ express.destroyStream(localStream); // localStream为express.createZegoStream创建的本地麦克风流
+ // 登出房间
+ express.logoutRoom(roomID);
+ // 销毁SDK
+ express.destroyEngine();
 ```
 </CodeGroup>
 
