@@ -76,51 +76,112 @@ components:
       properties:
         FromUserId:
           type: string
-          description: 操作用户 ID。
+          description: |
+            操作用户 ID（已在客户端调用 login 方法登录 ZIM 服务，或已调用 [服务端 API](./../user/batch-register-users.mdx) 完成注册）。
+
+            > 说明
+            >
+            > FromUserId 仅支持数字，英文字符和 "'!'，'#'，'$'，'%'，'&'，'('，')'，'+'，''，':'，';'，'<'，'='，'.'，'>'，'?'，'@'，'['，']'，'^'，'_'，' '，'{'，'}'，'|'，'~'"。
           maxLength: 32
-          example: "user123"
+          example: "user_test"
         ConvMarkInfoList:
           type: array
-          description: 会话标记的对象，每次最多 100 个，超过 100 或者为 0 报错。
+          description: 会话标记的对象，每次最多 100 个，超过100或者为0报错。
           maxItems: 100
           items:
             $ref: '#/components/schemas/StConvMarkInfo'
+          example:
+            - UserId: "userA"
+              SetMarkC2c:
+                conv_c2c_1:
+                  MarkContent: 2
+                conv_c2c_2:
+                  MarkContent: 2
+              SetMarkGroup:
+                conv_group_1:
+                  MarkContent: 2
+                conv_group_2:
+                  MarkContent: 2
+              Action: true
+            - UserId: "userB"
+              SetMarkC2c:
+                conv_c2c_1:
+                  MarkContent: 2
+                conv_c2c_2:
+                  MarkContent: 2
+              SetMarkGroup:
+                conv_group_1:
+                  MarkContent: 2
+                conv_group_2:
+                  MarkContent: 2
+              Action: true
     StConvMarkInfo:
       type: object
       required: [UserId, Action]
       properties:
         UserId:
           type: string
-          description: 为此 UserID 的用户设置或取消会话标记（群会话需已在群中）。
+          description: |
+            为此 UserID 的用户设置或取消会话标记。
+            > 说明
+            >
+            > 当目标会话为群聊时，此用户需已在群聊中。
+
+            > 说明
+            >
+            > UserId 仅支持数字，英文字符和 {"'!'，'#'，'$'，'%'，'&'，'('，')'，'+'，'-'，':'，';'，'<'，'='，'.'，'>'，'?'，'@'，'['，']'，'^'，'_'，' '，'{'，'}'，'|'，'~'"}。
+          example: "userA"
         SetMarkC2c:
           type: object
-          description: 单聊会话列表。key 为会话 ID，value 为 ConvMarkInfo 结构。最多 100 个。
+          description: 至少选择一个。单聊会话列表。key 为会话 ID，value 为 ConvMarkInfo 结构。列表最多可包含 100 个会话。
           additionalProperties:
             $ref: '#/components/schemas/ConvMarkInfo'
+          example:
+            conv_c2c_1:
+              MarkContent: 2
+            conv_c2c_2:
+              MarkContent: 2
         SetMarkGroup:
           type: object
-          description: 群聊会话列表。key 为会话 ID，value 为 ConvMarkInfo 结构。最多 100 个。
+          description: 至少选择一个。群聊会话列表。key 为会话 ID，value 为 ConvMarkInfo 结构。列表最多可包含 100 个会话（群聊会话需已存在，且为未被删除）。
           additionalProperties:
             $ref: '#/components/schemas/ConvMarkInfo'
+          example:
+            conv_group_1:
+              MarkContent: 2
+            conv_group_2:
+              MarkContent: 2
         Action:
           type: boolean
-          description: 标记操作：true 设置；false 取消。
+          description: |
+            标记操作：
+            - true：设置标记。
+            - false：取消标记。
+          example: true
     ConvMarkInfo:
       type: object
       required: [MarkContent]
       properties:
         MarkContent:
-          type: integer
+          type: number
           minimum: 1
           maximum: 30
-          description: 会话标记，取值为 [1, 30] 的整数。
+          description: 会话标记。取值为 [1, 30] 的整数。
+          example: 2
     SetConvMarkResponse:
       type: object
       properties:
         Code:
-          type: integer
+          type: number
           description: |
             返回码。
+
+            以下仅列出了接口业务逻辑相关的返回码，完整返回码请参考 [全局返回码](../return-codes.mdx)。
+            > 说明
+            >
+            > 当您发起请求设置或取消多个会话的标记时：
+            > <ul><li>只需成功对至少一个会话完成操作，Code 都会返回 0，表示成功。此时请参考 FailList 中的具体信息，了解失败操作详情。</li>
+            > <li>如果所有会话的操作都失败，Code 会返回相关返回码，具体请参考 <a href="../return-codes.mdx">全局返回码</a>。</li></ul>
             <table>
             <thead><tr><th>返回码</th><th>说明</th><th>处理建议</th></tr></thead>
             <tbody>
@@ -134,44 +195,94 @@ components:
         Message:
           type: string
           description: 请求结果的说明信息。
+          example: "success"
         RequestId:
           type: string
           description: 请求 ID。
+          example: "343649807833778782"
         FailList:
           type: array
-          description: 会话标记失败用户列表。
+          description: |
+            会话标记失败用户列表。
+            - Code 为 0：
+              - FailList 为空，为所有用户的会话标记操作都成功。
+              - FailList 不为空，表示为部分用户的会话标记操作失败，请参考 FailList 中的 SubCode 和 SubMessage 处理。
+            - Code 不为 0：
+              - FailList 为空，表示参数错误、接口频率限制、系统错误。
+              - FailList 不为空，表示为全部用户的会话标记操作都失败。
           items:
             $ref: '#/components/schemas/UserFailList'
+          example:
+            - SubCode: 0
+              SubMessage: "succ"
+              UserId: "UserA"
+              FailList:
+                - Code: 1
+                  Message: "mark content is invalide"
+                  ConvId: "conv_id_1"
+                  ConvType: 0
+                - Code: 1
+                  Message: "mark content is invalide"
+                  ConvId: "conv_id_2"
+                  ConvType: 0
+            - SubCode: 1
+              SubMessage: "user not exist"
+              UserId: "UserB"
     UserFailList:
       type: object
       properties:
         SubCode:
-          type: integer
-          description: 标识为一名用户执行会话标记操作的结果。
+          type: number
+          description: 用于标识为一名用户执行会话标记操作的结果。
+          example: 0
         SubMessage:
           type: string
           description: 描述为一名用户执行会话标记操作的结果。
+          example: "succ"
         UserId:
           type: string
           description: 会话标记操作目标用户的 ID。
+          example: "UserA"
         FailList:
           type: array
-          description: 标记操作目标会话失败列表。
+          description: |
+            标记操作目标会话失败列表。
+            - SubCode 为 0：
+              - FailList 为空，对目标用户的所有目标会话都操作成功。
+              - FailList 不为空，表示对目标用户的部分目标会话操作失败，请参考 FailList 中的 Code 和 Message 处理。
+            - SubCode 不为 0：
+              - FailList 为空，表示参数错误、接口频率限制、系统错误。
+              - FailList 不为空，表示对目标用户的所有目标会话都操作失败。
           items:
             $ref: '#/components/schemas/ConvMarkFailList'
+          example:
+            - Code: 1
+              Message: "mark content is invalide"
+              ConvId: "conv_id_1"
+              ConvType: 0
     ConvMarkFailList:
       type: object
       properties:
         Code:
-          type: integer
+          type: number
           description: 操作失败返回码。
+          example: 1
         Message:
           type: string
           description: 操作失败描述。
+          example: "mark content is invalide"
         ConvId:
           type: string
-          description: 会话 ID（单聊为用户 ID，群聊为群组 ID）。
+          description: |
+            会话 ID。
+            - 单聊会话：会话 ID 为用户 ID。
+            - 群聊会话：会话 ID 为群组 ID。
+          example: "conv_id_1"
         ConvType:
-          type: integer
+          type: number
           enum: [0, 2]
-          description: 会话类型（0 单聊；2 群聊）。
+          description: |
+            会话类型。
+            - 0：单聊会话。
+            - 2：群聊会话。
+          example: 0
