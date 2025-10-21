@@ -64,27 +64,39 @@ components:
       properties:
         FromUserId:
           type: string
-          description: 查询该用户的会话列表。
+          description: |
+            查询此 UserID（已在客户端调用 login 方法登录 ZIM 服务，或已调用 [服务端 API](./../user/batch-register-users.mdx) 完成注册）的会话列表。
+
+            > 说明
+            >
+            > FromUserId 仅支持数字，英文字符和 {"'!'，'#'，'$'，'%'，'&'，'('，')'，'+'，''，':'，';'，'<'，'='，'.'，'>'，'?'，'@'，'['，']'，'^'，'_'，' '，'{'，'}'，'|'，'~'"}。
           maxLength: 32
-          example: "user123"
+          example: "u1"
         Limit:
-          type: integer
-          format: int32
-          description: 单次获取会话数量，默认 100，范围 (0, 500]。
+          type: number
+          description: |
+            单次获取会话的数量，默认为 100，取值范围为 (0, 500]。
+            - 当值 ≤ 0 时，修正为 100。
+            - 当值 > 500，修正为 500。
           minimum: 1
           maximum: 500
           default: 100
-          example: 100
+          example: 10
         Next:
-          type: integer
-          format: int32
-          description: 分页拉取标志，第一次 0，之后填上一次返回的 Next 值；为 0 表示已获取完毕。
+          type: number
+          description: |
+            分页拉取标志，第一次填 0 ，之后填上一次返回的 Next 值。当返回的 Next 为 0 时，代表好友列表获取完毕。
+
+            例如，FromUserId 有 250 个会话，调用本接口查询时：
+            1. 第一次调用本接口，Limit 填 100，Next 传 0，查询第 1 ～100 个会话；返回结果中的 Next 值为 num1。
+            2. 第二次调用本接口，Limit 填 100，Next 填 num1，查询第 101 ～ 200 个会话；返回结果中 Next 值为 num2。
+            3. 第三次调用本接口，Limit 填 100，Next 填 num2，查询第 201 ～ 250 个会话；查询完毕，返回结果中的 Next 为 0。
           example: 0
     QueryConversationListResponse:
       type: object
       properties:
         Code:
-          type: integer
+          type: number
           description: |
             返回码。
             <table>
@@ -99,31 +111,56 @@ components:
         Message:
           type: string
           description: 请求结果的说明信息。
+          example: "success"
         RequestId:
           type: string
           description: 请求 ID。
-        Data:
-          type: object
-          properties:
-            TotalCount:
-              type: integer
-              description: 当前的会话总数。
-            Next:
-              type: integer
-              description: 分页拉取标志。
-            List:
-              type: array
-              description: 会话列表。按 UpdateTime 升序返回结果。
-              items:
-                type: object
-                properties:
-                  ConvId:
-                    type: string
-                    description: 会话 ID（单聊为对端用户 ID，群聊为群组 ID）。
-                  ConvType:
-                    type: integer
-                    description: 会话类型。0 单聊；2 群聊。
-                  UpdateTime:
-                    type: integer
-                    format: int64
-                    description: 会话最后修改时间，毫秒时间戳。
+          example: "343649807833778782"
+        TotalCount:
+          type: number
+          description: 当前的会话总数。
+          example: 500
+        Next:
+          type: number
+          description: |
+            分页拉取标志。
+            - 非 0：表示还有会话信息未返回，需要将该字段设置到请求参数 Next 中拉取更多会话信息。
+            - 为 0：表示已经返回完整会话列表。
+
+            > 说明
+            >
+            > 除上述说明之外，此字段与列表信息无任何关联，请勿基于此做任何其他逻辑。
+          example: 1000
+        List:
+          type: array
+          description: 会话列表。按 UpdateTime 升序返回结果。
+          items:
+            type: object
+            properties:
+              ConvId:
+                type: string
+                description: |
+                  会话 ID。
+                  - 单聊会话：会话 ID 为对端用户的 ID。
+                  - 群聊会话：会话 ID 为群组 ID。
+                example: "conv1"
+              ConvType:
+                type: number
+                description: |
+                  会话类型。
+                  - 0 或没有返回此字段：单聊会话。
+                  - 2：群聊会话。
+                example: 2
+              UpdateTime:
+                type: number
+                description: 会话最后修改时间，毫秒时间戳。
+                example: 1708254395000
+          example:
+            - ConvId: "conv1"
+              ConvType: 2
+              UpdateTime: 1708254395000
+            - ConvId: "conv2"
+              ConvType: 0
+              UpdateTime: 1708254395000
+            - ConvId: "conv3"
+              UpdateTime: 1708254395000
