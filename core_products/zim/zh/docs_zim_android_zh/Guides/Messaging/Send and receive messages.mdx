@@ -3,8 +3,6 @@ articleID: 11594
 ---
 
 import MarkMessageType from '/core_products/zim/zh/snippets/MessageType.mdx'
-import MarkSendMessageEvent from '/core_products/zim/zh/snippets/SendMessageEvent.mdx'
-
 import { getPlatformData, getPlatformData2 } from "/snippets/utils-content-parser.js"
 import {
     ZIMCommandMessageMap,
@@ -15,27 +13,26 @@ import {
     ZIMMessageTypeMap,
     ZIMMultipleMessageMap,
     ZIMTextMessageMap,
-    broadcastMessageReceivedMap,
+    queryConversationMap,
+    queryConversationListMap,
     clearConversationTotalUnreadMessageCountMap,
     clearConversationUnreadMessageCountMap,
     conversationChangedMap,
     downloadMediaFileMap,
-    groupMessageReceivedMap,
     isMentionAllMap,
     mentionedInfoListMap,
     mentionedUserIDsMap,
+    disableUnreadMessageCountMap,
     messageSentStatusChangedMap,
     multipleMediaUploadingProgressMap,
-    onMediaDownloadingProgressMap,
     onMediaUploadingProgressMap,
+    onMediaDownloadingProgressMap,
+    broadcastMessageReceivedMap,
     peerMessageReceivedMap,
-    queryConversationListMap,
-    queryConversationMap,
     roomMessageReceivedMap,
+    groupMessageReceivedMap,
     sendMessageMap,
     setEventHandlerMap,
-    ZIMCombineMessageDetailQueriedCallbackMap,
-    queryCombineMessageDetailMap,
 } from "/snippets/zim/const-link.mdx"
 
 # 收发消息
@@ -66,32 +63,13 @@ ZIM SDK 支持单聊消息、群组消息、房间消息等的收发，以及查
 
 <MarkMessageType />
 
-## 收发普通消息
-
-普通消息，包含 ZIMTextMessage、ZIMBarrageMessage 等消息类型。
-
-<Warning title="注意">
-:::if{props.platform="undefined|iOS|mac|win|flutter|Web|miniprogram|rn|uniapp"}
-<div>
-- 开发者可以通过注册 {getPlatformData(props,setEventHandlerMap)} 监听，用于接收相关通知（接收房间消息、连接状态、token 即将过期等通知）。
-</div>
-:::
-:::if{props.platform="UTS"}
-<div>
-- 开发者可以通过各类回调接收相关通知（接收房间消息、连接状态、token 即将过期等通知）。
-</div>
-:::
-- 接收消息时，收到的消息类型是基类 {getPlatformData(props,ZIMMessageMap)} 。开发者需要根据其中的 `type`（具体请参考 {getPlatformData(props,ZIMMessageTypeMap)} ）字段，判断消息类型是 Text 还是 Command，然后强转基类为具体的子类（ {getPlatformData(props,ZIMTextMessageMap)} 或 {getPlatformData(props,ZIMCommandMessageMap)} ），然后从 “message” 字段获取消息内容。
-- 接收消息时，可以使用消息的 orderkey 来实现排序；即 orderkey 越大，消息的时间越新。接收到消息后，会自动更新消息未读数量。
-</Warning>
-
-
-### 发送消息
+## 发送消息
 
 以客户端 A 向客户端 B 发送消息为例： 
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZIM/Common/send_receive_peerMessage.png" /></Frame>
 
+<div>
 :::if{props.platform="undefined|iOS|mac|win|flutter|Web|miniprogram|rn|uniapp"}
 1. 客户端 A、B 分别创建自己的 ZIM 实例，并注册 {getPlatformData(props,setEventHandlerMap)} 监听的 {getPlatformData(props,peerMessageReceivedMap)} 回调接口，用于接收单聊消息通知。
 :::
@@ -101,13 +79,21 @@ ZIM SDK 支持单聊消息、群组消息、房间消息等的收发，以及查
 2. 客户端 A、B 分别登录 ZIM SDK。
 3. 客户端 A 调用 {getPlatformData(props,sendMessageMap)} 接口，设置 `conversationType` 为 `ZIMConversationType.Peer` 发送一条单聊消息到客户端 B。
 4. 客户端 B 将通过 {getPlatformData(props,peerMessageReceivedMap)} 回调接口，收到客户端 A 的消息。
+</div>
 
 <Warning title="注意">
+发送消息时，统一使用 {getPlatformData(props, sendMessageMap)} 接口，并根据会话类型传入对应的 conversationType 取值。
+
 目前，ZIM SDK 对于 {getPlatformData(props,sendMessageMap)} 接口有以下限制：
+
 - 不支持向自己发送消息：即 `toConversationID` 不能设置为调用者自己的用户 ID。
 - 不支持发送空白消息：消息内容不能为空或空白。
 当出现上述两种情况时，ZIM SDK 会返回错误 6000001，并提示传入参数错误。
 </Warning>
+
+### 普通消息
+
+普通消息是指消息内容为文本的消息，包含 ZIMTextMessage、ZIMBarrageMessage 消息类型。
 
 :::if{props.platform=undefined}
 <CodeGroup>
@@ -267,317 +253,8 @@ ZIM.getInstance()!.sendMessage(textMessage, toConversationID, type, sendConfig).
 </CodeGroup>
 :::
 
-### 接收消息
 
-<MarkSendMessageEvent platform={props.platform || "android"} />
-
-:::if{props.platform=undefined}
-```java
-zim.setEventHandler(new ZIMEventHandler() {
-    @Override
-    public void onPeerMessageReceived(ZIM zim, ArrayList<ZIMMessage> messageList, ZIMMessageReceivedInfo info, String fromUserID) {
-        // 收到“单聊”通信的消息回调
-        for (ZIMMessage zimMessage : messageList) {
-           if (zimMessage instanceof ZIMTextMessage) {
-                ZIMTextMessage zimTextMessage = (ZIMTextMessage) zimMessage;
-                Log.e(TAG, "收到的文本消息:"+ zimTextMessage.message);
-           } else if (zimMessage instanceof ZIMCommandMessage) {
-                ZIMCommandMessage zimCommandMessage = (ZIMCommandMessage) zimMessage;
-                Log.e(TAG, "收到的信令消息:"+ zimCommandMessage.message);
-           }    
-        }
-    }
-
-    @Override
-    public void onGroupMessageReceived(ZIM zim, ArrayList<ZIMMessage> messageList, ZIMMessageReceivedInfo info, String fromGroupID) {
-        // 收到群组消息的回调
-        for (ZIMMessage zimMessage : messageList) {
-           if (zimMessage instanceof ZIMTextMessage) {
-                ZIMTextMessage zimTextMessage = (ZIMTextMessage) zimMessage;
-                Log.e(TAG, "收到的文本消息:"+ zimTextMessage.message);
-           } else if (zimMessage instanceof ZIMCommandMessage) {
-                ZIMCommandMessage zimCommandMessage = (ZIMCommandMessage) zimMessage;
-                Log.e(TAG, "收到的信令消息:"+ zimCommandMessage.message);
-           }    
-        }
-    }
-
-    @Override
-    public void onRoomMessageReceived(ZIM zim, ArrayList<ZIMMessage> messageList, ZIMMessageReceivedInfo info, String fromRoomID) {
-        // 收到房间消息的回调
-        for (ZIMMessage zimMessage : messageList) {
-           if (zimMessage instanceof ZIMTextMessage) {
-                ZIMTextMessage zimTextMessage = (ZIMTextMessage) zimMessage;
-                Log.e(TAG, "收到的文本消息:"+ zimTextMessage.message);
-           } else if (zimMessage instanceof ZIMCommandMessage) {
-                ZIMCommandMessage zimCommandMessage = (ZIMCommandMessage) zimMessage;
-                Log.e(TAG, "收到的信令消息:"+ zimCommandMessage.message);
-           }    
-        }
-    }
-});
-```
-:::
-:::if{props.platform="iOS|mac"}
-```objc
-//注册 ZIMEventHander 回调
-[zim setEventHandler:self];
-
-// 收到单聊消息的回调
-- (void)zim:(ZIM *)zim
-    peerMessageReceived:(NSArray<ZIMMessage *> *)messageList
-            info:(ZIMMessageReceivedInfo *)info
-            fromUserID:(NSString *)fromUserID{
-     // 在此编写收到消息后的业务逻辑    
-}
-
-// 收到群组消息的回调
-- (void)zim:(ZIM *)zim
-    groupMessageReceived:(NSArray<ZIMMessage *> *)messageList
-            info:(ZIMMessageReceivedInfo *)info
-            fromGroupID:(NSString *)fromGroupID{
-    // 在此编写收到消息后的业务逻辑
-}
-
-// 收到房间消息的回调
-- (void)zim:(ZIM *)zim
-    roomMessageReceived:(NSArray<ZIMMessage *> *)messageList
-            info:(ZIMMessageReceivedInfo *)info
-            fromRoomID:(NSString *)fromRoomID{
-    // 在此编写收到消息后的业务逻辑
-}
-```
-:::
-:::if{props.platform="win"}
-```cpp
-// 收到单聊消息的回调
-void onPeerMessagedReceived(ZIM *zim*,
-                         const std::vector<std::shared_ptr<ZIMMessage>> & messageList,
-                         const ZIMMessageReceivedInfo & info,
-                         const std::string &fromUserID) {
-    //在此编写收到消息后的业务逻辑
-}
-
-// 收到群组消息的回调
-void onGroupMessagedReceived(ZIM *zim*,
-                         const std::vector<std::shared_ptr<ZIMMessage>> & messageList,
-                         const ZIMMessageReceivedInfo & info,
-                         const std::string &fromGroupID) {
-    //在此编写收到消息后的业务逻辑
-}
-
-// 收到房间消息的回调
-void onRoomMessagedReceived(ZIM *zim*,
-                         const std::vector<std::shared_ptr<ZIMMessage>> & messageList,
-                         const ZIMMessageReceivedInfo & info,
-                         const std::string &fromRoomID) {
-    //在此编写收到消息后的业务逻辑
-}
-```
-:::
-
-:::if{props.platform="Web|miniprogram|rn|uniapp|harmonyos"}
-```typescript
-// 收到单聊通信的消息回调
-zim.on('peerMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
-});
-
-// 收到群组消息的回调
-zim.on('groupMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
-});
-
-// 收到房间消息的回调
-zim.on('roomMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
-});
-```
-:::
-:::if{props.platform="UTS"}
-```typescript
-// 收到单聊通信的消息回调
-zim.onPeerMessageReceived((data) => {
-});
-
-// 收到群组消息的回调
-zim.onGroupMessageReceived((data) => {
-});
-
-// 收到房间消息的回调
-zim.onRoomMessageReceived((data) => {
-});
-```
-:::
-:::if{props.platform="flutter"}
-```dart
-ZIMEventHandler.onPeerMessageReceived = (zim, messageList, info, fromUserID) {
-    //收到单聊消息触发此处
-};
-
-ZIMEventHandler.onGroupMessageReceived = (zim, messageList, info, fromGroupID) {
-    //收到群聊消息触发此处
-};
-
-ZIMEventHandler.onRoomMessageReceived = (zim, messageList, info, fromGroupID) {
-  //收到房间消息触发此处
-};
-```
-:::
-:::if{props.platform="undefined|iOS|mac|win|rn|flutter|Web|miniprogram|UTS"}
-## 重发消息
-
-<Note title="说明">如需使用本功能，请集成 2.20.0 及以上版本的 ZIM SDK。</Note>
-
-当用户发送**单聊**和**群聊**消息时，网络断开：
-
-<div>
-- 若在 30 秒内网络恢复，则 ZIM SDK 会自动重发该消息。
-- 若在 30 秒内网络未恢复，则消息发送失败。
-- 如需配置网络恢复等待时间，请联系 ZEGO 技术支持。
-</div>
-
-当自动重发失败时，用户可以在网络恢复后，手动重发该消息。此时，再次调用 {getPlatformData(props,sendMessageMap)} 接口，将发送失败的消息对象重新填入，并且参数 `config.isRetrySend` 设置为 true。
-
-手动重发成功后，该消息会排序到当前最后位置。例如：当前消息排序为：A（成功）、B（失败）、C（成功），当重发消息 B 成功后，排序为 A、C、B。
-
-<Note title="说明">当 ZIM SDK 自动重发消息时，若用户同时进行手动重发，接口将调用失败，ZIM SDK 提示参数错误。</Note>
-:::
-:::if{props.platform=undefined}
-<CodeGroup>
-```java title="示例代码" {10,14}
-// 重发单聊 `Text` 信息
-String toConversationID = "xxxx1";
-
-ZIMTextMessage zimMessage; // 从 queryHistoryMessage 接口获取发送失败的消息
-
-ZIMMessageSendConfig config = new ZIMMessageSendConfig();
-// 设置消息优先级
-config.priority = ZIMMessagePriority.LOW;
-// 需要设置为 true，表示重发此消息
-config.isRetrySend = true;
-
-ZIMConversationType type = ZIMConversationType.Peer;
-
-zim.sendMessage(zimMessage, toConversationID, type, config, new ZIMMessageSentFullCallback() {
-    @Override
-    public void onMessageAttached(ZIMMessage zimMessage) {
-        // 开发者可以通过该回调，监听消息是否开始准备发送。只有当通过本地基础参数检验的消息才会抛出该回调，否则通过 onMessageSent 回调抛出错误。
-    }
-
-    @Override
-    public void onMessageSent(ZIMMessage zimMessage, ZIMError error) {
-        // 开发者可以通过该回调监听消息是否发送成功。
-    }
-});
-```
-</CodeGroup>
-:::
-:::if{props.platform="iOS|mac"}
-<CodeGroup>
-```objc title="示例代码" {10,19}
-// 重发单聊 `Text` 信息
-NSString *toConversationID = @"xxxx1";
-
-ZIMTextMessage *textMessage; // 从 queryHistoryMessage 接口获取发送失败的消息
-
-ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
-// 设置消息优先级
-config.priority = ZIMMessagePriorityLow;
-// 需要设置为 true，表示重发此消息
-config.isRetrySend = true;
-
-ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
-notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
-    // 发送前的回调，客户可以在这里获取一个临时对象，该对象与开发者创建的 zimMessage 对象属于同一对象，开发者可利用此特性做一些业务逻辑，如提前展示 UI 等
-};
-
-ZIMConversationType type = ZIMConversationTypePeer;
-
-[self.zim sendMessage:textMessage toConversationID:toConversationID conversationType:type config:config notification:notification callback:^((ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo)) {
-    // 开发者可以通过该回调监听消息是否发送成功。
-}];
-```
-</CodeGroup>
-:::
-:::if{props.platform="win"}
-<CodeGroup>
-```cpp title="示例代码" {9,16}
-// 重发单聊 `Text` 信息
-
-std::shared_ptr<zim::ZIMTextMessage> message; // 从 queryHistoryMessage 接口获取发送失败的消息
-
-// 设置消息优先级
-zim::ZIMMessageSendConfig config;
-config.priority = zim::ZIM_MESSAGE_PRIORITY_LOW;
-// 需要设置为 true，表示重发此消息
-config.isRetrySend = true;
-
-zim::ZIMConversationType type = zim::ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER
-
-auto notification = std::make_shared<zim::ZIMMessageSendNotification>(
-            [=](const std::shared_ptr<zim::ZIMMessage> &message) { int i = 0; });
-
-zim_->sendMessage(message, "toConversationID", type, config, notification,
-                    [=](const std::shared_ptr<zim::ZIMMessage> &message,
-                              const zim::ZIMError &errorInfo) { int i = 0; });
-```
-</CodeGroup>
-:::
-:::if{props.platform="Web|miniprogram|rn|UTS|uniapp"}
-<CodeGroup>
-```typescript title="示例代码" {7,17}
-// 重发单聊 `Text` 信息
-
-const toConversationID = ''; // 对方 userID
-const conversationType = 0; // 会话类型，取值为 单聊：0，房间：1，群组：2
-const config: ZIMMessageSendConfig = { 
-    priority: 1, // 设置消息优先级，取值为 低：1（默认），中:2，高：3
-    isRetrySend: true, // 需要设置为 true，表示重发此消息
-};
-
-const notification: ZIMMessageSendNotification = {
-    onMessageAttached: (message: ZIMMessage) => {}
-}
-
-const messageTextObj: ZIMMessage = {}; // 从 queryHistoryMessage 接口获取发送失败的消息
-
-zim.sendMessage(messageTextObj, toConversationID, conversationType, config, notification)
-    .then((res: ZIMMessageSentResult) => {
-        // 发送成功
-    })
-    .catch((err: ZIMError) => {
-        // 发送失败
-    });
-```
-</CodeGroup>
-:::
-:::if{props.platform="flutter"}
-<CodeGroup>
-```dart title="示例代码" {8,16}
-// 重发单聊 `Text` 信息
-
-ZIMTextMessage textMessage; // 从 queryHistoryMessage 接口获取发送失败的消息
-ZIMMessageSendConfig sendConfig = ZIMMessageSendConfig();
-// 设置消息优先级
-sendConfig.priority = ZIMMessagePriority.low;
-// 需要设置为 true，表示重发此消息
-sendConfig.isRetrySend = true;
-
-ZIMMessageSendNotification notification = ZIMMessageSendNotification(onMessageAttached: (message){
-    // 发送前的回调，开发者可以在这里获取一个临时对象，该对象与开发者创建的 zimMessage 对象属于同一对象，开发者可利用此特性做一些业务逻辑，如提前展示 UI 等
-});
-
-ZIMConversationType type = ZIMConversationType.peer;
-
-ZIM.getInstance()!.sendMessage(textMessage, toConversationID, type, sendConfig).then((value) => {
-    // 开发者可以通过该回调监听消息是否发送成功。
-}).catchError((onError){
-    // 开发者可以捕获发送失败的异常。
-});
-```
-</CodeGroup>
-:::
-
-
-## 收发富媒体消息
+### 富媒体消息
 
 ZIM SDK 支持发送多种类型的富媒体消息，包含图片、文件、音频、视频等消息类型，开发者可以通过以下步骤实现富媒体文件消息的收发。
 
@@ -594,20 +271,14 @@ ZIM SDK 支持发送多种类型的富媒体消息，包含图片、文件、音
 </div>
 :::
 
-### 发送富媒体消息
-
-用户登录成功后，调用 {getPlatformData(props,sendMessageMap)} 接口，指定会话、消息类型（图片、文件、音频、视频）、会话类型（单聊、房间、群组）、以及相关消息配置，向指定会话发送富媒体消息。
-
-
 <Warning title="注意">
 
 :::if{props.platform="undefined|iOS|mac|win|rn|uniapp|UTS|flutter|harmonyos"}
 - 发送富媒体消息时，填写的待发送文件路径，必须使用 `UTF-8` 编码格式和本地文件的绝对路径。
 :::
 - 如果需要向房间/群组内发送富媒体消息，消息发送者必须要在这个房间/群组内。
-
-
 </Warning>
+
 <Note title="说明">
 1. 本地图片（通过 `fileLocalPath` 发送）
 图片将上传至 ZEGO 服务器，并自动生成 `fileDownloadURL`（发送方需在消息发送成功的回调中，通过 ZIMMessage 对象获取该 URL）。发送方和接收方均能通过 `fileDownloadURL` 下载原图（即使发送方本地图片已删除，仍可通过该 URL 重新获取）。
@@ -640,18 +311,18 @@ config.pushConfig = pushConfig;
 
 zim.sendMessage(message, toConversationID, ZIMConversationType.PEER, config, new ZIMMessageSentFullCallback() {
     @Override
-    public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {
+    public void onMessageAttached(ZIMMessage message) {
         // 开发者可以通过该回调，监听消息是否开始准备发送。只有当通过本地基础参数检验的消息才会抛出该回调，否则通过 onMessageSent 回调抛出错误。               
     }
 
     @Override
-    public void onMessageAttached(ZIMMessage message){
-    
+    public void onMessageSent(ZIMMessage message, ZIMError errorInfo){
+        // 开发者可以通过该回调监听消息是否发送成功。
     }
 
     @Override
     public void onMediaUploadingProgress(ZIMMediaMessage message, long currentFileSize, long totalFileSize, ) {
-        // 开发者可以通过该回调监听消息是否发送成功。               
+        // 开发者可以通过该回调监听文件上传进度。               
     }
 });
 ```
@@ -664,13 +335,13 @@ ZIMMessageSendConfig config = new ZIMMessageSendConfig();
 config.priority = ZIMMessagePriority.HIGH;
 zim.sendMessage(message, conversationID, ZIMConversationType.PEER, config, new ZIMMessageSentFullCallback() {
     @Override
-    public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {
-               
-    }
-
-    @Override
     public void onMessageAttached(ZIMMessage message){
     
+    }
+    
+    @Override
+    public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {
+               
     }
 
     @Override
@@ -691,13 +362,13 @@ ZIMMessageSendConfig config = new ZIMMessageSendConfig();
 config.priority = ZIMMessagePriority.HIGH;
 zim.sendMessage(message, conversationID, ZIMConversationType.PEER, config, new ZIMMessageSentFullCallback() {
     @Override
-    public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {
-               
+    public void onMessageAttached(ZIMMessage message){
+    
     }
     
     @Override
-    public void onMessageAttached(ZIMMessage message){
-    
+    public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {
+               
     }
 
     @Override
@@ -717,15 +388,15 @@ ZIMMessageSendConfig config = new ZIMMessageSendConfig();
 config.priority = ZIMMessagePriority.HIGH;
 zim.sendMessage(message, conversationID, ZIMConversationType.PEER, config, new ZIMMessageSentFullCallback() {
     @Override
+    public void onMessageAttached(ZIMMessage message){
+    
+    }
+    
+    @Override
     public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {
                
     }
    
-    @Override
-    public void onMessageAttached(ZIMMessage message){
-    
-    }
-
     @Override
     public void onMediaUploadingProgress(ZIMMediaMessage message, long currentFileSize, long totalFileSize) {
                
@@ -777,11 +448,11 @@ sendConfig.priority = ZIMMessagePriorityHigh;
 
 ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
 notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
-    // 开发者可以监听这个回调执行消息发送前的业务逻辑
+
 };
         
 notification.onMediaUploadingProgress = ^(ZIMMediaMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
-    // 开发者可以监听这个回调获取多媒体上传的进度
+
 };
 
 [[ZIM getInstance] sendMessage:audioMessage toConversationID:@"conversationID" conversationType:ZIMConversationTypePeer config:sendConfig notification:notification callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
@@ -804,11 +475,11 @@ sendConfig.priority = ZIMMessagePriorityHigh;
 
 ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
 notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
-    // 开发者可以监听这个回调执行消息发送前的业务逻辑
+
 };
         
 notification.onMediaUploadingProgress = ^(ZIMMediaMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
-    // 开发者可以监听这个回调获取多媒体上传的进度
+
 };
 
 [[ZIM getInstance] sendMessage:videoMessage toConversationID:@"conversationID" conversationType:ZIMConversationTypePeer config:sendConfig notification:notification callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
@@ -832,11 +503,11 @@ sendConfig.priority = ZIMMessagePriorityHigh;
 
 ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
 notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
-    // 开发者可以监听这个回调执行消息发送前的业务逻辑
+
 };
         
 notification.onMediaUploadingProgress = ^(ZIMMediaMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
-    // 开发者可以监听这个回调获取多媒体上传的进度
+
 };
 
 [[ZIM getInstance] sendMessage:fileMsg toConversationID:@"conversationID" conversationType:ZIMConversationTypePeer config:sendConfig notification:notification callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
@@ -883,7 +554,7 @@ auto notification = std::make_shared<zim::ZIMMessageSendNotification>(
             [=](const std::shared_ptr<zim::ZIMMediaMessage> &message,
                 unsigned long long currentFileSize,
                 unsigned long long totalFileSize) { 
-                // 开发者可监听此回调，获取资源上传的进度
+                // 开发者可监听此回调，获取文件上传的进度
             });
 
 zim_->sendMessage(message, receiver_id, zim::ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER,
@@ -920,12 +591,12 @@ message = &fileMessage;
 
 auto notification = std::make_shared<zim::ZIMMessageSendNotification>(
             [=](const std::shared_ptr<zim::ZIMMessage> &message) { 
-                // 开发者可监听此回调，执行消息发送前的逻辑
+
             },
             [=](const std::shared_ptr<zim::ZIMMediaMessage> &message,
                 unsigned long long currentFileSize,
                 unsigned long long totalFileSize) { 
-                // 开发者可监听此回调，获取资源上传的进度
+
             });
 
 zim_->sendMessage(message, receiver_id, zim::ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER,
@@ -966,12 +637,12 @@ message = &audioMessage;
 
 auto notification = std::make_shared<zim::ZIMMessageSendNotification>(
             [=](const std::shared_ptr<zim::ZIMMessage> &message) { 
-                // 开发者可监听此回调，执行消息发送前的逻辑
+
             },
             [=](const std::shared_ptr<zim::ZIMMediaMessage> &message,
                 unsigned long long currentFileSize,
                 unsigned long long totalFileSize) { 
-                // 开发者可监听此回调，获取资源上传的进度
+
             });
 
 zim_->sendMessage(message, receiver_id, zim::ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER,
@@ -1012,12 +683,12 @@ videoMessage.videoDuration = 100;
 message = &videoMessage;
 auto notification = std::make_shared<zim::ZIMMessageSendNotification>(
             [=](const std::shared_ptr<zim::ZIMMessage> &message) { 
-                // 开发者可监听此回调，执行消息发送前的逻辑
+
             },
             [=](const std::shared_ptr<zim::ZIMMediaMessage> &message,
                 unsigned long long currentFileSize,
                 unsigned long long totalFileSize) { 
-                // 开发者可监听此回调，获取资源上传的进度
+
             });
 
 zim_->sendMessage(message, receiver_id, zim::ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER,
@@ -1318,7 +989,29 @@ if (navigator.mediaDevices) {
 <CodeGroup>
 ```dart title="图片"
 // 发送多媒体消息示例 - 单聊 发送图片消息
-ZIMImageMessage imageMessage = ZIMImageMessage('xxx/xxx.jpeg');
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:universal_io/io.dart';
+
+final XFile? photo = await pickImage(source: ImageSource.gallery);
+final String fileName = photo!.name;
+
+var fileLocalPath;
+if (kIsWeb) {
+  // Web 平台：本地文件内容
+  final bytes = await photo!.readAsBytes();  
+  fileLocalPath = bytes; // Uint8List
+} else {
+  // 其他平台：本地文件绝对路径
+  final String path = (await getApplicationDocumentsDirectory()).path;
+  File photoFile = File(photo!.path);
+  final File copyPhotoFile = await photoFile.copy('$path/${fileName}');  
+  fileLocalPath = copyPhotoFile.path;
+}
+
+ZIMImageMessage imageMessage = ZIMImageMessage(fileLocalPath);
+imageMessage.fileName = fileName;
+
 ZIMMessageSendConfig sendConfig = ZIMMessageSendConfig();
 ZIMMessageSendNotification notification = ZIMMessageSendNotification(onMessageAttached: (message){
     // 开发者可以监听这个回调执行消息发送前的业务逻辑
@@ -1337,12 +1030,22 @@ ZIM.getInstance()!.sendMessage(
 ```
 ```dart title="视频"
 // 发送多媒体消息示例 - 单聊 发送视频消息
-ZIMVideoMessage videoMessage = ZIMVideoMessage('xxx/xxx.mov');
+
+var fileLocalPath;
+if (kIsWeb) {
+  // Web 平台：本地文件内容  
+  fileLocalPath = Uint8List.fromList([1, 2, 3]);
+} else {
+  // 其他平台：本地文件绝对路径  
+  fileLocalPath = '/xxx/xxx.mov';
+}
+
+ZIMVideoMessage videoMessage = ZIMVideoMessage(fileLocalPath);
 ZIMMessageSendConfig sendConfig = ZIMMessageSendConfig();
 ZIMMessageSendNotification notification = ZIMMessageSendNotification(onMessageAttached: (message){
-    // 开发者可以监听这个回调执行消息发送前的业务逻辑
+
 },onMediaUploadingProgress: (message,currentFileSize,totalFileSize){
-    // 开发者可以监听这个回调获取多媒体上传的进度
+
 });
 ZIM
     .getInstance()
@@ -1360,12 +1063,22 @@ ZIM
 ```
 ```dart title="音频"
 // 发送多媒体消息示例 - 单聊 发送音频消息
-ZIMAudioMessage audioMessage  = ZIMAudioMessage('xxx/xxx.mp3');
+
+var fileLocalPath;
+if (kIsWeb) {
+  // Web 平台：本地文件内容  
+  fileLocalPath = Uint8List.fromList([1, 2, 3]);
+} else {
+  // 其他平台：本地文件绝对路径  
+  fileLocalPath = '/xxx/xxx.mp3';
+}
+
+ZIMAudioMessage audioMessage  = ZIMAudioMessage(fileLocalPath);
 ZIMMessageSendConfig sendConfig = ZIMMessageSendConfig();
 ZIMMessageSendNotification notification = ZIMMessageSendNotification(onMessageAttached: (message){
-    // 开发者可以监听这个回调执行消息发送前的业务逻辑
+
 },onMediaUploadingProgress: (message,currentFileSize,totalFileSize){
-    // 开发者可以监听这个回调获取多媒体上传的进度
+
 });
 ZIM
     .getInstance()
@@ -1383,12 +1096,22 @@ ZIM
 ```
 ```dart title="文件"
 // 发送多媒体消息示例 - 单聊 发送文件消息
-ZIMFileMessage fileMessage = ZIMFileMessage('xxx/xxx.txt');
+
+var fileLocalPath;
+if (kIsWeb) {
+  // Web 平台：本地文件内容  
+  fileLocalPath = Uint8List.fromList([1, 2, 3]);
+} else {
+  // 其他平台：本地文件绝对路径  
+  fileLocalPath = '/xxx/xxx.txt';
+}
+
+ZIMFileMessage fileMessage = ZIMFileMessage(fileLocalPath);
 ZIMMessageSendConfig sendConfig = ZIMMessageSendConfig();
 ZIMMessageSendNotification notification = ZIMMessageSendNotification(onMessageAttached: (message){
-    // 开发者可以监听这个回调执行消息发送前的业务逻辑
+
 },onMediaUploadingProgress: (message,currentFileSize,totalFileSize){
-    // 开发者可以监听这个回调获取多媒体上传的进度
+
 });
 ZIM
     .getInstance()
@@ -1407,9 +1130,15 @@ ZIM
 </CodeGroup>
 :::
 
-#### 富媒体文件消息的发送进度回调
+#### 上传文件进度回调
 
-开发者可以通过 {getPlatformData(props,onMediaUploadingProgressMap)} 回调，接收富媒体消息的上传发送进度的相关通知。
+- 通过 {getPlatformData(props,onMediaUploadingProgressMap)} 回调，接收富媒体消息的上传文件进度的相关通知。
+
+    <div>
+    - message：正在发送的消息对象。
+    - currentFileSize：当前已上传文件的大小。
+    - totalFileSize：上传文件的总体大小。
+    </div>
 
 :::if{props.platform=undefined}
 ``` java
@@ -1426,7 +1155,7 @@ typedef void (^ZIMMediaUploadingProgress)(ZIMMediaMessage *message, unsigned lon
 using ZIMMediaUploadingProgress = std::function<void(const std::shared_ptr<ZIMMediaMessage> &message, long long currentSize, long long totalSize)>;
 ```
 :::
-:::if{props.platform="Web|miniprogram|rn|uniapp|harmonyos"}
+:::if{props.platform="Web|miniprogram"}
 ```typescript
 type onMediaUploadingProgress = (message: ZIMMediaMessage, currentFileSize: number, totalFileSize: number) => void;
 ```
@@ -1436,262 +1165,19 @@ type onMediaUploadingProgress = (message: ZIMMediaMessage, currentFileSize: numb
 type onMediaUploadingProgress = (message: ZIMMessage, currentFileSize: number, totalFileSize: number) => void;
 ```
 :::
+:::if{props.platform="rn|uniapp|harmonyos"}
+```typescript
+type onMediaUploadingProgress = (message: ZIMMediaMessage, currentFileSize: number, totalFileSize: number) => void;
+```
+:::
 :::if{props.platform="flutter"}
 ``` dart
 typedef ZIMMediaUploadingProgress = void Function(ZIMMediaMessage message, int currentFileSize, int totalFileSize);
 ```
 :::
 
-其中：
-- message：正在发送消息的内容。
-- currentFileSize：当前已被发送的消息大小。
-- totalFileSize：发送消息的总体大小。
 
-### 接收富媒体消息
-
-接收方用户登录成功后，根据会话类型（单聊、房间、群组）的相关回调监听（ {getPlatformData(props,peerMessageReceivedMap)} 、 {getPlatformData(props,roomMessageReceivedMap)} 、 {getPlatformData(props,groupMessageReceivedMap)} ），接收富媒体消息的相关通知，然后可以直接获取富媒体消息的相关 URL 属性。
-
-:::if{props.platform="undefined|iOS|mac|win|rn|uniapp|UTS|flutter|harmonyos"}
-如需下载富媒体消息到本地，可调用 {getPlatformData(props,downloadMediaFileMap)} 接口。
-
-下载富媒体消息时，需要指定对应的媒体消息的文件类型。
-
-<div>
-- 图片消息：可以选择下载原始文件、大图、缩略图。
-- 文件/音频消息：仅能选择下载文件/音频的原始文件。
-- 视频消息：可以选择下载视频原始文件、视频首帧的缩略图。
-</div>
-:::
-
-:::if{props.platform=undefined}
-``` java
-// 接收富媒体消息示例 - 单聊 接收富媒体消息
-@Override
-public void onPeerMessageReceived(ZIM zim, ArrayList<ZIMMessage> messageList, ZIMMessageReceivedInfo info, String fromUserID) {
-    super.onPeerMessageReceived(zim, messageList, info, fromUserID);
-    
-    ZIMMediaDownloadConfig config = new ZIMMediaDownloadConfig();
-
-    for (ZIMMessage message : messageList) {
-        // 收到消息时，可通过消息的 Type 进行判断接收到何种类型的消息
-        if (message.getType() == ZIMMessageType.IMAGE) {
-            // 获取图片消息
-            ZIMImageMessage imageMessage = (ZIMImageMessage) message;
-            zim.downloadMediaFile(imageMessage, ZIMMediaFileType.ORIGINAL_FILE, config, new ZIMMediaDownloadedCallback() {
-
-                @Override
-                public void onMediaDownloaded(ZIMMessage message, ZIMError errorInfo) {
-                    // 下载完成回调
-                }
-
-                @Override
-                public void onMediaDownloadingProgress(ZIMMessage message, long currentFileSize, long totalFileSize) {
-                    // 下载进度回调
-                }
-            });
-        } else if (message.getType() == ZIMMessageType.VIDEO) {
-            // 获取视频消息
-            ZIMVideoMessage videoMessage = (ZIMVideoMessage) message;
-        } else if (message.getType() == ZIMMessageType.AUDIO) {
-            // 获取音频消息
-            ZIMAudioMessage audioMessage = (ZIMAudioMessage) message;
-        } else if (message.getType() == ZIMMessageType.FILE) {
-            // 获取文件消息
-            ZIMFileMessage fileMessage = (ZIMFileMessage) message;
-        }
-    }
-}
-```
-:::
-:::if{props.platform="iOS|mac"}
-```objc
-// 接收多媒体消息示例 - 单聊 接收图片消息
-- (void)peerMessageReceived:(NSArray<ZIMMessage *> *)messageList
-                info:(ZIMMessageReceivedInfo *)info
-                fromUserID:(NSString *)fromUserID{
-    
-    ZIMMediaDownloadConfig *config = [[ZIMMediaDownloadConfig alloc] init];
-
-    for (ZIMMessage *msg in reverseMsgList) {
-
-        // 收到消息时，可通过消息的 Type 进行判断接收到何种类型的消息
-        switch (msg.type) {
-            case ZIMMessageTypeImage:{
-                ZIMImageMessage *imageMsg = (ZIMImageMessage *)msg;
-                [[ZIM getInstance] downloadMediaFileWithMessage:imageMsg fileType:ZIMMediaFileTypeOriginalFile config:config
-                    progress:^(ZIMMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
-                            
-                            } callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
-                                
-                }];
-                break;
-            }
-            case ZIMMessageTypeVideo:{
-                ZIMVideoMessage *videoMsg = (ZIMVideoMessage *)msg;
-                break;
-            }
-            case ZIMMessageTypeAudio:{
-                ZIMAudioMessage *audioMsg = (ZIMAudioMessage *)msg;
-                break;
-            }
-            case ZIMMessageTypeFile:{
-                ZIMFileMessage *fileMsg = (ZIMFileMessage *)msg;
-                break;
-            }
-            default:
-                break;
-        }
-        
-    }
-}
-```
-:::
-:::if{props.platform="win"}
-``` cpp
-// 接收富媒体消息示例 - 单聊
-void onPeerMessageReceived(
-    zim::ZIM *zim, const std::vector<std::shared_ptr<zim::ZIMMessage>> &messageList,
-    const ZIMMessageReceivedInfo &info,
-    const std::string &fromUserID) {
-    
-    zim::ZIMMediaDownloadConfig download_config;
-
-    for (auto &it : messageList) {
-        // 收到消息时，可通过消息的 Type 进行判断接收到何种类型的消息
-        if (it->getType() == zim::ZIMMessageType::ZIM_MESSAGE_TYPE_IMAGE) {
-            // Image message type
-            auto image_message = std::dynamic_pointer_cast<zim::ZIMImageMessage>(it);
-
-            // 下载原图示例如下，如果想下载其他类型，可以换用其他 ZIMMediaFileType
-            zim_->downloadMediaFile(
-                image_message.get(),
-                zim::ZIMMediaFileType::ZIM_MEDIA_FILE_TYPE_ORIGINAL_FILE,
-                download_config,
-                [=](const std::shared_ptr<zim::ZIMMessage> &message, unsigned int currentSize,
-                    unsigned int totalSize) {
-
-                },
-                [=](const std::shared_ptr<zim::ZIMMessage> &message,
-                    const zim::ZIMError &errorInfo) {
-
-                });
-            ...
-        } else if (it->getType() == zim::ZIMMessageType::ZIM_MESSAGE_TYPE_FILE) {
-            //  文件消息
-            auto media_message = std::dynamic_pointer_cast<zim::ZIMFileMessage>(it);
-            ...
-        } else if (it->getType() == zim::ZIMMessageType::ZIM_MESSAGE_TYPE_AUDIO) {
-            // 音频消息
-            auto media_message = std::dynamic_pointer_cast<zim::ZIMAudioMessage>(it);
-            ...
-        } else if (it->getType() == zim::ZIMMessageType::ZIM_MESSAGE_TYPE_VIDEO) {
-            // 视频消息
-            auto media_message = std::dynamic_pointer_cast<zim::ZIMVideoMessage>(it);
-            ...
-        }
-    }
-
-}
-```
-:::
-
-:::if{props.platform="rn|uniapp|harmonyos"}
-```typescript
-const config: ZIMMediaDownloadConfig = {messageInfoIndex: 0};
-zim.on('peerMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
-    data.messageList.forEach((msg) => {
-        if (msg.type == 11) {
-            zim.downloadMediaFile(msg, 1, config, (_msg, currentFileSize, totalFileSize) => {});
-        }
-    });
-});
-``` 
-:::
-:::if{props.platform="UTS"}
-```typescript
-const config: ZIMMediaDownloadConfig = {messageInfoIndex: 0};
-zim.onPeerMessageReceived((data) => {
-    data.messageList.forEach((msg) => {
-        if (msg.type == 11) {
-            zim.downloadMediaFile(msg, 1, config, (_msg, currentFileSize, totalFileSize) => {});
-        }
-    });
-});
-``` 
-:::
-:::if{props.platform="flutter"}
-``` dart
-// 接收多媒体消息示例 - 单聊 接收图片消息
-ZIMEventHandler.onPeerMessageReceived = (zim, messageList, info, fromUserID) {
-    //收到单聊消息触发此处
-    for (ZIMMessage message in messageList) {
-        // 收到消息时，可通过消息的 Type 进行判断接收到何种类型的消息
-        switch (message.type) {
-            case ZIMMessageType.image:
-                message as ZIMImageMessage;
-                break;
-            case ZIMMessageType.video:
-                message as ZIMVideoMessage;
-                break;
-            case ZIMMessageType.audio:
-                message as ZIMAudioMessage;
-                break;
-            case ZIMMessageType.File:
-                message as ZIMFileMessage;
-                break;
-            default:
-        }
-    }
-};
-```
-:::
-
-:::if{props.platform="undefined|iOS|mac|win|rn|uniapp|UTS|harmonyos|flutter"}
-#### 富媒体文件消息的下载进度回调
-
-开发者可以通过 {getPlatformData2(props,onMediaDownloadingProgressMap)} 回调，接收富媒体消息的下载进度的相关通知。
-
-:::
-
-:::if{props.platform=undefined}
-``` java
-void onMediaDownloadingProgress(ZIMMessage message, long currentFileSize, long totalFileSize);
-```
-:::
-:::if{props.platform="iOS|mac"}
-``` objc
-typedef void (^ZIMMediaDownloadingProgress)(ZIMMessage *message, unsigned long long currentFileSize, unsigned long long totalFileSize);
-```
-:::
-:::if{props.platform="win"}
-``` cpp
-using ZIMMediaDownloadingProgress = std::function<void(const std::shared_ptr<ZIMMessage> &message, unsigned int currentSize, unsigned int totalSize)>;
-```
-:::
-
-  :::if{props.platform="rn|uniapp|UTS|harmonyos"}
-```typescript
-type ZIMMediaDownloadingProgress = (message: ZIMMessage, currentFileSize: number, totalFileSize: number) => void;
-```
-:::
-:::if{props.platform="flutter"}
-``` dart
-typedef ZIMMediaDownloadingProgress = void Function(ZIMMessage message, int currentFileSize, int totalFileSize);
-```
-:::
-
-:::if{props.platform="undefined|iOS|mac|win|rn|uniapp|UTS|harmonyos|flutter"}
-
-其中：
-<div>
-- message：正在下载的消息内容。
-- currentFileSize：当前已被下载的消息大小。
-- totalFileSize：下载消息的总体大小。
-</div>
-:::
-
-
-## 收发信令消息
+### 信令消息
 
 ZIM SDK 支持开发者实现信令类型的消息收发，开发者可以通过 {getPlatformData(props,ZIMCommandMessageMap)} 对象定义自己的消息类型，例如位置消息等。
 
@@ -1700,10 +1186,6 @@ ZIM SDK 支持开发者实现信令类型的消息收发，开发者可以通过
 信令消息不支持离线推送和本地存储。
 </Note>
 
-
-以下以**向指定用户发送信令消息**为例。
-
-### 发送信令消息
 :::if{props.platform=undefined}
 ```java
 //向指定用户发送信令消息
@@ -1802,7 +1284,7 @@ zim_->sendMessage(message, "toConversationID", type, config, notification,
 ```
 :::
 
-:::if{props.platform="Web|miniprogram|rn|uniapp|harmonyos"}
+:::if{props.platform="Web|miniprogram|rn|uniapp"}
 ```typescript
 // 发送单聊 `Command` 信息
 // toConversationID 为 消息需要发送的会话 ID
@@ -1833,7 +1315,7 @@ zim.sendMessage(messageCommandObj, toConversationID, conversationType, config, n
     });
 ```
 :::
-:::if{props.platform="UTS"}
+:::if{props.platform="UTS|harmonyos"}
 ```typescript
 // 发送单聊 `Command` 信息
 // toConversationID 为 消息需要发送的会话 ID
@@ -1876,105 +1358,9 @@ ZIM.getInstance()!.sendMessage(cmdMsg, 'toUserID', ZIMConversationType.peer, sen
 :::
 
 
-### 接收信令消息
+### 自定义消息
 
-:::if{props.platform=undefined}
-```java
-//用户接收信令消息
-zim.setEventHandler(new ZIMEventHandler() {
-    @Override
-    public void onPeerMessageReceived(ZIM zim, ArrayList<ZIMMessage> messageList, ZIMMessageReceivedInfo info, String fromUserID) {
-        // 收到“单聊”通信的消息回调
-        for (ZIMMessage zimMessage : messageList) {
-            if (zimMessage instanceof ZIMCommandMessage) {
-                ZIMCommandMessage zimCommandMessage = (ZIMCommandMessage) zimMessage;
-                
-           }    
-        }
-    }
-});
-```
-:::
-:::if{props.platform="iOS|mac"}
-```objc
-//用户接收信令消息
-- (void)zim:(ZIM *)zim peerMessageReceived:(NSArray<ZIMMessage *> *)messageList info:(ZIMMessageReceivedInfo *)info fromUserID:(NSString *)fromUserID {
-    if (zim != self.zim) {
-        return;
-    }
-    for (ZIMMessage *msg in messageList) {
-        if(msg.type == ZIMMessageTypeCommand){
-            ZIMCommandMessage *cmdMsg = (ZIMCommandMessage *)msg;
-            NSData *receivedData = cmdMsg.message;
-        }
-    }
-}
-```
-:::
-:::if{props.platform="win"}
-```cpp
-//用户接收信令消息
-void onPeerMessageReceived(zim::ZIM *zim, const std::vector<std::shared_ptr<zim::ZIMMessage>> &messageList,
-    const ZIMMessageReceivedInfo &info, const std::string &fromUserID) {
-    for (auto &it : message_list) {
-        if (it->getType() == zim::ZIM_MESSAGE_TYPE_COMMAND) {
-            auto commandMessage = std::dynamic_pointer_cast<zim::ZIMCommandMessage>(it);
-            
-        }
-    }
-}
-```
-:::
-:::if{props.platform="Web|miniprogram|rn|uniapp|harmonyos"}
-```typescript
-// 用户接收信令消息
-zim.on('peerMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
-    data.messageList.forEach((msg) => {
-        // 收到 `Command` 消息时，这里以 JSON 字符串 为例，将 Uint8Array 消息内容转为 JSON 字符串
-        if (msg.type == 2) {
-            const uint8Array = msg.message;
-            const jsonText = decodeURIComponent(escape(String.fromCharCode(...Array.from(uint8Array))));
-            const jsonObj = JSON.parse(jsonText);
-            console.log('peerMessageReceived', jsonObj);
-        }
-    })
-});
-```
-:::
-:::if{props.platform="UTS"}
-```typescript
-// 用户接收信令消息
-zim.onPeerMessageReceived((data) => {
-    data.messageList.forEach((msg) => {
-        // 收到 `Command` 消息时
-        if (msg.type == 2) {
-            const byteArray = msg.message;
-            console.log('peerMessageReceived', byteArray);
-        }
-    })
-});
-```
-:::
-:::if{props.platform="flutter"}
-```dart
-// 用户接收信令消息
-ZIMEventHandler.onPeerMessageReceived = (zim, messageList, info, fromUserID) {
-    //收到单聊消息触发此处
-    for (ZIMMessage message in messageList) {
-        switch (message.type) {
-            case ZIMMessageType.command:
-                message as ZIMCommandMessage;
-                break;
-            default:
-        }
-    }
-};
-```
-:::
-
-## 收发自定义消息
-
-ZIM SDK 支持开发者实现自定义类型的消息收发，开发者可以通过 {getPlatformData(props,ZIMCustomMessageMap)} 对象自行定义消息类型，例如投票类型、接龙类型、视频卡片类型等。开发者可以通过以下步骤实现自定义消息的收发。
+ZIM SDK 支持开发者实现自定义类型的消息收发，开发者可以通过 {getPlatformData(props,ZIMCustomMessageMap)} 对象创建自定义类型消息，例如投票类型、接龙类型、视频卡片类型等。
 
 <Note title="说明">
 
@@ -1982,14 +1368,6 @@ ZIM SDK 支持开发者实现自定义类型的消息收发，开发者可以通
 - 如果接收端的 SDK 版本介乎 [2.0.0, 2.8.0) 区间，可以收到自定义消息时，但会显示此消息类型为未知，且无法获取信息内容。如需获取此条消息，请将 SDK 升级为 2.8.0 或以上版本。
 - 如果接收端的 SDK 版本为 1.x.x 版本，则无法收到自定义消息，也不会收到未知消息。
 </Note>
-
-### 发送自定义消息
-
-发送自定义消息使用的接口为 {getPlatformData(props,sendMessageMap)} ，与发送普通消息所用接口相同，开发者可参考 [收发普通消息 - 发送消息](#发送消息) 了解此接口参数详情。
-
-开发者需要通过 {getPlatformData(props,ZIMCustomMessageMap)} 对象定义自定义类型消息，包括以下参数：
-
-以下为用户在单聊会话中发送自定义消息的示例代码：
 
 :::if{props.platform=undefined}
 ```java
@@ -2151,99 +1529,10 @@ ZIM.getInstance().sendMessage(zimCustomMessage, userID, type, config, ZIMMessage
 ```
 :::
 
-### 接收自定义消息
+### 组合消息
 
-接收自定义消息的回调接口与接收普通消息的回调接口一致，请参考 [收发普通消息 - 接收消息](#接收消息) 了解具体接口。
+ZIM SDK 支持开发者实现组合类型的消息收发，开发者可以通过 {getPlatformData(props,ZIMMultipleMessageMap)} 对象组合多种消息类型（文本、图片、音频、视频、文件和自定义消息），实现图文消息等场景。
 
-以下为用户在单聊会话中接收自定义消息的示例代码：
-
-:::if{props.platform=undefined}
-```java
-// 用户在单聊会话中接收自定义消息
-zim.setEventHandler(new ZIMEventHandler() {
-    @Override
-    public void onPeerMessageReceived(ZIM zim, ArrayList<ZIMMessage> messageList, ZIMMessageReceivedInfo info, String fromUserID) {
-        // 收到“单聊”消息的回调
-        for (ZIMMessage zimMessage : messageList) {
-            if (zimMessage instanceof ZIMCustomMessage) {
-                ZIMCustomMessage zimCustomMessage = (ZIMCustomMessage) zimMessage;
-                
-           }    
-        }
-    }
-});
-```
-
-:::
-:::if{props.platform="iOS|mac"}
-```objc
-// 用户在单聊会话中接收自定义消息
-- (void)zim:(ZIM *)zim peerMessageReceived:(NSArray<ZIMMessage *> *)messageList info:(ZIMMessageReceivedInfo *)info fromUserID:(NSString *)fromUserID {
-    if (zim != self.zim) {
-        return;
-    }
-    for (ZIMMessage *msg in messageList) {
-        if(msg.type == ZIMMessageTypeCustom){
-            // 这里表示接收到自定义消息
-        }
-    }
-}
-```
-:::
-:::if{props.platform="win"}
-```cpp
-//用户接收自定义消息
-void onPeerMessageReceived(zim::ZIM *zim, const std::vector<std::shared_ptr<zim::ZIMMessage>> &messageList,
-    const ZIMMessageReceivedInfo &info, const std::string &fromUserID) {
-    for (auto &it : message_list) {
-        if (it->getType() == zim::ZIM_MESSAGE_TYPE_CUSTOM) {
-            auto customMessage = std::dynamic_pointer_cast<zim::ZIMCustomMessage>(it);
-        }
-    }
-}
-```
-:::
-
-:::if{props.platform="Web|miniprogram|rn|uniapp|harmonyos"}
-```typescript
-// 用户在单聊会话中接收自定义消息
-zim.on('peerMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
-    data.messageList.forEach((msg) => {
-        // 收到 `Custom` 消息时
-        if (msg.type == 200) {
-        }
-    })
-});
-```
-:::
-:::if{props.platform="UTS"}
-```typescript
-// 用户在单聊会话中接收自定义消息
-zim.onPeerMessageReceived((data) => {
-    data.messageList.forEach((msg) => {
-        // 收到 `Custom` 消息时
-        if (msg.type == 200) {
-        }
-    })
-});
-```
-:::
-:::if{props.platform="flutter"}
-```dart
-// 用户在单聊会话中接收自定义消息
-ZIMEventHandler.onPeerMessageReceived = (zim, messageList, info, fromUserID) {
-    for (ZIMMessage message in messageList) {
-        if(message is ZIMCustomMessage){
-        
-        }
-    }
-};
-```
-:::
-:::if{props.platform="undefined|iOS|mac|win|flutter|Web|miniprogram|rn|UTS|harmonyos"}
-## 收发组合消息
-
-ZIM SDK 支持开发者实现组合类型的消息收发，开发者可以通过 {getPlatformData(props,ZIMMultipleMessageMap)} 对象组合多种消息类型，例如图文类型等。
 <Note title="说明">
 - 仅 2.19.0 及以上版本的 ZIM SDK 支持发送组合类型消息，接收并查看组合类型消息的内容。
 - 如果接收端的 SDK 版本介乎 [2.0.0, 2.19.0) 区间，可以收到组合消息时，但会显示此消息类型为未知，且无法获取信息内容。如需获取此条消息，请将 SDK 升级为 2.19.0 或以上版本。
@@ -2253,13 +1542,8 @@ ZIM SDK 支持开发者实现组合类型的消息收发，开发者可以通过
 <Frame width="60%" height="auto" >
   <img src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/22bdff3b4b.png" alt="ZIMMultipleMessage_zh.png"/>
 </Frame>
-:::
-:::if{props.platform="undefined|iOS|mac|win|flutter|Web|miniprogram|rn|UTS|harmonyos"}
-### 发送组合消息
 
-用户登录成功后，通过 {getPlatformData(props,ZIMMultipleMessageMap)} 对象组合多种消息类型（文本、图片、音频、视频、文件和自定义文本等），调用 {getPlatformData(props,sendMessageMap)} 接口向单聊、房间或群聊会话发送该消息。
-
-您可以通过 {getPlatformData(props,multipleMediaUploadingProgressMap)} 回调，接收组合消息中富媒体文件的上传进度的相关通知。在此回调中，您可以了解到以下字段：
+通过 {getPlatformData(props,multipleMediaUploadingProgressMap)} 回调，接收组合消息中富媒体文件的上传进度的相关通知。在此回调中，您可以了解到以下字段：
 <div>
 - currentFileSize：已上传文件总大小，单位为 Byte。
 - totalFileSize：组合消息中多媒体文件的总大小，，单位为 Byte。
@@ -2274,7 +1558,6 @@ ZIM SDK 支持开发者实现组合类型的消息收发，开发者可以通过
 - 当前文件上传进度 = currentIndexFileSize / totalIndexFileSize。
 </div>
 
-以下为用户在单聊会话中发送组合消息的示例代码：
 :::
 :::if{props.platform=undefined}
 ```java
@@ -2715,109 +1998,9 @@ ZIM.getInstance().sendMessage(zimMultipleMessage, userID, type, config, notifica
   });
 ```
 :::
-:::if{props.platform="undefined|iOS|mac|win|flutter|Web|miniprogram|rn|UTS|harmonyos"}
-### 接收组合消息
-
-接收组合消息的回调接口与接收普通消息的回调接口一致，请参考 [收发普通消息 - 接收消息](#接收消息) 了解具体接口。
-
-1. 在消息接收回调中，若消息类型为 `ZIMMessageType.COMBINE`，调用 {getPlatformData(props,queryCombineMessageDetailMap)} 接口查询组合消息详情。
-
-2. 在 {getPlatformData(props,ZIMCombineMessageDetailQueriedCallbackMap)} 回调中，遍历子消息列表；若子消息为 `ZIMImageMessage` 类型，通过 {getPlatformData(props,downloadMediaFileMap)} 下载图片。
-
-以下为用户在单聊会话中接收组合消息的示例代码：
-:::
-:::if{props.platform=undefined}
-```java
-// 用户在单聊会话中接收组合消息
-zim.setEventHandler(new ZIMEventHandler() {
-    @Override
-    public void onPeerMessageReceived(ZIM zim, ArrayList<ZIMMessage> messageList, ZIMMessageReceivedInfo info, String fromUserID) {
-        // 收到“单聊”消息的回调
-        for (ZIMMessage zimMessage : messageList) {
-            if (zimMessage instanceof ZIMMultipleMessage) {
-                ZIMMultipleMessage zimMultipleMessage = (ZIMMultipleMessage) zimMessage;
-                
-           }    
-        }
-    }
-});
-```
-:::
-:::if{props.platform="iOS|mac"}
-```objc
-// 用户在单聊会话中接收组合消息
-- (void)zim:(ZIM *)zim peerMessageReceived:(NSArray<ZIMMessage *> *)messageList info:(ZIMMessageReceivedInfo *)info fromUserID:(NSString *)fromUserID {
-    if (zim != self.zim) {
-        return;
-    }
-    for (ZIMMessage *msg in messageList) {
-        if(msg.type == ZIMMessageTypeMultiple){
-            // 这里表示接收到组合消息
-        }
-    }
-}
-```
-:::
-:::if{props.platform="win"}
-```cpp
-// 用户接收组合消息
-void onPeerMessageReceived(zim::ZIM *zim, const std::vector<std::shared_ptr<zim::ZIMMessage>> &messageList,
-    const ZIMMessageReceivedInfo &info, const std::string &fromUserID) {
-    for (auto &it : message_list) {
-        if (it->getType() == zim::ZIM_MESSAGE_TYPE_MULTIPLE ) {
-            auto multipleMessage = std::dynamic_pointer_cast<zim::ZIMMultipleMessage>(it);
-        }
-    }
-}
-```
-:::
-:::if{props.platform="Web|miniprogram|rn|uniapp|harmonyos"}
-```typescript
-// 用户在单聊会话中接收组合消息
-zim.on('peerMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
-    data.messageList.forEach((msg) => {
-        // 收到 `Multiple` 消息时
-        if (msg.type == 10) {
-            msg.messageInfoList.forEach((info) => {
-                // 根据消息类型展示 UI
-                console.log('组合消息 item 类型：' + info.type);
-            }
-        }
-    })
-});
-```
-:::
-:::if{props.platform="UTS"}
-```typescript
-// 用户在单聊会话中接收组合消息
-zim.onPeerMessageReceived((data) => {
-    data.messageList.forEach((msg) => {
-        // 收到 `Multiple` 消息时
-        if (msg.type == 10) {
-            msg.messageInfoList.forEach((info) => {
-                // 根据消息类型展示 UI
-                console.log('组合消息 item 类型：' + info.type);
-            }
-        }
-    })
-});
-```
-:::
-:::if{props.platform="flutter"}
-```dart
-// 用户在单聊会话中接收组合消息
-ZIMEventHandler.onPeerMessageReceived = (zim, messageList, info, fromUserID) {
-    for (ZIMMessage message in messageList) {
-        if(message is ZIMMultipleMessage){
-        
-        }
-    }
-};
-```
-:::
 
 
-## 收发 @ 消息
+### @ 消息
 
 @ 消息，是指包含“@ + 用户”内容的消息。被 @ 的用户在收到消息时会强提醒。
 
@@ -2827,19 +2010,15 @@ ZIMEventHandler.onPeerMessageReceived = (zim, messageList, info, fromUserID) {
 
 <Note title="说明">
 
-@ 消息不属于消息类型。一条消息既可以是文本消息或其他类型消息，同时也是 @ 消息。
+仅 2.14.0 及以上版本的 ZIM SDK 支持发送消息中带 @ 信息。
+
+@ 消息不属于消息类型，是消息对象的属性。一条消息既可以是文本消息或其他类型消息，同时也是 @ 消息。
 </Note>
 
-### 发送 @ 消息
-
-在调用 {getPlatformData(props,sendMessageMap)} 发送消息时，可以通过以下方法（可同时使用）将一条消息设置为 @ 信息：
+在调用 {getPlatformData(props,sendMessageMap)} 发送消息时，可以通过以下属性或方法（可同时使用）将一条消息设置为 @ 信息：
 - {getPlatformData2(props,mentionedUserIDsMap)}：提醒指定用户（可以是会话外用户）查看消息。传入的 userID 列表长度最多为 50，如需上调，请联系 ZEGO 技术支持。
 - {getPlatformData2(props,isMentionAllMap)}：提醒会话内所有其他用户查看消息。
 
-<Note title="说明">
-
-仅 2.14.0 及以上版本的 ZIM SDK 支持发送消息中带 @ 信息。
-</Note>
 
 :::if{props.platform=undefined}
 ```java
@@ -3026,11 +2205,554 @@ try {
 ```
 :::
 
-### 接收 @ 消息
 
-接收 @ 消息的回调接口与接收普通消息的回调接口一致，请参考 [收发普通消息 - 接收消息](#接收消息) 了解具体接口。
+## 接收消息
 
-收到消息后，开发者可根据业务逻辑实现对应的功能，如高亮等。
+<Warning title="注意">
+:::if{props.platform="undefined|iOS|mac|win|flutter|Web|miniprogram|rn|uniapp"}
+<div>
+- 开发者可以通过 {getPlatformData(props,setEventHandlerMap)} 注册监听，用于接收消息相关通知。
+</div>
+:::
+:::if{props.platform="UTS"}
+<div>
+- 开发者可以通过相关回调接收消息通知。
+</div>
+:::
+- 接收消息时：
+  + 单聊消息（Peer 类型），通过 {getPlatformData(props, peerMessageReceivedMap)} 回调接收。
+  + 房间消息（Room 类型），通过 {getPlatformData(props, roomMessageReceivedMap)} 回调接收。
+  + 群组消息（Group 类型），通过 {getPlatformData(props, groupMessageReceivedMap)} 回调接收。
+- 接收消息时，收到的消息类型是基类 {getPlatformData(props,ZIMMessageMap)} 。开发者需要根据其中的 `type`（具体请参考 {getPlatformData(props,ZIMMessageTypeMap)} ）字段，判断消息类型，然后强转基类为具体的子类。
+- 接收消息时，可以使用消息的 orderkey 来实现排序；即 orderkey 越大，消息的时间越新。接收到消息后，会自动更新消息未读数量。
+</Warning>
+
+:::if{props.platform=undefined}
+```java
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onPeerMessageReceived(ZIM zim, ArrayList<ZIMMessage> messageList, ZIMMessageReceivedInfo info, String fromUserID) {
+        // 收到单聊消息的回调
+        
+        ZIMMediaDownloadConfig config = new ZIMMediaDownloadConfig();
+
+        for (ZIMMessage zimMessage : messageList) {
+           if (zimMessage instanceof ZIMTextMessage) {
+                ZIMTextMessage zimTextMessage = (ZIMTextMessage) zimMessage;
+           } else if (zimMessage instanceof ZIMBarrageMessage) {
+                ZIMBarrageMessage zimBarrageMessage = (ZIMBarrageMessage) zimMessage;
+           } else if (zimMessage instanceof ZIMCommandMessage) {
+                ZIMCommandMessage zimCommandMessage = (ZIMCommandMessage) zimMessage;
+           } else if (zimMessage instanceof ZIMCustomMessage) {
+                ZIMCustomMessage zimCustomMessage = (ZIMCustomMessage) zimMessage;
+           } else if (zimMessage instanceof ZIMMediaMessage) {
+                // 下载富媒体文件消息
+                ZIMMediaMessage zimMediaMessage = (ZIMMediaMessage) zimMessage;
+
+                zim.downloadMediaFile(zimMediaMessage, ZIMMediaFileType.ORIGINAL_FILE, config, new ZIMMediaDownloadedCallback() {
+
+                    @Override
+                    public void onMediaDownloaded(ZIMMessage message, ZIMError errorInfo) {
+                        // 下载完成回调
+                    }
+
+                    @Override
+                    public void onMediaDownloadingProgress(ZIMMessage message, long currentFileSize, long totalFileSize) {
+                        // 下载进度回调
+                    }
+                });
+           } else if (zimMessage instanceof ZIMMultipleMessage) {
+                // 下载组合消息中的富媒体文件
+                ZIMMultipleMessage zimMultipleMessage = (ZIMMultipleMessage) zimMessage;
+
+                ArrayList infos = zimMultipleMessage.getMessageInfoList();
+                for (int i = 0; i < infos.size(); i++) {
+                    if (infos.get(i) instanceof ZIMMediaMessageLiteInfo) {
+                        ZIMMediaDownloadConfig messageInfoConfig = new ZIMMediaDownloadConfig();
+                        // 设置为 item 的序号
+                        messageInfoConfig.messageInfoIndex = i;
+
+                        zim.downloadMediaFile(zimMultipleMessage, ZIMMediaFileType.ORIGINAL_FILE, messageInfoConfig, new ZIMMediaDownloadedCallback() {
+
+                            @Override
+                            public void onMediaDownloaded(ZIMMessage message, ZIMError errorInfo) {
+                                // 下载完成回调
+                            }
+
+                            @Override
+                            public void onMediaDownloadingProgress(ZIMMessage message, long currentFileSize, long totalFileSize) {
+                                // 下载进度回调
+                            }
+                        });
+                    }
+                }
+           } 
+        }
+    }
+
+    @Override
+    public void onGroupMessageReceived(ZIM zim, ArrayList<ZIMMessage> messageList, ZIMMessageReceivedInfo info, String fromGroupID) {
+        // 收到群组消息的回调
+    }
+
+    @Override
+    public void onRoomMessageReceived(ZIM zim, ArrayList<ZIMMessage> messageList, ZIMMessageReceivedInfo info, String fromRoomID) {
+        // 收到房间消息的回调
+    }
+});
+```
+:::
+:::if{props.platform="iOS|mac"}
+```objc
+//注册 ZIMEventHander 回调
+[zim setEventHandler:self];
+
+// 收到单聊消息的回调
+- (void)zim:(ZIM *)zim
+    peerMessageReceived:(NSArray<ZIMMessage *> *)messageList
+            info:(ZIMMessageReceivedInfo *)info
+            fromUserID:(NSString *)fromUserID {
+                
+    ZIMMediaDownloadConfig *config = [[ZIMMediaDownloadConfig alloc] init];
+
+    for (ZIMMessage *msg in messageList) {
+        if(msg.type == ZIMMessageTypeCommand){
+            ZIMCommandMessage *cmdMsg = (ZIMCommandMessage *)msg;
+            NSData *receivedData = cmdMsg.message;
+        } else if(msg.type == ZIMMessageTypeCustom){
+            ZIMCustomMessage *customMsg = (ZIMCustomMessage *)msg;
+        } else if(msg.type == ZIMMessageTypeImage || msg.type == ZIMMessageTypeFile || msg.type == ZIMMessageTypeAudio || msg.type == ZIMMessageTypeVideo){
+            // 下载富媒体文件消息
+            ZIMMediaMessage *mediaMsg = (ZIMMediaMessage *)msg;
+            [[ZIM getInstance] downloadMediaFileWithMessage:mediaMsg fileType:ZIMMediaFileTypeOriginalFile config:config
+                progress:^(ZIMMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+                    // 下载进度
+                } callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+                    // 下载结果 
+                }];
+        } else if(msg.type == ZIMMessageTypeMultiple){
+            // 下载组合消息中的富媒体文件
+            ZIMMultipleMessage *multipleMsg = (ZIMMultipleMessage *)msg;
+
+            NSArray<ZIMMessageLiteInfo *> *infos = multipleMsg.messageInfoList;
+            for (NSUInteger i = 0; i < [infos count]; i++) {
+                ZIMMessageLiteInfo *info = infos[i];
+                if (info.type == ZIMMessageTypeImage || info.type == ZIMMessageTypeFile || info.type == ZIMMessageTypeAudio || info.type == ZIMMessageTypeVideo) {
+                    ZIMMediaDownloadConfig *infoConfig = [[ZIMMediaDownloadConfig alloc] init];
+                    // 设置为 item 的序号
+                    infoConfig.messageInfoIndex = i;
+
+                    [[ZIM getInstance] downloadMediaFileWithMessage:multipleMsg fileType:ZIMMediaFileTypeOriginalFile config:infoConfig
+                        progress:^(ZIMMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+                            // 下载进度
+                        } callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+                            // 下载结果 
+                        }];
+                }
+            }
+
+        } 
+    }        
+}
+
+// 收到群组消息的回调
+- (void)zim:(ZIM *)zim
+    groupMessageReceived:(NSArray<ZIMMessage *> *)messageList
+            info:(ZIMMessageReceivedInfo *)info
+            fromGroupID:(NSString *)fromGroupID{
+}
+
+// 收到房间消息的回调
+- (void)zim:(ZIM *)zim
+    roomMessageReceived:(NSArray<ZIMMessage *> *)messageList
+            info:(ZIMMessageReceivedInfo *)info
+            fromRoomID:(NSString *)fromRoomID{
+}
+```
+:::
+:::if{props.platform="win"}
+```cpp
+// 收到单聊消息的回调
+void onPeerMessagedReceived(ZIM *zim*,
+                         const std::vector<std::shared_ptr<ZIMMessage>> & messageList,
+                         const ZIMMessageReceivedInfo & info,
+                         const std::string &fromUserID) {
+
+    zim::ZIMMediaDownloadConfig download_config;
+
+    for (auto &it : message_list) {
+        zim::ZIMMessageType type = it->getType();
+        if (type == zim::ZIM_MESSAGE_TYPE_COMMAND) {
+            auto commandMessage = std::dynamic_pointer_cast<zim::ZIMCommandMessage>(it);
+        } else if (type == zim::ZIM_MESSAGE_TYPE_CUSTOM) {
+            auto customMessage = std::dynamic_pointer_cast<zim::ZIMCustomMessage>(it);
+        } else if (type == zim::ZIMMessageType::ZIM_MESSAGE_TYPE_IMAGE
+            || type == zim::ZIMMessageType::ZIM_MESSAGE_TYPE_FILE
+            || type == zim::ZIMMessageType::ZIM_MESSAGE_TYPE_AUDIO
+            || type == zim::ZIMMessageType::ZIM_MESSAGE_TYPE_VIDEO) {
+
+            // 下载富媒体文件消息
+            auto mediaMessage = std::dynamic_pointer_cast<zim::ZIMMediaMessage>(it);
+            zim->downloadMediaFile(
+                mediaMessage.get(),
+                zim::ZIMMediaFileType::ZIM_MEDIA_FILE_TYPE_ORIGINAL_FILE,
+                download_config,
+                [=](const std::shared_ptr<zim::ZIMMessage> &message, unsigned long long currentSize,
+                    unsigned long long totalSize) {
+                    // 下载进度
+                },
+                [=](const std::shared_ptr<zim::ZIMMessage> &message,
+                    const zim::ZIMError &errorInfo) {
+
+                });
+        } else if (type == zim::ZIM_MESSAGE_TYPE_MULTIPLE) {
+            // 下载组合消息中的富媒体文件
+            auto multipleMessage = std::dynamic_pointer_cast<zim::ZIMMultipleMessage>(it);
+            const auto &infoList = multipleMessage->messageInfoList;
+            for (size_t i = 0; i < infoList.size(); ++i) {
+                auto &infoItem = infoList[i];
+
+                zim::ZIMMessageType subType = infoItem->type;
+                if (subType == zim::ZIM_MESSAGE_TYPE_IMAGE ||
+                    subType == zim::ZIM_MESSAGE_TYPE_FILE ||
+                    subType == zim::ZIM_MESSAGE_TYPE_AUDIO ||
+                    subType == zim::ZIM_MESSAGE_TYPE_VIDEO) {
+
+                    zim::ZIMMediaDownloadConfig itemConfig;
+                    // 设置为 item 的序号
+                    itemConfig.messageInfoIndex = static_cast<int>(i);
+
+                    zim->downloadMediaFile(
+                        multipleMessage.get(),
+                        zim::ZIMMediaFileType::ZIM_MEDIA_FILE_TYPE_ORIGINAL_FILE,
+                        itemConfig,
+                        // 下载进度
+                        [&](const std::shared_ptr<zim::ZIMMessage> &message,
+                            unsigned long long currentSize,
+                            unsigned long long totalSize) {
+                            // TODO: 处理组合消息子项的下载进度
+                        },
+                        // 下载完成
+                        [&](const std::shared_ptr<zim::ZIMMessage> &message,
+                            const zim::ZIMError &errorInfo) {
+                            // TODO: 组合消息子项下载完成
+                        });
+                }
+            }
+        } 
+    }
+}
+
+// 收到群组消息的回调
+void onGroupMessagedReceived(ZIM *zim*,
+                         const std::vector<std::shared_ptr<ZIMMessage>> & messageList,
+                         const ZIMMessageReceivedInfo & info,
+                         const std::string &fromGroupID) {
+}
+
+// 收到房间消息的回调
+void onRoomMessagedReceived(ZIM *zim*,
+                         const std::vector<std::shared_ptr<ZIMMessage>> & messageList,
+                         const ZIMMessageReceivedInfo & info,
+                         const std::string &fromRoomID) {
+}
+```
+:::
+
+:::if{props.platform="Web|miniprogram"}
+```typescript
+// 收到单消息的回调
+zim.on('peerMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
+    data.messageList.forEach((msg) => {
+        if (msg.type == 2) {
+            // 信令消息，这里以 JSON 字符串 为例，将 Uint8Array 消息内容转为 JSON 字符串
+            const uint8Array = msg.message;
+            const jsonText = decodeURIComponent(escape(String.fromCharCode(...Array.from(uint8Array))));
+            const jsonObj = JSON.parse(jsonText);
+        } 
+        // 富媒体文件消息的 URL
+        else if (msg.type == 11) {
+            console.log(msg.thumbnailDownloadUrl, msg.largeImageDownloadUrl, msg.fileDownloadUrl);
+        } else if (msg.type == 12) {
+            console.log(msg.fileDownloadUrl);
+        } else if (msg.type == 13) {
+            console.log(msg.fileDownloadUrl);
+        } else if (msg.type == 14) {
+            console.log(msg.videoFirstFrameDownloadUrl, msg.fileDownloadUrl);
+        } else if (msg.type == 10) {
+            // 组合消息中的富媒体文件的 URL
+            msg.messageInfoList.forEach((info) => {
+                if (info.type == 11) {
+                    console.log(info.thumbnailDownloadUrl, info.largeImageDownloadUrl, info.fileDownloadUrl);
+                } else if (info.type == 12) {
+                    console.log(info.fileDownloadUrl);
+                } else if (info.type == 13) {
+                    console.log(info.fileDownloadUrl);
+                } else if (info.type == 14) {
+                    console.log(info.videoFirstFrameDownloadUrl, info.fileDownloadUrl);
+                } 
+            }
+        }
+    })
+});
+
+// 收到群组消息的回调
+zim.on('groupMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
+});
+
+// 收到房间消息的回调
+zim.on('roomMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
+});
+```
+:::
+
+:::if{props.platform="rn|uniapp|harmonyos"}
+```typescript
+// 收到单消息的回调
+zim.on('peerMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
+    
+    const config: ZIMMediaDownloadConfig = {messageInfoIndex: 0};
+
+    data.messageList.forEach((msg) => {
+        if (msg.type == 2) {
+            // 信令消息，这里以 JSON 字符串 为例，将 Uint8Array 消息内容转为 JSON 字符串
+            const uint8Array = msg.message;
+            const jsonText = decodeURIComponent(escape(String.fromCharCode(...Array.from(uint8Array))));
+            const jsonObj = JSON.parse(jsonText);
+        } else if (msg.type == 11 || msg.type == 12 || msg.type == 13 || msg.type == 14) {
+            // 下载富媒体文件消息
+            zim.downloadMediaFile(msg, 1, config, (_msg, currentFileSize, totalFileSize) => {
+                // 下载进度
+            })
+            .then((res: ZIMMediaDownloadedResult) => {
+                // 操作成功
+            })
+            .catch((err: ZIMError) => {
+                // 操作失败
+            })
+        } else if (msg.type == 10) {
+            // 下载组合消息中的富媒体文件
+            msg.messageInfoList.forEach((info, i) => {
+                if (info.type == 11 || info.type == 12 || info.type == 13 || info.type == 14) {
+                    // 设置为 item 的序号
+                    const infoConfig: ZIMMediaDownloadConfig = {messageInfoIndex: i};
+
+                    zim.downloadMediaFile(msg, 1, infoConfig, (_msg, currentFileSize, totalFileSize) => {
+                        // 下载进度
+                    })
+                    .then((res: ZIMMediaDownloadedResult) => {
+                        // 操作成功
+                    })
+                    .catch((err: ZIMError) => {
+                        // 操作失败
+                    })
+                } 
+            }
+        }
+    })
+});
+
+// 收到群组消息的回调
+zim.on('groupMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
+});
+
+// 收到房间消息的回调
+zim.on('roomMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
+});
+```
+:::
+
+:::if{props.platform="UTS"}
+```typescript
+// 收到单聊消息的回调
+zim.onPeerMessageReceived((data) => {
+    
+    const config: ZIMMediaDownloadConfig = {messageInfoIndex: 0};
+
+    data.messageList.forEach((msg) => {
+        if (msg.type == 2) {
+            // 信令消息
+            const byteArray = msg.message;
+        } else if (msg.type == 11 || msg.type == 12 || msg.type == 13 || msg.type == 14) {
+            // 下载富媒体文件消息
+            zim.downloadMediaFile(msg, 1, config, (_msg, currentFileSize, totalFileSize) => {
+                // 下载进度
+            })
+            .then((res: ZIMMediaDownloadedResult) => {
+                // 操作成功
+            })
+            .catch((err: ZIMError) => {
+                // 操作失败
+            })
+        } else if (msg.type == 10) {
+            // 下载组合消息中的富媒体文件
+            msg.messageInfoList.forEach((info, i) => {
+                if (info.type == 11 || info.type == 12 || info.type == 13 || info.type == 14) {
+                    // 设置为 item 的序号
+                    const infoConfig: ZIMMediaDownloadConfig = {messageInfoIndex: i};
+
+                    zim.downloadMediaFile(msg, 1, infoConfig, (_msg, currentFileSize, totalFileSize) => {
+                        // 下载进度
+                    })
+                    .then((res: ZIMMediaDownloadedResult) => {
+                        // 操作成功
+                    })
+                    .catch((err: ZIMError) => {
+                        // 操作失败
+                    })
+                } 
+            }
+        }
+    })
+});
+
+// 收到群组消息的回调
+zim.onGroupMessageReceived((data) => {
+});
+
+// 收到房间消息的回调
+zim.onRoomMessageReceived((data) => {
+});
+```
+:::
+:::if{props.platform="flutter"}
+```dart
+ZIMEventHandler.onPeerMessageReceived = (zim, messageList, info, fromUserID) {
+    
+    ZIMMediaDownloadConfig config = ZIMMediaDownloadConfig();
+
+    for (ZIMMessage message in messageList) {
+        switch (message.type) {
+            case ZIMMessageType.command:
+                message as ZIMCommandMessage;
+                break;
+            case ZIMMessageType.custom:
+                message as ZIMCustomMessage;
+                break;
+
+            // 下载富媒体文件消息    
+            case ZIMMessageType.image:
+            case ZIMMessageType.video:
+            case ZIMMessageType.audio:
+            case ZIMMessageType.file:
+                message as ZIMMediaMessage;
+
+                zim.downloadMediaFile(message, ZIMMediaFileType.originalFile, config, (ZIMMessage message, int currentFileSize, int totalFileSize) {
+                    // 下载进度
+                }).then((ZIMMessage message) {
+                    // 下载完成
+                }).catch((ZIMError errorInfo) {
+                    // 下载失败
+                });
+                break;        
+
+            // 下载组合消息中的富媒体文件
+            case ZIMMessageType.multiple:
+                message as ZIMMultipleMessage;
+
+                List<ZIMMessageLiteInfo> infos = message.messageInfoList;
+                for (int i = 0; i < infos.length; i++) {
+                    if (infos[i] is ZIMMediaMessageLiteInfo) {
+                        ZIMMediaDownloadConfig messageInfoConfig = ZIMMediaDownloadConfig();
+                        // 设置为 item 的序号
+                        messageInfoConfig.messageInfoIndex = i;
+
+                        zim.downloadMediaFile(message, ZIMMediaFileType.originalFile, messageInfoConfig, (ZIMMessage message, int currentFileSize, int totalFileSize) {
+                            // 下载进度
+                        }).then((ZIMMessage message) {
+                            // 下载完成
+                        }).catch((ZIMError errorInfo) {
+                            // 下载失败
+                        });
+                    }
+                }
+                break;
+
+            default:
+                break;
+        }
+    }
+};
+
+ZIMEventHandler.onGroupMessageReceived = (zim, messageList, info, fromGroupID) {
+    //收到群聊消息触发此处
+};
+
+ZIMEventHandler.onRoomMessageReceived = (zim, messageList, info, fromGroupID) {
+  //收到房间消息触发此处
+};
+```
+:::
+
+
+### 富媒体消息
+
+接收富媒体消息时，可以直接获取富媒体消息的相关 URL 属性。
+
+:::if{props.platform="undefined|iOS|mac|win|rn|uniapp|UTS|harmonyos|flutter"}
+如需下载富媒体消息到本地，可调用 {getPlatformData(props,downloadMediaFileMap)} 接口。
+
+下载富媒体消息时，需要指定对应的媒体消息的文件类型。
+
+<div>
+- 图片消息：可以选择下载原始文件、大图、缩略图。
+- 文件/音频消息：仅能选择下载文件/音频的原始文件。
+- 视频消息：可以选择下载视频原始文件、视频首帧的缩略图。
+</div>
+
+#### 下载文件进度回调
+
+- 通过 {getPlatformData2(props,onMediaDownloadingProgressMap)} 回调，接收富媒体消息的下载文件进度的相关通知。
+
+    <div>
+    - message：正在下载的消息对象。
+    - currentFileSize：当前已下载文件的大小。
+    - totalFileSize：下载文件的总体大小。
+    </div>    
+:::
+
+:::if{props.platform=undefined}
+``` java
+void onMediaDownloadingProgress(ZIMMessage message, long currentFileSize, long totalFileSize);
+```
+:::
+:::if{props.platform="iOS|mac"}
+``` objc
+typedef void (^ZIMMediaDownloadingProgress)(ZIMMessage *message, unsigned long long currentFileSize, unsigned long long totalFileSize);
+```
+:::
+:::if{props.platform="win"}
+``` cpp
+using ZIMMediaDownloadingProgress = std::function<void(const std::shared_ptr<ZIMMessage> &message, unsigned int currentSize, unsigned int totalSize)>;
+```
+:::
+:::if{props.platform="UTS"}
+```typescript
+type ZIMMediaDownloadingProgress = (message: ZIMMessage, currentFileSize: number, totalFileSize: number) => void;
+```
+:::
+:::if{props.platform="rn|uniapp|harmonyos"}
+```typescript
+type ZIMMediaDownloadingProgress = (message: ZIMMessage, currentFileSize: number, totalFileSize: number) => void;
+```
+:::
+:::if{props.platform="flutter"}
+``` dart
+typedef ZIMMediaDownloadingProgress = void Function(ZIMMessage message, int currentFileSize, int totalFileSize);
+```
+:::
+
+:::if{props.platform="undefined|iOS|mac|win|flutter|rn|uniapp|UTS|harmonyos"}
+### 组合消息
+
+如果需要下载组合消息的 Item 中的富媒体文件，可遍历 `messageInfoList` 列表并判断为富媒体文件类型时，调用 `downloadMediaFile` 接口下载。开发者可参考 [接收消息 - 富媒体消息](#富媒体消息-2) 了解此接口参数详情。
+:::
+
+### Tips 消息
+
+ZIM SDK 支持用户在会话内的操作转换为 Tips 消息。当相关操作出现后，ZIM SDK 会向会话发送一条 Tips 消息进行通知，详情请参考 [接收 Tips 消息](./Receive%20tip%20messages.mdx)。
+
+### @ 消息
 
 <Note title="说明">
 
@@ -3039,13 +2761,13 @@ try {
 - 如果接收端的 SDK 版本为 1.x.x 版本，则无法收到 @ 信息。
 </Note>
 
-### 获取 mentionedInfoList
+#### 获取 mentionedInfoList
 
 当会话内用户被提醒后，可以被动或主动获取 {getPlatformData(props,mentionedInfoListMap)} 。
 
 {getPlatformData(props,mentionedInfoListMap)}，包含 @ 消息的对应消息 ID，发送者 userID，以及 @ 消息的类型 {getPlatformData(props,ZIMMessageMentionedTypeMap)} ，开发者可用于实现标记会话等多样业务逻辑。
 
-#### 被动获取
+##### 被动获取
 
 在用户被提醒时，会收到 {getPlatformData(props,conversationChangedMap)} 回调，即可获取当前 {getPlatformData(props,ZIMConversationMap)} 的最新 {getPlatformData(props,mentionedInfoListMap)} 。
 
@@ -3098,7 +2820,7 @@ ZIMEventHandler.onConversationChanged = (ZIM zim, List<ZIMConversationChangeInfo
 ```
 :::
 
-#### 主动获取
+##### 主动获取
 
 如用 {getPlatformData(props,queryConversationListMap)} 或者 {getPlatformData(props,queryConversationMap)} 主动拉取会话，也可获取会话里面的 {getPlatformData(props,mentionedInfoListMap)} ，可参考以下示例代码：
 
@@ -3130,7 +2852,7 @@ List<ZIMMessageMentionedInfo> mentionedInfoList = conversation.mentionedInfoList
 ```
 :::
 
-### 清除会话的 mentionedInfoList
+#### 清除会话的 mentionedInfoList
 
 接收 @ 消息后，用户需要清除会话的 {getPlatformData(props,mentionedInfoListMap)} ，才能不再被提醒。
 
@@ -3138,7 +2860,7 @@ List<ZIMMessageMentionedInfo> mentionedInfoList = conversation.mentionedInfoList
 - {getPlatformData(props,clearConversationUnreadMessageCountMap)} ：清除单个会话消息未读数，调用示例请参考 [会话管理 - 清除单个会话消息未读数](../Conversation/Manage%20unread%20message%20counts.mdx#清除单个会话消息未读数)。
 - {getPlatformData(props,clearConversationTotalUnreadMessageCountMap)} ：清除全部会话消息未读数，调用示例请参考 [会话管理 - 清除全部会话消息未读数](../Conversation/Manage%20unread%20message%20counts.mdx#清除全部会话消息未读数)。
 
-### 获取被提醒用户列表
+#### 获取被提醒用户列表
 
 会话内所有用户都可以调用 {getPlatformData2(props,mentionedUserIDsMap)} 参数获取具体的被提醒用户列表。
 
@@ -3168,7 +2890,7 @@ List<String> userIds = message.mentionedUserIDs;
 ```
 :::
 
-### 确认是否为全员提醒
+#### 确认是否为全员提醒
 
 会话内所有用户都可以调用 {getPlatformData(props,isMentionAllMap)} 参数，确认消息是否为全员提醒消息。
 :::if{props.platform=undefined}
@@ -3197,6 +2919,9 @@ const isMentionAll = message.isMentionAll;
 bool isMentionAll = message.isMentionAll;
 ```
 :::
+
+
+
 
 ## 收发全员推送消息
 
@@ -3264,7 +2989,9 @@ ZIMEventHandler.onBroadcastMessageReceived(zim, message){}
 ```
 :::
 
-## 转发消息
+## 发送消息进阶功能
+
+### 转发消息
 
 ZIM SDK 支持实现以下两种形式的消息转发：
 - 合并消息后转发。
@@ -3273,12 +3000,307 @@ ZIM SDK 支持实现以下两种形式的消息转发：
 具体实现流程，请参考 [转发消息](./Forward%20messages.mdx)。
 
 
-## 接收 Tips 消息
+### 重发消息
 
-ZIM SDK 支持用户在会话内的操作转换为 Tips 消息。当相关操作出现后，ZIM SDK 会向会话发送一条 Tips 消息进行通知，详情请参考 [接收 Tips 消息](./Receive%20tip%20messages.mdx)。
+<Note title="说明">如需使用本功能，请集成 2.20.0 及以上版本的 ZIM SDK。</Note>
+
+当用户发送**单聊**和**群聊**消息时，网络断开：
+
+<div>
+- 若在 30 秒内网络恢复，则 ZIM SDK 会自动重发该消息。
+- 若在 30 秒内网络未恢复，则消息发送失败。
+- 如需配置网络恢复等待时间，请联系 ZEGO 技术支持。
+</div>
+
+当自动重发失败时，用户可以在网络恢复后，手动重发该消息。此时，再次调用 {getPlatformData(props,sendMessageMap)} 接口，将发送失败的消息对象重新填入，并且参数 `config.isRetrySend` 设置为 true。
+
+手动重发成功后，该消息会排序到当前最后位置。例如：当前消息排序为：A（成功）、B（失败）、C（成功），当重发消息 B 成功后，排序为 A、C、B。
+
+<Note title="说明">当 ZIM SDK 自动重发消息时，若用户同时进行手动重发，接口将调用失败，ZIM SDK 提示参数错误。</Note>
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码" {10,14}
+// 重发单聊 `Text` 信息
+String toConversationID = "xxxx1";
+
+ZIMTextMessage zimMessage; // 从 queryHistoryMessage 接口获取发送失败的消息
+
+ZIMMessageSendConfig config = new ZIMMessageSendConfig();
+// 设置消息优先级
+config.priority = ZIMMessagePriority.LOW;
+// 需要设置为 true，表示重发此消息
+config.isRetrySend = true;
+
+ZIMConversationType type = ZIMConversationType.Peer;
+
+zim.sendMessage(zimMessage, toConversationID, type, config, new ZIMMessageSentFullCallback() {
+    @Override
+    public void onMessageAttached(ZIMMessage zimMessage) {
+        // 开发者可以通过该回调，监听消息是否开始准备发送。只有当通过本地基础参数检验的消息才会抛出该回调，否则通过 onMessageSent 回调抛出错误。
+    }
+
+    @Override
+    public void onMessageSent(ZIMMessage zimMessage, ZIMError error) {
+        // 开发者可以通过该回调监听消息是否发送成功。
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码" {10,19}
+// 重发单聊 `Text` 信息
+NSString *toConversationID = @"xxxx1";
+
+ZIMTextMessage *textMessage; // 从 queryHistoryMessage 接口获取发送失败的消息
+
+ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+// 设置消息优先级
+config.priority = ZIMMessagePriorityLow;
+// 需要设置为 true，表示重发此消息
+config.isRetrySend = true;
+
+ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
+notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
+    // 发送前的回调，客户可以在这里获取一个临时对象，该对象与开发者创建的 zimMessage 对象属于同一对象，开发者可利用此特性做一些业务逻辑，如提前展示 UI 等
+};
+
+ZIMConversationType type = ZIMConversationTypePeer;
+
+[self.zim sendMessage:textMessage toConversationID:toConversationID conversationType:type config:config notification:notification callback:^((ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo)) {
+    // 开发者可以通过该回调监听消息是否发送成功。
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="win"}
+<CodeGroup>
+```cpp title="示例代码" {9,16}
+// 重发单聊 `Text` 信息
+
+std::shared_ptr<zim::ZIMTextMessage> message; // 从 queryHistoryMessage 接口获取发送失败的消息
+
+// 设置消息优先级
+zim::ZIMMessageSendConfig config;
+config.priority = zim::ZIM_MESSAGE_PRIORITY_LOW;
+// 需要设置为 true，表示重发此消息
+config.isRetrySend = true;
+
+zim::ZIMConversationType type = zim::ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER
+
+auto notification = std::make_shared<zim::ZIMMessageSendNotification>(
+            [=](const std::shared_ptr<zim::ZIMMessage> &message) { int i = 0; });
+
+zim_->sendMessage(message, "toConversationID", type, config, notification,
+                    [=](const std::shared_ptr<zim::ZIMMessage> &message,
+                              const zim::ZIMError &errorInfo) { int i = 0; });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|miniprogram|rn|UTS|uniapp"}
+<CodeGroup>
+```typescript title="示例代码" {7,17}
+// 重发单聊 `Text` 信息
+
+const toConversationID = ''; // 对方 userID
+const conversationType = 0; // 会话类型，取值为 单聊：0，房间：1，群组：2
+const config: ZIMMessageSendConfig = { 
+    priority: 1, // 设置消息优先级，取值为 低：1（默认），中:2，高：3
+    isRetrySend: true, // 需要设置为 true，表示重发此消息
+};
+
+const notification: ZIMMessageSendNotification = {
+    onMessageAttached: (message: ZIMMessage) => {}
+}
+
+const messageTextObj: ZIMMessage = {}; // 从 queryHistoryMessage 接口获取发送失败的消息
+
+zim.sendMessage(messageTextObj, toConversationID, conversationType, config, notification)
+    .then((res: ZIMMessageSentResult) => {
+        // 发送成功
+    })
+    .catch((err: ZIMError) => {
+        // 发送失败
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="flutter"}
+<CodeGroup>
+```dart title="示例代码" {8,16}
+// 重发单聊 `Text` 信息
+
+ZIMTextMessage textMessage; // 从 queryHistoryMessage 接口获取发送失败的消息
+ZIMMessageSendConfig sendConfig = ZIMMessageSendConfig();
+// 设置消息优先级
+sendConfig.priority = ZIMMessagePriority.low;
+// 需要设置为 true，表示重发此消息
+sendConfig.isRetrySend = true;
+
+ZIMMessageSendNotification notification = ZIMMessageSendNotification(onMessageAttached: (message){
+    // 发送前的回调，开发者可以在这里获取一个临时对象，该对象与开发者创建的 zimMessage 对象属于同一对象，开发者可利用此特性做一些业务逻辑，如提前展示 UI 等
+});
+
+ZIMConversationType type = ZIMConversationType.peer;
+
+ZIM.getInstance()!.sendMessage(textMessage, toConversationID, type, sendConfig).then((value) => {
+    // 开发者可以通过该回调监听消息是否发送成功。
+}).catchError((onError){
+    // 开发者可以捕获发送失败的异常。
+});
+```
+</CodeGroup>
+:::
+
+### 发送不计入未读消息数的消息
+
+在调用 {getPlatformData(props,sendMessageMap)} 发送消息时，可以通过以下参数设置发送的消息不会被计入到未读消息数中：
+- {getPlatformData2(props,disableUnreadMessageCountMap)}：
+
+    - `true` : 不计入未读消息数
+    - `false` : 计入未读消息数
 
 
-## 监听消息状态
+<Warning title="注意">
+
+仅 2.23.0 及以上版本的 ZIM SDK 支持发送不计入未读消息数的消息。
+</Warning>
+
+:::if{props.platform=undefined}
+```java {7,8}
+// 以下为用户在单聊会话中发送不计入未读消息数的示例代码：
+
+ZIMMessageSendConfig config = new ZIMMessageSendConfig();
+// 设置消息优先级
+config.priority = ZIMMessagePriority.LOW;
+
+// 设置消息为不计入未读消息数消息
+config.disableUnreadMessageCount = true;
+
+// 以发送单聊信息为例子
+ZIMConversationType type = ZIMConversationType.Peer;
+
+zim.sendMessage(message, "conv_id", type, config, new ZIMMessageSentFullCallback() {
+    @Override
+    public void onMessageAttached(ZIMMessage zimMessage) {
+        // 开发者可以通过该回调，监听消息是否开始准备发送。只有当通过本地基础参数检验的消息才会抛出该回调，否则通过 onMessageSent 回调抛出错误。               
+    }
+
+    @Override
+    public void onMessageSent(ZIMMessage zimMessage, ZIMError error) {
+        // 开发者可以通过该回调监听消息是否发送成功。
+    }
+});
+```
+
+:::
+:::if{props.platform="iOS|mac"}
+
+```objc {7,5}
+// 以下为用户在单聊会话中发送不计入未读消息数的示例代码：
+
+ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+// 设置消息为不计入未读消息数消息
+config.disableUnreadMessageCount = YES;
+
+// 以发送单聊信息为例
+ZIMConversationType type = ZIMConversationTypePeer;
+
+[zim sendMessage:message convId:@"conv_id" type:type config:config callback:^(ZIMMessage *zimMessage, ZIMError *error) {
+    if (error) {
+        // 开发者可以通过该回调监听消息是否发送成功。
+    }
+}];
+
+```
+:::
+:::if{props.platform="win"}
+```cpp {7,8}
+// 以下为用户在单聊会话中发送不计入未读消息数的示例代码：
+
+ZIMMessageSendConfig config;
+// 设置消息优先级
+config.priority = ZIMMessagePriority::LOW;
+
+// 设置消息为不计入未读消息数消息
+config.disableUnreadMessageCount = true;
+
+// 以发送单聊信息为例子
+ZIMConversationType type = ZIMConversationType::Peer;
+
+zim_->sendMessage(
+    message, "conv_id", type, config,
+    std::make_shared<zim::ZIMMessageSendNotification>(
+        [=](const std::shared_ptr<zim::ZIMMessage> &message) {
+            if (message) {
+                // 开发者可以通过该回调，监听消息是否开始准备发送。只有当通过本地基础参数检验的消息才会抛出该回调，否则通过 onMessageSent 回调抛出错误。
+            }
+        }),
+    [=](std::shared_ptr<zim::ZIMMessage> message, zim::ZIMError errorInfo) {
+        // 开发者可以通过该回调监听消息是否发送成功。
+        if (errorInfo.code == zim::ZIMErrorCode::ZIM_ERROR_CODE_SUCCESS) {
+            
+        }
+    });
+```
+:::
+:::if{props.platform="Web|miniprogram|rn|uniapp|UTS|harmonyos"}
+```typescript {6}
+// 以下为用户在单聊会话中发送不计入未读消息数的示例代码：
+const toConversationID = ''; // 对方 userID
+const conversationType = 0; // 会话类型，取值为 单聊：0，房间：1，群组：2
+const config: ZIMMessageSendConfig = { 
+    priority: 1, // 设置消息优先级，取值为 低：1（默认），中:2，高：3
+    disableUnreadMessageCount: true, // 设置消息为不计入未读消息数消息
+};
+
+const notification: ZIMMessageSendNotification = {
+    onMessageAttached: (message: ZIMMessage) => {}
+}
+
+const messageTextObj: ZIMMessage = {
+    type: 1,
+    message: 'xxxx',
+};
+
+zim.sendMessage(messageTextObj, toConversationID, conversationType, config, notification)
+    .then((res: ZIMMessageSentResult) => {
+        // 发送成功
+    })
+    .catch((err: ZIMError) => {
+        // 发送失败
+    });
+
+
+```
+:::
+:::if{props.platform="flutter"}
+```dart {7,8}
+// 以下为用户在单聊会话中发送不计入未读消息数的示例代码：
+
+try {
+    ZIMMessageSendConfig config = ZIMMessageSendConfig();
+    //设置消息优先级
+    config.priority = ZIMMessagePriority.low;
+    // 设置消息为不计入未读消息数消息
+    config.disableUnreadMessageCount = true;
+
+    // 以发送单聊消息为例子
+    ZIMConversationType type = ZIMConversationType.peer;
+
+    ZIMMessageSentResult result = await ZIM.getInstance()!.sendMessage(message, 'conv_id', type, config);
+    
+} on PlatformException catch (onError){
+    onError.code;//根据错误码表处理
+    onError.message;//错误信息
+}
+```
+:::
+
+
+### 监听消息发送状态
 
 在一些弱网场景中，可能存在以下场景，即消息发送成功，但由于某些因素（如网络丢包），导致 ZIM SDK 未收到服务端应答。此时，ZIM SDK 会因应答超时而认为消息发送失败，但实际上消息发送成功，导致消息状态混乱。为解决该问题，明确消息最终状态， 2.6.0 或以上版本 SDK 支持开发者监听 {getPlatformData(props,messageSentStatusChangedMap)} 回调，接收消息的状态变化。消息的状态有三种，即 Sending、Success 和 Failed。根据消息状态的变化，开发者可判断消息发送是否成功，并在业务上做相应处理。
 
