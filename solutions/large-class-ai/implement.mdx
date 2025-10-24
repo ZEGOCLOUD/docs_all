@@ -4,8 +4,8 @@
 
 ## 前提提要
 在开始之前，请确保完成以下步骤：
-- 已联系 ZEGO 销售或售前定制 AI数字人老师形象（若使用公模则可以忽略此步骤）
-- 在 [ZEGO 控制台](https://console.zego.im/ProjectManage) 中注册并创建项目，并联系销售或售前 开通 AI Agent、数字人服务和相关接口权限
+- 已联系 ZEGO 技术支持定制 AI数字人老师形象（若使用公模则可以忽略此步骤）
+- 在 [ZEGO 控制台](https://console.zego.im/ProjectManage) 中注册并创建项目，并联系技术支持 开通 AI Agent、数字人服务和相关接口权限
 - 已在项目中集成 ZEGO Express SDK，详情请参考 [快速开始 - 集成 SDK](/real-time-voice-android/quick-start/integrating-sdk)。
 
 ## 实现方案
@@ -65,7 +65,7 @@ sequenceDiagram
 
 #### 业务后台最佳配置
 在 AI 数字人伴学互动场景中，智能体实例需要绑定一个房间 roomId，以及智能体自身的 agent_user_id、agent_stream_id 和用户的 user_id、user_stream_id。
-数字人会根据绑定的配置，在指定的 roomId 下，以 agent_user_id 作为 userId 推流（streamId 为 agent_stream_id），同时根据绑定的配置拉取 user_id 的流（streamId 为 user_stream_id）。如果这些 ID 配置不一致，将导致推流或拉流失败。
+数字人会根据绑定的配置，在指定的 roomId 下，以 agent_user_id 作为 userId 推流（streamId 为 agent_stream_id），同时根据绑定的配置拉取 user_id 的流（streamId 为 user_stream_id）。如果这些 ID 配置不一致，将无法正常启动数字人 1v1 通话。
 
 <Warning title="警告">每个智能体实例都需要与上述各类 ID 唯一绑定，已被某个实例占用的 ID 不能被其他实例复用，否则会导致智能体通话异常。</Warning>
 
@@ -115,7 +115,6 @@ async createDigitalHumanAgentInstance(agentId: string, userId: string, rtcInfo: 
 
 在大班课 AI 数字人伴学互动场景中，由真人老师控制系统开启 1V1 互动弹窗时，业务后台为每一个学生创建一个智能体实例，并且分发到各个学生端，学生端根据返回配置信息执行进房、推拉流、自定义渲染驱动数字人，与数字人通话。
 
-<Note title="说明">以下以 Android 为例，其他平台请参考对应平台的 SDK 文档。</Note>
 
 核心步骤如下：
 
@@ -124,9 +123,11 @@ async createDigitalHumanAgentInstance(agentId: string, userId: string, rtcInfo: 
 向业务后台请求的 Token。可用于登录 RTC （ZEGO Express SDK）房间和用于下载数字人资源。
 
 在成功获取 Token 后，可以预下载数字人资源，减少数字人首次启动耗时。
-<Note title="说明">建议在开始大班课时预下载数字人资源。如果数字人形象没有变更，在 APP 启动后仅预下载一次即可。</Note>
+<Note title="说明">推荐在启动数字人1v1页面之前，每次都触发预下载数字人资源。(备注：预下载时，SDK内部会判断是否需要下载或更新数字人资源)</Note>
+
+- 向后台请求 Token
 <CodeGroup>
-```java title="向后台请求 Token"
+```java Android(Java)
 var userToken = ""
 private fun requestToken() {
     Log.i(TAG, "requestZegoToken")
@@ -170,7 +171,66 @@ private fun requestToken() {
 // !mark
 preloadDigitalmobileRes(userToken, digitalHumanID)
 ```
-```java title="预下载数字人资源"
+
+```swift iOS(Swift)
+var userToken = ""
+private func requestToken() {
+    print("TAG: requestZegoToken")
+    // 注意使用的 user id 与服务端创建数字人智能体实例时填写的一致
+    // !mark
+    let request = URLRequest(url: URL(string: "\(BASE_URL)/api/zego-token?userId=\(userId)")!)
+    URLSession.shared.dataTask(with: request) { data, response, error in
+        if let error = error {
+            print("TAG: http failed: \(error.localizedDescription)")
+            return
+        }
+
+        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200,
+           let data = data {
+            let responseBody = String(data: data, encoding: .utf8)
+            print(responseBody ?? "")
+            do {
+                let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                let token = json?["token"] as? String
+                if !token?.isEmpty ?? false {
+                    print("TAG: get token : \(token ?? "")")
+                    DispatchQueue.main.async {
+                        // !mark
+                        userToken = token ?? ""
+                    }
+                } else {
+                    print("TAG: get token failed")
+                }
+            } catch {
+                print("TAG: JSON error: \(error.localizedDescription)")
+            }
+        } else {
+            print("TAG: get token failed: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+        }
+    }.resume()
+}
+
+//预下载数字人资源，减少数字人首次启动耗时；
+// !mark
+preloadDigitalmobileRes(userToken: userToken, digitalHumanID: digitalHumanID)
+```
+```javascript title="Web(JavaScript)"
+import axios from 'axios';
+/**
+* 此处省略axios配置
+**/
+// 注意使用的 user id 与服务端创建数字人智能体实例时填写的一致
+const userID = '';
+// !mark
+const { token } = await axios.get(`${base_url}/api/zego-token?userid=${userID}`)
+```
+</CodeGroup>
+
+- 预下载数字人资源
+
+<Note title="说明">Web 端不需要预加载数字人资源</Note>
+<CodeGroup>
+```java Android(Java)
 private fun preloadDigitalmobileRes(token: String, digitalHumanID: String) {
     // !mark
     var auth = ZegoDigitalMobileAuth(APP_ID, userId, token)
@@ -202,14 +262,52 @@ private fun preloadDigitalmobileRes(token: String, digitalHumanID: String) {
         })
 }
 ```
+
+```swift iOS(Swift)
+private func preloadDigitalmobileRes(token: String, digitalHumanID: String) {
+    // !mark
+    let auth = ZegoDigitalMobileAuth(appID: APP_ID, userId: userId, token: token)
+    let context = self
+    // !mark
+    ZegoDigitalHumanResource.shared.preload(
+        with: auth,
+        digitalHumanID: digitalHumanID,
+        callback: PreloadCallback(
+            onSuccess: {
+                print("TAG: preloadDigitalmobileRes, onSuccess")
+                ZegoDigitalHumanResource.shared.isLoaded(
+                    with: auth,
+                    digitalHumanID: digitalHumanID,
+                    callback: IsLoadedCallback(
+                        onError: { errorCode, errorMessage in
+                            print("TAG: isLoaded onError errCode=\(errorCode) errMsg=\(errorMessage ?? "")")
+                        },
+                        onResult: { isLoaded in
+                            print("TAG: isLoaded onResult=\(isLoaded)")
+                        }
+                    )
+                )
+            },
+            onProgress: { progress in
+                print("TAG: preloadDigitalmobileRes, onProgress \(progress)")
+            },
+            onError: { errorCode, errorMessage in
+                print("TAG: preloadDigitalmobileRes, onError errCode=\(errorCode) errMsg=\(errorMessage ?? "")")
+            }
+        )
+    )
+}
+```
 </CodeGroup>
 
 </Step>
 
 <Step title="向业务后台请求创建智能体实例">
 创建智能体实例后，智能体实例就会登录房间并推流，同时也会拉真实用户的流。同时业务后台会返回数字人配置用于初始化数字人 SDK，学生端根据返回配置信息执行进房、推拉流、自定义渲染驱动数字人，与数字人通话。
-```java title="向业务后台请求创建智能体实例"
-    private fun startDiagitalAgentRoom() {
+
+<CodeGroup>
+```java Android(Java)
+private fun startDiagitalAgentRoom() {
     Log.i(TAG, "startDigitalHumanChat")
 
     val jsonContent = try {
@@ -218,8 +316,6 @@ private fun preloadDigitalmobileRes(token: String, digitalHumanID: String) {
         //移动端配置(需要端上数字人SDK合成视频)
         // !mark
         jsonObject.put("config_id", "mobile");
-        //web端配置(直接拉数字人流，不需要端上处理)
-        //jsonObject.put("config_id", "web");
         jsonObject.toString()
     } catch (e: JSONException) {
         Log.e(TAG, "startDigitalHumanChat json error: " + e.message)
@@ -229,7 +325,7 @@ private fun preloadDigitalmobileRes(token: String, digitalHumanID: String) {
     //向业务后台请求创建智能体实例，获取数字人智能体实例Id、数字人配置
     val body = RequestBody.create("application/json; charset=utf-8".toMediaTypeOrNull(), jsonContent)
     // !mark(1:2)
-    // 对应调用后台的 createDigitalHumanAgentInstance 方法
+    // 该接口实际会调用 AI Agent 的 CreateDigitalHumanAgentInstance 接口（https://doc-zh.zego.im/aiagent-server/api-reference/agent-instance-management/create-digital-human-agent-instance）。
     val request = Request.Builder().url("$BASE_URL/api/start-digital-human").post(body).build()
     OkHttpClient.Builder().build().newCall(request).enqueue(object : Callback {
         override fun onFailure(call: Call, e: IOException) {
@@ -272,9 +368,106 @@ private fun preloadDigitalmobileRes(token: String, digitalHumanID: String) {
     })
 }
 ```
+
+```swift iOS(Swift)
+private func startDiagitalAgentRoom() {
+    print("TAG: startDigitalHumanChat")
+
+    let jsonContent: String
+    do {
+        let jsonObject: [String: Any] = [
+            //【【请求创建智能体关键参数】】
+            //移动端配置(需要端上数字人SDK合成视频)
+            // !mark
+            "config_id": "mobile"
+        ]
+        let jsonData = try JSONSerialization.data(withJSONObject: jsonObject)
+        jsonContent = String(data: jsonData, encoding: .utf8) ?? ""
+    } catch {
+        print("TAG: startDigitalHumanChat json error: \(error.localizedDescription)")
+        return
+    }
+
+    //向业务后台请求创建智能体实例，获取数字人智能体实例Id、数字人配置
+    let body = jsonContent.data(using: .utf8)
+    // !mark(1:2)
+    // 该接口实际会调用 AI Agent 的 CreateDigitalHumanAgentInstance 接口（https://doc-zh.zego.im/aiagent-server/api-reference/agent-instance-management/create-digital-human-agent-instance）。
+    var request = URLRequest(url: URL(string: "\(BASE_URL)/api/start-digital-human")!)
+    request.httpMethod = "POST"
+    request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+
+    URLSession.shared.dataTask(with: request) { data, response, error in
+        if let error = error {
+            print("TAG: startDigitalHumanChat http failed: \(error.localizedDescription)")
+            return
+        }
+
+        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200,
+           let data = data {
+            let responseBody = String(data: data, encoding: .utf8)
+            print("TAG: startDigitalHumanChat response: \(responseBody ?? "")")
+            do {
+                let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                let errorCode = json?["code"] as? Int ?? 0
+                // 后台返回的数字人配置
+                // !mark
+                let digitalHumanConfig = json?["digital_human_config"] as? String ?? ""
+                if errorCode == 0 {
+                    //数字人智能体实例
+                    agentInstanceId = json?["agent_instance_id"] as? String ?? ""
+                    let config = DigitalMobileConfigDecoder.decode(digitalHumanConfig)
+                    DispatchQueue.main.async {
+                        //下一步：进RTC房间、初始化数字人SDK.
+                        // 注意所有相关 ID 与服务端创建智能体实例时填写的一致
+                        // !mark(1:2)
+                        initDigitalMobileSDK(digitalHumanConfig: digitalHumanConfig)
+                        loginRoom(roomId: roomId, userId: userId, userStreamId: userStreamId)
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        stopDiagitalAgentRoom()
+                    }
+                    print("TAG: startDigitalHumanChat start failed: \(errorCode)")
+                }
+            } catch {
+                print("TAG: startDigitalHumanChat parse json failed: \(error.localizedDescription)")
+            }
+        } else {
+            print("TAG: startDigitalHumanChat http failed: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+        }
+    }.resume()
+}
+```
+```javascript title="Web(JavaScript)"
+//web端配置(直接拉数字人流，不需要端上处理)
+// !mark
+const digitalHuman = {id: '', configId: 'web'}
+// 该接口实际会调用 AI Agent 的 CreateDigitalHumanAgentInstance 接口（https://doc-zh.zego.im/aiagent-server/api-reference/agent-instance-management/create-digital-human-agent-instance）。
+const { agent_id,
+        agent_instance_id,
+        agent_name,
+        agent_stream_id,
+        agent_user_id,
+        code,
+        digital_human_config,
+        message
+} = await axios.post(`${base_url}/api/start-digital-human`, {
+    "room_id": roomID,
+    "user_id": userID,
+    "user_stream_id": userStreamId,
+    "digital_human_id": digitalHuman.id,
+    "config_id": digitalHuman.configId
+});
+```
+</CodeGroup>
+
 </Step>
 <Step title="初始化数字人 SDK">
-```java title="initDigitalMobileSDK"
+
+<Note title="说明">Web 端不需要初始化数字人 SDK</Note>
+<CodeGroup>
+```java title="Android(Java)"
 private fun initDigitalMobileSDK(digitalHumanConfig: String) {
     Log.i(TAG, "initDigitalMobileSDK: $digitalHumanConfig")
     runOnUiThread(Runnable {
@@ -297,12 +490,41 @@ private fun initDigitalMobileSDK(digitalHumanConfig: String) {
     })
 }
 ```
+
+```swift title="iOS(Swift)"
+private func initDigitalMobileSDK(digitalHumanConfig: String) {
+    print("TAG: initDigitalMobileSDK: \(digitalHumanConfig)")
+    DispatchQueue.main.async {
+        // !mark(1:2)
+        digitalMobileSDK = ZegoDigitalMobileFactory.create()
+        digitalMobileSDK?.start(
+            withConfig: digitalHumanConfig,
+            listener: DigitalMobileListener(
+                onStartSuccess: {
+                    print("TAG: onDigitalMobileStartSuccess")
+                },
+                onError: { errCode, errMsg in
+                    print("TAG: initDigitalMobileSDK, errCode=\(errCode), errMsg=\(errMsg ?? "")")
+                },
+                onSurfaceFirstFrameDraw: {
+                    print("TAG: onSurfaceFirstFrameDraw")
+                }
+            )
+        )
+        digitalMobileSDK?.attach(to: playView)
+    }
+}
+```
+</CodeGroup>
+
 </Step>
 
 <Step title="初始化 ZEGO Express SDK">
 
 在登录 RTC （ZEGO Express SDK）房间前，需要初始化 ZEGO Express SDK。以下示例代码包含了适配 AI 数字人伴学互动场景中初始化 ZEGO Express SDK 的最佳实践配置：
-```java title="初始化 ZEGO Express SDK"
+
+<CodeGroup>
+```java title="Android(Java)"
 //1.创建引擎前，设置相关参数配置
 var config = ZegoEngineConfig().apply {
     //设置音量闪避模式，提升asr对用户声音识别成功率。仅iOS配置，Android端不设置避免低端机性能不足导致推流异常
@@ -335,6 +557,47 @@ ZegoExpressEngine.getEngine().enableCamera(true) //允许开启摄像头
 ZegoExpressEngine.getEngine().muteMicrophone(false) //允许开启麦克风
 ZegoExpressEngine.getEngine().mutePublishStreamVideo(true) //用户端仅推音频流
 ```
+
+```swift title="iOS(Swift)"
+//1.创建引擎前，设置相关参数配置
+let config = ZegoEngineConfig()
+//设置音量闪避模式，提升asr对用户声音识别成功率。仅iOS配置，Android端不设置避免低端机性能不足导致推流异常
+config.advancedConfig["set_audio_volume_ducking_mode"] = "1"
+//设置拉流音量自适应调节，减少干扰用户声音，提升asr对用户声音识别成功率。
+config.advancedConfig["enable_rnd_volume_adaptive"] = "true"
+config.advancedConfig["sideinfo_callback_version"] = "3"
+config.advancedConfig["sideinfo_bound_to_video_decoder"] = "true"
+//避免因网络差导致声音快慢放问题
+config.advancedConfig["jitter_level_compensation"] = "true"
+ZegoExpressEngine.setEngineConfig(config)
+
+//2.创建引擎，场景模式设置为HIGH_QUALITY_CHATROOM(推荐最优配置)
+let profile = ZegoEngineProfile()
+profile.appID = APP_ID
+profile.scenario = .highQualityChatroom
+ZegoExpressEngine.createEngine(with: profile)
+
+//3、创建引擎后，开启相关设置
+ZegoExpressEngine.shared?.setAudioDeviceMode(.general)
+ZegoExpressEngine.shared?.enableAEC(true)
+ZegoExpressEngine.shared?.enableAGC(true)
+ZegoExpressEngine.shared?.enableANS(true)
+ZegoExpressEngine.shared?.setAECMode(.aiBalanced) //设置AI回声消除模式
+ZegoExpressEngine.shared?.setANSMode(.medium) //设置降噪模式
+ZegoExpressEngine.shared?.enableCamera(true) //允许开启摄像头
+ZegoExpressEngine.shared?.muteMicrophone(false) //允许开启麦克风
+ZegoExpressEngine.shared?.mutePublishStreamVideo(true) //用户端仅推音频流
+```
+```javascript title="Web(JavaScript)"
+// 初始化 ZEGO Express SDK
+const appID = 0; // 从zego控制台获取的 AppID
+const server = ''; // 从zego控制台获取的 Server 地址
+const express = new ZegoExpressEngine(appID, server, {
+    scenario: ZegoScenario.HighQualityChatroom, // HighQualityChatroom = 7
+});
+```
+</CodeGroup>
+
 </Step>
 
 <Step title="登录房间并进房、推流、拉流后实现通话。">
@@ -342,7 +605,8 @@ ZegoExpressEngine.getEngine().mutePublishStreamVideo(true) //用户端仅推音�
 在做好必要准备后，真实用户（学生）可以登录房间。登录房间后推流，数字人就可以通过拉取真实用户的音频流并识别后进行回答；用户也可以拉流听到数字人的回答。
 
 <Warning title="警告">请务必参考步骤 1 再次向业务后台请求 Token 后再登录房间，防止 Token 过期导致登录房间失败。</Warning>
-```java title="loginRoom"
+<CodeGroup>
+```java title="Android(Java)"
 //登录房间
 ZegoRoomConfig roomConfig = new ZegoRoomConfig();
 //能使得数字人实时得到该用户进房通知.
@@ -355,7 +619,6 @@ roomConfig.isUserStatusNotify = true;
 roomConfig.token = userToken;
 // !mark
 ZegoExpressEngine.getEngine().loginRoom(Constant.room_id, new ZegoUser(userId, userName), roomConfig, (errorCode, extendedData) -> {
-    ZegoExpressEngine.getEngine().enableCamera(false);
     ZegoCanvas zegoCanvas = new ZegoCanvas(renderView);
     zegoCanvas.viewMode = ZegoViewMode.ASPECT_FILL;
     //开启预览
@@ -403,6 +666,123 @@ ZegoExpressEngine.getEngine().setCustomVideoRenderHandler(new IZegoCustomVideoRe
 });
 ```
 
+```swift title="iOS(Swift)"
+//登录房间
+let roomConfig = ZegoRoomConfig()
+//能使得数字人实时得到该用户进房通知.
+//AIAgent服务端会依赖用户进房onUserUpdate回调进行超时管理，
+//当没有收到指定用户的userUpdate事件，超过120s将会异常结束通话，删除数字人智能体实例.
+// !mark
+roomConfig.isUserStatusNotify = true
+// 注意应该在进房前再调用一次防止 token 过期导致登录房间失败。
+// !mark
+roomConfig.token = userToken
+// !mark
+ZegoExpressEngine.shared?.loginRoom(
+    roomId,
+    user: ZegoUser(userID: userId, userName: userName),
+    config: roomConfig
+) { errorCode, _ in
+    ZegoExpressEngine.shared?.enableCamera(false)
+    let zegoCanvas = ZegoCanvas(view: renderView)
+    zegoCanvas.viewMode = .aspectFill
+    //开启预览
+    ZegoExpressEngine.shared?.startPreview(zegoCanvas)
+    // 开启推流，智能体实例就可以通过拉取真实用户的音频流并识别后进行回答。
+    // 注意这里的userStreamId要与服务端创建智能体实例时填写的一致
+    // !mark
+    ZegoExpressEngine.shared?.startPublishingStream(userStreamId)
+
+    //拉数字人流。显示数字人画面。
+    let zegoCanvas2 = ZegoCanvas(view: renderView)
+    zegoCanvas2.viewMode = .aspectFill
+    // !mark
+    ZegoExpressEngine.shared?.startPlayingStream(agentStreamID, canvas: zegoCanvas2)
+}
+
+//开启自定义渲染：数字人画面交给数字人SDK渲染.
+let renderConfig = ZegoCustomVideoRenderConfig()
+renderConfig.bufferType = .rawData
+renderConfig.frameFormatSeries = .rgb
+//该配置的作用：预览画面跳过自定义渲染.
+renderConfig.enableEngineRender = true
+ZegoExpressEngine.shared?.enableCustomVideoRender(true, config: renderConfig)
+//自定义渲染处理：数字人本地渲染驱动
+// !mark
+ZegoExpressEngine.shared?.setCustomVideoRenderHandler(CustomVideoRenderHandler())
+
+class CustomVideoRenderHandler: IZegoCustomVideoRenderHandler {
+    func onRemoteVideoFrameRawData(_ data: [UnsafeMutableRawPointer], dataLength: [Int], param: ZegoVideoFrameParam, streamID: String) {
+        let digitalParam = IZegoDigitalMobile.ZegoVideoFrameParam()
+        digitalParam.format = IZegoDigitalMobile.ZegoVideoFrameFormat(rawValue: param.format.rawValue)
+        digitalParam.height = param.height
+        digitalParam.width = param.width
+        digitalParam.rotation = param.rotation
+        for i in 0..<4 {
+            digitalParam.strides[i] = param.strides[i]
+        }
+        // 把 Express 视频帧数据传给数字人 SDK
+        objc_sync_enter(IZegoDigitalMobile.self)
+        defer { objc_sync_exit(IZegoDigitalMobile.self) }
+        if digitalMobileSDK != nil {
+            // !mark
+            digitalMobileSDK?.onRemoteVideoFrameRawData(data, dataLength: dataLength, param: digitalParam, streamID: streamID)
+        }
+    }
+}
+```
+```javascript title="Web(JavaScript)"
+// 以下 ID 填写实际值
+const userID = '';
+const userName = '';
+const roomID = '';
+const userStreamId = '';
+
+async function startPublishingStream(userStreamId: string) {
+    try {
+      const customAudioStream = {
+        camera: {
+          video: false,
+          audio: true,
+        },
+      };
+      const localStream = await express.createZegoStream(customAudioStream);
+      // 开启推流，智能体实例就可以通过拉取真实用户的音频流并识别后进行回答。
+      // 注意这里的userStreamId要与服务端创建智能体实例时填写的一致
+      await express.startPublishingStream(userStreamId, localStream);
+    } catch (error) {
+      throw Error(error);
+    }
+}
+async function startPlayingStream(streamID: string) {
+    const mediaStream = await express.startPlayingStream(streamID);
+    remoteView = await express.createRemoteStreamView(mediaStream);
+    if (remoteView) {
+      remoteView.playAudio();
+    }
+}
+
+const loginRoom = async (roomId: string, userID: string, userName: string, userStreamId: string) => {
+  // !mark
+  const login = await zg.loginRoom(roomId, token, {
+     userID,
+     userName,
+  });
+  if (!login) {
+    throw Error("登录RTC房间失败");
+  }
+  // !mark
+  await startPublishingStream(userStreamId);
+  // agentStreamID 跟服务端约定，或者监听回调获取：express.on("roomStreamUpdate", async (roomID: string,updateType: "DELETE" | "ADD", streamList: ZegoStreamList[]) => {...}
+  // !mark
+  await startPlayingStream(agentStreamID);
+}
+
+loginRoom(roomID, userID, userName, userStreamId);
+```
+</CodeGroup>
+
+
 恭喜你🎉，在完成上述步骤后，你已经成功实现了大班课中 AI 数字人教师和学生之间 1V1 对话。
 
 </Step>
@@ -414,8 +794,8 @@ ZegoExpressEngine.getEngine().setCustomVideoRenderHandler(new IZegoCustomVideoRe
 
 在学生与 AI 数字人教师对话结束后，需要结束通话。向业务后台请求删除智能体实例、销毁 RTC （ZEGO Express SDK）引擎、销毁数字人SDK。
 
-
-```java title="结束通话"
+<CodeGroup>
+```java title="Android(Java)"
 private fun stopDiagitalAgentRoom() {
     Log.i(TAG, "stopDigitalHumanChat, agentInstanceId=${agentInstanceId}")
     val jsonContent = try {
@@ -428,7 +808,7 @@ private fun stopDiagitalAgentRoom() {
     }
     val body: RequestBody = RequestBody.create("application/json; charset=utf-8".toMediaTypeOrNull(), jsonContent)
     // !mark(1:2)
-    // 实际调用 https://doc-zh.zego.im/aiagent-server/api-reference/agent-instance-management/delete-agent-instance 接口
+    // 该接口实际会调用 AI Agent 的 DeleteAgentInstance 接口（https://doc-zh.zego.im/aiagent-server/api-reference/agent-instance-management/delete-agent-instance）。
     val request: Request = Request.Builder().url("$BASE_URL/api/stop").post(body).build()
     client.newCall(request)
         .enqueue(object : Callback {
@@ -460,6 +840,76 @@ private fun unInitDigitalMobileSDK() {
     digitalMobileSDK?.stop()
 }
 ```
+
+```swift title="iOS(Swift)"
+private func stopDiagitalAgentRoom() {
+    print("TAG: stopDigitalHumanChat, agentInstanceId=\(agentInstanceId)")
+    let jsonContent: String
+    do {
+        let jsonObject: [String: Any] = ["agent_instance_id": agentInstanceId] //智能体实例
+        let jsonData = try JSONSerialization.data(withJSONObject: jsonObject)
+        jsonContent = String(data: jsonData, encoding: .utf8) ?? ""
+    } catch {
+        print("TAG: startDigitalHumanChat json error: \(error.localizedDescription)")
+        return
+    }
+    let body = jsonContent.data(using: .utf8)
+    // !mark(1:2)
+    // 该接口实际会调用 AI Agent 的 DeleteAgentInstance 接口（https://doc-zh.zego.im/aiagent-server/api-reference/agent-instance-management/delete-agent-instance）。
+    var request = URLRequest(url: URL(string: "\(BASE_URL)/api/stop")!)
+    request.httpMethod = "POST"
+    request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+
+    URLSession.shared.dataTask(with: request) { data, response, error in
+        if let error = error {
+            print("TAG: stopDiagitalAgentRoom, e: \(error.localizedDescription)")
+            return
+        }
+
+        if let httpResponse = response as? HTTPURLResponse {
+            print("TAG: stopDiagitalAgentRoom, onResponse code=\(httpResponse.statusCode)")
+        }
+    }.resume()
+
+    // !mark
+    destroyEngine()
+    // !mark
+    unInitDigitalMobileSDK()
+}
+
+private func destroyEngine() {
+    if let engine = ZegoExpressEngine.shared {
+        engine.stopDumpData()
+        engine.logoutRoom()
+        ZegoExpressEngine.destroyEngine()
+    }
+}
+
+private func unInitDigitalMobileSDK() {
+    digitalMobileSDK?.stop()
+}
+```
+```javascript title="Web(JavaScript)"
+// 该接口实际会调用 AI Agent 的 DeleteAgentInstance 接口（https://doc-zh.zego.im/aiagent-server/api-reference/agent-instance-management/delete-agent-instance）。
+// !mark
+await axiox.post(`${base_user}/api/stop`, {
+    "agent_instance_id": agent_instance_id,
+  });
+
+ // 停止拉数字人流
+ express.stopPlayingStream(streamID); // streamID为roomStreamUpdate回调的AI数字人流
+ // 停止推流
+ express.stopPublishingStream(userStreamId); // userStreamId为真实用户人声流
+ express.destroyStream(localStream); // localStream为express.createZegoStream创建的本地麦克风流
+ // 登出房间
+ express.logoutRoom(roomID);
+ // 销毁SDK
+ express.destroyEngine();
+```
+</CodeGroup>
+
+
 </Step>
 
 
