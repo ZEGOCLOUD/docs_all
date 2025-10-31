@@ -1,0 +1,149 @@
+---
+
+date: "2022-05-18"
+ce-comparison:
+  - "如何:how"
+  - "在:in"
+  - "较差:poor"
+  - "的:of"
+  - "网络:network"
+  - "环境:environment"
+  - "中:in"
+  - "保证:ensure"
+  - "音视频:audio and video"
+  - "流畅:smooth"
+  - "流控:flow control"
+---
+import { Title } from './title';
+import ArticleMetadata from '../../zh/faq/ArticleMetadata';
+
+<Title>How to ensure smooth audio and video streaming in poor network environments (flow control)?</Title>
+
+<ArticleMetadata language="en" product="Video Call / Audio Call / Live streaming" platform="All" />
+
+
+---
+## Overview
+
+ZEGO provides two solutions to ensure smooth stream publishing and playing in poor network environments:
+
+- For scenarios where the network environment of the stream playing end is poor, ZEGO provides layered video encoding functionality. When the stream publishing end publishes one stream with multiple layers of different quality, the stream playing end can independently choose the video quality to play based on its own network environment to adapt to the downlink bandwidth. For the use of this feature, please refer to [Video Advanced - Layered Video Encoding](/real-time-video-android-java/video/set-video-encoding).
+
+- For scenarios where the network environment of the stream publishing end is poor, ZEGO provides flow control functionality. When the stream publishing end has a poor network environment, it actively reduces the uplink bitrate of stream publishing to ensure normal stream publishing.
+
+Flow control allows the SDK to dynamically adjust the video stream publishing bitrate, frame rate, resolution, and audio bitrate based on the current network environment status of itself and the other end, automatically adapting to the current network environment and network fluctuations, thus ensuring smooth video publishing.
+
+The principle of flow control is based on the current network situation, modeling the user's network environment and estimating its uplink bandwidth. If the current uplink bandwidth is less than the set stream publishing bitrate, it will progressively reduce the video bitrate, resolution, frame rate, and audio bitrate according to the configured options to reduce the final uplink bitrate of stream publishing and ensure smooth live streaming. After the network environment returns to normal, the uplink bitrate will also be restored to the initial set value.
+
+Only in 1v1 connection scenarios will the SDK automatically enable downlink flow control. The stream playing end will notify the stream publishing end of its network situation. The stream publishing end estimates its own uplink bandwidth and the stream playing end's downlink bandwidth, and takes the minimum value from the uplink and downlink bandwidth estimates to adjust its own uplink bitrate to ensure smooth connection.
+
+
+### Enable/Disable Flow Control
+
+Flow control capability is enabled by default. In general, developers do not need to pay attention to this interface.
+
+Call the `enableTrafficControl` interface before stream publishing. Use the "enable" parameter to enable/disable flow control and set the "property" parameter to adjust flow control properties (bitrate, frame rate, resolution). Multiple items can be selected simultaneously. The default value is "ADAPTIVE_FPS", which means dynamically adjusting the frame rate. When the uplink bandwidth is insufficient, the SDK will automatically adjust the set properties according to the current network environment to adapt to the uplink bandwidth.
+
+<Warning title="Note">
+
+
+- When the flow control switch is turned off, the set flow control property "property" will also become invalid.
+- When the flow control property contains adaptive resolution "ADAPTIVE_RESOLUTION", it only supports initial resolutions with "16:9" or "4:3" aspect ratios. If the initial resolution is other values, the adaptive resolution will not take effect, and the SDK will degrade to directly reducing the encoding bitrate. If you need to record local media during the use of flow control functionality, adaptive resolution will affect the recording of "MP4" format files. In this case, you need to change the format to "FLV". For detailed operations, please refer to [Common Features - Local Media Recording](/real-time-video-ios-oc/other/local-media-recording).
+
+</Warning>
+
+
+
+In different scenarios, you can set different flow control properties:
+
+- In conference scenarios, to ensure information is not lost, you can choose to enable both resolution and frame rate adaptation simultaneously.
+
+Objective-C
+
+```objc
+// Enable flow control and enable both resolution and frame rate adaptation
+[ZegoExpressEngine sharedEngine] enableTrafficControl:YES property:ZegoTrafficControlPropertyAdaptiveFPS | ZegoTrafficControlPropertyAdaptiveResolution];
+```
+
+Java
+
+```java
+ZegoExpressEngine.getEngine().enableTrafficControl(true, ADAPTIVE_RESOLUTION.value() | ADAPTIVE_FPS.value());
+```
+
+
+C++
+
+```cpp
+// Enable flow control and enable both resolution and frame rate adaptation
+ZegoExpressSDK::getEngine()->enableTrafficControl(true, ZEGO_TRAFFIC_CONTROL_PROPERTY_ADAPTIVE_FPS | ZEGO_TRAFFIC_CONTROL_PROPERTY_ADAPTIVE_RESOLUTION);
+```
+
+uni-app
+```js
+// Enable flow control and enable both resolution and frame rate adaptation
+ZegoExpressEngine.instance().enableTrafficControl(true, AdaptiveResolution | AdaptiveAudioBitrate);
+```
+
+
+C#
+
+```cs
+ZegoExpressEngine.GetEngine().EnableTrafficControl(true, ZegoTrafficControlProperty.AdaptiveResolution | AdaptiveResolution.AdaptiveFPS);
+```
+
+
+- In show live streaming scenarios, to ensure video smoothness, it is recommended to choose resolution adaptation, and set the `property` parameter to `ZegoTrafficControlPropertyAdaptiveResolution`
+
+- In education scenarios, to ensure clarity, it is recommended to choose frame rate adaptation, and set the `property` parameter to `property:ZegoTrafficControlPropertyAdaptiveFPS`
+
+
+### Set the minimum video bitrate for flow control
+
+After enabling flow control, you can call the `setMinVideoBitrateForTrafficControl` method to set the minimum video bitrate (default value is "0"). This allows the SDK to use the video sending mode set by this method when the network does not reach the minimum bitrate for sending video (not sending video or sending at an extremely low frame rate).
+
+<Warning title="Note">
+
+
+It can be called at any time after the SDK is initialized, but the setting will only take effect after flow control is enabled.
+
+</Warning>
+
+
+
+Objective-C
+
+```objc
+// After enabling flow control, when the uplink and downlink bandwidth is lower than 200kbps, continue to send video data at an extremely low frame rate
+[[ZegoExpressEngine sharedEngine] setMinVideoBitrateForTrafficControl:200 mode:ZegoTrafficControlMinVideoBitrateModeUltraLowFPS];
+```
+
+Java
+
+```java
+// After enabling flow control, when the uplink and downlink bandwidth is lower than 200 kbps, continue to send video data at an extremely low frame rate
+ZegoExpressEngine.getEngine().setMinVideoBitrateForTrafficControl(200, ZegoTrafficControlMinVideoBitrateMode.ULTRA_LOW_FPS);
+```
+
+
+C++
+
+```cpp
+// After enabling flow control, when the uplink and downlink bandwidth is lower than 200kbps, continue to send video data at an extremely low frame rate
+ZegoExpressSDK::getEngine()->setMinVideoBitrateForTrafficControl(200, ZEGO_TRAFFIC_CONTROL_MIN_VIDEO_BITRATE_MODE_ULTRA_LOW_FPS);
+```
+
+uni-app
+```js
+// After enabling flow control, when the bitrate is lower than 200 kbps, continue to send video data at an extremely low frame rate
+ZegoExpressEngine.instance().setMinVideoBitrateForTrafficControl(200, ZegoTrafficControlMinVideoBitrateMode.UltraLowFPS);
+```
+
+C#
+
+```cs
+// After enabling flow control, when the uplink and downlink bandwidth is lower than 200kbps, continue to send video data at an extremely low frame rate
+ZegoExpressSDK::GetEngine().SetMinVideoBitrateForTrafficControl(200, ZegoTrafficControlMinVideoBitrateMode.UltraLowFPS);
+```
+
+

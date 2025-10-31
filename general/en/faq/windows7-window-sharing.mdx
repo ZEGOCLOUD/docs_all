@@ -1,0 +1,90 @@
+---
+
+date: "2021-09-09"
+ce-comparison:
+  - "如何:how"
+  - "处理:handle"
+  - "Windows:Windows"
+  - "7:7"
+  - "窗口:window"
+  - "共享:sharing"
+  - "异常:exception"
+---
+import { Title } from './title';
+import ArticleMetadata from '../../zh/faq/ArticleMetadata';
+
+<Title>How to handle Windows 7 window sharing exceptions?</Title>
+
+<ArticleMetadata language="en" product="Video Call / Audio Call / Live streaming" platform="Windows" />
+
+
+
+- - -
+
+## Problem Description
+
+1. When sharing a file explorer window on Windows 7, the search box color of the shared window seen by remote users may be abnormal (black).
+
+2. When sharing a Google Chrome window on Windows 7, remote users may not see the shared window at all.
+
+3. On Windows 7 and above versions (Windows 8, Windows 8.1, Windows 10), when enabling screen DPI (Dots Per Inch) scaling or modifying screen resolution during sharing, the shared window seen by remote users is incomplete or has black borders.
+
+
+## Problem Cause
+
+Windows has many window types. Simply copying window bitmaps through GDI (Graphics Device Interface) cannot meet the requirements of sharing windows in various scenarios.
+
+## Solution
+
+[ZegoScreenCapture-Windows SDK](https://doc-zh.zego.im/article/3167) combines various capture methods to meet most scenarios and provides multiple mode options for window capture.
+
+```cpp
+enum ZegoScreenCaptureWindowMode
+	{
+		kZegoScreenCaptureWindowModeWindow = 1,			///< Capture the entire window image
+		kZegoScreenCaptureWindowModeClient = 2,			///< Capture the window client area
+		kZegoScreenCaptureWindowModeRgn1 = 3,			///< Capture the window's corresponding screen area (continue capturing the corresponding area after the window is covered)
+		kZegoScreenCaptureWindowModeRgn2 = 4,			///< Capture the window's corresponding screen area (continue capturing after the window is covered, paint the covered area black)
+		kZegoScreenCaptureWindowModeRgn3 = 5,			///< Capture the window's corresponding screen area (continue capturing after the window is covered, filter the upper layer covered window, effective for win8 and later systems)
+	};
+
+/// \brief In the mode where the capture target is a single window, set the target capture mode, such as whether to capture all window content or window client area content (not implemented on macOS)
+/// \param mode Window capture mode, default to capture the entire window
+/// \return Returns non-zero on success, otherwise returns 0
+/// \note Call this interface after zego_screencapture_set_target_window to set, kZegoScreenCaptureWindowModelClient only supports limited windows
+/// \see zego_screencapture_set_target_window
+/// \see ZegoScreenCaptureWindowMode
+SCREENCAPTURE_API int zego_screencapture_set_target_window_mode(enum ZegoScreenCaptureWindowMode mode);
+```
+
+### Differences Between Modes
+
+- "kZegoScreenCaptureWindowModeWindow" and "kZegoScreenCaptureWindowModeClient" modes capture window bitmaps through GDI.
+
+- "kZegoScreenCaptureWindowModeRgn1", "kZegoScreenCaptureWindowModeRgn2", and "kZegoScreenCaptureWindowModeRgn3" modes capture the window's bitmap on the screen through GDI, which is equivalent to capturing the screen bitmap and then extracting the window image. The difference between the three is the handling method when the shared window is covered:
+    - kZegoScreenCaptureWindowModeRgn1: Continue capturing the corresponding area after the window is covered.
+    - kZegoScreenCaptureWindowModeRgn2: Continue capturing after the window is covered, paint the covered area black.
+    - kZegoScreenCaptureWindowModeRgn3: Continue capturing after the window is covered, filter the upper layer covered window, effective for Windows 8 and above systems.
+
+
+### Scenario Recommendations
+
+Users have two main scenarios when sharing windows:
+
+- Scenario 1
+
+When capturing a specific window, for example, when you need to specify sharing a certain APP window, prioritize using the "kZegoScreenCaptureWindowModeWindow" mode. When the shared window exhibits the phenomena described in "Problem Description", you can switch to other modes for testing based on product requirements.
+
+```cpp
+zego_screencapture_set_target_window_mode(kZegoScreenCaptureWindowModeWindow);
+```
+
+- Scenario 2
+
+When the captured window is uncertain, or the running system version is also uncertain, it is recommended to use the "kZegoScreenCaptureWindowModeRgn3" mode. Since this mode is equivalent to capturing the screen image, it is independent of the characteristics of the captured window and can be compatible with all types of windows. When handling scenarios where the window is covered or moved outside the screen, you can also choose "kZegoScreenCaptureWindowModeRgn1" or "kZegoScreenCaptureWindowModeRgn2" mode based on requirements.
+
+```cpp
+zego_screencapture_set_target_window_mode(kZegoScreenCaptureWindowModeClient);
+```
+
+

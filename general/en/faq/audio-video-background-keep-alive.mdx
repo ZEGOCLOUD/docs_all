@@ -1,0 +1,195 @@
+---
+date: "2025-09-28"
+ce-comparison:
+  - "如何:how"
+  - "在:in"
+  - "应用:application"
+  - "退到:go to"
+  - "后台:background"
+  - "时:when"
+  - "保持:keep"
+  - "ZEGO SDK:ZEGO SDK"
+  - "音视频:audio and video"
+  - "功能:function"
+  - "正常:normal"
+  - "运行:run"
+---
+import { Title } from './title';
+import ArticleMetadata from '../../zh/faq/ArticleMetadata';
+
+<Title>How to keep ZEGO SDK's audio and video functions running normally when the application goes to the background?</Title>
+
+<ArticleMetadata language="en" product="Video Call / In-app chat / Live streaming" platform="Android" />
+
+---
+This article describes how to keep ZEGO SDK's audio and video functions running normally when the application goes to the background.
+
+## System Restrictions
+
+### Privacy Restrictions on Android 9.0 and Above
+
+With the increasing requirements for privacy protection, Android 9.0 and later versions have imposed restrictions on audio and video permissions for background applications:
+
+- Microphone Restrictions
+  - After the application goes to the background for one minute, the microphone will return silent data
+  - It will automatically recover when returning to the foreground without additional operations
+
+- Camera Restrictions
+  - After the application goes to the background for one minute, the camera will be released by the system
+  - When returning to the foreground, the SDK will automatically recover the camera
+
+### Power Consumption Management Restrictions
+
+To optimize device battery life, Android 9.0 and above systems have added background application management features:
+
+- After the application goes to the background for a period of time, the system will restrict network access
+- After network restriction, audio and video data cannot be sent and received normally
+- After a period of time, the application process may be suspended by the system
+
+## Impact on Audio and Video Services
+
+1. After the streaming end goes to the background for one minute:
+   - Audio and video data cannot be sent normally
+   - Due to network restrictions, the heartbeat with the server may be disconnected
+   - The playback end may receive a stream deletion notification
+
+2. After the playback end goes to the background:
+   - Due to network restrictions, audio and video data cannot be received normally
+
+## Solution
+
+To keep the application's audio and video functions running normally in the background, you can use foreground services. The following are the specific implementation steps:
+
+### 1. Declare Permissions
+
+Add foreground service permissions in AndroidManifest.xml:
+
+```xml
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+```
+
+### 2. Register Service
+
+Register the service under the application node in AndroidManifest.xml:
+
+```xml
+<application>
+    ...
+    <service android:name=".ForegroundNotificationService"
+    android:foregroundServiceType="microphone"
+    android:enabled="true"
+    android:exported="false"/>
+</application>
+```
+
+### 3. Create Foreground Service Class
+
+```java
+public class ForegroundNotificationService extends Service {
+    public static final String FOREGROUND_NOTIFICATION_CHANNEL_ID = "foreground_channel_id";
+    public static final String FOREGROUND_NOTIFICATION_CHANNEL_NAME = "Foreground Service Notification";
+    public static final int FOREGROUND_NOTIFICATION_CHANNEL_IMPORTANCE = NotificationManagerCompat.IMPORTANCE_LOW;
+    private static final int FOREGROUND_NOTIFICATION_PENDING_INTENT_REQUEST_CODE = 0x10;
+    private static final int FOREGROUND_NOTIFICATION_ID = 0xc000;
+    private NotificationManager mNotificationManager;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        mNotificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        showNotification();
+    }
+
+    @Nullable
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        return super.onStartCommand(intent, flags, startId);
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        mNotificationManager.cancel(FOREGROUND_NOTIFICATION_ID);
+    }
+
+    private void showNotification() {
+        PendingIntent pendingIntent = PendingIntent.getActivity(this,
+            FOREGROUND_NOTIFICATION_PENDING_INTENT_REQUEST_CODE,
+            new Intent(this, MainActivity.class),
+            PendingIntent.FLAG_UPDATE_CURRENT);
+
+        Notification notification = new NotificationCompat.Builder(this, FOREGROUND_NOTIFICATION_CHANNEL_ID)
+            .setContentText("Application is running in the background")
+            .setContentIntent(pendingIntent)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .build();
+
+        mNotificationManager.notify(FOREGROUND_NOTIFICATION_ID, notification);
+        startForeground(FOREGROUND_NOTIFICATION_ID, notification);
+    }
+}
+```
+
+### 4. Create Notification Channel
+
+Create a notification channel in the Application class:
+
+```java
+public class YourApplication extends Application {
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        createNotificationChannel();
+    }
+
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                ForegroundNotificationService.FOREGROUND_NOTIFICATION_CHANNEL_ID,
+                ForegroundNotificationService.FOREGROUND_NOTIFICATION_CHANNEL_NAME,
+                ForegroundNotificationService.FOREGROUND_NOTIFICATION_CHANNEL_IMPORTANCE);
+            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+            notificationManager.createNotificationChannel(channel);
+        }
+    }
+}
+```
+
+### 5. Start and Stop Foreground Service
+
+In the Activity where you need to keep running in the background:
+
+```java
+public class YourActivity extends AppCompatActivity {
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        startForegroundNotificationService();
+    }
+
+    private void startForegroundNotificationService() {
+        startService(new Intent(this, ForegroundNotificationService.class));
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        stopService(new Intent(this, ForegroundNotificationService.class));
+    }
+}
+```
+
+## Precautions
+
+1. Foreground services need to display persistent notifications in the notification bar, which is a system requirement
+2. This solution applies to Android 6.0 and above
+3. Even with foreground services, you still need to comply with system privacy restrictions
+4. It is recommended to enable foreground services only when necessary to reduce power consumption
+
+

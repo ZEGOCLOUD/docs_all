@@ -1,0 +1,151 @@
+---
+
+date: "2023-12-11"
+ce-comparison:
+  - "在:in"
+  - "Android:Android"
+  - "平台:platform"
+  - "开发:development"
+  - "中:in"
+  - "出现:appear"
+  - "CPU:CPU"
+  - "占用率:usage rate"
+  - "过高:too high"
+  - "设备:device"
+  - "发热:heat"
+  - "问题:problem"
+  - "该:should"
+  - "如何:how"
+  - "分析:analyze"
+---
+import { Title } from './title';
+import ArticleMetadata from '../../zh/faq/ArticleMetadata';
+
+<Title>In Android platform development, how to analyze the problem of high CPU usage and device overheating?</Title>
+
+<ArticleMetadata language="en" product="Video Call / Audio Call / Live streaming" platform="Android" />
+
+
+
+- - -
+
+This document aims to help Android developers using ZEGO SDK analyze CPU performance issues, as such issues often lead to App UI stuttering, mobile device overheating, audio and video not being real-time (large latency) and other issues, affecting customer experience.
+
+To improve customer experience and service, this document analyzes the problem of high CPU usage, helping developers locate the root cause of the problem and confirm whether it is a performance issue caused by ZEGO SDK.
+
+## Process Analysis
+
+Execute the `top` command to check whether the App's CPU usage is too high and the corresponding PID (Process Identification).
+
+For example: the current App's CPU usage is 106%, and the PID is 27056.
+
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/Performance/cpu_top.png" /></Frame></Frame>
+
+## Thread Analysis
+
+Execute the `top -H -p` command, sort by %CPU usage, and find the CPU usage of each thread under the corresponding PID, which includes system-level, C/C++ (lib layer), and Java layer self-developed threads.
+
+For example: the execution result of the `top -H -p 30959 -O Tid` command is as follows:
+
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/Performance/cpu_top_p.png" /></Frame></Frame>
+
+From this, you can see that the main thread in the `com.zegodemo.dynamicfunction` process consumes higher CPU.
+
+### Profiler Tool
+
+The Profiler tool that comes with Android Studio can also directly view threads with high CPU usage.
+
+1. Install the Debug version of Android Studio, connect to the mobile device, open the Profiler tool, and select the package name corresponding to the App to be analyzed.
+
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/Performance/Profiler.png" /></Frame>
+
+2. Click CPU to enter the CPU analysis page.
+
+    - The upper part shows the current App's CPU usage and the CPU usage of other processes on the phone.
+
+    <Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/Performance/Profiler_cpu.png" /></Frame></Frame>
+
+    - The lower part shows all current threads and the CPU time slices occupied by the threads. **CPU usage refers to the CPU time occupied by a thread during a period of time, that is, the ratio of the thread's running state time to the total time.** 
+
+    The length of the green bar represents the thread's running state time. If there are longer green bars or very frequent green bars appearing in a period of time, it indicates high CPU usage.
+
+    <Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/Performance/Profiler_cpu_running.png" /></Frame></Frame>
+
+
+For example: the main thread's running state time shows a large number of green bars. When you move the mouse to the green bar, you can see that the running state time often exceeds 1s, which suggests that the main thread has time-consuming operations.  
+
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/Performance/Profiler_cpu_running1.png" /></Frame></Frame>
+
+
+## Function Details
+
+After locating the specific time-consuming thread, further analyze the operations within the target thread, and analyze in detail according to the level of the thread that needs to be analyzed.
+
+### Java Layer
+
+1. If you need to debug Java layer CPU issues in the main thread or other upper-level Java threads, select: `Sample Java Methods`, click Record, and reproduce the problem of high CPU usage.
+
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/Performance/funcion_record.png" /></Frame>
+
+2. Then click Stop to stop. Profiler will automatically parse the thread Java method calls during this period.
+
+    <Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/Performance/funcion_record_stop.png" /></Frame></Frame>
+
+3. According to the Java method name, view the thread usage rate. For example: the following figure shows that the onClick length bar in the main thread clearly occupies a longer CPU time.
+
+    Click the function in the main thread, and the right panel will display the longest execution times of the function within the Record time range. **Function calls to system APIs are displayed in orange, function calls to the application's own functions are displayed in green (key inspection), and function calls to third-party APIs (including Java language APIs) are displayed in blue.**
+
+    <Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/Performance/funcion_record_example.png" /></Frame></Frame>
+
+    <Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/Performance/funcion_record_example1.png" /></Frame></Frame>
+
+### C/C++ Layer
+
+If the C/C++ layer has high CPU usage, select `Sample C/C++ Functions`.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/Performance/funcion_record_cpp.png" /></Frame>
+
+Query the CPU resource usage in the ZEGO SDK's so. Common threads in Zego lib.so are as follows:
+
+ <table>
+  
+<tbody><tr>
+<th>Thread name</th>
+<th>Function</th>
+</tr>
+<tr>
+<td>decoder</td>
+<td>Decoding thread (audio/video)</td>
+</tr>
+<tr>
+<td>CWelsTaskThread</td>
+<td>H.264 hierarchical encoding thread</td>
+</tr>
+<tr>
+<td>audio_encode</td>
+<td>Audio encoding thread</td>
+</tr>
+<tr>
+<td>Vcap_enc</td>
+<td>Video capture encoding thread</td>
+</tr>
+<tr>
+<td>avert-play-udp</td>
+<td>Stream pulling thread</td>
+</tr>
+<tr>
+<td>cap_thread</td>
+<td>Capture thread</td>
+</tr>
+<tr>
+<td>video_filter</td>
+<td>External filter thread</td>
+</tr>
+</tbody></table>
+
+
+**If developers encounter problems with the above threads, please save the C/C++ trace file, logcat information, export ZEGO SDK, and save the log in the SD card, and contact ZEGOCLOUD Technical Support for processing.**
+
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/Performance/funcion_record_cpp_cpu.png" /></Frame></Frame>
+
+

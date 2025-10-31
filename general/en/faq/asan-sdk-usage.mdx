@@ -1,0 +1,469 @@
+---
+
+date: "2023-08-11"
+ce-comparison:
+  - "如何:how"
+  - "使用:use"
+  - "附带:come with"
+  - "ASan:ASan"
+  - "工具:tool"
+  - "的:of"
+  - "ZEGO:ZEGO"
+  - "SDK:SDK"
+---
+import { Title } from './title';
+import ArticleMetadata from '../../zh/faq/ArticleMetadata';
+
+<Title>How to use ZEGO SDK with ASan tool?</Title>
+
+<ArticleMetadata language="en" product="Video Call / Audio Call / AI Effects / In-app chat / Live streaming" platform="iOS / Android / macOS / Windows" />
+
+
+---
+
+[Address Sanitizer (ASan)](https://github.com/google/sanitizers/wiki/AddressSanitizer) is a compiler-based fast detection tool used to detect memory errors in native code.
+
+ASan can detect the following issues:
+
+- Heap and stack buffer overflow/underflow
+- Heap use after free
+- Out of scope stack use
+- Double free/invalid free
+
+## Get SDK
+
+To get the SDK package with ASan tool enabled, please contact ZEGOCLOUD Technical Support.
+
+<Warning title="Note">
+
+
+The SDK package already includes the matching version of ASan runtime library.
+
+</Warning>
+
+
+
+## Integrate SDK
+
+The following takes RTC SDK as an example to explain how to integrate the SDK package with ASan enabled. Other products have similar operations.
+
+### Android
+
+1. Please integrate the SDK according to the "Method 2: Manual integration by copying SDK files" in the [Integrate SDK](/real-time-video-android-java/quick-start/integrating-sdk) documentation.
+
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ASAN/express_android_asan_runtime_library.png" /></Frame>
+
+2. Please integrate the ASan runtime library that comes with the SDK package into the App.
+
+    Integrate "wrap.sh" into the App. You can get the "wrap.sh" file from the Android sample code downloaded from [Run Example Code](/real-time-video-android-java/quick-start/run-example-code). After decompressing the sample source code, find the "ZegoExpressExample/main/asan/lib" directory and copy the entire `lib` directory to the "app/src/main/resources" directory of your application project. The structure is as follows.
+
+<Note title="Note">
+
+
+    You can also get the "wrap.sh" file provided by Google NDK through [Android ASan Documentation](https://developer.android.com/ndk/guides/asan) for integration.
+
+</Note>
+
+
+
+    ```bash
+    <project root>
+    └── app
+        ├── src
+        │   └── main
+        │       └── resources
+        │           └── lib
+        │               ├── arm64-v8a
+        │               │   └── wrap.sh
+        │               ├── armeabi-v7a
+        │               │   └── wrap.sh
+        │               ├── x86
+        │               │   └── wrap.sh
+        │               └── x86_64
+        │                   └── wrap.sh
+        └── libs
+            ├── ZegoExpressEngine.jar
+            ├── arm64-v8a
+            │   ├── libclang_rt.asan-aarch64-android.so
+            │   └── libZegoExpressEngine.so
+            ├── armeabi-v7a
+            │   ├── libclang_rt.asan-arm-android.so
+            │   └── libZegoExpressEngine.so
+            ├── x86
+            │   ├── libclang_rt.asan-i686-android.so
+            │   └── libZegoExpressEngine.so
+            └── x86_64
+                ├── libclang_rt.asan-x86_64-android.so
+                └── libZegoExpressEngine.so
+    ```
+    **Precautions**
+
+    Please ensure that the "wrap.sh" file uses LF (`\n`) line breaks instead of CRLF (`\r\n`), otherwise the built App will not start.
+
+    Generally, the default line break on Windows systems is CRLF. If you are developing Android App on Windows and manually created or modified the "wrap.sh" file, please ensure that this file must use LF line breaks.
+
+    You can view the line breaks of the file through editors like VS Code, as shown in the figure below.
+
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ASAN/android_asan_wrap_sh_crlf_or_lf.png" /></Frame>
+
+
+3. Modify Android App project configuration. Run the App with "debuggable", add `android:debuggable` to `AndroidManifest.xml` application manifest.
+
+    This step is to ensure that even if the built package is Release, it is debuggable. If the built package is not debuggable, ASan will not work properly.
+
+    ```xml
+    <application
+        android:debuggable="true"
+        ...>
+        ...
+    </application>
+    ```
+
+    If after modifying the project configuration, gradle reports an error when building Release App:
+
+    ```markdown
+    Error: Avoid hardcoding the debug mode; leaving it out allows debug and release builds to automatically assign one [HardcodedDebugMode]
+        android:debuggable="true"
+        ~~~~~~~~~~~~~~~~~~~~~~~~~
+    ```
+
+    Please add the following configuration in the "app/build.gradle" file:
+
+    ```groovy
+    android {
+        lintOptions {
+            // Allow the hardcode of `android:debuggable="true"` in `AndroidManifest.xml`, which required by ASan
+            // Ref: https://developer.android.com/ndk/guides/asan#running
+            checkReleaseBuilds false
+        }
+    }
+    ```
+
+4. If your App's minSdkVersion >= 23 and the Android Gradle Plugin version used in the project >= 7.0, please set `useLegacyPackaging` to `true` in the "app/build.gradle" file as follows. For details, please refer to [Documentation](https://developer.android.com/ndk/guides/wrap-script#packaging_wrapsh).
+
+    ```groovy
+    android {
+        packagingOptions {
+            // Only available since AGP 7.0
+            jniLibs {
+                useLegacyPackaging true
+            }
+        }
+    }
+    ```
+
+5. If you get an error "The APKs are invalid." when running the App, please refer to [GitHub Documentation](https://github.com/android/ndk/issues/988) and add the following configuration in the "app/build.gradle" file. Please refer to [Configuration Documentation](https://developer.android.com/ndk/guides/asan#building) for processing.
+
+    ```groovy
+    android {
+        defaultConfig {
+            externalNativeBuild {
+                cmake {
+                    arguments "-DANDROID_STL=c++_shared"
+                }
+            }
+        }
+    }
+    ```
+
+### iOS
+
+1. Please integrate the SDK according to the "Method 3: Manual integration by copying SDK files" in the [Integrate SDK](/real-time-video-ios-oc/quick-start/integrating-sdk) documentation.
+
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ASAN/express_ios_asan_runtime_library.png" /></Frame>
+
+2. The SDK package includes ASan runtime library. Please choose whether to integrate it into the App based on the situation.
+
+    **Situation 1: Only ZEGO SDK uses ASan, your App code does not need to use ASan**
+
+    In this case, please integrate the ASan runtime library into the App in the "Embed & Sign" way.
+
+<Warning title="Note">
+
+
+    The SDK package includes three ASan runtime libraries, corresponding to iOS real device, iOS simulator, and Mac Catalyst respectively. Do not integrate multiple ASan runtime libraries into the App at the same time.
+    - When running on iOS real device, you need to integrate `libclang_rt.asan_ios_dynamic.dylib`.
+    - When running on iOS simulator, you need to integrate `libclang_rt.asan_iossim_dynamic.dylib`.
+    - When running on iOS Mac Catalyst, you need to integrate `libclang_rt.asan_osx_dynamic.dylib`.
+
+</Warning>
+
+
+
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ASAN/express_ios_xcode_embed_asan_runtime_library.png" /></Frame>
+
+    **Situation 2: Both ZEGO SDK and your App code need to use ASan**
+
+    1. Integrate ZEGO SDK's xcframework without needing to integrate ASan runtime library. However, you first need to confirm whether the clang version used by ZEGO SDK matches the clang version on your machine.
+
+    ```sh
+    # View the clang version used by ZEGO SDK
+    otool -l libclang_rt.asan_ios_dynamic.dylib | grep -A 2 LC_SOURCE_VERSION
+
+    # View the clang version of Xcode on this machine
+    clang --version
+    ```
+
+    If they do not match, you need to download the Xcode version used by ZEGO SDK, otherwise ASan cannot be used.
+
+<Note title="Note">
+
+
+    You can check the clang version included in Xcode historical versions through the following links:
+        - [https://en.wikipedia.org/wiki/Xcode](https://en.wikipedia.org/wiki/Xcode)
+        - [https://gist.github.com/yamaya/2924292](https://gist.github.com/yamaya/2924292)
+
+</Note>
+
+
+
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ASAN/ios_asan_lib_clang_version.png" /></Frame>
+
+    Taking the above image as an example, the clang version of Xcode on this machine is 1400 (14.0.0), while the clang version used by this ZEGO SDK is 1316 (13.1.6). Then it is found that the clang version included in Xcode 13.3 to 13.4.1 is 1316, so you can download an Xcode version 13.4.1.
+
+<Note title="Note">
+
+
+    You can use [XcodesApp](https://github.com/RobotsAndPencils/XcodesApp) to install multiple versions of Xcode on your machine at the same time.
+
+</Note>
+
+
+
+    2. Open the Xcode project, select "Product > Scheme > Edit Scheme" from the menu bar, click "Run" in the sidebar, in the "Diagnostics" tab, check "Address Sanitizer" to enable ASan.
+
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ASAN/express_ios_xcode_scheme_enable_asan.png" /></Frame>
+
+    3. Click the Xcode run button to start building and debugging the App.
+
+<Warning title="Note">
+
+        - At this time, Xcode will automatically integrate ASan runtime library into the App, so you cannot manually integrate the ASan runtime library that comes with ZEGO SDK, otherwise there will be conflicts.
+        - If you use command line to build the App instead of Xcode GUI, please add the `-enableAddressSanitizer YES` parameter to the `xcodebuild` command. For details, please refer to [Documentation](https://developer.apple.com/documentation/xcode/diagnosing-memory-thread-and-crash-issues-early) for processing.
+
+</Warning>
+
+
+
+### macOS
+
+<Warning title="Note">
+
+
+If your project is a native Xcode project, please refer to the iOS usage method above for integration. The following will introduce the integration method for non-Xcode projects.
+
+</Warning>
+
+
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ASAN/express_mac_asan_runtime_library.png" /></Frame>
+
+The SDK package includes ASan runtime library. Please choose whether to integrate it into the App based on the situation.
+
+**Situation 1: Only ZEGO SDK uses ASan, your App code does not need to use ASan**
+
+- CMake
+
+    ```cmake
+    # Link ZEGO SDK and ASan runtime library provided in ZEGO SDK package
+    link_libraries(
+        "${CMAKE_CURRENT_LIST_DIR}/libs/ZegoExpressEngine.xcframework/macos-arm64_x86_64/libZegoExpressEngine.dylib"
+        "${CMAKE_CURRENT_LIST_DIR}/libs/libclang_rt.asan_osx_dynamic.dylib"
+    )
+    ```
+
+- QMake (Qt5)
+
+    ```qmake
+    # Link ZEGO SDK and ASan runtime library provided in ZEGO SDK package
+    LIBS += -L$$PWD/libs -lclang_rt.asan_osx_dynamic
+    LIBS += -L$$PWD/libs/ZegoExpressEngine.xcframework/macos-arm64_x86_64 -lZegoExpressEngine
+    ```
+
+**Situation 2: Both ZEGO SDK and your App code need to use ASan**
+
+<Warning title="Note">
+
+
+Please ensure that the clang version used by ZEGO SDK matches the clang version on your machine. Please refer to Situation 2 of iOS above for processing.
+
+</Warning>
+
+
+
+- CMake
+
+    ```cmake
+    # Enable ASan for your App
+    add_compile_options(-fsanitize=address)
+    add_link_options(-fsanitize=address)
+
+    # Link ZEGO SDK and ASan runtime library provided in ZEGO SDK package
+    link_libraries(
+        "${CMAKE_CURRENT_LIST_DIR}/libs/ZegoExpressEngine.xcframework/macos-arm64_x86_64/libZegoExpressEngine.dylib"
+        "${CMAKE_CURRENT_LIST_DIR}/libs/libclang_rt.asan_osx_dynamic.dylib"
+    )
+    ```
+
+- QMake (Qt5)
+
+    ```qmake
+    # Enable ASan for your App
+    QMAKE_CXXFLAGS += -fsanitize=address
+    QMAKE_LFLAGS += -fsanitize=address
+
+    # Link ZEGO SDK and ASan runtime library provided in ZEGO SDK package
+    LIBS += -L$$PWD/libs -lclang_rt.asan_osx_dynamic
+    LIBS += -L$$PWD/libs/ZegoExpressEngine.xcframework/macos-arm64_x86_64 -lZegoExpressEngine
+    ```
+
+### Windows
+
+Currently we use Microsoft [MSVC's ASan](https://learn.microsoft.com/en-us/cpp/sanitizers/asan). Please refer to [Official Documentation](https://learn.microsoft.com/en-us/cpp/sanitizers/asan) to enable ASan for your App.
+
+<Note title="Note">
+
+
+Using MSVC ASan has the following limitations:
+
+- Need to use Visual Studio 2019 v16.9 or higher version, Visual Studio 2022 is recommended.
+- All C/C++ code of the App needs to be compiled with Static CRT (`/MT`) method. (Because ZEGO SDK uses Static CRT, please refer to [Documentation](https://learn.microsoft.com/en-us/answers/questions/650660/open-address-sanitizer-flagmy-app-crash.html?childToView=657116#comment-657116) for details)
+- When EXE links a DLL with ASan enabled, the EXE must also enable ASan ([Reference Documentation](https://devblogs.microsoft.com/cppblog/asan-for-windows-x64-and-debug-build-support/#comment-1163)). Therefore, if you want to use ZEGO SDK with ASan enabled, your App must also enable ASan.
+
+
+</Note>
+
+## Run App
+
+When a problem occurs, ASan will output a report similar to the following to the console. Please submit the relevant content, corresponding SDK logs, and crash logs (Apple Crash Report / Windows Crash Dump) to ZEGOCLOUD Technical Support for analysis.
+
+```log
+==9901==ERROR: AddressSanitizer: heap-use-after-free on address 0x60700000dfb5 at pc 0x45917b bp 0x7fff4490c700 sp 0x7fff4490c6f8
+READ of size 1 at 0x60700000dfb5 thread T0
+    #0 0x45917a in main use-after-free.c:5
+    #1 0x7fce9f25e76c in __libc_start_main /build/buildd/eglibc-2.15/csu/libc-start.c:226
+    #2 0x459074 in _start (a.out+0x459074)
+0x60700000dfb5 is located 5 bytes inside of 80-byte region [0x60700000dfb0,0x60700000e000)
+freed by thread T0 here:
+    #0 0x4441ee in __interceptor_free projects/compiler-rt/lib/asan/asan_malloc_linux.cc:64
+    #1 0x45914a in main use-after-free.c:4
+    #2 0x7fce9f25e76c in __libc_start_main /build/buildd/eglibc-2.15/csu/libc-start.c:226
+previously allocated by thread T0 here:
+    #0 0x44436e in __interceptor_malloc projects/compiler-rt/lib/asan/asan_malloc_linux.cc:74
+    #1 0x45913f in main use-after-free.c:3
+    #2 0x7fce9f25e76c in __libc_start_main /build/buildd/eglibc-2.15/csu/libc-start.c:226
+SUMMARY: AddressSanitizer: heap-use-after-free use-after-free.c:5 main
+```
+
+Some platforms need to start the App in an unconventional way to get ASan error reports.
+
+### Android
+
+No special processing is required. Just run the App directly. When the App crashes, ASan error reports will be output to Logcat along with the crash stack. You can view them through Android Studio or `adb logcat`.
+
+### iOS
+
+<Warning title="Note">
+
+
+
+If you use Xcode to run and debug the App, no special processing is required. When the App crashes, ASan reports will be output in the Xcode debug console.
+
+</Warning>
+
+
+
+
+If you package an ipa package and distribute it to other iOS devices to run, please note that packages with ASan enabled cannot be uploaded to App Store Connect (including TestFlight, will be rejected by Apple). Therefore, it is recommended to package in `ad-hoc` or `development` mode and distribute to internal test devices through ipa packages. You can use tools like [tidevice](https://github.com/alibaba/taobao-iphone-device) or [libimobiledevice](https://libimobiledevice.org) to install ipa to test devices.
+
+When the App crashes, the regular Apple Crash Report will not include ASan reports (including crash reports collected by third-party exception reporting platforms such as Bugly).
+
+ASan reports will be output to the system log. You need to get them yourself. The following provides several common methods.
+
+**Method 1**
+
+Connect the iOS device to Mac, open the **Console** App (Console.app) on Mac, find and select the iOS device in the device list on the left side of the Console App, then click the start button to start collecting system logs in real time. Then run the App on the iOS device. When the App crashes, the console will output ASan error reports.
+
+**Method 2**
+
+1. First, you need to get the UDID of the iOS device: Connect the iOS device to Mac, open the **Finder** App and find and select the iOS device in the device list on the left side. On the right side, find the device name and model name. Click on the model name line of text. At this time, it will switch to display the device serial number and UDID. Right-click on the UDID and select copy UDID.
+
+2. Run the App on the iOS device. After the App crashes, connect the iOS device to Mac. On Mac, open the Terminal App (Terminal.app) and execute the `sudo log collect --last 10m --device-udid YOUR-UDID` command (replace YOUR_UDID with the UDID obtained in the previous step). At this time, a **system_logs.logarchive** system log archive will be generated in the current directory, which contains all system logs of this iOS device from 10 minutes ago to now. Double-click to open the **system_logs.logarchive** file, which contains ASan error reports.
+
+### macOS
+
+1. Do not double-click to open the application directly. Instead, open the terminal and `cd` to the directory where the application (.app) is located.
+
+```shell
+cd MyAwesomeApp
+```
+
+2. Run the executable binary in the `.app` directory.
+
+```shell
+./MyAwesomeApp.app/Contents/MacOS/MyAwesomeApp
+```
+
+When a crash occurs, the terminal console will output ASan error reports.
+
+### Windows
+
+Do not double-click to open the application directly. Instead, open the command prompt and `cd` to the directory where the application `.exe` is located, then run the application.
+
+```cmd
+cd MyAwesomeApp
+```
+
+When a crash occurs, ASan error reports will be output in the command prompt console. It is also recommended to set the crash dump file path for ASan. When a crash occurs, a Crash Dump file will be generated ([Reference Documentation](https://learn.microsoft.com/en-us/cpp/sanitizers/asan#crash-dumps)).
+
+```cmd
+set ASAN_SAVE_DUMPS=MyFileName.dmp
+.\MyAwesomeApp.exe
+```
+
+## Precautions
+
+ASan detects Container Overflow issues by default, but it is easy to produce false positives. For details, please refer to [GitHub Documentation](https://github.com/google/sanitizers/wiki/AddressSanitizerContainerOverflow#false-positives). Therefore, when starting the App, it is recommended to disable the detection of Container Overflow type errors.
+
+### Android
+
+If you get the `wrap.sh` file from [Run Example Code](/real-time-video-android-java/quick-start/run-example-code), no additional modifications are needed. The `wrap.sh` provided in the example source code is already modified.
+
+If you get the `wrap.sh` file from Android NDK or other places, you need to modify the `wrap.sh` file and add the `detect_container_overflow=0` parameter to the `ASAN_OPTIONS` environment variable as follows.
+
+```shell
+export ASAN_OPTIONS=log_to_syslog=false,allow_user_segv_handler=1,detect_container_overflow=0
+```
+
+### iOS
+
+If you use Xcode to run and debug the App directly, open the Xcode project, select "Product > Scheme > Edit Scheme" from the menu bar, click "Run" in the sidebar, then in the "Arguments" tab, in the "Environment Variables" option, add the environment variable `ASAN_OPTIONS` with the value set to `detect_container_overflow=0`, as shown in the figure below.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ASAN/express_ios_xcode_scheme_set_asan_options.png" /></Frame>
+
+If you use ipa package distribution to other devices to run the App, please use [tidevice](https://github.com/alibaba/taobao-iphone-device) to set environment variables and then start the App.
+
+```shell
+tidevice launch -e ASAN_OPTIONS:"detect_container_overflow=0" YOUR_APP_BUNDLE_ID
+```
+
+### macOS
+
+Before starting the App in the terminal, first set the `ASAN_OPTIONS` environment variable, then run the App.
+
+```shell
+export ASAN_OPTIONS=detect_container_overflow=0
+./MyAwesomeApp.app/Contents/MacOS/MyAwesomeApp
+```
+
+### Windows
+
+Before starting the App in the command prompt, first set the `ASAN_OPTIONS` environment variable, then run the App.
+
+```cmd
+set ASAN_OPTIONS=detect_container_overflow=0
+set ASAN_SAVE_DUMPS=MyFileName.dmp
+.\MyAwesomeApp.exe
+```
+
+

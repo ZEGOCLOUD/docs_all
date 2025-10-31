@@ -1,0 +1,273 @@
+---
+
+date: "2024-12-31"
+ce-comparison:
+  - "Express SDK:Express SDK"
+  - "是否:whether"
+  - "支持:support"
+  - "断线:disconnection"
+  - "重连:reconnection"
+  - "机制:mechanism"
+---
+import { Title } from './title';
+import ArticleMetadata from '../../zh/faq/ArticleMetadata';
+
+<Title>Does Express SDK support a disconnection and reconnection mechanism?</Title>
+
+<ArticleMetadata language="en" product="Video Call / Audio Call / Live streaming" platform="iOS / Android / macOS / Windows / Flutter / Unity3D" />
+
+
+
+- - -
+
+ZEGO Express SDK supports a disconnection and reconnection mechanism. This article will introduce the SDK's logic processing for room reconnection, stream publishing reconnection, and stream playing reconnection, as well as methods to handle common abnormal disconnections.
+
+
+## Reconnection Logic Description
+
+### Room Reconnection
+
+After a user logs into a room, if the connection to the room is interrupted due to network signal issues or network type switching issues, the SDK will automatically reconnect internally.
+
+Users can monitor their connection status in the room in real-time by listening to the `onRoomStateChanged` callback. When logging into a room, if the `isUserStatusNotify` parameter in the `config` is set to "true", other users in the room can receive notifications of connection status changes through the `onRoomUserUpdate` callback.
+
+#### Room State Callback
+
+<table>
+  <colgroup>
+    <col width="30%"/>
+    <col width="20%"/>
+    <col width="50%"/>
+  </colgroup>
+  <tbody><tr>
+    <th>State</th>
+    <th>Enum Value</th>
+    <th>Meaning</th>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.LOGINING</td>
+    <td>0</td>
+    <td>Logging in to the room. When calling [loginRoom] to log in to the room or [switchRoom] to switch to the target room, this state is entered, indicating that the client is requesting to connect to the server. Usually, this state is used to display the application interface.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.LOGINED</td>
+    <td>1</td>
+    <td>Successfully logged in to the room. After successfully logging in to the room or switching rooms, this state is entered, indicating that the room login has been successful, and the user can normally receive callback notifications of other users and all stream information additions and deletions in the room.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.LOGIN_FAILED</td>
+    <td>2</td>
+    <td>Failed to log in to the room. After failing to log in to the room or switch rooms, this state is entered, indicating that the room login or room switch has failed, such as incorrect AppID, AppSign, or Token.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.RECONNECTING</td>
+    <td>3</td>
+    <td>Room connection is temporarily interrupted. If the interruption is caused by poor network quality, the SDK will perform internal retries.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.RECONNECTED</td>
+    <td>4</td>
+    <td>Room reconnection is successful. If the interruption is caused by poor network quality, the SDK will perform internal retries, and this state is entered after successful reconnection.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.RECONNECT_FAILED</td>
+    <td>5</td>
+    <td>Room reconnection failed. If the interruption is caused by poor network quality, the SDK will perform internal retries, and this state is entered after failed reconnection.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.KICK_OUT</td>
+    <td>6</td>
+    <td>Kicked out of the room by the server. For example, if the same username logs in to the room elsewhere, this end will be kicked out of the room and enter this state.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.LOGOUT</td>
+    <td>7</td>
+    <td>Successfully logged out of the room. Before logging in to the room, the default state is this state. After successfully calling [logoutRoom] to log out of the room or [switchRoom] to internally log out of the current room, this state is entered.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.LOGOUT_FAILED</td>
+    <td>8</td>
+    <td>Failed to log out of the room. After failing to call [logoutRoom] to log out of the room or [switchRoom] to internally log out of the current room, this state is entered.</td>
+  </tr>
+</tbody></table>
+
+
+#### Room State Diagram
+
+
+There are three cases of room reconnection after disconnection:
+
+**Case 1: Reconnection is successful before the server determines that user A's heartbeat has timed out**
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/roomconnect1.png" /></Frame>
+
+If user A has a brief disconnection but successfully reconnects within 90 seconds, user B will not receive a callback notification from `onRoomUserUpdate`.
+
+- T0 = 0s: User A's SDK receives the `loginRoom` request initiated by the client.
+- T1 ≈ T0 + 120 ms: Usually, about 120 ms after calling `loginRoom`, the client can join the room. During the room joining process, user A's client will receive 2 `onRoomStateChanged` callbacks, notifying the client that it is connecting to the room (logining) and that the connection to the room is successful (logined).
+- T2 ≈ T1 + 100 ms: Due to network transmission delay, user B will receive the `onRoomUserUpdate` callback about 100 ms later to notify the client that user A has joined the room.
+- T3: At some point, user A's uplink network becomes poor due to network disconnection or other reasons. The SDK will attempt to rejoin the room, and the client will receive an `onRoomStateChanged` callback to notify the client that user A is reconnecting after disconnection.
+- T5 = T3 + time (less than 90s): User A recovers the network within the reconnection time and successfully reconnects. The client will receive an `onRoomStateChanged` callback to notify the client that user A has successfully reconnected.
+
+**Case 2: Reconnection is successful after the server determines that user A's heartbeat has timed out:**
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/connect3.jpg" /></Frame>
+
+
+- T0, T1, T2, T3: The situations at these times are the same as T0, T1, T2, T3 in "Case 1: Reconnection is successful before the server determines that user A's heartbeat has timed out".
+
+- T4' ≈ T3 + 90s: User B receives the `onRoomUserUpdate` callback at this time to notify that user A has disconnected.
+
+- T5' = T3 + time (greater than 90s, less than 20 min): User A recovers the network within the reconnection time and successfully reconnects. The client will receive an `onRoomStateChanged` callback to notify the client that user A has successfully reconnected.
+
+- T6' ≈ T5' + 100 ms: Due to network transmission delay, user B will receive the `onRoomUserUpdate` callback about 100 ms later to notify the client that user A has joined the room.
+
+**Case 3: User A fails to reconnect:**
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/Reconnect3.png" /></Frame>
+
+- T0, T1, T2, T3: The situations at these times are the same as T0, T1, T2, T3 in "Case 1: Reconnection is successful before the server determines that user A's heartbeat has timed out".
+
+- T4'' ≈ T3 + 90s: User B receives the `onRoomUserUpdate` callback at this time to notify that user A has disconnected.
+
+- T5'' = T3 + 20 min: If user A cannot rejoin the room within 20 minutes, the SDK will no longer attempt to reconnect. User A will receive an `onRoomStateChanged` callback to notify the client that reconnection has failed.
+
+### Stream Publishing Reconnection
+
+During the stream publishing process, if the stream publishing fails due to network signal issues or network type switching issues, the SDK will automatically reconnect internally.
+
+If all stream publishing nodes have been attempted and still fail, the user will receive the [onPublisherStateUpdate](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-event-handler&jumpType=route#on-publisher-state-update) callback, with "state" as `ZegoPublisherStateNoPublish` and "errorCode" not equal to 0, indicating that the SDK's internal reconnection has failed. The specific error should be determined based on the value of "errorCode". You can refer to [Common Error Codes](/real-time-video-android-java/client-sdk/error-code). At this point, the business side can consider waiting a few seconds (such as 3-5 seconds) before starting to republish the stream, but do not continuously retry, which will lead to an infinite loop.
+
+#### Stream Publishing State Callback
+
+
+<table>
+
+  <tbody><tr>
+    <th>State</th>
+    <th>Enum Value</th>
+    <th>Meaning</th>
+  </tr>
+  <tr>
+    <td>ZegoPublisherStateNoPublish</td>
+    <td>0</td>
+    <td>No publishing state. This state is entered before stream publishing. If a steady-state exception occurs during stream publishing, such as incorrect AppID, AppSign, or Token, or another user is already publishing a stream with the same stream ID (stream publishing will fail), the no publishing state will be entered.</td>
+  </tr>
+  <tr>
+    <td>ZegoPublisherStatePublishRequesting</td>
+    <td>1</td>
+    <td>Requesting stream publishing state. After the stream publishing action is executed successfully, the requesting stream publishing state is entered. Usually, this state can be used to display the UI interface. If the interruption is caused by poor network quality, the SDK will perform internal retries and also enter the requesting stream publishing state.</td>
+  </tr>
+  <tr>
+    <td>ZegoPublisherStatePublishing</td>
+    <td>2</td>
+    <td>Publishing stream state. This state is entered after successful stream publishing. At this time, users can communicate normally.</td>
+  </tr>
+</tbody></table>
+
+
+
+### Stream Playing Reconnection
+
+During the stream playing process, if the stream playing fails due to network signal issues or network type switching issues, the SDK will automatically reconnect internally.
+
+If all stream playing nodes have been attempted and still fail, the user will receive the [onPlayerStateUpdate](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-event-handler&jumpType=route#on-player-state-update)
+ callback, with "state" as `ZegoPlayerStateNoPlay` and "errorCode" not equal to 0, indicating that the SDK's internal reconnection has failed. The specific error should be determined based on the value of "errcode". You can refer to [Common Error Codes](/real-time-video-android-java/client-sdk/error-code). At this point, the business side can consider waiting a few seconds (such as 3-5 seconds) before starting to play the stream again, but do not continuously retry, which will lead to an infinite loop.
+
+#### Stream Playing State Callback
+
+
+<table>
+
+  <tbody><tr>
+    <th>State</th>
+    <th>Enum Value</th>
+    <th>Meaning</th>
+  </tr>
+  <tr>
+    <td>ZegoPlayerStateNoPlay</td>
+    <td>0</td>
+    <td>No playing state. This state is entered before stream playing. If a steady-state exception occurs during stream playing, such as incorrect AppID, AppSign, or Token, the no playing state will be entered.</td>
+  </tr>
+  <tr>
+    <td>ZegoPlayerStatePlayRequesting</td>
+    <td>1</td>
+    <td>Requesting stream playing state. After the stream playing action is executed successfully, the requesting stream playing state is entered. Usually, this state can be used to display the UI interface. If the interruption is caused by poor network quality, the SDK will perform internal retries and also enter the requesting stream playing state.</td>
+  </tr>
+  <tr>
+    <td>ZegoPlayerStatePlaying</td>
+    <td>2</td>
+    <td>Playing stream state. This state is entered after successful stream playing. At this time, users can communicate normally.</td>
+  </tr>
+</tbody></table>
+
+
+### Reconnection Time Setting
+
+When the connection is interrupted due to network reasons, the default reconnection time for the SDK is 20 minutes. After this time, the SDK will no longer attempt to reconnect.
+
+<Warning title="Note">
+
+
+Please set the reconnection time before logging in to the room.
+
+</Warning>
+
+
+
+
+  - You can use [setEngineConfig](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine&jumpType=route#set-engine-config) with the parameter `"room_retry_time=xxxx"` to set the room reconnection timeout (in seconds).
+  - You can use [setEngineConfig](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine&jumpType=route#set-engine-config) with the parameter `"av_retry_time=xxxx"` to set the stream publishing/playing reconnection timeout (in seconds).
+
+
+## Handling Unexpected Disconnections
+
+<Note title="Note">
+
+When a user disconnects from the room, by default, other users in the room will receive a callback notification of that user’s disconnection 90 seconds later. If you need to change this default value, please contact ZEGOCLOUD Technical Support.
+
+</Note>
+
+
+### Handling Host Network Disconnection
+
+The SDK automatically monitors the host’s network status. If the host is disconnected, the SDK will automatically pause stream publishing. If the network recovers within 20 minutes, the SDK will resume publishing automatically.
+
+If the network does not recover within 90 seconds, all room users except the host will receive a "stream deleted" notification via the [onRoomStreamUpdate](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-event-handler&jumpType=route#on-room-stream-update) callback. At this point, viewers should stop playing the stream by calling [stopPlayingStream](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine&jumpType=route#stop-playing-stream).
+If the SDK manages to republish the stream successfully, all users in the room will receive a "new stream added" notification via the same callback, and viewers can call [startPlayingStream](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine&jumpType=route#start-playing-stream) to resume playback.
+
+
+### Handling Host Network Issues from the Audience Side
+
+If the host is disconnected, the audience cannot directly detect it. During this time, the audience will not be able to play the stream, but the SDK will automatically attempt to replay in the background. If the retry attempts still fail, the audience will receive the [onPlayerStateUpdate](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-event-handler&jumpType=route#on-player-state-update) callback, and the "errorCode" in the callback will not be 0. It is recommended that the audience attempts to play the stream again after a delay (for example, 3 seconds later).
+
+While the SDK is automatically retrying, you can handle the following scenarios on the audience side:
+
+- If the host’s network recovers and streaming resumes, the audience can play the stream normally.
+- If the host’s network does not recover, after 90 seconds, the audience will receive a "stream deleted" notification via [onRoomStreamUpdate](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-event-handler&jumpType=route#on-room-stream-update); at this time, the audience should call [stopPlayingStream](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine&jumpType=route#stop-playing-stream) to stop playback.
+- If the host resumes streaming later and successfully republishes, the audience will receive a "new stream added" notification via [onRoomStreamUpdate](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-event-handler&jumpType=route#on-room-stream-update).
+  The audience can then call [startPlayingStream](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine&jumpType=route#start-playing-stream)
+  to resume playback.
+
+<Warning title="Warning">
+
+To avoid falling into a replay infinite loop, the audience should stop playback promptly when receiving a stream deleted notification.
+
+</Warning>
+
+
+
+### Handling Host Crashes from the Audience Side
+
+If the host application crashes and the stream isn’t started again within 90 seconds, the audience will receive
+a "stream deleted" notification via [onRoomStreamUpdate](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-event-handler&jumpType=route#on-room-stream-update). You can handle the 90-seconds case and after-90-seconds case as follows:
+
+- If the host restarts the stream within 90 seconds, the audience will first receive a "stream deleted" notification,
+  in which case you should call [stopPlayingStream](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine&jumpType=route#stop-playing-stream) to stop playback. Then, when a "new stream added" notification is received, call [startPlayingStream](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine&jumpType=route#start-playing-stream) to resume playback.
+
+- If the host still hasn’t published after 90 seconds, the audience will receive a "stream deleted" notification;
+  in this case, just call [stopPlayingStream](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine&jumpType=route#stop-playing-stream) and stop playback.
+
+If the host later recovers and successfully republishes the stream, the audience will receive a "new stream added" notification via [onRoomStreamUpdate](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-event-handler&jumpType=route#on-room-stream-update), at which point the audience can call [startPlayingStream](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine&jumpType=route#start-playing-stream) to resume playback.
+
+
