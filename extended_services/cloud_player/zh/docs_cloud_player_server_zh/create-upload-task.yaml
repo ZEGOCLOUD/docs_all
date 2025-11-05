@@ -1,0 +1,157 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: './shared-components.yaml#/servers'
+
+paths:
+  /:
+    post:
+      tags:
+        - upload
+      summary: 创建上传任务
+      description: |
+        创建一个上传任务，将 URL 在线资源上传到 OSS。上传之后同区域的云播放器集群可以通过内网拉流地址获取播放资源，保证资源传输过程的稳定性。
+
+        <Note title="说明">
+        此功能为增值服务，如需使用，请联系 ZEGO 商务人员开通。
+        </Note>
+
+        <Note title="说明">
+        对于单个 AppID 而言，ZEGO 服务端最多同时可处理 10 上传任务（包含上传中和等待中），如需调高上限，请联系 ZEGO 技术支持修改。
+        </Note>
+
+        <Note title="说明">调用频率限制：20 次/秒</Note>
+      operationId: create-upload-task
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://cloud-player-api.zego.im?Action=CreateUploadTask
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [CreateUploadTask]
+          style: form
+          explode: true
+        - $ref: './shared-components.yaml#/components/parameters/AppId'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: './shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: './shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - Title
+                - StreamUrl
+              properties:
+                Title:
+                  type: string
+                  maxLength: 100
+                  description: |
+                    文件名称，长度上限为 100B，文件后缀（支持 `.mp3`、`.mp4`、`.flv`、`.wav`、`.aac` 和 `.flac`）需保留且正确，否则可能导致播放失败。
+                    > **注意**
+                    >
+                    > 请勿使用相同文件名称。如果多个文件的 Title 相同，它们会互相替代，只保留最后上传的文件，但是，新文件可能会继承旧文件的过期时间。
+                  example: "your-title.mp4"
+                StreamUrl:
+                  type: string
+                  maxLength: 1024
+                  description: 媒体资源的地址，必须是有效的 HTTP/HTTPS 地址，且长度在 1024 字节以内，文件大小上限为 5GB。
+                  example: "https://xxx.com/video/test.mp4"
+                RetentionDays:
+                  type: number
+                  description: 资源有效时长，单位为天。有效取值范围为 [1, 7]，（默认值：3），如果您需要提高上限，请联系 ZEGO 技术支持处理。
+                  example: 3
+                ContentMd5:
+                  type: string
+                  description: |
+                    ContentMd5 是通过 MD5 算法对文件进行计算生成的哈希值，然后经过 Base64 编码得到的结果，用于验证文件在上传过程中是否保持完整性。
+                    
+                    如果您在上传时提供了 ContentMd5 参数，ZEGO 服务端会通过 OSS 计算文件的 ContentMd5 并与您提供的值进行比对。若两者不一致，上传将失败，表明文件可能被篡改或损坏。
+                    
+                    为确保文件的完整性和安全性，强烈建议在上传文件时传入 ContentMd5 参数。
+
+
+                    以下是使用 PHP 生成 ContentMd5 的示例：
+                    ```PHP
+                    function calculateMD5($content) {
+                        return base64_encode(md5($content, true));
+                    }
+                    ```
+                  example: "0uyh0doi++pDCwZkI0VEfA=="
+              example:
+                Title: "your-title.mp4"
+                StreamUrl: "https://xxx.com/video/test.mp4"
+                RetentionDays: 3
+                ContentMd5: "0uyh0doi++pDCwZkI0VEfA=="
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Code:
+                    type: number
+                    description: |
+                      返回码。
+                      
+                      以下仅列出了接口业务逻辑相关的返回码，完整返回码请参考 [全局返回码](/cloud-player-server/return-codes)。
+                      <table>
+                      <thead>
+                      <tr><th>返回码</th><th>说明</th><th>处理建议</th></tr>
+                      </thead>
+                      <tbody>
+                      <tr><td>0</td><td>成功。</td><td>-</td></tr>
+                      <tr><td>100000004</td><td>签名过期。</td><td>请重新生成签名。</td></tr>
+                      <tr><td>100000005</td><td>签名错误。</td><td>请确认生成签名的参数是否正确。</td></tr>
+                      <tr><td>350006001</td><td>接口请求频率超过上限。</td><td>请确认对应接口的 QPS 限制，降低请求频率。</td></tr>
+                      <tr><td>350006002</td><td>网关校验失败。</td><td>请联系 ZEGO 技术支持处理。</td></tr>
+                      <tr><td>350006003</td><td>无效的输入参数。</td><td>请根据 Message 提示，调整对应参数的取值。</td></tr>
+                      <tr><td>350006006</td><td>服务未开通。</td><td>请联系 ZEGO 技术支持，开通服务权限。</td></tr>
+                      <tr><td>350010000</td><td>系统错误。</td><td>请联系 ZEGO 技术支持处理。</td></tr>
+                      </tbody>
+                      </table>
+                    example: 0
+                  Message:
+                    type: string
+                    description: 操作结果描述。
+                    example: "succeed"
+                  RequestId:
+                    type: string
+                    description: 请求 ID。
+                    example: "955607951583870294"
+                  Data:
+                    type: object
+                    description: 响应对象。
+                    properties:
+                      UploadTaskId:
+                        type: string
+                        description: 上传任务 ID。
+                        example: "upload_task_1"
+                      CreateTime:
+                        type: number
+                        description: 文件上传任务创建成功的 Unix 时间戳，单位：秒。
+                        example: 1681221508
+                example:
+                  Code: 0
+                  Message: "succeed"
+                  RequestId: "955607951583870294"
+                  Data:
+                    UploadTaskId: "upload_task_1"
+                    CreateTime: 1681221508
+

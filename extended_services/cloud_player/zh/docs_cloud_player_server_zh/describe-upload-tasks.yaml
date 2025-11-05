@@ -1,0 +1,224 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: './shared-components.yaml#/servers'
+
+paths:
+  /:
+    post:
+      tags:
+        - upload
+      summary: 查询上传任务
+      description: |
+        本接口可用于获取单个或多个上传任务的详情。
+
+        <Note title="说明">
+        - 若下列参数都不传，则表示查询所有上传任务的详细信息，返回结果包含至多 50 个任务的详细信息。
+        - 若仅传入 `UploadTaskId`，表示查询对应上传任务的详细信息。
+        - 当同时传入 `UploadTaskId` 和 `Status` 时，若 `Status` 不符合该上传任务的实际状态，则返回结果为空。
+        </Note>
+
+        <Note title="说明">调用频率限制：20 次/秒</Note>
+      operationId: describe-upload-tasks
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://cloud-player-api.zego.im?Action=DescribeUploadTasks
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [DescribeUploadTasks]
+          style: form
+          explode: true
+        - $ref: './shared-components.yaml#/components/parameters/AppId'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: './shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: './shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DescribeUploadTasksRequest'
+            example:
+              PageSize: 10
+              PageToken: ""
+              Status: 1
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DescribeUploadTasksResponse'
+
+components:
+  schemas:
+    DescribeUploadTasksRequest:
+      type: object
+      properties:
+        UploadTaskId:
+          type: string
+          description: |
+            待查询的上传任务 ID。当传入此参数时，`PageSize` 无效。
+          example: "upload_task_1"
+        Status:
+          type: number
+          description: |
+            查询处于特定状态的上传任务。支持下列值：
+            - 0：默认值，无意义。
+            - 1：等待中。
+            - 2：上传中。
+            - 3：等待重试。
+            - 4：上传成功。
+            - 5：上传失败。
+            - 6：已取消。
+            - 7：已过期。
+          enum: [0, 1, 2, 3, 4, 5, 6, 7]
+        PageSize:
+          type: number
+          description: 当前请求返回的数据量上限。取值范围为 (0, 50]，为空时默认为 50。
+        PageToken:
+          type: string
+          description: |
+            分页拉取标志。
+            
+            第一次查询无需设置此参数。当返回参数中 `NextPageToken` 不为空时，表示之后的查询结果未获取完毕，再次调用本接口继续查询时，此参数填写该 `NextPageToken` 的值。
+      
+
+    DescribeUploadTasksResponse:
+      type: object
+      properties:
+        Code:
+          type: number
+          description: |
+            返回码。
+            
+            以下仅列出了接口业务逻辑相关的返回码，完整返回码请参考 [全局返回码](/cloud-player-server/return-codes)。
+            <table>
+            <thead>
+            <tr><th>返回码</th><th>说明</th><th>处理建议</th></tr>
+            </thead>
+            <tbody>
+            <tr><td>0</td><td>成功。</td><td>-</td></tr>
+            <tr><td>100000004</td><td>签名过期。</td><td>请重新生成签名。</td></tr>
+            <tr><td>100000005</td><td>签名错误。</td><td>请确认生成签名的参数是否正确。</td></tr>
+            <tr><td>350006001</td><td>接口请求频率超过上限。</td><td>请确认对应接口的 QPS 限制，降低请求频率。</td></tr>
+            <tr><td>350006002</td><td>网关校验失败。</td><td>请联系 ZEGO 技术支持处理。</td></tr>
+            <tr><td>350006003</td><td>无效的输入参数。</td><td>请根据 Message 提示，调整对应参数的取值。</td></tr>
+            <tr><td>350006006</td><td>服务未开通。</td><td>请联系 ZEGO 技术支持，开通服务权限。</td></tr>
+            <tr><td>350010000</td><td>系统错误。</td><td>请联系 ZEGO 技术支持处理。</td></tr>
+            </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: 操作结果描述。
+          example: "succeed"
+        RequestId:
+          type: string
+          description: 请求 ID。
+          example: "abcd123"
+        Data:
+          type: object
+          description: 返回的具体信息。
+          properties:
+            TotalSize:
+              type: number
+              description: 查询结果总数。
+              example: 1
+            NextPageToken:
+              type: string
+              description: |
+                分页拉取标志。
+                - 非空时表示还有未返回的结果信息，需要将此值设置到请求参数的 `PageToken` 中再次调用本接口获取剩余结果信息。
+                - 为空时表示已经返回所有结果信息。
+                
+                > **说明**
+                >
+                > 除上述说明之外，此字段与列表信息无任何关联，请勿基于此做任何其他逻辑。
+              example: ""
+            UploadTasks:
+              type: array
+              description: 查询结果详情，详情请参考 [UploadTasks](#uploadtasks)。
+              items:
+                type: object
+                properties:
+                  UploadTaskId:
+                    type: string
+                    description: 上传任务 ID。
+                    example: "upload_task_1"
+                  StreamUrl:
+                    type: string
+                    description: 媒体资源的地址。
+                    example: "https://xxx.com/video/test.mp4"
+                  Title:
+                    type: string
+                    description: 文件标题。
+                    example: "your-title.mp4"
+                  Status:
+                    type: number
+                    description: |
+                      上传状态，数值如下所示：
+                      - 1：等待中
+                      - 2：上传中
+                      - 3：等待重试
+                      - 4：上传成功
+                      - 5：上传失败
+                      - 6：已取消
+                      - 7：已过期
+                    enum: [1, 2, 3, 4, 5, 6, 7]
+                    example: 4
+                  RetryCount:
+                    type: number
+                    description: 上传重试次数。
+                    example: 0
+                  ExpiresAt:
+                    type: number
+                    description: 文件的过期 Unix 时间戳，单位为秒。
+                    example: 1742989076
+                  CreateTime:
+                    type: number
+                    description: 上传任务创建成功的 Unix 时间戳，单位为秒。
+                    example: 1735213076
+                  UploadStreamUrl:
+                    type: string
+                    description: 上传成功后，文件的公网 URL。
+                    example: "https://xxx.com/video/your-title.mp4"
+                  InternalUploadStreamUrl:
+                    type: string
+                    description: |
+                      上传成功后，文件的 ZEGO 内网 URL。
+                      > **说明**
+                      >
+                      > 建议在 [创建媒体播放器](/cloud-player-server/create-player) 时用作 `StreamUrl`。
+                    example: "https://xxx.com/video/your-title.mp4"
+      example:
+        Code: 0
+        Message: "succeed"
+        RequestId: "abcd123"
+        Data:
+          TotalSize: 1
+          NextPageToken: ""
+          UploadTasks:
+            - UploadTaskId: "upload_task_1"
+              StreamUrl: "https://xxx.com/video/test.mp4"
+              Title: "your-title.mp4"
+              Status: 4
+              RetryCount: 0
+              ExpiresAt: 1742989076
+              CreateTime: 1735213076
+              UploadStreamUrl: "https://xxx.com/video/your-title.mp4"
+              InternalUploadStreamUrl: "https://xxx.com/video/your-title.mp4"
+

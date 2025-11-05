@@ -1,0 +1,236 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: './shared-components.yaml#/servers'
+
+paths:
+  /:
+    post:
+      tags:
+        - player
+      summary: 更新云端播放器
+      description: |
+        调用本接口更新指定云端播放器的播放进度、音频转码参数、视频转码参数等信息。
+
+        <Note title="说明">调用频率限制：20 次/秒</Note>
+      operationId: update-player
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://cloud-player-api.zego.im?Action=UpdatePlayer
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [UpdatePlayer]
+          style: form
+          explode: true
+        - $ref: './shared-components.yaml#/components/parameters/AppId'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: './shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: './shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePlayerRequest'
+      responses:
+        '200':
+            description: OK
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/UpdatePlayerResponse'
+
+components:
+  schemas:
+    UpdatePlayerRequest:
+      type: object
+      required: [PlayerId,Sequence]
+      properties:
+        PlayerId:
+          type: string
+          description: |
+            云端播放器唯一标识 ID，通过 [CreatePlayer](/cloud-player-server/create-player) 返回。
+            <b>调用本接口时，请确保 PlayerId 是已存在的，否则可能会出错。</b>
+          example: "player_1"
+        Sequence:
+          type: number
+          description: 请求的序列号，用于保证时序，同个播放器任务的参数修改需要保证序列号的递增。例如："Sequence"：1。ZEGO 服务器将按照最新的配置来更新云端播放器。
+          example: 100
+        StreamUrl:
+          type: string
+          maxLength: 1024
+          description: |
+            媒体资源的地址，必须是有效的 HTTP/HTTPS 地址，且长度在 1024 字节以内。
+            > **注意**
+            >
+            > 此处需要根据 [创建云端播放器](/cloud-player-server/create-player) 时，创建的是单播放器还是列表播放器来选择。
+            >
+            > - 创建单播放器时 `StreamUrl` 参数可选填，`StreamUrlList` 不可选；
+            > - 创建列表播放器时 `StreamUrlList` 参数可选填，`StreamUrl` 不可选。
+            >
+            > <b>如果此处选填了 `StreamUrl` 或者 `StreamUrlList` ，其他的参数会被忽略。</b>
+          example: "https://xxx.com/video/test111.mp4"
+        StreamUrlList:
+          type: array
+          description: |
+            媒体资源列表地址。更新列表将重置媒体资源列表，并立即从新列表的首个资源开始播放。
+            > **注意**
+            >
+            > 此处需要根据 [创建云端播放器](/cloud-player-server/create-player) 时，创建的是单播放器还是列表播放器来选择。
+            >
+            > - 创建单播放器时 `StreamUrl` 参数可选填，`StreamUrlList` 不可选；
+            > - 创建列表播放器时 `StreamUrlList` 参数可选填，`StreamUrl` 不可选。
+            >
+            > <b>如果此处选填了 `StreamUrl` 或者 `StreamUrlList` ，其他的参数会被忽略。</b>
+          items:
+            type: string
+          example:
+            - "https://xxx.com/video/test1.mp4"
+            - "https://xxx.com/video/test2.mp4"
+        BackupStreamUrl:
+          type: string
+          maxLength: 1024
+          description: 媒体资源的备用地址，必须是有效的 HTTP/HTTPS 地址，且长度在 1024 字节以内。当 StreamUrl 参数中的地址访问失败时，云端播放器会尝试访问备用地址。
+          example: ""
+        VideoOptions:
+          type: object
+          description: |
+            视频转码参数配置。
+            <b>请注意，该参数不填写时，默认使用上一次调用本接口、或创建云端播放器时的配置。</b>
+          properties:
+            Width:
+              type: number
+              description: |
+                视频宽度，取值范围为 [1, 3000]，且必须是 2 的整倍数，单位为 px。
+                <b>请注意，Width 和 Height 任意参数设置为 1 时，都表示纯音频推流；该参数不填写时，默认使用上一次调用本接口、或创建云端播放器时的配置。</b>
+              example: 360
+            Height:
+              type: number
+              description: |
+                视频高度，取值范围为 [1, 3000]，且必须是 2 的整倍数，单位为 px。
+                <b>请注意，Width 和 Height 任意参数设置为 1 时，都表示纯音频推流；该参数不填写时，默认使用上一次调用本接口、或创建云端播放器时的配置。</b>
+              example: 640
+            VideoBitrate:
+              type: number
+              description: |
+                视频码率，取值范围为 [1, 50000]，单位为 kbps。
+                <b>请注意，该参数不填写时，默认使用上一次调用本接口、或创建云端播放器时的配置。</b>
+              example: 1200
+          example:
+            Width: 360
+            Height: 640
+            VideoBitrate: 1200
+        AudioOptions:
+          type: object
+          description: |
+            音频转码参数配置。
+            <b>请注意，该参数不填写时，默认使用上一次调用本接口、或创建云端播放器时的配置。</b>
+          properties:
+            AudioBitrate:
+              type: number
+              description: |
+                音频码率，范围为 [1, 192]，单位为 kbps。
+                <b>请注意，该参数不填写时，默认使用上一次调用本接口、或创建云端播放器时的配置。</b>
+              example: 48
+            Volume:
+              type: number
+              description: |
+                音量值，范围为 [0, 200]。
+                <b>请注意，该参数不填写时，默认使用上一次调用本接口、或创建云端播放器时的配置。</b>
+              example: 150
+          example:
+            AudioBitrate: 48
+            Volume: 150
+        SeekTo:
+          type: number
+          description: |
+            指定播放进度（秒）。
+            <b>请注意，该参数不填写时，默认使用上一次调用本接口、或创建云端播放器时的配置。</b>
+          example: 10
+        IsPause:
+          type: number
+          description: |
+            是否暂停播放。
+            - 0：正常播放源文件。
+            - 1：暂停播放源文件。
+            > **注意**
+            >
+            > 设置暂停播放时不能传入 StreamUrl 参数，否则会忽略其他的参数配置导致暂停播放失败。
+          example: 1
+        RepeatTimes:
+          type: number
+          description: |
+            播放次数。
+            - 1：播放媒体流 1 次。
+            - -1：自动循环播放。
+            - n：自定义播放媒体流次数，必须大于 0。
+            
+            <b>请注意，该参数不填写或值为 0 时，默认使用上一次调用本接口、或创建云端播放器时的配置。</b>
+          example: 1
+      example:
+        PlayerId: "player_1"
+        Sequence: 100
+        StreamUrl: "https://xxx.com/video/test111.mp4"
+        BackupStreamUrl: ""
+        VideoOptions:
+          Width: 360
+          Height: 640
+          VideoBitrate: 1200
+        AudioOptions:
+          AudioBitrate: 48
+          Volume: 150
+        SeekTo: 10
+        IsPause: 1
+        RepeatTimes: 1
+
+    UpdatePlayerResponse:
+      type: object
+      properties:
+        Code:
+          type: number
+          description: |
+            错误码。
+
+            以下仅列出了接口业务逻辑相关的返回码，完整返回码请参考 [全局返回码](/cloud-player-server/return-codes)。
+            <table>
+            <thead>
+            <tr><th>返回码</th><th>说明</th><th>处理建议</th></tr>
+            </thead>
+            <tbody>
+            <tr><td>0</td><td>成功。</td><td>-</td></tr>
+            <tr><td>100000004</td><td>签名过期。</td><td>请重新生成签名。</td></tr>
+            <tr><td>100000005</td><td>签名错误。</td><td>请确认生成签名的参数是否正确。</td></tr>
+            <tr><td>350006001</td><td>接口请求频率超过上限。</td><td>请确认对应接口的 QPS 限制，降低请求频率。</td></tr>
+            <tr><td>350006002</td><td>网关校验失败。</td><td>请联系 ZEGO 技术支持处理。</td></tr>
+            <tr><td>350006003</td><td>无效的输入参数。</td><td>请根据 Message 提示，调整对应参数的取值。</td></tr>
+            <tr><td>350006006</td><td>服务未开通。</td><td>请联系 ZEGO 技术支持，开通服务权限。</td></tr>
+            <tr><td>350010000</td><td>系统错误。</td><td>请联系 ZEGO 技术支持处理。</td></tr>
+            </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: 错误描述。
+          example: "succeed"
+        RequestId:
+          type: string
+          description: 请求 ID。
+          example: "abcd123"
+      example:
+        Code: 0
+        Message: "succeed"
+        RequestId: "abcd123"
+
