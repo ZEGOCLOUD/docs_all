@@ -1,0 +1,223 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+tags:
+  - messaging
+
+paths:
+  /:
+    post:
+      tags: [messaging]
+      summary: 编辑消息
+      description: |
+        ZIM 服务端支持开发者编辑已发送的单聊或群聊消息。
+
+        编辑消息成功后，会触发 [消息发送后回调](/zim-server/callbacks/message-sent)。同时消息接收用户可以通过以下 ZIM SDK 回调接口，接收消息已编辑通知。
+
+        | iOS-25% | Android-25% | macOS-25% | Windows-25% |
+        |-----|---------|-------|---------|
+        | [messageEdited](https://doc-zh.zego.im/article/api?doc=zim_API~objective-c_ios~protocol~ZIMEventHandler#zim-message-edited) | [onMessageEdited](https://doc-zh.zego.im/article/api?doc=zim_API~java_android~class~ZIMEventHandler#on-message-edited) | [messageEdited](https://doc-zh.zego.im/article/api?doc=zim_API~objective-c_macos~protocol~ZIMEventHandler#zim-message-edited) | [onMessageEdited](https://doc-zh.zego.im/article/api?doc=zim_API~cpp_windows~class~ZIMEventHandler#on-message-edited) |
+
+        | Web-25% | 小程序-25% | Flutter-25% | React Native-25% |
+        |---------|-----|--------|--------------|
+        | [messageEdited](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_web~interface~ZIMEventHandler#message-edited) | [messageEdited](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_wxxcx~interface~ZIMEventHandler#message-edited) | [onMessageEdited](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onMessageEdited.html) | [messageEdited](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_react-native~interface~ZIMEventHandler#message-edited) |
+
+        | uni-app \| uni-app x-25% | HarmonyOS-25% |
+        |---------|---------|
+        |[messageEdited](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_uni-app~interface~ZIMEventHandler#message-edited) | [messageEdited](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_harmony~interface~ZIMEventHandler#message-edited) |
+
+        <Note title="说明">
+        单次调用仅可每次修改一个会话的一条消息。<br/>
+        默认仅支持 24 小时内发送的消息，如需编辑更早的历史消息，请联系 ZEGO 技术支持配置。
+        </Note>
+
+        <Note title="说明">调用频率限制：20 次/秒。</Note>
+      operationId: edit-a-message
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://zim-api.zego.im/?Action=EditC2cMsgBody
+            > 或
+            > https://zim-api.zego.im/?Action=EditGroupMsgBody
+          required: true
+          schema:
+            type: string
+            enum: [EditC2cMsgBody, EditGroupMsgBody]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditMessageRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditMessageResponse'
+
+components:
+  schemas:
+    EditMessageRequest:
+      type: object
+      required: [FromUserId, SenderId,ConvId, MsgType, ConvMsgSeq, EditType]
+      properties:
+        FromUserId:
+          type: string
+          description: |
+            消息编辑用户 ID。
+            > **说明**
+            >
+            > 编辑群聊消息时，此用户需为目标群组成员。
+          maxLength: 32
+          example: "editer"
+        SenderId:
+          type: string
+          description: |
+            消息发送者 ID。
+            - 编辑单聊消息时，此处必填。
+            - 编辑群聊消息时，此处选填。
+          maxLength: 32
+          example: "sender"
+        ConvId:
+          type: string
+          description: |
+            会话 ID。
+            - 编辑单聊消息时，此处填入另一参与用户的 userID。
+            - 编辑群聊消息时，此处填入目标群组的 groupID。
+          maxLength: 32
+          example: "conv_id_007"
+        MsgType:
+          type: number
+          description: |
+            消息类型。支持以下值：
+            - 1：文本。
+            - 10：组合。
+            - 200：自定义。
+          example: 200
+        ConvMsgSeq:
+          type: number
+          description: |
+            消息 Seq。获取方式：
+            - 若需要编辑由**客户端**发出的消息，通过 [消息发送后回调](/zim-server/callbacks/message-sent) 获取 MsgSeq。
+            - 若需要编辑由 服务端 API [SendPeerMessage](/zim-server/messaging/send-a-one-to-one-message) 发出的**单聊**消息，通过接口响应数据获取 MsgSeq。
+            - 若需要编辑由 服务端 API [SendGroupMessage](/zim-server/messaging/send-group-messages) 发出的**群聊**消息，通过接口响应数据获取 MsgSeq。
+          example: 110
+        EditType:
+          type: number
+          description: |
+            编辑类型。支持以下值：
+            - 1：EM_MSG（编辑消息的内容），即修改 MessageBody 中的 Message 字段，此时，Message 不能为空。
+            - 2：EM_PAYLOAD（编辑消息的扩展内容），即修改 MessageBody 中的 ExtendedData 字段。此时，ExtendedData 可以为空
+            - 4：EM_AT（编辑消息的提醒属性），即修改 AtListInfo 或 IsAtAll。此时，AtListInfo 和 IsAtAll 都可以为空。
+            - 8：EM_AT_ALL（编辑是否提醒全部用户），即修改 IsAtAll。
+            - 16：EM_SUBMSGTYPE（编辑自定义消息的类型），即修改 subMsgType。此时需要 MsgType 为 200。
+
+            您可以将以上任意值做位运算，表示同时编辑消息的多种属性，如：3：同时选择 EM_MSG 和 EM_PAYLOAD，修改 MessageBody 中的 Message 和 ExtendedData 字段。
+          example: 31
+        MessageBody:
+          type: object
+          description: |
+            当 EditType 包含 EM_MSG 或 EM_PAYLOAD 时，必填。
+            此参数结构请参考 [MessageBody 说明](/zim-server/messaging/messagebody-introduction) 中文本消息、组合消息和自定义消息中 Message、ExtendedData 字段说明。
+          example:
+            Message: "edit msg"
+            ExtendedData: "extend data"
+        AtListInfo:
+          type: object
+          description: |
+            被提醒用户列表。当 EditType 包含 EM_AT 时，必填。
+          properties:
+            AtList:
+              type: array
+              description: At列表，用户id，可以为空
+              items:
+                type: string
+          example:
+            AtList: ["userA", "userB"]
+        IsAtAll:
+          type: boolean
+          description: 是否全部用户都被提醒。当 EditType 包含 EM_AT_ALL 时，必填。
+          example: false
+        SubMsgType:
+          type: number
+          description: 自定义消息的类型，由您定义，取值范围为 [0, 200]。当 EditType 包含 EM_SUBMSGTYPE 时，必填。
+          example: 101
+    EditMessageResponse:
+      type: object
+      properties:
+        Code:
+          type: number
+          description: |
+            返回码。
+
+            以下仅列出了接口业务逻辑相关的返回码，完整返回码请参考 [全局返回码](/zim-server/return-codes)。
+            <table>
+            <tbody><tr>
+            <th>返回码</th>
+            <th>说明</th>
+            <th>处理建议</th>
+            </tr>
+            <tr>
+            <td>660000002</td>
+            <td>输入参数错误。</td>
+            <td>请检查参数。</td>
+            </tr>
+            <tr>
+            <td>661000001</td>
+            <td>已超过可编辑时间。</td>
+            <td>如需编辑更早的历史消息，请联系 ZEGO 技术支持。</td>
+            </tr>
+            <tr>
+            <td>661000005</td>
+            <td>编辑失败。</td>
+            <td>请联系 ZEGO 技术支持。</td>
+            </tr>
+            </tbody></table>
+          example: 0
+        Message:
+          type: string
+          description: 操作结果描述。
+          example: "success"
+        RequestId:
+          type: string
+          description: 请求 ID。
+          example: "343649807833778782"
+        StateMsgSeq:
+          type: number
+          description: 消息状态 Seq。
+          example: 1
+        EditMsgSeq:
+          type: number
+          description: 消息编辑 Seq。
+          example: 1
+        LatestEditTime:
+          type: number
+          description: 最近一次消息编辑的 Unix 时间戳，单位为秒（s）。
+          example: 173436478
+      example:
+        Code: 0
+        Message: "success"
+        RequestId: "343649807833778782"
+        StateMsgSeq: 1
+        EditMsgSeq: 1
+        LatestEditTime: 173436478

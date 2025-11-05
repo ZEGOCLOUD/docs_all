@@ -1,0 +1,180 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+tags:
+  - user
+
+paths:
+  /:
+    get:
+      tags: [user]
+      summary: 查询黑名单
+      description: |
+        根据用户 ID 分页拉取其全量黑名单数据。
+
+        <Note title="说明">调用频率限制：20 次/秒。</Note>
+      operationId: query-the-blocklist
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://zim-api.zego.im/?Action=QueryBlacklist
+          required: true
+          schema:
+            type: string
+            enum: [QueryBlacklist]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryBlacklistRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryBlacklistResponse'
+              example:
+                Code: 0
+                Message: success
+                RequestId: "343649807833778782"
+                TotalCount: 500
+                Next: 1
+                Blacklist:
+                  - UserId: "usera1"
+                    UserName: "Nicknamea1"
+                    Avatar: "Avatar1"
+                    UpdateTime: 1698310534000
+                  - UserId: "usera2"
+                    UserName: "Nicknamea2"
+                    Avatar: "Avatar2"
+                    UpdateTime: 1698310534000
+
+components:
+  schemas:
+    QueryBlacklistRequest:
+      type: object
+      required: [FromUserId, Limit, Next]
+      properties:
+        FromUserId:
+          type: string
+          description: 查询此 UserID（已在客户端调用 login 方法登录 ZIM 服务，或已调用 [服务端 API](/zim-server/user/batch-register-users) 完成注册）的黑名单列表。
+          maxLength: 32
+          example: "zego"
+        Limit:
+          type: number
+          description: 单次拉取多少名用户的信息。取值范围为 [0, 100]。如果不填或数值为 0、大于 100，取值为 100。
+          minimum: 0
+          maximum: 100
+          example: 100
+        Next:
+          type: number
+          description: |
+            分页拉取标志，第一次填 0，之后填上一次返回的 Next 值。当返回的 Next 为 0 时，代表黑名单获取完毕。
+
+            例如，FromUserId 拉黑了 250 名用户，调用本接口查询时：
+
+            - 第一次调用本接口，Limit 填 100，Next 传空，查询第 1 ～ 100 名用户；返回结果中的 Next 值为 num1。
+            - 第二次调用本接口，Limit 填 100，Next 填 num1，查询第 101 ～ 200 名用户；返回结果中 Next 值为 num2。
+            - 第三次调用本接口，Limit 填 100，Next 填 num2，查询第 201 ～ 250 名用户；查询完毕，返回结果中的 Next 为 0。
+          example: 2
+    BlackItem:
+      type: object
+      properties:
+        UserId:
+          type: string
+          description: 用户 ID。
+          example: "usera1"
+        UserName:
+          type: string
+          description: 用户名称。
+          example: "Nicknamea1"
+        Avatar:
+          type: string
+          description: 用户头像地址。
+          example: "Avatar1"
+        UpdateTime:
+          type: number
+          description: 拉黑时间，单位为 ms。
+          example: 1698310534000
+    QueryBlacklistResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          description: |
+            返回码。
+
+            <table>
+            <tbody><tr>
+            <th>返回码</th>
+            <th>说明</th>
+            <th>处理建议</th>
+            </tr>
+            <tr>
+            <td>660000002</td>
+            <td>参数错误。</td>
+            <td>请检查请求参数。</td>
+            </tr>
+            <tr>
+            <td>660300005</td>
+            <td>调用接口的频率超出了 AppID 级别限制。</td>
+            <td>请稍后再试。</td>
+            </tr>
+            <tr>
+            <td>660500002</td>
+            <td>FromUserId 未注册。</td>
+            <td>请确认该用户是否已注册：<br/>确认已注册，请联系 ZEGO 技术支持排查。<br/>确认未注册，请注册此用户。</td>
+            </tr>
+            <tr>
+            <td>660800001</td>
+            <td>FromUserId 未注册。</td>
+            <td>请确认该用户是否已注册：<br/>确认已注册，请联系 ZEGO 技术支持排查。<br/>确认未注册，请注册此用户。</td>
+            </tr>
+            </tbody></table>
+          example: 0
+        Message:
+          type: string
+          description: 请求结果的说明信息。
+          example: "success"
+        RequestId:
+          type: string
+          description: 请求 ID。
+          example: "343649807833778782"
+        TotalCount:
+          type: integer
+          format: int32
+          description: 当前黑名单用户总数。
+          example: 500
+        Next:
+          type: number
+          description: |
+            分页拉取标志，非 0 表示还有黑名单信息未返回，需要将该字段设置到请求参数 Next 中拉取更多黑名单信息；为 0 表示已经返回所有黑名单信息。
+            >**说明**
+            >
+            > 除上述说明之外，此字段与列表信息无任何关联，请勿基于此做任何其他逻辑。
+          example: 1
+        Blacklist:
+          type: array
+          description: 黑名单数据列表。
+          items:
+            $ref: '#/components/schemas/BlackItem'

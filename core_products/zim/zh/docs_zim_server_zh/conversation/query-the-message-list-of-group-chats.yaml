@@ -1,0 +1,310 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+tags:
+  - conversation
+
+paths:
+  /:
+    post:
+      tags: [conversation]
+      summary: 查询群聊会话消息列表
+      description: |
+        调用此接口，分页拉取某个群聊会话的消息列表。
+
+        <Note title="说明">调用频率限制：20 次/秒。</Note>
+      operationId: query-the-message-list-of-group-chats
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://zim-api.zego.im/?Action=QueryGroupMsg
+          required: true
+          schema:
+            type: string
+            enum: [QueryGroupMsg]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryGroupMsgRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryGroupMsgResponse'
+
+components:
+  schemas:
+    QueryGroupMsgRequest:
+      type: object
+      required: [GroupId]
+      properties:
+        GroupId:
+          type: string
+          description: 群组 ID。
+          maxLength: 32
+          example: "group1"
+        Limit:
+          type: number
+          description: |
+            单次获取消息的数量，取值范围为 (0, 100]，默认为 10。
+            - 当值 ≤ 0 时，修正为 10。
+            - 当值 > 100，修正为 100。
+          minimum: 1
+          maximum: 100
+          default: 10
+          example: 10
+        Next:
+          type: number
+          description: |
+            分页拉取标志，第一次填 0 ，之后填上一次返回的 Next 值。当返回的 Next 为 0 时，代表消息列表获取完毕。
+
+            例如，当前群聊会话有 250 条消息，调用本接口查询时：
+            - 第一次调用本接口，Limit 填 100，Next 传 0，查询第 1 ～100 条消息；返回结果中的 Next 值为 num1。
+            - 第二次调用本接口，Limit 填 100，Next 填 num1，查询第 101 ～ 200 条消息；返回结果中 Next 值为 num2。
+            - 第三次调用本接口，Limit 填 100，Next 填 num2，查询第 201 ～ 250 条消息；查询完毕，返回结果中的 Next 为 0。
+          example: 0
+        WithEmptyMsg:
+          type: number
+          description: |
+            返回结果是否包含已撤回消息和在服务端被删除的消息。
+            - 0：默认值，不包含。
+            - 1：包含。
+          enum: [0, 1]
+          default: 0
+          example: 0
+    QueryGroupMsgResponse:
+      type: object
+      properties:
+        Code:
+          type: number
+          description: |
+            返回码。
+
+            以下仅列出了接口业务逻辑相关的返回码，完整返回码请参考 [全局返回码](/zim-server/return-codes)。
+            <table>
+            <thead><tr><th>返回码</th><th>说明</th><th>处理建议</th></tr></thead>
+            <tbody>
+            <tr><td>660000002</td><td>输入参数错误。</td><td>请检查输入的参数。</td></tr>
+            <tr><td>660300005</td><td>调用接口的频率超出了 AppID 级别限制。</td><td>请稍后再试。</td></tr>
+            <tr><td>660500002</td><td>FromUserId 未注册。</td><td>请检查 FromUserId 是否正确。</td></tr>
+            <tr><td>660600001</td><td>输入的 GroupId 不存在。</td><td>请确认 GroupId 是否正确。</td></tr>
+            <tr><td>660600009</td><td>获取群相关信息失败。</td><td>请确认 GroupId 是否正确；否则联系 ZEGO 技术支持。</td></tr>
+            </tbody>
+            </table>
+        Message:
+          type: string
+          description: 请求结果的说明信息。
+          example: "success"
+        RequestId:
+          type: string
+          description: 请求 ID。
+          example: "343649807833778782"
+        Next:
+          type: number
+          description: |
+            分页拉取标志。
+            - 非 0：表示还有消息未返回，需要将该字段设置到请求参数 Next 中拉取更多消息。
+            - 为 0：表示已经返回完整消息列表。
+
+            > **说明**
+            >
+            > 除上述说明之外，此字段与列表信息无任何关联，请勿基于此做任何其他逻辑。
+          example: 1000
+        List:
+          type: array
+          description: 消息列表。按 MsgTime 降序返回结果。
+          items:
+            type: object
+            properties:
+              Sender:
+                type: string
+                description: 消息发送者 ID。
+                example: "user1"
+              MsgType:
+                type: number
+                description: |
+                  消息类型：
+                  - 1：文本。
+                  - 10：组合。
+                  - 11：图片。
+                  - 12：文档。
+                  - 13：音频。
+                  - 14：视频。
+                  - 200：自定义。
+                example: 1
+              SubMsgType:
+                type: number
+                description: 具体的自定义类型。值由用户发送自定义消息时填写，取值范围为 [0,200]。只有当 MsgType 为 200（自定义类型）时，此参数才有意义。
+              MsgBody:
+                type: string
+                description: |
+                  消息内容。
+                  - 当 MsgType 为 1（文本类型）或 200（自定义类型），MsgBody 为发送消息时传入的消息内容，开发者可直接阅读消息内容。
+                  - 当 MsgType 为下列类型时，MsgBody 为 JSON 字符串。请使用 URLDecode 对此 JSON 字符串解码，并按照对应结构获取消息中各字段数据：
+                    - 当 MsgType 为 11、12、13、14（多媒体消息）时 ，请参考 MsgBody JSON 字符串解析结果的多媒体消息参数说明。
+                    - 当 MsgType 为 10（组合消息）时，请参考 MsgBody JSON 字符串解析结果的组合消息参数说明。
+                example: "这是一条消息"
+                oneOf:
+                  - $ref: '#/components/schemas/多媒体消息'
+                  - $ref: '#/components/schemas/组合消息'
+              MsgId:
+                type: number
+                description: 消息 ID，可借此确定消息的唯一性。
+                example: 971503777289036700
+              MsgSeq:
+                type: number
+                description: 消息 Seq。
+                example: 1
+              Payload:
+                type: string
+                description: 消息扩展字段。
+                example: "Payload"
+              MsgTime:
+                type: number
+                description: 服务端收到消息的时间，Unix 时间戳，单位为毫秒（ms）。
+                example: 1705895412000
+              IsEmpty:
+                type: number
+                description: |
+                  是否是空消息。
+                  - 0：非空。
+                  - 1：消息被删除或者已过期。
+                  - 2：消息被撤回。
+                example: 0
+          example:
+            - Sender: "user1"
+              MsgType: 1
+              MsgBody: "这是一条消息"
+              MsgId: 971503777289036700
+              MsgSeq: 1
+              Payload: "Payload"
+              MsgTime: 1705895412000
+              IsEmpty: 0
+    多媒体消息:
+      type: object
+      description: |
+        多媒体消息体。当 MsgType 为 11、12、13、14（多媒体消息）时，MsgBody 为 JSON 字符串。
+        请使用 URLDecode 对此 JSON 字符串解码，并按照以下结构获取消息中各字段数据。
+      properties:
+        md5:
+          type: string
+          description: 文件的 MD5 值。
+          example: "5d41402abc4b2a76b9719d911017c592"
+        file_name:
+          type: string
+          description: 文件名称。
+          example: "image.jpg"
+        file_size:
+          type: string
+          description: 文件大小，单位为字节（B）。
+          example: "1024"
+        download_url:
+          type: string
+          description: 下载地址。
+          example: "https://example.com/download/image.jpg"
+        media_duration:
+          type: string
+          description: 音视频时长，单位为秒（s）。
+          example: "30"
+        origin_image_width:
+          type: integer
+          description: 🏞️如果是图片消息则包含此属性。原图的宽度，单位为像素（px）。
+          example: 1920
+        origin_image_height:
+          type: integer
+          description:  🏞️如果是图片消息则包含此属性。原图的高度，单位为像素（px）。
+          example: 1080
+        large_image_download_url:
+          type: string
+          description:  🏞️如果是图片消息则包含此属性。大图下载地址。
+          example: "https://example.com/download/image_large.jpg"
+        large_image_width:
+          type: integer
+          description:  🏞️如果是图片消息则包含此属性。大图的宽度，单位为像素（px）。
+          example: 1920
+        large_image_height:
+          type: integer
+          description:  🏞️如果是图片消息则包含此属性。大图的高度，单位为像素（px）。
+          example: 1080
+        thumbnail_download_url:
+          type: string
+          description:  🏞️如果是图片消息则包含此属性。缩略图下载地址。
+          example: "https://example.com/download/image_thumb.jpg"
+        thumbnail_width:
+          type: integer
+          description:  🏞️如果是图片消息则包含此属性。缩略图的宽度，单位为像素（px）。
+          example: 200
+        thumbnail_height:
+          type: integer
+          description:  🏞️如果是图片消息则包含此属性。缩略图的高度，单位为像素（px）。
+          example: 200
+        video_first_frame_download_url:
+          type: string
+          description: 🎬如果是视频消息则包含此属性。视频首帧图的下载地址。
+          example: "https://example.com/download/video_frame.jpg"
+        video_first_frame_width:
+          type: integer
+          description: 🎬如果是视频消息则包含此属性。视频首帧图的宽度，单位为像素（px）。
+          example: 1920
+        video_first_frame_height:
+          type: integer
+          description: 🎬如果是视频消息则包含此属性。视频首帧图的高度，单位为像素（px）。
+          example: 1080
+    组合消息:
+      type: object
+      description: |
+        组合消息体。当 MsgType 为 10（组合消息）时，MsgBody 为 JSON 字符串。
+        请使用 URLDecode 对此 JSON 字符串解码，并按照以下结构获取消息中各字段数据。
+      required: [multi_msg]
+      properties:
+        multi_msg:
+          type: array
+          description: 组合消息 Item 数组。
+          items:
+            type: object
+            required: [msg_type]
+            properties:
+              msg_type:
+                type: integer
+                description: |
+                  Item 类型：
+                  - 1：文本。
+                  - 11：图片。
+                  - 12：文档。
+                  - 13：音频。
+                  - 14：视频。
+                  - 200：自定义消息类型。
+                example: 1
+              sub_msg_type:
+                type: integer
+                description: 仅当 msg_type 为 200 时，返回此参数。表示具体的自定义类型，取值范围为 [0,200]。
+                example: 0
+              callback_content:
+                type: string
+                description: |
+                  Item 内容。
+                  - 仅当 msg_type 为 1 或 200 时，可直接在此参数阅读消息内容。
+                  - 当 Item 为 11、12、13 或 14，请参考本文 多媒体消息结构 了解消息的的各个字段数据。
+                example: "这是一条文本消息"

@@ -21,7 +21,7 @@ type: "manual"
 
 ## 公共参数与 Action
 - 公共参数统一从 shared-components.yaml 引用：
-  - AppId、SignatureNonce、Timestamp、Signature、SignatureVersion、IsTest。
+  - AppId、SignatureNonce、Timestamp、Signature、SignatureVersion。
 - GET/POST 的参数顺序：
   1) Action
   2) 公共参数（如上）
@@ -36,6 +36,9 @@ type: "manual"
 ## paths 与方法
 - paths 下仅保留根路径 /。
 - 请求方法遵循 mdx：GET 或 POST。POST 场景使用 requestBody.application/json，Schema 从组件中引用。
+- paths / 下的 description 必须使用多行块标量（description: |），并将 mdx 的“描述”章节内容原封不动复制到该处，保持段落与换行。
+- 若 mdx 的“请求参数”章节包含 <Note title="说明"> 或 <Warning title="警告">，则将说明与警告的正文内容按出现顺序原封不动追加到 paths / 下的 description 之后。
+- 若“接口原型”章节中存在调用频率限制说明，应使用 <Note title="说明"> 组件包裹该限制说明，并追加到 paths / 下的 description 的最后。
 
 ## 类型与格式
 - 明确的数值类型补充 format：
@@ -46,13 +49,15 @@ type: "manual"
 ## 响应结构
 - 统一包含 Code、Message、RequestId、Data 四层结构（除非 mdx 特别说明返回为空）。
 - Data 内的厂商差异（如 Tencent、Huawei、Ws）要按照 mdx 列表精确还原结构与字段。
+- 若 mdx 的“返回码”章节给出了业务逻辑相关的返回码表格，应将该表格转换为 HTML 表格（<table>...），并放入对应“返回码”字段（通常为 Code 或业务 Code 字段）的 description 中，以确保渲染与对齐不丢失。
 
 ## 生成流程（操作步骤）
 1) 读取对应 mdx，确定：请求方法、Action、业务参数、响应结构与示例、频率限制与注意事项。
 2) 新建同名 yaml，填充固定骨架：openapi、info、tags、servers（$ref）、paths:/、方法、Action 描述块、公共参数 $ref。
-3) 按 mdx 定义补充业务参数，保持顺序与约束（required、enum、format、样例）。
-4) 依据 mdx 的“响应参数/示例” 定义 components.schemas，注意多厂商差异结构与字段。
-5) 保存并在 TASKS.md 勾选条目。
+3) 组装 paths / 下的 description（多行 |）：原封不动复制 mdx 的“描述”；将“请求参数”章节中的 <Note title="说明"> 与 <Warning title="警告"> 正文依次追加；若“接口原型”包含调用频率限制说明，使用 <Note title="说明"> 包裹并置于 description 的最后。
+4) 按 mdx 定义补充业务参数，保持顺序与约束（required、enum、format、样例）。
+5) 依据 mdx 的“响应参数/示例” 定义 components.schemas，注意多厂商差异结构与字段；若存在“返回码”业务表格，将其转换为 HTML 表格并填入对应返回码字段的 description。
+6) 任务管理：对于一次“生成任务”，必须制定任务列表并同步写入 TASKS.md；每个待转换 mdx 文件为一个任务，全部任务完成并勾选后，方视为本次生成任务完成。
 
 ## 其他约定
 - 禁止在 YAML 内手写 servers 列表，统一引用 shared-components.yaml。

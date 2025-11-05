@@ -1,0 +1,98 @@
+# OBS 使用 WHIP 协议推流
+---
+
+## WHIP 协议介绍
+
+WHIP （WebRTC-HTTP Ingestion Protocol）是一种基于 HTTP 的标准协议，该协议允许您使用 HTML5 和不同的客户端向流媒体服务器或 CDN 推送/拉取 WebRTC 实时流。
+
+使用 WHIP 可以显著提升直播体验：
+- 抗弱网：WebRTC 推流的 UDP 协议优势，抗弱网能力更强。
+- 低延迟：相对 RTMP 可降低 150 ms 左右。
+
+<Note title="说明">
+[OBS V30.0](https://obsproject.com/kb/whip-streaming-guide) 之后版本（23年10月之后的版本）已支持 WHIP 协议，老版本 OBS 需要集成插件来实现 WebRTC 推流。
+</Note>
+
+## 前置准备
+
+- 已联系 ZEGO 技术支持，开通工具推流到 ZEGO 服务器的相关权限，申请并配置 WHIP 域名。
+- 准备三方推流工具，例如 [OBS](https://obsproject.com/)。
+
+## 使用步骤
+
+### 生成推流地址
+
+申请 WHIP 域名后，推流地址按以下格式拼接。
+```bash
+https://i-whip{appid}.whip.zegotech.cn/whip/v1/{appid}/{streamId}?userId={userId}&zgVer=v1&zgExpired={expire}&zgNonce={nonce}
+```
+参数说明
+| 参数名         | 描述 |
+| ------------- | -------- |
+| appid         | 用户的 appid，与域名申请时的一致。 |
+| streamId      | 音视频流的 ID，由用户自定义。 |
+| userId        | 推流用户的 ID。 |
+| expire        | Token 的过期时间，参考 Token 生成小节。 |
+| nonce         | 随机字符串，参考 Token 生成小节。 |
+
+### 生成TOKEN
+
+以下为鉴权 Token 的计算参数列表，参数名区分大小写。
+
+| 参数名         | 值类型   | 是否必填 | 描述 |
+| ------------- | -------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| appid         | string   | 是     | ZEGO 分配给客户的 appid ，仅用于参与计算 Token。 |
+| streamId      | string   | 是     | 流名，仅用于参与计算 Token。 |
+| zgExpired     | int64    | 是     | Token 过期时间。值取 unix 秒级时间戳，即从 1970-01-01 00:00:00 UTC 到现在的秒数，参与计算 Token 与组成鉴权参数。<Warning title="注意">建议用户设置合理的失效时间，如果使用过期 Token 推流会失败。</Warning> |
+| zgNonce       | string   | 是     | 即 Number once，避免 Token 重放，预留实现。建议长度不超过15个字节可以取当前毫秒数，参与计算 Token 与组成鉴权参数。 |
+| zgPrivilege   | string   | 是     | 表示鉴权权限：<ul><li>`0`： 表示仅拉流权限</li><li>`1`： 表示推拉流权限</li></ul>仅用于参与计算 Token 。<Note title="说明">媒体服务器会根据请求推流还是拉流，自行决定这个参数；客户后台计算 Token 时，根据这个用户是用来推流还是拉流来决定这个参数值，然后参与 Token 计算。</Note> |
+| key           | string   | 是     | 鉴权密钥。<Warning title="注意">ServerSecret 需要根据是推流鉴权还是拉流鉴权来指定对应的密钥。</Warning> |
+
+
+
+1. 将除 key 以外的所有需要参与 Token 计算的参数按从小到大的顺序进行排序拼接，最后再拼接 key。
+
+```javascript
+let str = "appid=176xxxx14&streamId=stream_1xxxxx4&zgExpired=86400&zgNonce=1760511934298&zgPrivilege=1&key=e0xxxxxxxxxxd";
+```
+2. 对 `str` 进行 sha256 加密，得到的字符串即为 Token。
+
+```bash
+b0f8c8e4c6f5b3a8xxxxxxxxxxxxxxxxxxxxx0d9e8f7a6b5c4d3e2f1a0b9
+```
+
+
+## OBS推流
+<Steps >
+<Step title="打开 OBS，设置采集源后进入设置选项。">
+
+<Frame width="auto" height="auto" >
+  <img src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/183e5125f9.png"/>
+</Frame>
+</Step>
+<Step title="单击直播进入推流地址设置界面。">
+1. 选择服务类型为：WHIP。
+2. 在服务器中填写直播推流 URL。
+3. 在 Bearer 令牌中填写 Token。
+<Frame width="auto" height="auto" >
+  <img src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/676b89fd19.png"/>
+</Frame>
+</Step>
+<Step title="开启直播。">
+<Frame width="auto" height="auto" >
+  <img src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/060bac1272.png"/>
+</Frame>
+</Step>
+</Steps>
+
+
+
+
+
+## 常见问题
+
+<Accordion title="业务服务器如何知道 RTMP 推流工具是否已开始推流或停止推流？" defaultOpen="false">
+ZEGO 提供了 publish_start 开始推流和 publish_stop 停止推流回调通知，如有需要请联系 ZEGO 技术支持配置。
+</Accordion>
+
+
