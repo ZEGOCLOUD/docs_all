@@ -80,7 +80,7 @@ def load_whitelist():
     """加载链接白名单"""
     script_dir = Path(__file__).parent
     whitelist_file = script_dir / 'link_whitelist.json'
-    
+
     if not whitelist_file.exists():
         # 如果白名单文件不存在，创建一个空的白名单文件
         default_whitelist = {
@@ -89,7 +89,7 @@ def load_whitelist():
         }
         whitelist_file.write_text(json.dumps(default_whitelist, indent=2, ensure_ascii=False), encoding='utf-8')
         return default_whitelist
-    
+
     try:
         return json.loads(whitelist_file.read_text(encoding='utf-8'))
     except Exception as e:
@@ -101,7 +101,7 @@ def is_url_whitelisted(url, whitelist):
     # 检查完整URL匹配
     if url in whitelist.get('urls', []):
         return True
-    
+
     # 检查正则表达式模式匹配
     for pattern in whitelist.get('patterns', []):
         try:
@@ -109,7 +109,7 @@ def is_url_whitelisted(url, whitelist):
                 return True
         except re.error:
             continue
-    
+
     return False
 
 def get_repo_root():
@@ -363,6 +363,42 @@ def extract_links_from_file(file_path):
 
 def check_mixed_language(link, language):
     # 检查中英文链接混用
+    # 这些域名是中英文共用的，不计入混用
+    shared_domains = [
+        'artifact-sdk.zego.im',
+        'artifact-demo.zego.im',
+        'doc-media.zego.im',
+        'site-media.zego.im',
+        'storage.zego.im',
+    ]
+
+    # 英文专用的域名
+    en_only_domains = [
+        'doc-en-api.zego.im',
+    ]
+
+    # 中文专用的域名
+    zh_only_domains = [
+        'doc-zh-api.zego.im',
+    ]
+
+    # 检查是否为共用域名
+    for domain in shared_domains:
+        if domain in link:
+            return False
+
+    # 检查是否为语言专用域名
+    if language == 'en':
+        # 英文文档中，英文专用域名是允许的
+        for domain in en_only_domains:
+            if domain in link:
+                return False
+    elif language == 'zh':
+        # 中文文档中，中文专用域名是允许的
+        for domain in zh_only_domains:
+            if domain in link:
+                return False
+
     if language == 'zh' and re.search(r'https?://[^/]*zegocloud\.com', link):
         return True
     if language == 'en' and re.search(r'https?://(?!storage\.|rtc-api\.)[^/]*zego\.im', link):
@@ -726,25 +762,32 @@ def check_remote_link(link):
 
 def check_mdx_import(import_path, base_file_path, repo_root):
     """检查MDX导入路径是否有效"""
-    # 统一使用仓库根目录作为查找基准
-    if import_path.startswith('/'):
-        import_path = import_path[1:]
-    full_path = os.path.join(repo_root, import_path)
+    # 处理相对路径（./或../开头）
+    if import_path.startswith('./') or import_path.startswith('../'):
+        # 相对于当前文件所在目录
+        full_path = os.path.normpath(os.path.join(os.path.dirname(base_file_path), import_path))
+    else:
+        # 绝对路径（以/开头）或其他情况，相对于仓库根目录
+        if import_path.startswith('/'):
+            import_path = import_path[1:]
+        full_path = os.path.join(repo_root, import_path)
 
-    # 1) 明确以 .mdx 结尾：要求存在对应文件
-    if import_path.lower().endswith('.mdx'):
+    # 1) 明确以某个扩展名结尾：要求存在对应文件
+    if import_path.lower().endswith(('.mdx', '.jsx', '.js', '.ts', '.tsx')):
         return os.path.isfile(full_path)
 
-    # 2) 可能是省略扩展名的文件：尝试同名 .mdx
-    candidate_file = full_path + '.mdx'
-    if os.path.isfile(candidate_file):
-        return True
-
-    # 3) 可能是目录写法：尝试目录下的 index.mdx
-    if os.path.isdir(full_path):
-        index_file = os.path.join(full_path, 'index.mdx')
-        if os.path.isfile(index_file):
+    # 2) 可能是省略扩展名的文件：尝试多种扩展名
+    for ext in ['.mdx', '.jsx', '.js', '.ts', '.tsx']:
+        candidate_file = full_path + ext
+        if os.path.isfile(candidate_file):
             return True
+
+    # 3) 可能是目录写法：尝试目录下的 index.mdx 或 index.jsx
+    if os.path.isdir(full_path):
+        for index_name in ['index.mdx', 'index.jsx', 'index.js', 'index.ts', 'index.tsx']:
+            index_file = os.path.join(full_path, index_name)
+            if os.path.isfile(index_file):
+                return True
         return False
 
     # 4) 既不是文件也不是目录
@@ -954,7 +997,7 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
     problems = defaultdict(list)
     # 额外收集：仅用于聚合统计（例如 old-doc），不计入问题
     collected_urls = []
-    
+
     # 加载白名单
     whitelist = load_whitelist()
 
@@ -965,7 +1008,7 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
             line = link_info['line']
             line_content = link_info['line_content']
             link_type = link_info['type']
-            
+
             # 检查链接是否在白名单中
             if is_url_whitelisted(url, whitelist):
                 continue
