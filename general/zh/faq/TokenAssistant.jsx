@@ -153,38 +153,149 @@ const TokenAssistant = ({ defaultTab = 'generate', language = 'zh' } = {}) => {
     document.body.removeChild(ta);
   };
 
-  // 随机数/IV
-  const rndInt = (a, b) => Math.ceil((a + (b - a)) * Math.random());
-  const makeNonce = () => rndInt(-2147483648, 2147483647);
+  // ========== 参考 token_helper.ts 的生成逻辑 ==========
+
+  // 生成 int32 范围的随机数
+  const RndNum = (a, b) => {
+    return Math.ceil((a + (b - a)) * Math.random());
+  };
+
+  const makeNonce = () => {
+    return RndNum(-2147483648, 2147483647);
+  };
+
+  // 生成随机 IV（16字节字符串）
   const makeRandomIv = () => {
-    const chars = '0123456789abcdefghijklmnopqrstuvwxyz';
-    let out = '';
-    for (let i = 0; i < 16; i++) out += chars[Math.floor(Math.random() * chars.length)];
-    return enc.encode(out); // Uint8Array(16)
+    const str = '0123456789abcdefghijklmnopqrstuvwxyz';
+    const result = [];
+    for (let i = 0; i < 16; i++) {
+      const r = Math.floor(Math.random() * str.length);
+      result.push(str.charAt(r));
+    }
+    return result.join('');
   };
 
-  // BE 写入工具
-  const writeUint16BE = (v) => { const b = new Uint8Array(2); b[0] = (v>>>8)&0xff; b[1]=v&0xff; return b; };
-  const writeInt64BE = (v) => {
-    const b = new Uint8Array(8); let x = BigInt(v);
-    for (let i=7;i>=0;i--){ b[i]=Number(x & 0xffn); x >>= 8n; }
-    return b;
+  // 根据密钥长度确定算法
+  const getAlgorithm = (keyStr) => {
+    const keyLength = enc.encode(keyStr).length;
+    switch (keyLength) {
+      case 16:
+        return 'AES-CBC';
+      case 24:
+        return 'AES-CBC';
+      case 32:
+        return 'AES-CBC';
+      default:
+        throw new Error('Invalid key length: ' + keyLength);
+    }
   };
 
-  // 拼接
-  const concatBytes = (arrs) => {
-    const total = arrs.reduce((s,a)=>s+a.length,0);
-    const out = new Uint8Array(total);
-    let off=0; for (const a of arrs){ out.set(a, off); off += a.length; }
-    return out;
+  // AES加密，使用模式: CBC/PKCS5Padding
+  const aesEncrypt = async (plainText, key, iv) => {
+    const algorithm = getAlgorithm(key);
+    const keyBytes = enc.encode(key);
+    const ivBytes = enc.encode(iv);
+    const plainBytes = enc.encode(plainText);
+
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      keyBytes,
+      { name: algorithm },
+      false,
+      ['encrypt']
+    );
+
+    const encrypted = await crypto.subtle.encrypt(
+      {
+        name: algorithm,
+        iv: ivBytes
+      },
+      cryptoKey,
+      plainBytes
+    );
+
+    return new Uint8Array(encrypted);
   };
 
-  // Base64 <-> bytes
-  const b64encode = (buf) => {
-    const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
-    let bin=''; for (let i=0;i<bytes.length;i++) bin += String.fromCharCode(bytes[i]);
-    return btoa(bin);
+  // 生成 Token04
+  const generateToken04 = async (appId, userId, secret, effectiveTimeInSeconds, payload = '') => {
+    if (!appId || typeof appId !== 'number') {
+      throw new Error('appID invalid');
+    }
+
+    if (!userId || typeof userId !== 'string') {
+      throw new Error('userId invalid');
+    }
+
+    if (!secret || typeof secret !== 'string' || secret.length !== 32) {
+      throw new Error('secret must be a 32 byte string');
+    }
+
+    if (!effectiveTimeInSeconds || typeof effectiveTimeInSeconds !== 'number') {
+      throw new Error('effectiveTimeInSeconds invalid');
+    }
+
+    const createTime = Math.floor(new Date().getTime() / 1000);
+    const tokenInfo = {
+      app_id: appId,
+      user_id: userId,
+      nonce: makeNonce(),
+      ctime: createTime,
+      expire: createTime + effectiveTimeInSeconds,
+      payload: payload || ''
+    };
+
+    // 把token信息转成json
+    const plaintText = JSON.stringify(tokenInfo);
+    console.log('plain text: ', plaintText);
+
+    // 随机生成的 16 字节串，用作 AES 加密向量
+    const iv = makeRandomIv();
+    console.log('iv', iv);
+
+    // 进行加密
+    const encryptBuf = await aesEncrypt(plaintText, secret, iv);
+
+    // token 二进制拼接: 过期时间 + Base64(iv长度 + iv + 加密信息长度 + 加密信息)
+    const b1 = new Uint8Array(8);
+    const b2 = new Uint8Array(2);
+    const b3 = new Uint8Array(2);
+
+    // 写入 expire (Big Endian int64)
+    new DataView(b1.buffer).setBigInt64(0, BigInt(tokenInfo.expire), false);
+    // 写入 iv.length (Big Endian uint16)
+    new DataView(b2.buffer).setUint16(0, iv.length, false);
+    // 写入 encryptBuf.byteLength (Big Endian uint16)
+    new DataView(b3.buffer).setUint16(0, encryptBuf.byteLength, false);
+
+    // 拼接所有部分
+    const totalLength = b1.length + b2.length + iv.length + b3.length + encryptBuf.length;
+    const buf = new Uint8Array(totalLength);
+    let offset = 0;
+
+    buf.set(b1, offset);
+    offset += b1.length;
+
+    buf.set(b2, offset);
+    offset += b2.length;
+
+    buf.set(enc.encode(iv), offset);
+    offset += iv.length;
+
+    buf.set(b3, offset);
+    offset += b3.length;
+
+    buf.set(encryptBuf, offset);
+
+    // Base64 编码
+    const base64 = btoa(String.fromCharCode(...buf));
+
+    return '04' + base64;
   };
+
+  // ========== 以下是校验相关的辅助函数 ==========
+
+  // Base64 解码
   const b64decode = (b64) => {
     const bin = atob(b64);
     const out = new Uint8Array(bin.length);
@@ -192,38 +303,16 @@ const TokenAssistant = ({ defaultTab = 'generate', language = 'zh' } = {}) => {
     return out;
   };
 
-  // PKCS7 Padding for AES-CBC
-  const pkcs7Pad = (data) => {
-    const block = 16; const pad = block - (data.length % block); const out = new Uint8Array(data.length + pad);
-    out.set(data,0); out.fill(pad, data.length);
-    return out;
-  };
-  const pkcs7Unpad = (data) => {
-    if (!data || data.length===0) return null;
-    const pad = data[data.length-1];
-    if (pad<=0 || pad>16 || pad>data.length) return null;
-    for (let i=data.length-pad;i<data.length;i++) if (data[i]!==pad) return null;
-    return data.subarray(0, data.length - pad);
-  };
-
-  // AES-CBC 加密/解密（手动PKCS7）
-  const aesCbcEncrypt = async (plainBytes, keyStr, ivBytes) => {
-    const keyBytes = enc.encode(keyStr);
-    if (![16,24,32].includes(keyBytes.length)) throw new Error('secret length invalid');
-    const key = await crypto.subtle.importKey('raw', keyBytes, 'AES-CBC', false, ['encrypt']);
-    const padded = pkcs7Pad(plainBytes);
-    const cipher = await crypto.subtle.encrypt({ name: 'AES-CBC', iv: ivBytes }, key, padded);
-    return new Uint8Array(cipher);
-  };
+  // AES-CBC 解密（用于校验）
   const aesCbcDecrypt = async (cipherBytes, keyStr, ivBytes) => {
     const keyBytes = enc.encode(keyStr);
     if (![16,24,32].includes(keyBytes.length)) throw new Error('secret length invalid');
     const key = await crypto.subtle.importKey('raw', keyBytes, 'AES-CBC', false, ['decrypt']);
     try {
+      // 注意：Web Crypto API 的 decrypt 会自动处理 PKCS7 padding
+      // 不需要手动 unpad
       const plainPadded = await crypto.subtle.decrypt({ name: 'AES-CBC', iv: ivBytes }, key, cipherBytes);
-      const unpadded = pkcs7Unpad(new Uint8Array(plainPadded));
-      if (!unpadded) throw new Error('pkcs7 unpad failed');
-      return unpadded;
+      return new Uint8Array(plainPadded);
     } catch (err) {
       if (err.name === 'OperationError') {
         throw new Error('AesDecrypt failed: invalid key or corrupted data');
@@ -246,27 +335,6 @@ const TokenAssistant = ({ defaultTab = 'generate', language = 'zh' } = {}) => {
       }
       throw err;
     }
-  };
-
-  // 生成 Token（04 + base64(expire + iv + cipher)） CBC 模式
-  const generateToken04Browser = async (appIdNum, userIdStr, secretStr, effectiveSeconds, payloadStr = '') => {
-    if (!appIdNum || typeof appIdNum !== 'number') throw new Error('appID invalid');
-    if (!userIdStr || typeof userIdStr !== 'string') throw new Error('userId invalid');
-    if (!secretStr || typeof secretStr !== 'string' || secretStr.length !== 32) throw new Error('serverSecret must be 32 bytes');
-    if (!effectiveSeconds || typeof effectiveSeconds !== 'number') throw new Error('effectiveTimeInSeconds invalid');
-
-    const ctime = Math.floor(Date.now()/1000);
-    const tokenInfo = { app_id: appIdNum, user_id: userIdStr, ctime, expire: ctime + effectiveSeconds, nonce: makeNonce(), payload: payloadStr || '' };
-    const plain = enc.encode(JSON.stringify(tokenInfo));
-    const iv = makeRandomIv();
-    const cipherBytes = await aesCbcEncrypt(plain, secretStr, iv);
-
-    const packed = concatBytes([
-      writeInt64BE(tokenInfo.expire),
-      writeUint16BE(iv.length), iv,
-      writeUint16BE(cipherBytes.length), cipherBytes
-    ]);
-    return '04' + b64encode(packed);
   };
 
   // 解析结构：int64 expire | u16 ivLen | iv | u16 cipherLen | cipher | [u8 mode]
@@ -346,7 +414,7 @@ const TokenAssistant = ({ defaultTab = 'generate', language = 'zh' } = {}) => {
     const eff = parseInt(effective, 10); if (!eff || eff <= 0) return alert(t.errorEffective);
 
     try {
-      const token = await generateToken04Browser(Number(appId), userId.trim(), serverSecret, eff, payload);
+      const token = await generateToken04(Number(appId), userId.trim(), serverSecret, eff, payload);
       setToken(token);
     } catch (e) {
       console.error(e); alert(t.generateFailed + (e?.message || e));
