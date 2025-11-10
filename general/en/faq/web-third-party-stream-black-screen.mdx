@@ -1,0 +1,107 @@
+---
+
+date: "2024-02-20"
+ce-comparison:
+  - "使用:use"
+  - "浏览器:browser"
+  - "推:publish"
+  - "第三方:third-party"
+  - "视频:video"
+  - "流:stream"
+  - "推流:publishing"
+  - "预览:preview"
+  - "正常:normal"
+  - "但:but"
+  - "拉流:playing"
+  - "时:when"
+  - "画面:image"
+  - "黑屏:black screen"
+  - "该:should"
+  - "如何:how"
+  - "处理:handle"
+---
+import { Title } from './title';
+import ArticleMetadata from '../../zh/faq/ArticleMetadata';
+
+<Title>When using a browser to publish third-party video streams, publishing/preview is normal, but the image is black when playing. How to handle this?</Title>
+
+<ArticleMetadata language="en" product="Video Call" platform="Web" />
+
+
+
+- - - 
+
+Currently, this problem occurs when using the following types of browsers to publish third-party video streams.
+
+- Chrome 88~92 browser
+- Safari browser
+- Harmony OS Firefox browser
+
+Developers can use Canvas to get the media stream of the video element when publishing.
+
+```javascript
+/**
+ * Compatible with the problem that the video of customized captured stream is abnormal when chrome 88-92 turns on hardware acceleration
+ * @param {*} video 
+ * @returns 
+ */
+var canvas;
+let localStream;
+var media = getStreamThroughCanvas(video)
+zg.createZegoStream({
+    custom: {
+        video: {
+            source: media
+        },
+        audio: {
+            source: media
+        }
+    }
+}).then(stream => {
+    localStream = stream;
+})
+function destroy() {
+    localStream && zg.destroyStream(localStream)
+    localStream = null;
+    if(canvas) {
+        canvas.width = 0;
+        canvas.remove();
+        canvas = null;
+    }
+}
+function getStreamThroughCanvas(video) {
+
+    let canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    const draw = function () {
+        if(!canvas) return
+        if (canvas.width !== video.videoWidth) canvas.width = video.videoWidth;
+        if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight;
+        ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+        setTimeout(draw, 66);
+    };
+
+    draw();
+
+    const media = canvas.captureStream();
+
+    // overwrite stop track function
+    const track = media.getVideoTracks()[0];
+    const q = track.stop;
+    track.stop = () => {
+        q.call(track);
+        draw();
+    };
+
+    // get audio track
+    const stream = video.captureStream && video.captureStream()
+    if (stream instanceof MediaStream && stream.getAudioTracks().length) {
+        const micro = stream.getAudioTracks()[0];
+        media.addTrack(micro);
+    }
+    return media;
+}
+```
+
+
