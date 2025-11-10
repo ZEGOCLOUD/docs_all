@@ -1,0 +1,504 @@
+---
+
+date: "2023-03-03"
+ce-comparison:
+  - "如何:how"
+  - "通过:through"
+  - "自定义:custom"
+  - "采集:capture"
+  - "实现:implement"
+  - "屏幕:screen"
+  - "共享:sharing"
+---
+{/* TODO translate */}
+import { Title } from './title';
+import ArticleMetadata from '../../zh/faq/ArticleMetadata';
+
+<Title>How to implement screen sharing through custom capture?</Title>
+
+<ArticleMetadata language="en" product="Video Call / Live streaming" platform="iOS / Android / macOS / Windows" />
+
+
+---
+
+<Warning title="Note">
+
+
+
+If you are using SDK version 3.1.0 or above, it is recommended that you use the latest implementation method. Please refer to the [Screen Sharing](/real-time-video-ios-oc/video/screen-sharing) documentation.
+
+</Warning>
+
+
+
+## Feature Introduction
+
+Screen sharing refers to sharing screen content as video to other viewers during video calls or live streaming to enhance interactive experience and improve communication efficiency.
+
+Screen sharing is widely used in the following scenarios:
+
+- In video conference scenarios, screen sharing can share the speaker's local files, data, web pages, PPT and other content to other participants;
+- In online classroom scenarios, screen sharing can display the teacher's courseware, notes, lecture content and other content to students.
+
+
+## iOS Implementation Process
+
+
+### Prerequisites
+
+Before implementing screen sharing functionality, please ensure:
+- You have prepared an iOS device or simulator with iOS 12.0 or above that supports audio and video (real device is recommended).
+- You have integrated ZEGO Express SDK in your project and implemented basic Video Call functionality. For details, please refer to [Quick Start - Integration](/real-time-video-ios-oc/quick-start/integrating-sdk) and [Quick Start - Implementing Video Call](/real-time-video-ios-oc/quick-start/implementing-video-call).
+- You have created a project in [ZEGOCLOUD Console](https://console.zegocloud.com/) and applied for a valid AppID and AppSign. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+
+
+### Implementation Process
+
+The iOS platform implements screen recording based on Apple's [Replaykit](https://developer.apple.com/documentation/ReplayKit) framework, which can share the screen content of the entire system. However, it requires the current App (main App process) to additionally provide an Extension component (Extension process) for screen recording, combined with ZEGO Express SDK related APIs to implement screen sharing functionality.
+
+<Warning title="Note">
+
+
+
+The main App process and Extension process are two separate processes, so the userID and streamID in the Extension process cannot be the same as those in the main App process.
+
+</Warning>
+
+
+
+
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_implementation.png" /></Frame></Frame>
+
+
+The main process of implementing screen sharing is as follows:
+
+1. In your project, create a new Broadcast Upload Extension Target and integrate ZEGO Express SDK in it.
+2. Create App Groups in the Broadcast Upload Extension Target so that the Extension process can synchronize configuration data with the main App process.
+3. Use the Extension process to record the screen and send the recorded screen buffer data to ZEGO Express SDK through [handleReplayKitSampleBuffer](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine&jumpType=route#handle-replay-kit-sample-buffer-buffer-type).
+4. Manually trigger screen sharing.
+
+For detailed operations, please refer to the following.
+
+
+### Usage Steps
+
+**Create a new Broadcast Upload Extension in the project**
+
+<Note title="Note">
+
+
+
+- If you don't have an existing project, you can refer to "Create a new project" in [Quick Start - Integration](/real-time-video-ios-oc/quick-start/integrating-sdk#可选新建项目) to create one.
+- The memory usage limit for Broadcast Upload Extension is 50 MB. Please ensure that the memory usage of the screen sharing Extension does not exceed 50 MB.
+
+</Note>
+
+
+
+
+1. Open the project file with Xcode, and click "File > New > Target..." in the menu bar.
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_extension_ios1.png" /></Frame></Frame>
+2. In the pop-up window, select "Broadcast Upload Extension" on the iOS page and click "Next".
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_extension_ios.png" /></Frame></Frame>
+3. In the pop-up dialog, fill in the name of "Broadcast Upload Extension" in the "Product Name" field, for example "ScreenShare". After selecting "Team", "Language" and other information, click "Finish".
+
+<Note title="Note">
+
+
+Do not check "Include UI Extension".
+
+</Note>
+
+
+
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_extension_ios3.png" /></Frame></Frame>
+
+After creation, you will see the Extension folder in the project. The structure is similar to the following. This folder is used to store the implementation code for screen sharing functionality:
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_extension_project.png" /></Frame></Frame>
+
+
+**(Optional) Synchronize configuration data through App Groups**
+
+<Accordion title="Create App Groups" defaultOpen="false">
+1. In the newly created Target in Xcode, select "Signing & Capabilities > Capability > App Groups".
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_appgroups.png" /></Frame></Frame>
+
+2. In the pop-up window, add "App Groups ID" to bind the Extension process with the main App process.
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_appgroups_id.png" /></Frame></Frame>
+
+3. Use iOS system API [NSUserDefaults](https://developer.apple.com/documentation/foundation/nsuserdefaults) to synchronize configuration data (such as AppID, AppSign, roomID, etc.) between the Extension process and the main App process.
+
+```objc
+NSUserDefaults *userDefaults = [[NSUserDefaults alloc] initWithSuiteName:appGroup];
+```
+</Accordion>
+
+
+**Get screen data through Extension and publish stream**
+
+<Note title="Note">
+
+
+The implementation of the following system callbacks can be found in the "/ZegoExpressExample-iOS-OC/Topics/ScreenCapture/ZegoExpressExample-iOS-OC-Broadcast/SampleHandler.m" file in [Download Example Source Code](/real-time-video-ios-oc/quick-start/run-example-code):
+
+- [broadcastStartedWithSetupInfo](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2143170-broadcaststartedwithsetupinfo?language=objc)
+- [processSampleBuffer](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2123045-processsamplebuffer?language=objc)
+- [broadcastFinished](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2143169-broadcastfinished?language=objc)
+
+
+</Note>
+
+
+
+
+1. Ensure that in the Extension's "Info.plist" file, "RPBroadcastProcessMode" is set to "RPBroadcastProcessModeSampleBuffer".
+2. Import ZEGO Express SDK in the Extension. For details, please refer to "Import SDK" in [Quick Start - Integration](/real-time-video-ios-oc/quick-start/integrating-sdk#导入-sdk).
+3. The system notifies the Extension through [broadcastStartedWithSetupInfo](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2143170-broadcaststartedwithsetupinfo?language=objc) callback that screen recording has started. You need to call the following interfaces of ZEGO Express SDK in this callback to implement related functions:
+    1. Create ZegoExpressEngine.
+
+    ```objc
+    ZegoEngineConfig *engineConfig = [[ZegoEngineConfig alloc] init];
+
+    engineConfig.advancedConfig = @{
+        @"replaykit_handle_rotation": @"false", // Specify not to process the screen rotation on the publisher side, but to process it on the player side, thereby reduce memory usage, but in this case, the player must not play this stream from the CDN but directly from the ZEGO server. If you need to play this stream from the CDN and the captured screen needs to be dynamically rotated, please comment this line of code.
+        @"max_channels": @"0", // Specify the max number of streams to play as 0  (Because this extension only needs to publish stream)
+        @"max_publish_channels": @"1" // Specify the max number of streams to publish as 1
+    };
+
+    // Set engine config
+    [ZegoExpressEngine setEngineConfig:engineConfig];
+
+    // Create engine
+    ZegoEngineProfile *profile = [ZegoEngineProfile new];
+    profile.appID = appID;
+    profile.appSign = appSign;
+    profile.scenario = ZegoScenarioDefault;
+
+    [ZegoExpressEngine createEngineWithProfile:profile eventHandler:self];
+
+    // Enable hardware encoder to reduce memory usage when publishing stream
+    [[ZegoExpressEngine sharedEngine] enableHardwareEncoder:YES];
+
+    ```
+
+    2. Initialize Express ReplayKit module.
+
+    ```objc
+    // Init SDK ReplayKit module
+    [[ZegoExpressEngine sharedEngine] prepareForReplayKit];
+    ```
+
+    3. Login room and push screen sharing stream
+
+    ```objc
+    // Login room
+    [[ZegoExpressEngine sharedEngine] loginRoom:self.roomID user:[ZegoUser userWithUserID:self.userID userName:self.userName]];
+    // Push screen sharing stream
+    [[ZegoExpressEngine sharedEngine] startPublishingStream:self.streamID];
+    ```
+
+
+4. In the [processSampleBuffer](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2123045-processsamplebuffer?language=objc) system callback, send the screen recording buffer data to ZEGO Express SDK through [handleReplayKitSampleBuffer](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine&jumpType=route#handle-replay-kit-sample-buffer-buffer-type).
+
+    ```objc
+    [[ZegoExpressEngine sharedEngine] handleReplayKitSampleBuffer:sampleBuffer bufferType:sampleBufferType];
+    ```
+
+5. The system notifies the Extension through [broadcastFinished](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2143169-broadcastfinished?language=objc) callback that screen recording has ended. You can call the following interfaces of ZEGO Express SDK in this callback to stop screen sharing:
+
+    ```objc
+    // 1. Stop pushing screen sharing stream.
+    [[ZegoExpressEngine sharedEngine] stopPublishingStream];
+    // 2. Logout room
+    [[ZegoExpressEngine sharedEngine] logoutRoom:self.roomID];
+    // 3. Destroy ZegoExpressEngine
+    [ZegoExpressEngine destroyEngine];
+    ```
+
+**Start screen sharing**
+
+<Warning title="Note">
+
+
+After completing the above preparation code for screen sharing, you must manually trigger screen sharing by the user to truly start the screen sharing function.
+
+</Warning>
+
+
+
+You can trigger it in the following two ways:
+
+- Method 1 (Recommended):
+
+You need to long-press the screen recording button in the iOS system control center and select the corresponding Extension to start recording.
+
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_trigger.png" /></Frame></Frame>
+
+- Method 2:
+
+<Accordion title="(Optional) Invoke screen sharing in App" defaultOpen="false">
+<Warning title="Note">
+
+
+- Apple added [RPSystemBroadcastPickerView](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview) in iOS 12.0, which can pop up a launcher from the App for users to confirm starting screen sharing. However, [RPSystemBroadcastPickerView](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview) currently does not support custom interface and has no official invocation method.
+- Apple does not recommend this solution and it may become invalid in the next round of system updates. Therefore, it is only an optional solution. If you choose this solution, you need to bear the risk yourself.
+
+</Warning>
+
+
+
+    1. Create [RPSystemBroadcastPickerView](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview) system class and bind the "BundleID" of the Extension.
+    2. Traverse the sub-views of [RPSystemBroadcastPickerView](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview) to find UIButton and trigger its click event.
+</Accordion>
+
+**Watch remote screen sharing**
+
+After completing the above steps, other users can use the [startPlayingStream](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#start-playing-stream-canvas) interface to pull the screen sharing stream. For detailed operations, please refer to [Quick Start](/real-time-video-android-java/quick-start/integrating-sdk).
+
+```objc
+// Similarly, users pulling and playing streams first need to initialize the SDK and login to the same room
+...
+...
+
+// play stream and play, need to pass in the streamID used by the user who initiated screen sharing
+[[ZegoExpressEngine sharedEngine] startPlayingStream:streamID canvas:[ZegoCanvas canvasWithView:self.playView]];
+```
+
+
+## Android Implementation Process
+
+
+### Prerequisites
+
+Before implementing screen sharing functionality, please ensure:
+
+- You have integrated ZEGO Express SDK in your project and implemented basic Video Call functionality. For details, please refer to [Quick Start - Integration](/real-time-video-android-java/quick-start/integrating-sdk) and [Quick Start - Implementing Video Call](/real-time-video-android-java/quick-start/implementing-video-call).
+- You have created a project in [ZEGOCLOUD Console](https://console.zegocloud.com/) and applied for a valid AppID and AppSign. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+
+### Implementation Process
+
+We need to combine Android system API and ZEGO Express SDK's custom video capture to implement screen sharing.
+
+The following diagram shows the data flow of implementing screen sharing on the Android platform:
+
+{/*TODO Translate*/}
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/general/en/faq/screen_capture_android2.png" /></Frame></Frame>
+
+**Get user screen recording authorization**
+
+Before recording the screen, you need to get user authorization. Different versions require different permissions:
+- Android 4.4 and earlier versions must obtain root permissions to implement screen recording. Since most devices now have system versions higher than 4.4, this scenario is not described here.
+- Android 5.0 and above versions can use the MediaProjection and MediaProjectionManager provided by the system for screen recording. This version does not require root permissions, but will pop up a window asking the user whether to allow the application to record the screen, requiring user authorization.
+- Android 10.0 and above versions require the use of foreground services when using system API for screen recording. For details, please refer to [Official Documentation](https://developer.android.google.cn/reference/kotlin/android/media/projection/MediaProjectionManager?hl=en).
+
+```java
+public static MediaProjectionManager mMediaProjectionManager;
+if (Build.VERSION.SDK_INT < 21) {
+    Toast.makeText(ZGVideoCaptureOriginUI.this, getString(R.string.record_request), Toast.LENGTH_SHORT).show();
+    finish();
+} else {
+    // Version 5.0 and above
+    // Request screen recording permission and wait for user authorization
+   mMediaProjectionManager = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
+   startActivityForResult(mMediaProjectionManager.createScreenCaptureIntent(), REQUEST_CODE);
+    }
+```
+
+**Create MediaProjection instance**
+
+1. Add related configuration in AndroidManifest.xml.
+
+<Note title="Note">
+
+
+
+To implement screen recording for Android 10.0 and above applications, you need to enable foreground service in the code and register the Service in AndroidManifest.xml with the foregroundServiceType attribute.
+
+</Note>
+
+
+
+```xml
+<application>
+ <activity android:name="im.zego.videocapture.ui.ZGVideoCaptureDemoUI" />
+ <activity android:name="im.zego.videocapture.ui.ZGVideoCaptureOriginUI"></activity>
+ <service android:name=".service.CaptureScreenService"
+     android:enabled="true"
+     android:foregroundServiceType="mediaProjection"/>
+</application>
+```
+
+
+2. Create MediaProjection instance after user authorization.
+
+- For Android 10.0 and below versions, directly get MediaProjection after authorization succeeds
+- For Android 10.0 and above versions, the creation of MediaProjection instance needs to be executed in the onStartCommand method of the foreground service.
+
+```java
+
+@RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+   @Override
+   protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+       super.onActivityResult(requestCode, resultCode, data);
+       if (requestCode == REQUEST_CODE && resultCode == RESULT_OK) {
+           if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.Q){
+               //Target version 10.0 and above requires using foreground service and creating MediaProjection in the onStartCommand method of the foreground service
+               service=new Intent(ZGVideoCaptureOriginUI.this, CaptureScreenService.class);
+               service.putExtra("code",resultCode);
+               service.putExtra("data",data);
+               startForegroundService(service);
+           }else {
+               //Target version below 10.0 directly get MediaProjection
+               mMediaProjection = mMediaProjectionManager.getMediaProjection(resultCode, data);
+           }
+       }
+   }
+```
+
+Create a class that implements the `Service` interface and create a `MediaProjection` instance in `onStartCommand`.
+
+```java
+@RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+public class CaptureScreenService extends Service {
+    ...
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        ···
+        //Get MediaProjection here
+        ZGVideoCaptureOriginUI.mMediaProjection = ZGVideoCaptureOriginUI.mMediaProjectionManager.getMediaProjection(mResultCode, Objects.requireNonNull(mResultData));
+        return super.onStartCommand(intent, flags, startId);
+    }
+   ···
+}
+```
+
+
+**Enable custom video capture functionality of ZegoExpress SDK**
+
+Call the [enableCustomVideoCapture](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine&jumpType=route#enable-custom-video-capture) interface of ZegoExpress SDK to enable custom capture functionality. For details, please refer to [Custom Video Capture](/real-time-video-android-java/video/custom-video-capture).
+
+```java
+//VideoCaptureScreen inherits IZegoCustomVideoCaptureHandler to listen to custom capture onStart and onStop callbacks
+VideoCaptureScreen videoCapture = new VideoCaptureScreen(ZGVideoCaptureOriginUI.mMediaProjection, DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT, mSDKEngine);
+//Listen to custom capture start and stop callbacks
+mSDKEngine.setCustomVideoCaptureHandler(videoCapture);
+ZegoCustomVideoCaptureConfig videoCaptureConfig=new ZegoCustomVideoCaptureConfig();
+//Use SurfaceTexture type for custom capture
+videoCaptureConfig.bufferType=ZegoVideoBufferType.SURFACE_TEXTURE;
+//Start custom capture
+mSDKEngine.enableCustomVideoCapture(true, videoCaptureConfig, ZegoPublishChannel.MAIN);
+```
+
+**Login room and start pushing stream**
+
+Call the [loginRoom ](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#login-room) interface, pass in the room ID parameter "roomID" and user parameter "user" to login to the room.
+
+Call the [startPublishingStream ](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#start-publishing-stream) interface, pass in the stream ID parameter "streamID" to send your audio and video stream to remote users.
+
+
+```java
+/** Create user */
+ZegoUser user = new ZegoUser("user1");
+
+/** Start logging into room */
+mSDKEngine.loginRoom("room1", user);
+/** Start pushing stream */
+mSDKEngine.startPublishingStream("stream1");
+
+```
+
+**Create VirtualDisplay and send screen data to ZEGO Express SDK**
+1. Create ZegoVideoCaptureCallback class that inherits IZegoCustomVideoCaptureHandler.
+
+2. Create VideoCaptureScreen class that inherits ZegoVideoCaptureCallback.
+
+After receiving the [onStart ](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-custom-video-capture-handler#on-start) callback, developers can create a VirtualDisplay instance through MediaProjection to get screen data and send it to ZEGO Express SDK.
+
+3. Use the createVirtualDisplay system API to render the virtual display content to the Surface.
+
+```java
+//ZegoVideoCaptureCallback inherits from IZegoCustomVideoCaptureHandler
+class VideoCaptureScreen extends ZegoVideoCaptureCallback {
+    @Override
+    //After receiving the onStart callback, you can create VirtualDisplay through MediaProjection and send screen data to ZEGO SDK
+    public void onStart(ZegoPublishChannel channel) {
+        if (mZegoEngine != null && !mIsCapturing && mMediaProjection != null) {
+            mIsCapturing = true;
+            //Get SurfaceTexture through ZEGO API getCustomVideoCaptureSurfaceTexture. This interface uses the main channel for pushing stream by default
+            SurfaceTexture texture = mZegoEngine.getCustomVideoCaptureSurfaceTexture();
+            texture.setDefaultBufferSize(mCaptureWidth, mCaptureHeight);
+            //Create Surface through the obtained SurfaceTexture
+            mSurface = new Surface(texture);
+            //Through mSurface, complete sending screen recording data to ZEGO SDK
+            mVirtualDisplay = mMediaProjection.createVirtualDisplay("ScreenCapture",
+                    mCaptureWidth, mCaptureHeight, 1,
+                    DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC, mSurface, null, mHandler);
+        }
+    }
+}
+```
+
+So far, we have completed the operation of collecting screen data and sharing it to remote users through ZegoExpress SDK.
+
+### Watch remote screen sharing
+
+After completing the above steps, other users can use the [startPlayingStream](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~java_android~class~ZegoExpressEngine#start-playing-stream) interface to pull the screen sharing stream. For detailed steps, please refer to [Quick Start](/real-time-video-android-java/quick-start/integrating-sdk).
+
+```java
+// Similarly, users pulling and playing streams first need to initialize the SDK and login to the same room
+...
+...
+
+// play stream and play, need to pass in the streamID used by the user who initiated screen sharing
+mSDKEngine.startPlayingStream(streamID, new ZegoCanvas(playView));
+```
+
+
+
+## Windows Implementation Process
+
+<Warning title="Note">
+
+
+This functionality is provided as a plugin. For details, please refer to [ZegoScreenCapture-Windows](https://doc-zh.zego.im/article/3167). As a plugin for [zego-express-video-windows ](/real-time-video-windows-cpp/client-sdk/download-sdk), the two must be used together to implement screen sharing functionality.
+
+
+</Warning>
+
+
+
+### Prerequisites
+
+Before using screen sharing, please first download the [ScreenCapture SDK ](https://doc-zh.zego.im/article/3167) plugin and integrate it in your project.
+
+
+### Usage Steps
+
+Screen sharing supports the following functions. For detailed implementation process, please refer to the relevant documentation in the screen capture plugin:
+
+|Function|Description|Implementation Process|
+|-|-|-|
+|Integrate Plugin|Integrate the screen capture plugin|Please refer to [Integration](https://doc-zh.zego.im/article/2371)|
+|Capture Entire Screen|Select a screen to capture|Please refer to [Screen Sharing](https://doc-zh.zego.im/article/2351)|
+|Capture Specified Area|Select an area to capture|Please refer to [Screen Sharing](https://doc-zh.zego.im/article/2363)|
+|Capture Specified Window|Select a window to capture|Please refer to [Window Sharing](https://doc-zh.zego.im/article/2364)|
+|Window Thumbnail|Get thumbnail to display in img tag for easy selection of capture target|Please refer to [Window Thumbnail](https://doc-zh.zego.im/article/2365)|
+
+
+## macOS Implementation Process
+
+
+### Usage Steps
+
+Screen sharing supports the following functions. For detailed implementation process, please refer to the relevant documentation in screen sharing:
+
+|Function|Description|Implementation Process|
+|-|-|-|
+|Integrate Plugin|Integrate the screen capture plugin|Please refer to [Integration](https://doc-zh.zego.im/article/2396)|
+|Capture Entire Screen|Select a screen to capture|Please refer to [Screen Sharing](https://doc-zh.zego.im/article/2397)|
+|Capture Specified Area|Select an area to capture|Please refer to [Area Sharing](https://doc-zh.zego.im/article/2398)|
+|Capture Specified Window|Select a window to capture|Please refer to [Window Sharing](https://doc-zh.zego.im/article/2395)|
+|Window Thumbnail|Get thumbnail to display in img tag for easy selection of capture target|Please refer to [Window Thumbnail](https://doc-zh.zego.im/article/2399)|
+
+

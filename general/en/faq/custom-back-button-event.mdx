@@ -1,0 +1,76 @@
+---
+
+date: "2024-05-11"
+ce-comparison:
+  - "如何:how"
+  - "自定义:customize"
+  - "通话:call"
+  - "中:in"
+  - "返回:back"
+  - "按钮:button"
+  - "事件:event"
+---
+import { Title } from './title';
+import ArticleMetadata from '../../zh/faq/ArticleMetadata';
+
+<Title>How to customize the back button event during a call?</Title>
+
+<ArticleMetadata language="en" product="Call Kit" platform="Android" />
+
+
+
+---
+
+By default, when you click the Android back button during a call, the user will directly leave the call.
+
+If you want to add a confirmation dialog, you can change `callInvitationConfig` like this:
+
+```java
+ZegoUIKitPrebuiltCallInvitationConfig callInvitationConfig = new ZegoUIKitPrebuiltCallInvitationConfig();
+
+callInvitationConfig.provider = new ZegoUIKitPrebuiltCallConfigProvider() {
+    @Override
+    public ZegoUIKitPrebuiltCallConfig requireConfig(ZegoCallInvitationData invitationData) {
+        ZegoUIKitPrebuiltCallConfig config = null;
+        boolean isVideoCall = invitationData.type == ZegoInvitationType.VIDEO_CALL.getValue();
+        boolean isGroupCall = invitationData.invitees.size() > 1;
+        if (isVideoCall && isGroupCall) {
+            config = ZegoUIKitPrebuiltCallConfig.groupVideoCall();
+        } else if (!isVideoCall && isGroupCall) {
+            config = ZegoUIKitPrebuiltCallConfig.groupVoiceCall();
+        } else if (!isVideoCall) {
+            config = ZegoUIKitPrebuiltCallConfig.oneOnOneVoiceCall();
+        } else {
+            config = ZegoUIKitPrebuiltCallConfig.oneOnOneVideoCall();
+        }
+        config.hangUpConfirmDialogInfo = new ZegoHangUpConfirmDialogInfo();
+        return config;
+    }
+};
+```
+You can adjust the value of the member variable config.hangUpConfirmDialogInfo to change the text of the dialog.
+
+Moreover, you can override BackPressEvent to customize the back button event. The example is as follows:
+```java
+ZegoUIKitPrebuiltCallService.events.setBackPressEvent(new BackPressEvent() {
+    @Override
+    public boolean onBackPressed() {
+    // If you return true, it means you need to customize the back button event; if you return false, it means you don't need to customize the back button event, and it will execute according to the default behavior.
+        return true;
+    }
+});
+``` 
+
+For example, if you want to minimize the call when you have already added `ZegoMenuBarButtonName.MINIMIZING_BUTTON` in the config, you can call `ZegoUIKitPrebuiltCallService.minimizeCall()` in the callback:
+
+```java
+ZegoUIKitPrebuiltCallService.events.setBackPressEvent(new BackPressEvent() {
+    @Override
+    public boolean onBackPressed() {
+        ZegoUIKitPrebuiltCallService.minimizeCall();
+        return true;
+    }
+});
+``` 
+
+
