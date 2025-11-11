@@ -1,0 +1,87 @@
+---
+
+date: "2022-11-16"
+ce-comparison:
+  - "如何:how"
+  - "解决:resolve"
+  - "macOS:macOS"
+  - "窗口:window"
+  - "相关:related"
+  - "问题:problem"
+---
+import { Title } from './title';
+import ArticleMetadata from '../../zh/faq/ArticleMetadata';
+
+<Title>How to resolve macOS window-related issues?</Title>
+
+<ArticleMetadata language="en" product="Screen sharing" platform="macOS" />
+
+
+---
+
+### Why can't I get the window list?
+
+Please check if the SDK is initialized correctly. If initialization fails, please retry.
+
+### How to detect if the window ID is correct?
+
+Please refer to the following code to confirm.
+
+```objc
+//Detect whether the screen can be captured (data can be captured without enabling accessibility permissions, but the window status callback may be abnormal)
+bool isValid = zego_windowthumbnail_window_checkStatus(windowID);
+```
+
+### Why does window filtering fail?
+
+The SDK follows the following interface call steps when performing screen sharing:
+1. Enumerate screens: zego_screencapture_enum_screen_list().
+2. Set filtered windows: zego_screencapture_set_excluded_windows.
+3. Set the target screen to share: zego_screencapture_set_target_screen().
+4. Set the capture area: zego_screencapture_set_target_rect().
+5. Start screen sharing: zego_screencapture_start_capture().
+
+<br/>
+
+If window filtering fails, please confirm according to the following steps:
+
+1. First, please confirm that the call order of step 2 is at the front.
+2. Secondly, if it is your own application's window, you can set the window's "sharingType" to "NSWindowSharingNone". The Qt sample code is as follows:
+
+    ```objc
+    void ZegoMacUtils::setSharingTypeNone(QWidget* widget){    
+        if(widget != nullptr)    
+        {        
+            NSView* view = (NSView*)widget->winId();        
+            NSWindow* wnd = [view window];            
+            wnd.sharingType = NSWindowSharingNone;    
+        }
+    }
+
+3. Check if the passed window ID is correct. Developers can obtain the window ID through the following method and compare it with the ID they passed in.
+
+    ```objc
+    uint32_t windowListLen = 0;    
+    const struct ZegoScreenCaptureWindowItem * windowList = zego_screencapture_enum_window_list(1,&windowListLen);    
+    for (int i = 0; i < windowListLen; i++)    
+    {        
+        // NSLog(@"[***] windowID: %d title: %s", windowList[i].handle, windowList[i].title);//        
+        struct ZegoScreenCaptureWindowItem info = windowList[i];        
+        ZegoWindowItem *windowItem = [[ZegoWindowItem alloc] init];        
+        windowItem.windowID = (CGWindowID)windowList[i].handle;        
+        windowItem.title = [NSString stringWithUTF8String:(windowList[i].title)];                
+        [self.m_windowList addObject:windowItem];    
+    }    
+    zego_screencapture_free_window_list(windowList);
+    ```
+
+    For the method to obtain the window ID under Qt, please refer to the following code:
+    ```objc
+    quint32 ZegoMacUtils::getNSWindowId(QWidget* widget){    
+        NSView* view = (NSView*)widget->winId();    
+        NSWindow* wnd = [view window];        
+        return (CGWindowID)[wnd windowNumber];
+    } 
+    ```
+
+

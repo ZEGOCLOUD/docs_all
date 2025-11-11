@@ -1,0 +1,88 @@
+---
+
+date: "2024-05-11"
+ce-comparison:
+  - "如何:how"
+  - "解决:resolve"
+  - "同时:simultaneously"
+  - "集成:integrate"
+  - "Firebase Cloud Message:Firebase Cloud Message"
+  - "时:when"
+  - "的:of"
+  - "冲突:conflict"
+---
+import { Title } from './title';
+import ArticleMetadata from '../../zh/faq/ArticleMetadata';
+
+<Title>How to resolve conflicts when integrating Firebase Cloud Message simultaneously?</Title>
+
+<ArticleMetadata language="en" product="Call Kit" platform="Android" />
+
+
+
+---
+
+When Call Kit receives a message from FCM, if the message is not from ZEGO SDK, it will send a broadcast to the current application with the action `com.zegocloud.zegouikit.call.fcm`. The sample code is as follows:
+
+```java
+Intent intent = new Intent("com.zegocloud.zegouikit.call.fcm");
+intent.putExtra("remoteMessage", remoteMessage);
+context.sendBroadcast(intent);
+```
+
+Therefore, if you have already integrated Firebase Messaging, simply follow these steps to complete the migration:
+
+1. Create and statically register a BroadcastReceiver in your application:
+   - Create a BroadcastReceiver, for example `YourCustomBroadcastReceiver.java`.
+   - Register it to the `application` node of your application's `Manifest.xml` file and set the action to `"com.zegocloud.zegouikit.call.fcm"`. The example is as follows:
+   ```xml
+   <receiver
+        android:name="com.zegocloud.uikit.demo.calloffline.YourCustomBroadcastReceiver"
+        android:enabled="true"
+        android:exported="false">
+        <intent-filter>
+          <action android:name="com.zegocloud.zegouikit.call.fcm"/>
+        </intent-filter>
+    </receiver>
+   ```
+2. Remove the original FCM Service from `Manifest.xml`. The example is as follows:
+    ```xml
+    <service
+        android:name=".java.MyFirebaseMessagingService"
+        android:exported="false">
+        <intent-filter>
+            <action android:name="com.google.firebase.MESSAGING_EVENT" />
+        </intent-filter>
+    </service>
+    ```
+   Please remove it to avoid conflicts with Zego SDK.
+
+3. Listen to and handle related events:
+   You need to migrate the logic from `MyFirebaseMessagingService` to `YourCustomBroadcastReceiver`. The example is as follows.
+
+   Original code:
+   ```java
+   public class YourFirebaseMsgService extends FirebaseMessagingService {
+        @Override
+        public void onMessageReceived(RemoteMessage remoteMessage) {
+            // Your custom logic
+        }
+    }
+   ```
+   Please migrate as follows and delete YourFirebaseMsgService.java:
+
+   ```java
+   public class YourCustomBroadcastReceiver extends BroadcastReceiver {
+
+        private static final String TAG = "CustomReceiver";
+
+        public void onReceive(Context context, Intent intent) {
+            com.google.firebase.messaging.RemoteMessage remoteMessage = intent.getParcelableExtra("remoteMessage");
+            // Your custom logic
+            Log.d(TAG, "onReceive.remoteMessage.getData: " + remoteMessage.getData());
+        }
+    }
+   ```
+By following these steps, you should be able to receive and handle your own FCM messages.
+
+
