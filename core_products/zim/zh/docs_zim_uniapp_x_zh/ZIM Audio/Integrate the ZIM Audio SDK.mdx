@@ -76,19 +76,7 @@ uni-app x 官方自定义调试基座使用说明，请参考 [使用自定义�
 
 自定义调试基座，请选择“运行 > 运行到手机或模拟器 > 运行到 Android App 基座 > 使用自定义基座运行”菜单。
 
-### 2.5 导入 SDK
-
-```typescript
-import {
-    IZIMAudio,
-    ZIMAudio,
-    ZIMAudioRecordConfig,
-    ZIMAudioPlayConfig,
-    ZIMAudioANSParam,
-} from '@/uni_modules/zego-zim-audio-uts';
-```
-
-## 3 设置权限
+## 3 申请录音权限
 
 使用 ZIM Audio SDK 前，请设置麦克风权限，以实现采集语音。
 
@@ -124,4 +112,109 @@ if (!UTSAndroid.checkSystemPermissionGranted(UTSAndroid.getUniActivity()!, permi
     // ZIMAudio.getInstance().startRecord({ filePath, maxDuration: 1 * 60 * 1000 } as ZIMAudioRecordConfig);
 }
 // #endif
+```
+
+
+## 4 完整参考代码
+
+``` typescript
+// <script>
+import { ZIMAudio, ZIMAudioRecordConfig, ZIMAudioPlayConfig, ZIMAudioANSParam } from '@/uni_modules/zego-zim-audio-uts';
+
+export default {
+    onShow() {
+        this.useZIMAudio();
+    },
+    methods: {
+        async useZIMAudio() {
+            // 录音文件存放的绝对路径
+            let filePath = '';
+
+            // 创建实例        
+            const zimAudio = ZIMAudio.getInstance();
+
+            zimAudio.onError((res) => console.log('onError: ' + JSON.stringify(res)));
+            zimAudio.onRecorderStarted(() => {
+                console.log('onRecorderStarted');
+                setTimeout(() => {
+                    zimAudio.isRecording().then((res) => console.log('isRecording: ' + res));
+                    zimAudio.completeRecord().then(async () => {
+                        // 录制完成后，可播放录音文件
+                        await zimAudio.setAudioRouteType(0);
+                        await zimAudio.startPlay({ filePath, routeType: 0 } as ZIMAudioPlayConfig);
+                        // zimAudio.uninit();
+                    });
+                    // zimAudio.cancelRecord();
+                }, 10 * 1000);
+            });
+            zimAudio.onRecorderCancelled(() => console.log('onRecorderCancelled'));
+            zimAudio.onRecorderCompleted((res) => console.log('onRecorderCompleted: ' + res));
+            zimAudio.onRecorderProgress((res) => console.log('onRecorderProgress: ' + res));
+            zimAudio.onRecorderFailed((res) => console.log('onRecorderFailed: ' + res));
+            zimAudio.onPlayerStarted((res) => {
+                console.log('onPlayerStarted: ' + res);
+                setTimeout(() => {
+                    zimAudio.isPlaying().then((res) => console.log('isPlaying: ' + res));
+                    zimAudio.stopPlay();
+                }, 5 * 1000);
+            });
+            zimAudio.onPlayerInterrupted(() => console.log('onPlayerInterrupted'));
+            zimAudio.onPlayerStopped(() => console.log('onPlayerStopped'));
+            zimAudio.onPlayerEnded(() => console.log('onPlayerEnded'));
+            zimAudio.onPlayerProgress((res) => console.log('onPlayerProgress: ' + res));
+            zimAudio.onPlayerFailed((res) => console.log('onPlayerFailed: ' + res));
+
+
+            // 参考 ZEGO 文档，https://doc-zh.zego.im/zim-server/zim-audio/obtain-a-license 接口用以上配置生成的鉴权
+            const license = '';
+
+            // ZIMAudio.setAdvancedConfig('audio_session_do_nothing', 'true');
+            await zimAudio.initWithLicense(license);
+            // ZIMAudio.setAdvancedConfig('audio_session_mix_with_others', 'true');
+
+            await zimAudio.enableAGC(true);
+            await zimAudio.enableANS(true);
+            await zimAudio.setANSParam({ mode: 1 } as ZIMAudioANSParam);
+
+            // #ifdef APP-ANDROID
+            const apkName = ''; // apk 包名
+            filePath = '/storage/emulated/0/Android/data/' + apkName + '/test.mp3';
+
+            // Android 平台：请求录制权限
+            const permissionCheck = ["android.permission.RECORD_AUDIO"]
+            if (!UTSAndroid.checkSystemPermissionGranted(UTSAndroid.getUniActivity()!, permissionCheck)) {
+                UTSAndroid.requestSystemPermission(
+                    UTSAndroid.getUniActivity()!,
+                    permissionCheck,
+                    function (allRight : boolean, _ : string[]) {
+                        if (allRight) {
+                            zimAudio.startRecord({ filePath, maxDuration: 1 * 60 * 1000 } as ZIMAudioRecordConfig)
+                        }
+                    },
+                    function (all : boolean, _ : string[]) {
+                        //用户拒绝了部分权限
+                    });
+            } else {
+                zimAudio.startRecord({ filePath, maxDuration: 1 * 60 * 1000 } as ZIMAudioRecordConfig);
+            }
+            // #endif
+
+
+            // 通过以下 swift 代码获取文件目录
+            // import Foundation;
+            // func getSandboxDirectory() -> String {
+            //     // temporaryDirectory cachesDirectory documentDirectory
+            //     return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].path
+            // }
+            // filePath = getSandboxDirectory();
+
+            // #ifdef APP-IOS
+            filePath = filePath + '/test.mp3';
+            zimAudio.startRecord({ filePath, maxDuration: 1 * 60 * 1000 } as ZIMAudioRecordConfig);
+            // #endif
+
+        }
+    }
+}     
+// </script>     
 ```
