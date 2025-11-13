@@ -1,0 +1,221 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: './shared-components.yaml#/servers'
+
+paths:
+  /:
+    post:
+      tags:
+        - cloud-recording
+        - POST
+      summary: DescribeTasks
+      description: |
+        After starting recording, developers can call this API to query the list of recording tasks that are in progress or have ended.
+
+        <Note title="Note">Call frequency limit: 10 times/second</Note>
+      operationId: describe-tasks
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > API prototype parameter
+            >
+            > https://cloudrecord-api.zego.im?Action=DescribeTasks
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [DescribeTasks]
+          style: form
+          explode: true
+        - $ref: './shared-components.yaml#/components/parameters/AppId'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: './shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: './shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRecordTaskListRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryRecordTaskListResponse'
+
+components:
+  schemas:
+    QueryRecordTaskListRequest:
+      type: object
+      required: [Status, StartTime, EndTime]
+      properties:
+        Status:
+          type: integer
+          description: |
+            Recording task status.
+
+            - 2: Indicates tasks that are currently recording.
+            - 3: Indicates tasks that have ended recording.
+          enum: [2, 3]
+          example: 2
+        RoomId:
+          type: string
+          description: Used to specify the room number for querying recording tasks. When not filled in, queries recording tasks for all rooms under the AppId.
+          example: "1230"
+        PageOffset:
+          type: integer
+          description: Page number for paginated queries, starting from 1. When not filled in or filled in as 0, defaults to 1.
+          default: 1
+          minimum: 1
+          example: 1
+        PageSize:
+          type: integer
+          description: Number of records per page for paginated queries. This value must be less than or equal to 50 and greater than 0. When not filled in, defaults to 50.
+          default: 50
+          minimum: 1
+          maximum: 50
+          example: 50
+        StartTime:
+          type: integer
+          format: int64
+          description: "Query start time, Unix timestamp in milliseconds. Start time cannot be earlier than 3 days before the current time."
+          example: 1628474401000
+        EndTime:
+          type: integer
+          format: int64
+          description: "Query end time, Unix timestamp in milliseconds. EndTime must be greater than StartTime, and the query time span cannot exceed 3 days. The API only returns records where the recording start time is within the query time range."
+          example: 1628475402000
+      example:
+        Status: 2
+        RoomId: "1230"
+        StartTime: 1628474401000
+        EndTime: 1628475402000
+        PageOffset: 1
+        PageSize: 50
+
+    QueryRecordTaskListResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int64
+          description: |
+            Error code.
+          example: 0
+        Message:
+          type: string
+          description: Error description.
+          example: "succeed"
+        RequestId:
+          type: string
+          description: Request ID.
+          example: "abcd123"
+        Data:
+          $ref: '#/components/schemas/RecordTaskListData'
+          description: Response object.
+      example:
+        Code: 0
+        Message: "succeed"
+        RequestId: "abcd123"
+        Data:
+          PageOffset: 1
+          PageSize: 50
+          TotalCount: 3
+          TaskidList:
+            - RecordBeginTimestamp: 1628565227899
+              TaskId: "YRHu6-E4IyvEAAAD"
+              RoomId: "1000"
+              Status: 2
+            - RecordBeginTimestamp: 1628565226303
+              TaskId: "YRHu6uE4IyvEAAAC"
+              RoomId: "1000"
+              Status: 2
+            - RecordBeginTimestamp: 1628565222498
+              TaskId: "YRHu5uE4IyvEAAAB"
+              RoomId: "1000"
+              Status: 2
+
+    RecordTaskListData:
+      type: object
+      properties:
+        PageOffset:
+          type: integer
+          description: Page number for paginated queries.
+          example: 1
+        PageSize:
+          type: integer
+          description: Number of records per page for paginated queries.
+          example: 50
+        TotalCount:
+          type: integer
+          description: Total number of query results.
+          example: 3
+        TaskidList:
+          type: array
+          description: |
+            Recording task list.
+          items:
+            $ref: '#/components/schemas/RecordTaskItem'
+      example:
+        PageOffset: 1
+        PageSize: 50
+        TotalCount: 3
+        TaskidList:
+          - RecordBeginTimestamp: 1628565227899
+            TaskId: "YRHu6-E4IyvEAAAD"
+            RoomId: "1000"
+            Status: 2
+          - RecordBeginTimestamp: 1628565226303
+            TaskId: "YRHu6uE4IyvEAAAC"
+            RoomId: "1000"
+            Status: 2
+          - RecordBeginTimestamp: 1628565222498
+            TaskId: "YRHu5uE4IyvEAAAB"
+            RoomId: "1000"
+            Status: 2
+
+    RecordTaskItem:
+      type: object
+      properties:
+        RecordBeginTimestamp:
+          type: integer
+          format: int64
+          description: "Recording start timestamp in milliseconds."
+          example: 1628565227899
+        TaskId:
+          type: string
+          description: Recording task ID.
+          example: "YRHu6-E4IyvEAAAD"
+        RoomId:
+          type: string
+          description: Target room ID for recording.
+          example: "1000"
+        Status:
+          type: integer
+          description: |
+            Recording status.
+
+            - 1: Recording task initialization
+            - 2: Recording task in progress
+            - 3: Recording task ended
+            - 4: Recording task ended abnormally
+            - 5: Recording task paused
+          enum: [1, 2, 3, 4, 5]
+          example: 2
+      example:
+        RecordBeginTimestamp: 1628565227899
+        TaskId: "YRHu6-E4IyvEAAAD"
+        RoomId: "1000"
+        Status: 2
+
