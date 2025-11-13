@@ -1,0 +1,224 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: './shared-components.yaml#/servers'
+
+paths:
+  /:
+    post:
+      tags:
+        - upload
+      summary: DescribeUploadTasks
+      description: |
+        This API can be used to obtain details of one or more upload tasks.
+
+        <Note title="Note">
+        - If none of the following parameters are passed, it means querying detailed information of all upload tasks, and the return result contains detailed information of up to 50 tasks.
+        - If only `UploadTaskId` is passed, it means querying the detailed information of the corresponding upload task.
+        - When both `UploadTaskId` and `Status` are passed, if `Status` does not match the actual status of the upload task, the return result will be empty.
+        </Note>
+
+        <Note title="Note">Call frequency limit: 20 times/second</Note>
+      operationId: describe-upload-tasks
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > API prototype parameter
+            >
+            > https://cloud-player-api.zego.im?Action=DescribeUploadTasks
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [DescribeUploadTasks]
+          style: form
+          explode: true
+        - $ref: './shared-components.yaml#/components/parameters/AppId'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: './shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: './shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DescribeUploadTasksRequest'
+            example:
+              PageSize: 10
+              PageToken: ""
+              Status: 1
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DescribeUploadTasksResponse'
+
+components:
+  schemas:
+    DescribeUploadTasksRequest:
+      type: object
+      properties:
+        UploadTaskId:
+          type: string
+          description: |
+            Upload task ID to be queried. When this parameter is passed, `PageSize` is invalid.
+          example: "upload_task_1"
+        Status:
+          type: number
+          description: |
+            Query upload tasks in a specific status. Supports the following values:
+            - 0: Default value, meaningless.
+            - 1: Waiting.
+            - 2: Uploading.
+            - 3: Waiting for retry.
+            - 4: Upload successful.
+            - 5: Upload failed.
+            - 6: Cancelled.
+            - 7: Expired.
+          enum: [0, 1, 2, 3, 4, 5, 6, 7]
+        PageSize:
+          type: number
+          description: Upper limit of data returned by the current request. Value range is (0, 50], default is 50 when empty.
+        PageToken:
+          type: string
+          description: |
+            Pagination pull flag.
+
+            No need to set this parameter for the first query. When `NextPageToken` in the return parameter is not empty, it indicates that subsequent query results have not been fully obtained. When calling this API again to continue the query, fill in the value of that `NextPageToken` for this parameter.
+
+
+    DescribeUploadTasksResponse:
+      type: object
+      properties:
+        Code:
+          type: number
+          description: |
+            Return code.
+
+            The following only lists the return codes related to the API business logic. For the complete return codes, please refer to [Global Return Codes](/cloud-player-server/return-codes).
+            <table>
+            <thead>
+            <tr><th>Return Code</th><th>Description</th><th>Handling Suggestion</th></tr>
+            </thead>
+            <tbody>
+            <tr><td>0</td><td>Success.</td><td>-</td></tr>
+            <tr><td>100000004</td><td>Signature expired.</td><td>Please regenerate the signature.</td></tr>
+            <tr><td>100000005</td><td>Signature error.</td><td>Please confirm whether the parameters for generating the signature are correct.</td></tr>
+            <tr><td>350006001</td><td>API request frequency exceeds the limit.</td><td>Please confirm the QPS limit of the corresponding API and reduce the request frequency.</td></tr>
+            <tr><td>350006002</td><td>Gateway verification failed.</td><td>Please contact ZEGOCLOUD Technical Support for assistance.</td></tr>
+            <tr><td>350006003</td><td>Invalid input parameter.</td><td>Please adjust the value of the corresponding parameter according to the Message prompt.</td></tr>
+            <tr><td>350006006</td><td>Service not activated.</td><td>Please contact ZEGOCLOUD Technical Support to activate the service permission.</td></tr>
+            <tr><td>350010000</td><td>System error.</td><td>Please contact ZEGOCLOUD Technical Support for assistance.</td></tr>
+            </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: Operation result description.
+          example: "succeed"
+        RequestId:
+          type: string
+          description: Request ID.
+          example: "abcd123"
+        Data:
+          type: object
+          description: Returned specific information.
+          properties:
+            TotalSize:
+              type: number
+              description: Total number of query results.
+              example: 1
+            NextPageToken:
+              type: string
+              description: |
+                Pagination pull flag.
+                - When not empty, it indicates that there are still unreturned result information, and this value needs to be set to the `PageToken` in the request parameters to call this API again to obtain the remaining result information.
+                - When empty, it indicates that all result information has been returned.
+
+                > **Note**
+                >
+                > Except for the above description, this field has no association with the list information. Please do not base any other logic on this.
+              example: ""
+            UploadTasks:
+              type: array
+              description: Query result details.
+              items:
+                type: object
+                properties:
+                  UploadTaskId:
+                    type: string
+                    description: Upload task ID.
+                    example: "upload_task_1"
+                  StreamUrl:
+                    type: string
+                    description: Address of the media resource.
+                    example: "https://xxx.com/video/test.mp4"
+                  Title:
+                    type: string
+                    description: File title.
+                    example: "your-title.mp4"
+                  Status:
+                    type: number
+                    description: |
+                      Upload status, values are as follows:
+                      - 1: Waiting
+                      - 2: Uploading
+                      - 3: Waiting for retry
+                      - 4: Upload successful
+                      - 5: Upload failed
+                      - 6: Cancelled
+                      - 7: Expired
+                    enum: [1, 2, 3, 4, 5, 6, 7]
+                    example: 4
+                  RetryCount:
+                    type: number
+                    description: Number of upload retries.
+                    example: 0
+                  ExpiresAt:
+                    type: number
+                    description: File expiration Unix timestamp, unit is seconds.
+                    example: 1742989076
+                  CreateTime:
+                    type: number
+                    description: Unix timestamp when the upload task was successfully created, unit is seconds.
+                    example: 1735213076
+                  UploadStreamUrl:
+                    type: string
+                    description: Public network URL of the file after successful upload.
+                    example: "https://xxx.com/video/your-title.mp4"
+                  InternalUploadStreamUrl:
+                    type: string
+                    description: |
+                      ZEGOCLOUD internal network URL of the file after successful upload.
+                      > **Note**
+                      >
+                      > It is recommended to use it as `StreamUrl` when [Create a cloud player](/cloud-player-server/create-player).
+                    example: "https://xxx.com/video/your-title.mp4"
+      example:
+        Code: 0
+        Message: "succeed"
+        RequestId: "abcd123"
+        Data:
+          TotalSize: 1
+          NextPageToken: ""
+          UploadTasks:
+            - UploadTaskId: "upload_task_1"
+              StreamUrl: "https://xxx.com/video/test.mp4"
+              Title: "your-title.mp4"
+              Status: 4
+              RetryCount: 0
+              ExpiresAt: 1742989076
+              CreateTime: 1735213076
+              UploadStreamUrl: "https://xxx.com/video/your-title.mp4"
+              InternalUploadStreamUrl: "https://xxx.com/video/your-title.mp4"
+
