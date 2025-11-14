@@ -1,0 +1,245 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: './shared-components.yaml#/servers'
+
+paths:
+  /:
+    post:
+      tags:
+        - player
+      summary: DescribePlayers
+      description: |
+        调用本接口查询 AppID 下所有的云端播放器任务列表，包含已创建、正在运行中、已销毁等所有状态；或查询指定云端播放器的任务信息。
+
+        <Note title="说明">调用频率限制：20 次/秒</Note>
+      operationId: describe-players
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://cloud-player-api.zego.im?Action=DescribePlayers
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [DescribePlayers]
+          style: form
+          explode: true
+        - $ref: './shared-components.yaml#/components/parameters/AppId'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: './shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: './shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DescribePlayersRequest'
+      responses:
+        '200':
+            description: OK
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/DescribePlayersResponse'
+
+components:
+  schemas:
+    DescribePlayersRequest:
+      type: object
+      properties:
+        RoomId:
+          type: string
+          maxLength: 128
+          description: |
+            查询指定房间 ID，长度在 128 字节以内。
+            <b>如果填写了 RoomId，请确保 RoomId 是已存在的，否则查询结果可能为空。</b>
+
+            > **注意**
+            >
+            > - RoomId 和 PlayerId 都不填写时，调用本接口会返回 AppId 下所有的云端播放器任务列表。
+            > - RoomId 填写、PlayerId 不填写时，调用本接口会返回 AppId 下该房间 RoomId 内的所有的云端播放器任务列表。
+            > - PlayerId 填写（RoomId 填或不填均可）时，调用本接口会返回该 PlayerId 对应的云端播放器任务信息。
+          example: "room_12"
+        PlayerId:
+          type: string
+          description: |
+            云端播放器唯一标识 ID，通过 [CreatePlayer](/cloud-player-server/create-player) 返回。
+            <b>如果填写了 PlayerId，请确保 PlayerId 是已存在的，否则查询结果可能为空。</b>
+
+            > **注意**
+            >
+            > - RoomId 和 PlayerId 都不填写时，调用本接口会返回 AppId 下所有的云端播放器任务列表。
+            > - RoomId 填写、PlayerId 不填写时，调用本接口会返回 AppId 下该房间 RoomId 内的所有的云端播放器任务列表。
+            > - PlayerId 填写（RoomId 填或不填均可）时，调用本接口会返回该 PlayerId 对应的云端播放器任务信息。
+          example: ""
+        PageSize:
+          type: number
+          description: |
+            分页大小，取值范围 (0, 50]，默认为 50 个/页，指调用本接口一次最多返回的任务列表数量。
+            <b>超过 PageSize 取值的任务列表，需要根据前一次调用本接口时、返回结果中的 NextPageToken（查询任务列表分页起始位）取值，再次调用本接口进行查询。</b>
+
+            例如，当前有 123 个云端播放器任务，PageSize 取值为 50，调用本接口查询时：
+            - 第一次调用本接口，入参 PageToken 传空，查询第 1 ～ 50 的播放器任务；返回结果中 NextPageToken 值假设为  "pagetoken1"。
+            - 第二次调用本接口，入参 PageToken 取值为 "pagetoken1"，查询第 51 ～ 100 的播放器任务；返回结果中 NextPageToken 值假设为 "pagetoken2"。
+            - 第三次调用本接口，入参 PageToken 取值为 "pagetoken2"，查询第 101 ～ 123 的播放器任务；查询完毕，返回结果中 NextPageToken 为空。
+          example: 50
+        PageToken:
+          type: string
+          description: |
+            查询任务列表分页起始位，<b>该参数不填写时，默认返回查询到的第一页任务列表。</b>
+
+            每次调用本接口发起请求时，响应结果中都会返回 NextPageToken，开发者需要判断是否查询到最后一页。
+          example: "XXXXXXXXX"
+      example:
+        RoomId: "room_12"
+        PlayerId: ""
+        PageSize: 50
+        PageToken: "XXXXXXXXX"
+
+    DescribePlayersResponse:
+      type: object
+      properties:
+        Code:
+          type: number
+          description: |
+            错误码。
+
+            以下仅列出了接口业务逻辑相关的返回码，完整返回码请参考 [全局返回码](/cloud-player-server/return-codes)。
+            <table>
+            <thead>
+            <tr><th>返回码</th><th>说明</th><th>处理建议</th></tr>
+            </thead>
+            <tbody>
+            <tr><td>0</td><td>成功。</td><td>-</td></tr>
+            <tr><td>100000004</td><td>签名过期。</td><td>请重新生成签名。</td></tr>
+            <tr><td>100000005</td><td>签名错误。</td><td>请确认生成签名的参数是否正确。</td></tr>
+            <tr><td>350006001</td><td>接口请求频率超过上限。</td><td>请确认对应接口的 QPS 限制，降低请求频率。</td></tr>
+            <tr><td>350006002</td><td>网关校验失败。</td><td>请联系 ZEGO 技术支持处理。</td></tr>
+            <tr><td>350006003</td><td>无效的输入参数。</td><td>请根据 Message 提示，调整对应参数的取值。</td></tr>
+            <tr><td>350006006</td><td>服务未开通。</td><td>请联系 ZEGO 技术支持，开通服务权限。</td></tr>
+            <tr><td>350010000</td><td>系统错误。</td><td>请联系 ZEGO 技术支持处理。</td></tr>
+            </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: 错误描述。
+          example: "succeed"
+        RequestId:
+          type: string
+          description: 请求 ID。
+          example: "abcd123"
+        Data:
+          type: object
+          description: 返回的具体信息。
+          properties:
+            TotalSize:
+              type: number
+              description: 查询到的云端播放器任务总数。
+              example: 1
+            NextPageToken:
+              type: string
+              description: 本次查询的下一页页码。NextPageToken 为空时，表示已查询到最后一页。
+              example: ""
+            Players:
+              type: array
+              description: 查询到的云端播放器任务信息。
+              items:
+                type: object
+                properties:
+                  PlayerId:
+                    type: string
+                    description: 云端播放器唯一标识 ID。
+                    example: "player_1"
+                  RoomId:
+                    type: string
+                    description: 房间 ID。
+                    example: "room_12"
+                  StreamId:
+                    type: string
+                    description: 推流到指定房间的流 ID。
+                    example: "stream"
+                  CreateTime:
+                    type: number
+                    description: 播放器创建时间，Unix 时间戳，单位为秒。
+                    example: 1681221508
+                  PlayTime:
+                    type: number
+                    description: 开始播放媒体资源的时间，Unix 时间戳，单位为秒。
+                    example: 1681221508
+                  PlayerName:
+                    type: string
+                    description: 云端播放器的名称。
+                    example: "player_1"
+                  StreamUrl:
+                    type: string
+                    description: 播放的媒体资源的地址。
+                    example: "https://xxx.com/video/test.mp4"
+                  Status:
+                    type: number
+                    description: |
+                      云端播放器的状态。
+                      - 1：创建中。
+                      - 2：连接媒体资源中。
+                      - 3：等待播放。
+                      - 4：播放中。
+                      - 5：暂停中。
+                      - 6：连接媒体资源失败。
+                      - 7：播放结束。
+                      - 8：已销毁。
+                    enum: [1, 2, 3, 4, 5, 6, 7, 8]
+                    example: 4
+                  DestroyReason:
+                    type: number
+                    description: |
+                      云端播放器销毁的原因。
+                      - 1：调用了 [DeletePlayer](/cloud-player-server/delete-player) 接口主动销毁。
+                      - 2：处于空闲状态的时长超过了 MaxIdleTime。
+                      - 3：媒体资源播放已结束。
+                      - 4：推流失败。
+                      - 5：进入房间失败或被踢出房间。
+                    enum: [1, 2, 3, 4, 5]
+                    example: 1
+                  StreamUrlList:
+                    type: array
+                    description: 播放的媒体资源列表。
+                    items:
+                      type: string
+                    example:
+                      - "https://xxx.com/video/test1.mp4"
+                      - "https://xxx.com/video/test2.mp4"
+                  PlayIndex:
+                    type: number
+                    description: 当前播放的媒体资源下标。播放器销毁后返回 0。
+                    example: 0
+      example:
+        Code: 0
+        Message: "succeed"
+        RequestId: "abcd123"
+        Data:
+          TotalSize: 1
+          NextPageToken: ""
+          Players:
+            - PlayerId: "player_1"
+              RoomId: "room_12"
+              StreamId: "stream"
+              CreateTime: 1681221508
+              PlayTime: 1681221508
+              PlayerName: "player_1"
+              StreamUrl: "https://xxx.com/video/test.mp4"
+              Status: 4
+              DestroyReason: 1
+              StreamUrlList: []
+              PlayIndex: 0
+
