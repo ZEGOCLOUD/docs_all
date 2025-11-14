@@ -1,0 +1,161 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+tags:
+  - room
+
+paths:
+  /:
+    get:
+      tags: [room]
+      summary: 获取房间成员信息
+      description: |
+        根据房间 ID 获取房间成员的信息，包括房间用户数量、用户 ID 及名称。
+
+        <Note title="说明">调用频率限制：20 次/秒</Note>
+      operationId: obtain-information-about-users-in-a-room
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://zim-api.zego.im/?Action=QueryRoomUserList
+          required: true
+          schema:
+            type: string
+            enum: [QueryRoomUserList]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRoomUserListRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryRoomUserListResponse'
+              example:
+                Code: 0
+                Message: success
+                RequestId: "343649807833778782"
+                Count: 2
+                NextFlag: "0"
+                UserList:
+                  - UserId: "aaa"
+                    UserName: "UserA"
+                  - UserId: "bbb"
+                    UserName: "UserB"
+
+components:
+  schemas:
+    QueryRoomUserListRequest:
+      type: object
+      required: [RoomId]
+      properties:
+        RoomId:
+          type: string
+          description: 房间ID，长度上限为 32 字节，仅支持数字，英文字符和 '!'，'#'，'$'，'%'，'&'，'('，')'，'+'，'-'，':'，';'，'<'，'='，'.'，'>'，'?'，'@'，'['，']'，'^'，'_'，'{'，'}'，'|'，'~'。
+          maxLength: 32
+          example: "room123"
+        Mode:
+          type: number
+          enum: [0, 1]
+          default: 0
+          description: |
+            按用户登录房间时间排序：
+            - 0: 按时间顺序（默认值）。
+            - 1: 按时间倒序。
+        NextFlag:
+          type: string
+          description: |
+            分页拉取标志，第一次填空，之后填上一次返回的 NextFlag 值。当返回的 NextFlag 为 0 时，代表房间成员列表获取完毕。
+
+            例如，房间内有 250 个成员，调用本接口查询房间成员列表时：
+            - 第一次调用本接口，Limit 填 100，NextFlag 传空，查询第 1 ～ 100 名用户；返回结果中的 NextFlag 值为 1。
+            - 第二次调用本接口，Limit 填 100，NextFlag 填 1，查询第 101 ～ 200 名用户；返回结果中 NextFlag 值为 2。
+            - 第三次调用本接口，Limit 填 100，NextFlag 填 2，查询第 201 ～ 250 名用户；查询完毕，返回结果中的 NextFlag 为 0。
+        Limit:
+          type: number
+          minimum: 0
+          maximum: 500
+          description: |
+            单次查询用户的数量，取值范围为 [0, 500]，即调用本接口一次最多返回 500 个成员。
+
+            当房间内成员超过 Limit 时，需调用多次本接口<b>且 Limit 需保持一致</b>。
+
+            如果传空或大于 500，则默认取值为 500。
+
+            如需提高查询结果上限，请联系 ZEGO 技术支持进行配置。
+    QueryRoomUserListResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          description: |
+            返回码。
+
+            以下仅列出了接口业务逻辑相关的返回码，完整返回码请参考 [全局返回码](/zim-server/return-codes)。
+            <table>
+            <thead><tr><th>返回码</th><th>说明</th><th>处理建议</th></tr></thead>
+            <tbody>
+            <tr><td>660000002</td><td>参数错误。</td><td>请检查请求参数。</td></tr>
+            <tr><td>660300001</td><td>房间不存在。</td><td>请检查 RoomId 是否正确或房间是否已被销毁。</td></tr>
+            <tr><td>660300006</td><td>超出调用频率限制。</td><td>调用频率为 20 次/秒，请稍后重试。</td></tr>
+            <tr><td>660300007</td><td>获取房间失败。</td><td>请联系 ZEGO 技术支持。</td></tr>
+            <tr><td>660300008</td><td>获取房间用户列表失败；房间人数为空，一般是处于房间延迟销毁期间。</td><td>无需操作。</td></tr>
+            </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: 请求结果的说明信息。
+          example: "success"
+        RequestId:
+          type: string
+          description: 请求 ID。
+          example: "343649807833778782"
+        Count:
+          type: number
+          description: 当前房间用户数。
+          example: 2
+        NextFlag:
+          type: string
+          description: |
+            分页拉取标志，非空表示还有用户的信息未返回，需要将该字段设置到请求参数 NextFlag 中拉取更多用户的信息；为空表示已经返回所有用户的信息。
+            > **说明**
+            >
+            > 除上述说明之外，此字段与列表信息无任何关联，请勿基于此做任何其他逻辑。
+          example: "0"
+        UserList:
+          type: array
+          description: 成员列表。
+          items:
+            type: object
+            properties:
+              UserId:
+                type: string
+                description: 用户 ID。
+                example: "aaa"
+              UserName:
+                type: string
+                description: 用户名称。
+                example: "UserA"

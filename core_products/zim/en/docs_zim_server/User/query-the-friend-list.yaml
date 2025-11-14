@@ -1,0 +1,213 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+tags:
+  - user
+
+paths:
+  /:
+    get:
+      tags: [user]
+      summary: 查询好友列表
+      description: |
+        根据用户 ID 分页拉取其好友列表，获取备注、好友关系建立时间等信息。
+
+        <Note title="说明">调用频率限制：20 次/秒。</Note>
+      operationId: query-the-friend-list
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://zim-api.zego.im/?Action=QueryFriendList
+          required: true
+          schema:
+            type: string
+            enum: [QueryFriendList]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryFriendListRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryFriendListResponse'
+              example:
+                Code: 0
+                Message: success
+                RequestId: "343649807833778782"
+                TotalCount: 500
+                Next: 1
+                FriendInfos:
+                  - UserId: "UserA"
+                    UserName: "UserNameA"
+                    Avatar: "Avatar1"
+                    Wording: "Wording1"
+                    FriendAlias: "FriendAlias1"
+                    CreateTime: 1698310534000
+                    Attributes:
+                      - Key: "k1"
+                        Value: "Value"
+                      - Key: "k0"
+                        Value: "Value1"
+                  - UserId: "UserB"
+                    UserName: "UserNameB"
+                    Avatar: "Avatar2"
+                    Wording: "Wording1"
+                    FriendAlias: "FriendAlias2"
+                    CreateTime: 1698310534000
+                    Attributes:
+                      - Key: "k3"
+                        Value: "Value"
+                      - Key: "k4"
+                        Value: "Value1"
+
+components:
+  schemas:
+    QueryFriendListRequest:
+      type: object
+      required: [FromUserId, Limit, Next]
+      properties:
+        FromUserId:
+          type: string
+          description: 查询此 UserID（已在客户端调用 login 方法登录 ZIM 服务，或已调用 [服务端 API](/zim-server/user/batch-register-users) 完成注册）的好友列表。
+          maxLength: 32
+          example: "zego"
+        Limit:
+          type: number
+          description: 单次拉取多少名好友的信息。取值范围为 [0, 100]。如果不填或数值为 0、大于 100，取值为 100。
+          minimum: 0
+          maximum: 100
+          example: 100
+        Next:
+          type: number
+          description: |
+            分页拉取标志，第一次填 0 ，之后填上一次返回的 Next 值。当返回的 Next 为 0 时，代表好友列表获取完毕。
+
+            例如，FromUserId 有 250 个好友，调用本接口查询时：
+
+            - 第一次调用本接口，Limit 填 100，Next 传空，查询第 1 ～ 100 名好友；返回结果中的 Next 值为 num1。
+            - 第二次调用本接口，Limit 填 100，Next 填 num1，查询第 101 ～ 200 名好友；返回结果中 Next 值为 num2。
+            - 第三次调用本接口，Limit 填 100，Next 填 num2，查询第 201 ～ 250 名好友；查询完毕，返回结果中的 Next 为 0。
+          example: 2
+    FriendAttribute:
+      type: object
+      properties:
+        Key:
+          type: string
+          description: 好友属性的键。
+          example: "k1"
+        Value:
+          type: string
+          description: 好友属性的值。
+          example: "Value"
+    FriendInfoItem:
+      type: object
+      properties:
+        UserId:
+          type: string
+          description: 好友用户 ID。
+          example: "UserA"
+        UserName:
+          type: string
+          description: 	用户名称。
+          example: "UserNameA"
+        Avatar:
+          type: string
+          description: 用户头像地址。
+          example: "Avatar1"
+        Wording:
+          type: string
+          description: 建立好友关系时的附言。
+          example: "Wording1"
+        FriendAlias:
+          type: string
+          description: FromUserId 对此好友的备注。
+          example: "FriendAlias1"
+        CreateTime:
+          type: number
+          description: 好友关系建立时间，单位为 ms。
+          example: 1698310534000
+        Attributes:
+          type: array
+          description: 好友属性。
+          items:
+            $ref: '#/components/schemas/FriendAttribute'
+    QueryFriendListResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          description: |
+            返回码。
+
+            <table>
+            <tbody><tr>
+            <th>返回码</th>
+            <th>说明</th>
+            <th>处理建议</th>
+            </tr>
+            <tr>
+            <td>660000001</td>
+            <td>业务类通用错误。</td>
+            <td>请重试，或联系 ZEGO 技术支持。</td>
+            </tr>
+            <tr>
+            <td>660000002</td>
+            <td>参数错误。</td>
+            <td>请检查请求参数。</td>
+            </tr>
+            <tr>
+            <td>660300005</td>
+            <td>调用接口的频率超出了 AppID 级别限制。</td>
+            <td>请稍后再试。</td>
+            </tr>
+            </tbody></table>
+          example: 0
+        Message:
+          type: string
+          description: 请求结果的说明信息。
+          example: "success"
+        RequestId:
+          type: string
+          description: 请求 ID。
+          example: "343649807833778782"
+        TotalCount:
+          type: integer
+          format: int32
+          description: 当前好友总数。
+          example: 500
+        Next:
+          type: number
+          description: |
+            分页拉取标志，非 0 表示还有好友信息未返回；为 0 表示已经返回所有好友信息。
+            > **说明**
+            >
+            > 除上述说明之外，此字段与列表信息无任何关联，请勿基于此做任何其他逻辑。
+          example: 1
+        FriendInfos:
+          type: array
+          description: 好友数据列表。
+          items:
+            $ref: '#/components/schemas/FriendInfoItem'

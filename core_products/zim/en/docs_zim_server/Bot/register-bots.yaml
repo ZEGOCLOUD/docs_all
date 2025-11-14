@@ -1,0 +1,161 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+paths:
+  /:
+    post:
+      tags:
+        - bot
+      summary: 注册机器人
+      description: |
+        调用此接口，您可以注册多个机器人。
+
+        <Note title="说明">调用频率限制：20 次/秒</Note>
+      operationId: register-bots
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://zim-api.zego.im?Action=RobotRegister
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [RobotRegister]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterBotsRequest'
+      responses:
+        '200':
+            description: OK
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/RegisterBotsResponse'
+
+components:
+  schemas:
+    RegisterBotsRequest:
+      type: object
+      required: [UserInfo]
+      properties:
+        UserInfo:
+          type: array
+          description: 机器人用户信息列表。单次最多注册 20 个机器人。
+          maxItems: 20
+          items:
+            type: object
+            required: [UserId]
+            properties:
+              UserId:
+                type: string
+                description: 机器人用户 ID。长度不超过 32 字节，必须以 @RBT#开头。
+                maxLength: 32
+                example: "@RBT#R1"
+              UserName:
+                type: string
+                description: 机器人名称。长度不超过 256 字节。
+                maxLength: 256
+                example: "userNameA"
+              UserAvatar:
+                type: string
+                description: 机器人头像地址。长度不超过 500 字节。
+                maxLength: 500
+                example: "https"
+          example:
+            - UserId: "@RBT#R1"
+              UserName: "userNameA"
+              UserAvatar: "https"
+            - UserId: "@RBT#R2"
+              UserName: "userNameB"
+              UserAvatar: "https"
+
+    RegisterBotsResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          description: |
+            返回码。
+
+            以下仅列出了接口业务逻辑相关的 Code 和 SubCode ，完整返回码请参考 [全局返回码](/zim-server/return-codes)。
+            > **说明**
+            >
+            > 当您发起请求同时注册多个机器人时：
+            > <ul><li>如果有 1 个或以上的机器人用户 ID 注册成功，Code 都会返回 0。此时请参考 ErrorList 中的具体信息，确认操作结果。</li>
+            > <li>如果全部机器人用户 ID 注册失败，Code 会返回相关返回码，具体请参考 <a href="/zim-server/return-codes" target="_blank">全局返回码</a>。</li></ul>
+            <table>
+            <thead>
+            <tr><th>Code / SubCode</th><th>描述</th><th>可能原因</th><th>处理建议</th></tr>
+            </thead>
+            <tbody>
+            <tr><td>660000001</td><td>业务类通用错误。</td><td>服务端出错。</td><td>请重试，或联系 ZEGO 技术支持。</td></tr>
+            <tr><td>660000002</td><td>输入参数错误。</td><td>输入的参数缺失或不合法。</td><td>请检查输入的参数。</td></tr>
+            <tr><td>660300005</td><td>调用接口的频率超出了 AppID 级别限制。</td><td></td><td>请稍后再试，或参考相关文档了解调用频率。</td></tr>
+            <tr><td>660000012</td><td>UserID 长度超过限制。</td><td>UserID 最大长度为 32 字节。</td><td>请确认 UserID 的长度。</td></tr>
+            <tr><td>660700001</td><td>请求过于频繁。</td><td>发起请求频率超过 20 次/秒。</td><td>请稍后再试。</td></tr>
+            <tr><td>660700002</td><td>机器人已存在。</td><td>发送请求的 UserID 已存在。</td><td>请避免重复注册相同的 UserID。</td></tr>
+            <tr><td>660700006</td><td>UserName 长度超过限制。</td><td>UserName 长度最大为 256 字节。</td><td>请确认 UserName 的长度。</td></tr>
+            <tr><td>660700007</td><td>UserAvatar 地址长度超过限制。</td><td>UserAvatar 地址长度最大为 500 字节。</td><td>请确认 UserAvatar 的长度。</td></tr>
+            </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: 操作结果描述。
+          example: success
+        RequestId:
+          type: string
+          description: 请求 ID。
+          example: '343649807833778782'
+        ErrorList:
+          type: array
+          description: |
+            失败信息列表。
+            - Code 为 0：
+              - ErrorList 为空，全部机器人用户 ID 注册成功。
+              - ErrorList 不为空，表示部分机器人用户 ID 注册失败，请参考 SubCode、SubMessage 处理。
+            - Code 不为 0：
+              - ErrorList 为空，表示参数错误、接口频率限制、系统错误。
+              - ErrorList 不为空，表示所有机器人用户 ID 都注册失败，请参考 SubCode、SubMessage 处理。
+          items:
+            type: object
+            properties:
+              UserId:
+                type: string
+                description: 注册失败的机器人用户 ID。
+                example: "@RBT#R2"
+              SubCode:
+                type: number
+                description: |
+                  机器人注册失败的具体返回码，完整返回码请参考 Code 说明或者 [全局返回码](/zim-server/return-codes)。
+                example: 660700002
+              SubMessage:
+                type: string
+                description: 机器人注册失败的原因说明。
+                example: "机器人已存在"
+      example:
+        Code: 0
+        Message: "success"
+        RequestId: "343649807833778782"
+        ErrorList: []

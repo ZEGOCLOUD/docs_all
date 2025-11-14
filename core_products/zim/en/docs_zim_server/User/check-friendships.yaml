@@ -1,0 +1,240 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+servers:
+  $ref: '../shared-components.yaml#/servers'
+tags:
+  - user
+paths:
+  /:
+    post:
+      tags: [user]
+      summary: 检查好友关系
+      description: |
+        调用此接口，可为一名用户批量检查其与至多 20 名其他用户的好友关系。如需上调（最多可为 50），请联系 ZEGO 技术支持。
+
+        ZEGO 支持单边或双边检查好友关系，以检查用户 A 与目标用户 B 的好友关系为例：
+        - 单边检查：仅检查用户 A 的好友列表是否有用户 B。
+        - 双边检查：同时检查用户 A 和用户 B 的好友列表是否有对方。
+
+        检查好友关系的结果可能有：
+
+        <table>
+        <tbody><tr>
+        <th rowspan="2">检查类型</th>
+        <th rowspan="2">Relation</th>
+        <th colspan="2">说明</th>
+        </tr>
+        <tr>
+        <th>A 的好友列表有 B</th>
+        <th>B 的好友列表有 A</th>
+        </tr>
+        <tr>
+        <td rowspan="2">单向</td>
+        <td>1</td>
+        <td>✖</td>
+        <td>无法确认</td>
+        </tr>
+        <tr>
+        <td>2</td>
+        <td>✔️</td>
+        <td>无法确认</td>
+        </tr>
+        <tr>
+        <td rowspan="4">双向</td>
+        <td>3</td>
+        <td>✖</td>
+        <td>✖</td>
+        </tr>
+        <tr>
+        <td>4</td>
+        <td>✔️</td>
+        <td>✖</td>
+        </tr>
+        <tr>
+        <td>5</td>
+        <td>✖</td>
+        <td>✔️</td>
+        </tr>
+        <tr>
+        <td>6</td>
+        <td>✔️</td>
+        <td>✔️</td>
+        </tr>
+        </tbody></table>
+        
+        <Note title="说明">
+
+        参数 `FromUserId` 和 `UserId` 对应的用户已在客户端调用 `login` 方法登录 ZIM 服务，或已调用 [服务端 API](/zim-server/user/batch-register-users) 完成注册。
+        </Note>
+        <Note title="说明">调用频率限制：20 次/秒。</Note>
+      operationId: check-friendships
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://zim-api.zego.im/?Action=CheckFriendsRelation
+          required: true
+          schema:
+            type: string
+            enum: [CheckFriendsRelation]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckFriendsRelationRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckFriendsRelationResponse'
+              example:
+                Code: 0
+                Message: success
+                RequestId: "343649807833778782"
+                Successes:
+                  - UserId: "user_id1"
+                    Relation: 4
+                  - UserId: "user_id2"
+                    Relation: 4
+                Fails:
+                  - UserId: "user_id3"
+                    SubCode: 660000001
+                    Relation: 1
+                  - UserId: "user_id4"
+                    SubCode: 660000001
+                    Relation: 2
+components:
+  schemas:
+    CheckFriendsRelationRequest:
+      type: object
+      required: [FromUserId, UserIds, CheckType]
+      properties:
+        FromUserId:
+          type: string
+          description: 为此 UserId 查询好友关系。
+          maxLength: 32
+          example: "zego_user"
+        UserIds:
+          type: array
+          description: 待检查好友关系的目标用户列表。默认数量上限为 20。
+          maxItems: 20
+          items:
+            type: string
+            maxLength: 32
+            example: "user_id1"
+          example: ["user_id1", "user_id2", "user_id3", "user_id4"]
+        CheckType:
+          type: number
+          description: |
+            检查类型：
+            - 0：双向检查。
+            - 1：单向检查。
+          enum: [0, 1]
+          example: 0
+    CheckFriendsRelationResponse:
+      type: object
+      properties:
+        Code:
+          type: number
+          description: |
+            返回码。
+            
+            以下仅列出了接口业务逻辑相关的 Code 和 SubCode ，完整返回码请参考 [全局返回码](/zim-server/return-codes)。
+            > **说明**
+            >
+            > 当您发起请求同时检查 FromUserId 与多名用户的好友关系时：
+            > <ul><li>如果成功检查 FromUserId 与 1 名或更多用户的好友关系，Code 都会返回 0。此时请参考 Fails 中的具体信息，确认操作结果。</li>
+            > <li>如果  FromUserId 与全部目标用户的好友关系都检查失败，Code 会返回相关返回码，具体请参考 <a href="/zim-server/return-codes" target="_blank">全局返回码</a>。</li></ul>
+
+            <table>
+            <tbody><tr>
+            <th>Code / SubCode</th>
+            <th>描述</th>
+            <th>处理建议</th>
+            </tr>
+            <tr>
+            <td>660000001</td>
+            <td>业务类通用错误。</td>
+            <td>请重试，或联系 ZEGO 技术支持。</td>
+            </tr>
+            <tr>
+            <td>660000002</td>
+            <td>输入参数错误。</td>
+            <td>请检查输入的参数。</td>
+            </tr>
+            <tr>
+            <td>660300005</td>
+            <td>调用接口的频率超出了 AppID 级别限制。</td>
+            <td>请稍后再试。</td>
+            </tr>
+            </tbody></table>
+          example: 0
+        Message:
+          type: string
+          description: 请求结果的说明信息。
+          example: "success"
+        RequestId:
+          type: string
+          description: 请求 ID。
+          example: "343649807833778782"
+        Successes:
+          type: array
+          description: 检查成功列表。
+          items:
+            type: object
+            properties:
+              UserId:
+                type: string
+                description: 成功检查 FromUserId 与此用户 ID 的好友关系。
+                example: "user_id1"
+              Relation:
+                type: number
+                description: 关系类型，详情请参考本接口功能描述。
+                example: 4
+        Fails:
+          type: array
+          description: |
+            检查失败列表。
+            <ul>
+            <li>Code 为 0：</li>
+            <li>Fails 为空，表示成功检查 FromUserId 与全部目标用户的好友关系。</li>
+            <li>Fails 不为空，表示 FromUserId 与部分目标用户的好友关系检查失败，请参考 SubCode 处理。</li>
+            </ul>
+            <ul>
+            <li>Code 不为 0：</li>
+            <li>Fails 为空，表示参数错误、接口频率限制、系统错误。</li>
+            <li>Fails 不为空，表示FromUserId 与全部目标用户的好友关系检查失败。</li>
+            </ul>
+          items:
+            type: object
+            properties:
+              UserId:
+                type: string
+                description: FromUserId 与此用户 ID 的好友关系检查失败。
+                example: "user_id3"
+              SubCode:
+                type: number
+                description: |
+                  具体失败返回码，完整返回码请参考 Code 说明或者 [全局返回码](/zim-server/return-codes)。
+                example: 660000001
+              Relation:
+                type: number
+                description: 关系类型。仅当请求参数 CheckType 为 0 时，此字段有值，为 1 或 2，相关数值详情请参考本接口功能描述。
+                example: 1
