@@ -1,0 +1,207 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: './shared-components.yaml#/servers'
+
+paths:
+  /:
+    post:
+      tags:
+        - cloud-recording
+        - POST
+      summary: UpdateLayout
+      description: |
+        在录制过程中，可以随时调用本接口更改混流布局的设置。
+
+        <Note title="说明">调用频率限制：10 次/秒</Note>
+      operationId: update-layout
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://cloudrecord-api.zego.im?Action=UpdateLayout
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [UpdateLayout]
+          style: form
+          explode: true
+        - $ref: './shared-components.yaml#/components/parameters/AppId'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: './shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: './shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLayoutRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateLayoutResponse'
+
+components:
+  schemas:
+    UpdateLayoutRequest:
+      type: object
+      required: [TaskId]
+      properties:
+        TaskId:
+          type: string
+          description: 录制任务 ID，长度固定为 16 个字节的字符串。
+          example: "xxxx"
+        MixMode:
+          type: integer
+          description: |
+            布局方式。
+
+            - 1：自定义布局，必须指定 MixInputList
+            - 2：平分布局（默认值）
+            - 3：水平布局
+            - 4：垂直布局
+            - 5：悬浮布局
+          enum: [1, 2, 3, 4, 5]
+          default: 2
+        MixInputList:
+          type: array
+          description: |
+            自定义布局参数。
+          items:
+            $ref: '#/components/schemas/MixInputListItem'
+        MixMaxResolutionStreamId:
+          type: string
+          description: |
+            `MixMode` 设为 3、4、5 时，用于指定显示大画面的流 ID。
+          example: "stream_1"
+      example:
+        TaskId: "xxxx"
+        MixMode: 1
+        MixInputList:
+          - StreamId: "xxxx"
+            ViewType: 1
+            Top: 0
+            Left: 0
+            Bottom: 720
+            Right: 540
+            Layer: 1
+          - StreamId: ""
+            ViewType: 1
+            Top: 0
+            Left: 540
+            Bottom: 360
+            Right: 1080
+            Layer: 1
+          - StreamId: ""
+            ViewType: 1
+            Top: 360
+            Left: 540
+            Bottom: 720
+            Right: 1080
+            Layer: 1
+
+    MixInputListItem:
+      type: object
+      required: [Top, Left, Bottom, Right, Layer]
+      properties:
+        StreamId:
+          type: string
+          description: |
+            指定在该画面显示的 streamID，如果未指定，会按照流加入房间的时间顺序进行匹配。
+          example: "xxxx"
+        ViewType:
+          type: integer
+          description: |
+            该画面显示内容的类型。
+
+            - 1：音视频（默认值）
+            - 2：白板
+
+            类型 2 仅在开启白板录制时有效，仅支持将一个画面设置为白板，超过两个及以上会返回错误。
+          enum: [1, 2]
+          default: 1
+        Top:
+          type: integer
+          description: |
+            画布上该画面左上角的 y 轴坐标，取值范围 [0, 1920]，不能超过 Bottom 的值和画布的高。
+          minimum: 0
+          maximum: 1920
+          example: 0
+        Left:
+          type: integer
+          description: |
+            画布上该画面左上角的 x 轴坐标，取值范围 [0, 1920]，不能超过 Right 的值和画布的宽。
+          minimum: 0
+          maximum: 1920
+          example: 0
+        Bottom:
+          type: integer
+          description: |
+            画布上该画面右下角的 y 轴坐标，取值范围 [0, 1920]，不能超过画布的高。
+          minimum: 0
+          maximum: 1920
+          example: 720
+        Right:
+          type: integer
+          description: |
+            画布上该画面右下角的 x 轴坐标，取值范围 [0, 1920]，不能超过画布的宽。
+          minimum: 0
+          maximum: 1920
+          example: 540
+        Layer:
+          type: integer
+          description: 该画面的图层优先级，当两个画面发生重叠时，数值大的显示在上方。
+          example: 1
+        FillMode:
+          type: integer
+          description: |
+            实际视频流宽高比与画面不一致时的处理方式。
+
+            - 1：裁剪模式，该模式下优先保证画面被填满，原视频等比缩放填满画面后，四周超出画面的内容会被裁剪。（默认值）
+            - 2：缩放模式，该模式下优先保证原视频的完整性，原视频等比缩放填满画面后，四周会补一圈黑边。
+          enum: [1, 2]
+          default: 1
+        BackgroundImage:
+          type: string
+          description: |
+            流画面背景图的 URL 地址，仅当指定了 [StreamId] 参数时生效。自定义布局指定的流不存在或者流中断时会显示该背景图。
+
+            - 建议背景图的分辨率与流画面分辨率一致，如两者分辨率不一致，背景图会被拉伸或压缩以填满整个画面。
+            - 背景图格式支持 JPG 和 PNG，大小不能超过 5MB，如背景图下载失败，则设置不生效。
+            - URL 支持 HTTP 和 HTTPS 协议。
+
+    UpdateLayoutResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int64
+          description: |
+            错误码。
+          example: 0
+        Message:
+          type: string
+          description: 错误描述。
+          example: "succeed"
+        RequestId:
+          type: string
+          description: 请求 ID。
+          example: "abcd123"
+      example:
+        Code: 0
+        Message: "succeed"
+        RequestId: "abcd123"
+
