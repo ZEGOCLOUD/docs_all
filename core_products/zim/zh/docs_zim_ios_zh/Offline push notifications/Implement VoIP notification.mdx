@@ -18,8 +18,10 @@ articleID: 11593
 在实现 VoIP 通知之前，请确保：
 - 已集成 ZPNs SDK **2.1.0 或以上版本** 并实现离线推送，详情请参考 [实现离线推送](./../../../en/docs_zim_ios/Offline%20push%20notifications/Implement%20offline%20push%20notification.mdx)。
 - 已向用户申请通知权限，并且用户同意 App 发送推送通知。
+:::if{props.platform="undefined|Flutter|RN"}
 - Xcode 工程已在 +Capability 中添加 Push Notifications。
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZIM/offline_push_enable_pushNotification.png" /></Frame>
+:::
 
 ## 实现流程
 
@@ -34,6 +36,7 @@ articleID: 11593
 <Step title="获取 resourceID">
 联系 ZEGO 技术支持配置携带 iOS VoIP 策略的 `resourceID`。
 </Step>
+:::if{props.platform="undefined|Flutter|RN"}
 <Step title="添加 Background Modes Capabilities">
 使用 Xcode 打开工程，在 “Signing & capabilities” 页面单击 “+Capability”，并在弹窗中双击 “Background Modes”，您即可在 “Signing & capabilities” 看到 “Background Modes” 配置区域。  
 
@@ -49,7 +52,7 @@ articleID: 11593
 导入 PushKit 与 CallKit 库，并在使用前声明头文件。
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZIM/iOS/Callkit_and_Pushkit.jpg" /></Frame>
 </Step>
-
+:::
 :::if{props.platform=undefined}
 <Step title="导入头文件">
 ```objc
@@ -168,7 +171,7 @@ ZPNsEventHandler.onRegistered = (ZPNsRegisterMessage registerMessage) {
         ```
 
     - 接收到 VoIP 通知
-      为了方便 Flutter 开发者使用 iOS 原生的 Callkit 库接口， ZEGO 封装了相关接口到 zego_callkit 插件中。请参考 [CallKit 使用指南](./Best%20Practices/CallKit%20user%20guide.mdx)。
+      为了方便开发者使用 iOS 原生的 Callkit 库接口， ZEGO 封装了相关接口到 zego_callkit 插件中。请参考 [CallKit 使用指南](./Best%20Practices/CallKit%20user%20guide.mdx)。
 
 </Step>
 :::
@@ -177,7 +180,7 @@ ZPNsEventHandler.onRegistered = (ZPNsRegisterMessage registerMessage) {
 调用 [applyNotificationPermission](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_react-native~class~ZPNs#apply-notification-permission) 接口向用户申请同意 App 的通知权限。
 
     ```typescript
-    import ZPNs, { CallKit } from 'zego-zpns-react-native';
+    import ZPNs from 'zego-zpns-react-native';
     
     ZPNs.getInstance().applyNotificationPermission();
     ```
@@ -222,16 +225,77 @@ ZPNsEventHandler.onRegistered = (ZPNsRegisterMessage registerMessage) {
             payload: "业务需要的透传字段",
             content: "your content",
             voIPConfig:{
-                'iOSVoIPHandleType': 1,
-                'iOSVoIPHandleValue': '发送方联系人信息',
-                'iOSVoIPHasVideo': true
+                iOSVoIPHandleType: 1,
+                iOSVoIPHandleValue: '发送方联系人信息',
+                iOSVoIPHasVideo: true
             }
         };
         ```
 
 - 接收到 VoIP 通知
 
-    为了方便 RN 开发者使用 iOS 原生的 Callkit 库接口， ZEGO 封装了相关接口到 zego-callkit-react-native 插件中。请参考 [CallKit 使用指南](./Best%20Practices/CallKit%20user%20guide.mdx)。
+    为了方便开发者使用 iOS 原生的 Callkit 库接口， ZEGO 封装了相关接口到 zego-callkit-react-native 插件中。请参考 [CallKit 使用指南](./Best%20Practices/CallKit%20user%20guide.mdx)。
+
+</Step>
+:::
+:::if{props.platform="UTS"}
+<Step title="申请通知权限">
+调用 [applyNotificationPermission](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_react-native~class~ZPNs#apply-notification-permission) 接口向用户申请同意 App 的通知权限。
+
+    ```typescript
+    import { ZPNs } from '@/uni_modules/zego-zpns-uts';
+    
+    ZPNs.getInstance().applyNotificationPermission();
+    ```
+</Step>
+<Step title="启用 VoIP">
+设置 iOS 当前所处环境，调用 [registerPush](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_react-native~class~ZPNs#register-push)，并设置 `enableIOSVoIP` 为 true。
+
+    <Warning title="注意">
+    请根据开发环境或生产环境准确填入 [iOSEnvironment](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_react-native~interface~ZPNsRegisterConfig) 的参数（打包时用 development 证书签名为开发环境，用 distribution 证书签名为生产环境），否则 ZPNs 服务器无法选择合适的推送证书向 APNs 正确发送离线推送请求。APNs 在生产环境下的到达率与延迟均好于开发环境。
+    </Warning>
+
+    ```typescript
+    // iOSEnvironment 开发环境: 1;  生产环境: 0 (默认值)
+    ZPNs.getInstance().registerPush({ iOSEnvironment: 1, enableIOSVoIP: true });
+    ```
+</Step>
+<Step title="获取携带 VoIP token 的 pushID">
+注册 [registered](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_react-native~class~ZPNsEventHandler#registered) 回调，获取 携带 VoIP token 的 pushID。
+
+   ```typescript
+    ZPNs.getInstance().onRegistered((message: ZPNsRegisterMessage) => {
+        console.log("[ZPNs] registered. pushID: " + message.pushID, "error: " + message.errorCode);
+    });
+    ```
+</Step>
+<Step title="发送及接收 VoIP 通知">
+- 发送 VoIP 通知 
+    
+    <Note title="说明">
+    请联系 ZEGO 技术支持，配置带 **VoIP 策略** 的 resourceID。
+    </Note>
+
+
+    在 [发起呼叫邀请](./../Guides/Call%20invitation%20signaling.mdx) 或其他需要 VoIP 通知场景中，向 [ZIMPushConfig](https://doc-zh.zego.im/article/api?doc=zim_API~javascript_react-native~interface~ZIMPushConfig) 中传入该 resourceID，即可配置本次推送为 VoIP 类型。
+
+        ```typescript
+        const pushConfig: ZIMPushConfig = {
+            resourcesID: "your resourcesID", // 联系 ZEGO 技术支持配置的 resourcesID
+            title: "系统通话标题",
+            payload: "业务需要的透传字段",
+            content: "your content",
+            voIPConfig:{
+                iOSVoIPHandleType: 1,
+                iOSVoIPHandleValue: '发送方联系人信息',
+                iOSVoIPHasVideo: true
+            }
+        };
+        ```
+
+- 接收到 VoIP 通知
+
+    为了方便开发者使用 iOS 原生的 Callkit 库接口， ZEGO 封装了相关接口到 zego-callkit-uts 插件中。请参考 [CallKit 使用指南](./Best%20Practices/CallKit%20user%20guide.mdx)。
 
 </Step>
 :::
@@ -274,4 +338,3 @@ ZPNsEventHandler.onRegistered = (ZPNsRegisterMessage registerMessage) {
 </Step>
 :::
 </Steps>
-
