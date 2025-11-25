@@ -35,20 +35,83 @@ def read_json_files(src_dir: Path) -> List[Dict[str, Any]]:
 
 def escape_mdx_text(s: str) -> str:
     """简单转义 MDX 中可能出问题的字符（最小化处理，尽量原样输出 Markdown）。"""
-    return s.replace("{", "{{").replace("}", "}}").replace("`", "\`")
+    # 先修复不合法的 </br> 标签为 <br/>
+    s = s.replace("</br>", "<br/>")
+    return s.replace("{", "{{").replace("}", "}}").replace("`", r"\`")
+
+
+def escape_table_cell(s: str) -> str:
+    """转义 Markdown 表格单元格中的特殊字符。
+
+    在 Markdown 表格中，{ 和 } 不需要转义，只需要转义管道符 | 和反引号。
+    """
+    # 转义管道符，避免破坏表格结构
+    # 注意：反引号在表格中通常不需要转义
+    return s.replace("|", r"\|")
+
+
+def escape_attr_value(s: str) -> str:
+    """转义 JSX 属性值中的特殊字符。
+
+    在被引号包裹的属性值中，{ 和 } 不需要转义，只需要转义反引号。
+    同时修复不合法的 </br> 标签为 <br/>。
+    """
+    # 先修复不合法的 </br> 标签为 <br/>
+    s = s.replace("</br>", "<br/>")
+    return s.replace("`", r"\`")
+
+
+def quote_attr_value(value: str) -> str:
+    """智能选择引号包裹属性值。
+
+    如果值中包含双引号，使用单引号包裹；否则使用双引号包裹。
+    如果同时包含单引号和双引号，使用双引号并转义内部的双引号。
+
+    注意：属性值会先经过 escape_attr_value 处理，然后再用引号包裹。
+
+    Args:
+        value: 属性值（未转义）
+
+    Returns:
+        带引号的属性值字符串
+    """
+    # 先转义属性值中的特殊字符（但不转义 { 和 }）
+    escaped = escape_attr_value(value)
+
+    has_double_quote = '"' in escaped
+    has_single_quote = "'" in escaped
+
+    if has_double_quote and has_single_quote:
+        # 同时包含单引号和双引号，使用双引号并转义内部的双引号
+        final_value = escaped.replace('"', r'\"')
+        return f'"{final_value}"'
+    elif has_double_quote:
+        # 只包含双引号，使用单引号包裹（需要转义单引号，如果有的话）
+        # 在 JSX 中，单引号包裹的字符串内部的单引号需要用 HTML 实体或转义
+        # 但实际上 JSX 单引号字符串中的单引号不需要转义
+        return f"'{escaped}'"
+    else:
+        # 不包含双引号或只包含单引号，使用双引号包裹
+        return f'"{escaped}"'
 
 
 def escape_jsx_in_text(s: str) -> str:
-    """转义文本中的 JSX 敏感字符（如 <），但保留 MDX 组件标签。
+    r"""转义文本中的 JSX 敏感字符（{、}、<、>），但保留 MDX 组件标签。
 
-    策略：只转义不在 MDX 组件标签内的 <。
-    MDX 组件标签包括：<Note、<Warning、<Tip、</Note>、</Warning>、</Tip> 等。
+    策略：
+    1. 先修复不合法的 </br> 标签为 <br/>
+    2. 标记所有 MDX 组件标签（<Note>、<Warning> 等）和 <br/> 标签
+    3. 转义剩余的 {、}、<、> 为 \{、\}、\<、\>
+    4. 恢复 MDX 组件标签和 <br/> 标签
     """
     import re
 
-    # 先标记所有 MDX 组件标签，用占位符替换
-    # 匹配 <Note、<Warning、<Tip、</Note>、</Warning>、</Tip> 等
-    mdx_tag_pattern = r'</?(?:Note|Warning|Tip)(?:\s[^>]*)?>|</(?:Note|Warning|Tip)>'
+    # 修复不合法的 </br> 标签为 <br/>
+    s = s.replace('</br>', '<br/>')
+
+    # 先标记所有 MDX 组件标签和 <br/> 标签，用占位符替换
+    # 匹配 <Note、<Warning、<Tip、</Note>、</Warning>、</Tip>、<br/> 等
+    mdx_tag_pattern = r'</?(?:Note|Warning|Tip)(?:\s[^>]*)?>|</(?:Note|Warning|Tip)>|<br\s*/>'
 
     placeholders = []
     def replace_with_placeholder(match):
@@ -56,11 +119,15 @@ def escape_jsx_in_text(s: str) -> str:
         placeholders.append(match.group(0))
         return placeholder
 
-    # 用占位符替换所有 MDX 标签
+    # 用占位符替换所有 MDX 标签和 <br/> 标签
     text_with_placeholders = re.sub(mdx_tag_pattern, replace_with_placeholder, s)
 
-    # 转义剩余的 <
-    escaped_text = text_with_placeholders.replace("<", "\\<")
+    # 转义 JSX 敏感字符：{、}、<、>
+    escaped_text = text_with_placeholders
+    escaped_text = escaped_text.replace("{", r"\{")
+    escaped_text = escaped_text.replace("}", r"\}")
+    escaped_text = escaped_text.replace("<", r"\<")
+    escaped_text = escaped_text.replace(">", r"\>")
 
     # 恢复 MDX 标签
     for i, tag in enumerate(placeholders):
@@ -90,7 +157,8 @@ def render_detail_section(details: List[Dict[str, Any]], support: Optional[Dict[
     # 详情描述：object_detail 一律带 "**详情**" 标题
     detail_desc = (detail_map.pop("详情描述", "") or "").strip()
     if detail_desc:
-        parts.append(f"**详情**\n\n{escape_mdx_text(detail_desc)}")
+        # 不在这里转义，调用方会用 escape_jsx_in_text 处理
+        parts.append(f"**详情**\n\n{detail_desc}")
 
     # 仅 支持版本 / 使用限制 / 注意事项 放 Warning，其余（除详情外）出 Note
     warning_keys = ["支持版本", "使用限制", "注意事项"]
@@ -98,8 +166,9 @@ def render_detail_section(details: List[Dict[str, Any]], support: Optional[Dict[
 
     for key in warning_keys:
         if key in detail_map and detail_map[key]:
-            label = escape_mdx_text(key)
-            value = escape_mdx_text(detail_map[key])
+            # 不在这里转义，调用方会用 escape_jsx_in_text 处理
+            label = str(key)
+            value = str(detail_map[key])
             warning_bullets.append(f"- **{label}**：{value}")
             detail_map.pop(key, None)
 
@@ -108,8 +177,9 @@ def render_detail_section(details: List[Dict[str, Any]], support: Optional[Dict[
     for key, value in detail_map.items():
         if not value:
             continue
-        label = escape_mdx_text(str(key))
-        body = escape_mdx_text(str(value))
+        # 不在这里转义，调用方会用 escape_jsx_in_text 处理
+        label = str(key)
+        body = str(value)
         note_bullets.append(f"- **{label}**：{body}")
 
     if note_bullets:
@@ -136,9 +206,10 @@ def render_params(params: List[Dict[str, Any]], with_heading: bool = True) -> st
     lines.append("| 名称 | 类型 | 描述 |")
     lines.append("| --- | --- | --- |")
     for p in params:
-        name = escape_mdx_text(str(p.get("name", "")))
-        t = escape_mdx_text(str(p.get("type", "")))
-        desc = escape_mdx_text(str(p.get("desc", "")))
+        # 表格单元格中不需要转义 { 和 }，只需要转义管道符
+        name = escape_table_cell(str(p.get("name", "")))
+        t = escape_table_cell(str(p.get("type", "")))
+        desc = escape_table_cell(str(p.get("desc", "")))
         lines.append(f"| {name} | {t} | {desc} |")
     return "\n".join(lines)
 
@@ -159,13 +230,12 @@ def render_return(ret: Optional[Dict[str, Any]], has_params: bool = False) -> st
     if not info:
         return ""
 
-    escaped_info = escape_mdx_text(info)
-
+    # 不在这里转义，最后统一用 escape_jsx_in_text 处理
     # 如果有参数章节，需要添加 **返回值** 标题；否则直接输出内容
     if has_params:
-        return f"**返回值**\n\n{escaped_info}"
+        return f"**返回值**\n\n{info}"
     else:
-        return escaped_info
+        return info
 
 
 def render_deprecated_warning(deprecated: Optional[Dict[str, Any]]) -> str:
@@ -174,7 +244,8 @@ def render_deprecated_warning(deprecated: Optional[Dict[str, Any]]) -> str:
     info = (deprecated.get("info") or "").strip()
     if not info:
         return ""
-    return f"<Warning title=\"已废弃\">{escape_mdx_text(info)}</Warning>"
+    # 不在这里转义，最后统一用 escape_jsx_in_text 处理
+    return f"<Warning title=\"已废弃\">{info}</Warning>"
 
 
 def render_param_like(node: Dict[str, Any], obj_meta: Optional[Dict[str, str]] = None) -> str:
@@ -185,19 +256,20 @@ def render_param_like(node: Dict[str, Any], obj_meta: Optional[Dict[str, str]] =
       - parent_name
       - parent_type
     """
-    name = escape_mdx_text(str(node.get("name", "")))
-    prototype = escape_mdx_text(str(node.get("full_code", "")))
+    # 属性值：不使用 escape_mdx_text，因为 quote_attr_value 会处理转义
+    # 只有在 children 内容中才需要 escape_mdx_text
+    name_raw = str(node.get("name", ""))
+    prototype_raw = str(node.get("full_code", ""))
     desc_raw = str(node.get("desc", ""))
-    desc = escape_mdx_text(desc_raw) if desc_raw else ""
 
     # 顶层对象元信息（如果有）
-    parent_file = ""
-    parent_name = ""
-    parent_type = ""
+    parent_file_raw = ""
+    parent_name_raw = ""
+    parent_type_raw = ""
     if obj_meta:
-        parent_file = escape_mdx_text(obj_meta.get("parent_file", "") or "")
-        parent_name = escape_mdx_text(obj_meta.get("parent_name", "") or "")
-        parent_type = escape_mdx_text(obj_meta.get("parent_type", "") or "")
+        parent_file_raw = obj_meta.get("parent_file", "") or ""
+        parent_name_raw = obj_meta.get("parent_name", "") or ""
+        parent_type_raw = obj_meta.get("parent_type", "") or ""
 
     prefixes: List[str] = []
     if node.get("static") is True:
@@ -242,8 +314,9 @@ def render_param_like(node: Dict[str, Any], obj_meta: Optional[Dict[str, str]] =
 
     for key in warning_keys:
         if key in detail_map and detail_map[key]:
-            label = escape_mdx_text(key)
-            value = escape_mdx_text(detail_map[key])
+            # 不在这里转义，最后统一用 escape_jsx_in_text 处理
+            label = str(key)
+            value = str(detail_map[key])
             warning_bullets.append(f"- **{label}**：{value}")
             detail_map.pop(key, None)
 
@@ -251,18 +324,18 @@ def render_param_like(node: Dict[str, Any], obj_meta: Optional[Dict[str, str]] =
     for key, value in detail_map.items():
         if not value:
             continue
-        label = escape_mdx_text(str(key))
-        body = escape_mdx_text(str(value))
+        # 不在这里转义，最后统一用 escape_jsx_in_text 处理
+        label = str(key)
+        body = str(value)
         note_bullets.append(f"- **{label}**：{body}")
 
     # 详情：仅当既有 params 又有详情时才输出 **详情** 标题；否则只输出内容本身
     if detail_desc:
-        # 对详情描述做 JSX 转义
-        escaped_detail_desc = escape_jsx_in_text(escape_mdx_text(detail_desc))
+        # 不在这里转义，最后统一用 escape_jsx_in_text 处理
         if params:
-            parts.append(f"**详情**\n\n{escaped_detail_desc}")
+            parts.append(f"**详情**\n\n{detail_desc}")
         else:
-            parts.append(escaped_detail_desc)
+            parts.append(detail_desc)
 
     if note_bullets:
         note_body = "\n".join(note_bullets)
@@ -287,21 +360,22 @@ def render_param_like(node: Dict[str, Any], obj_meta: Optional[Dict[str, str]] =
     children = escape_jsx_in_text(children_raw) if children_raw else ""
 
     # 组件起始标签：按行输出，每个属性单独一行，空属性不输出
+    # 使用 quote_attr_value 智能选择引号（会自动处理转义）
     attr_lines: List[str] = ["<ParamField"]
-    attr_lines.append(f"  name=\"{name}\"")
-    attr_lines.append(f"  prototype=\"{prototype}\"")
-    if desc:
-        attr_lines.append(f"  desc=\"{desc}\"")
+    attr_lines.append(f"  name={quote_attr_value(name_raw)}")
+    attr_lines.append(f"  prototype={quote_attr_value(prototype_raw)}")
+    if desc_raw:
+        attr_lines.append(f"  desc={quote_attr_value(desc_raw)}")
     if prefixes:
         attr_lines.append(f"  prefixes={{{prefixes_literal}}}")
     if suffixes:
         attr_lines.append(f"  suffixes={{{suffixes_literal}}}")
-    if parent_file:
-        attr_lines.append(f"  parent_file=\"{parent_file}\"")
-    if parent_name:
-        attr_lines.append(f"  parent_name=\"{parent_name}\"")
-    if parent_type:
-        attr_lines.append(f"  parent_type=\"{parent_type}\"")
+    if parent_file_raw:
+        attr_lines.append(f"  parent_file={quote_attr_value(parent_file_raw)}")
+    if parent_name_raw:
+        attr_lines.append(f"  parent_name={quote_attr_value(parent_name_raw)}")
+    if parent_type_raw:
+        attr_lines.append(f"  parent_type={quote_attr_value(parent_type_raw)}")
 
     opening = "\n".join(attr_lines) + ">"
 
@@ -365,7 +439,8 @@ def render_api_field(obj: Dict[str, Any]) -> str:
     detail_block = render_detail_section(obj.get("object_detail") or [], obj.get("support"))
     if detail_block:
         lines.append("")
-        lines.append(detail_block)
+        # 对 detail_block 做 JSX 转义（保留 MDX 组件标签）
+        lines.append(escape_jsx_in_text(detail_block))
 
     # object_belong_file 用斜体渲染，放在 object_detail 的最后
     if belong:
