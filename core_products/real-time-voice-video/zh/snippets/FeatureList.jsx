@@ -13,7 +13,7 @@ import React from 'react';
  */
 export default function FeatureList({ type, features = [] }) {
   const [hoveredIndex, setHoveredIndex] = React.useState(null);
-  const typeTextColor = '#28292e';
+  const typeTextColor = 'var(--docuo-text-color)';
   const openLinkInNewTab = (url) => {
     if (!url) return;
     try {
@@ -50,7 +50,7 @@ export default function FeatureList({ type, features = [] }) {
     },
     blue: {
       backgroundColor: '#eef3ff',
-      color: '#1e40af',
+      color: 'var(--docuo-color-primary-hover)',
     },
   };
 
@@ -88,8 +88,8 @@ export default function FeatureList({ type, features = [] }) {
     position: 'relative',
     padding: '16px 24px 16px',
     borderRadius: 4,
-    border: '1px solid #f7f7f8',
-    background: '#fafafa',
+    border: '1px solid var(--docuo-page-context-menu-border)',
+    background: "var(--docuo-page-context-menu-bg)",
   };
 
   const typeBadgeWrapperStyle = {
@@ -111,7 +111,7 @@ export default function FeatureList({ type, features = [] }) {
     alignItems: 'center',
     fontSize: 12,
     lineHeight: '18px',
-    background: '#ededed',
+    background: 'var(--docuo-step-line-color)',
     color: typeTextColor,
     clipPath: 'polygon(0 0, 92% 0, 100% 50%, 92% 100%, 0 100%)',
   };
@@ -137,7 +137,7 @@ export default function FeatureList({ type, features = [] }) {
     width: 5,
     height: 5,
     borderRadius: '50%',
-    background: '#94a3b8',
+    background: 'var(--docuo-text-color)',
     flex: '0 0 auto',
   };
 
@@ -182,7 +182,7 @@ export default function FeatureList({ type, features = [] }) {
                   onMouseEnter={() => setHoveredIndex(index)}
                   onMouseLeave={() => setHoveredIndex(null)}
                   style={{
-                    color: hoveredIndex === index ? '#1e40af' : typeTextColor,
+                    color: hoveredIndex === index ? 'var(--docuo-color-primary-hover)' : typeTextColor,
                     textDecoration: 'none',
                     fontWeight: 400,
                     fontSize: 14,
