@@ -4,7 +4,7 @@
 
 状态消息包括以下类型：
 
-- 智能体实例说话状态事件： 开始说话，说话结束。
+- 智能体实例状态事件：空闲、正在听、正在想、正在做。
 - 用户说话状态事件：开始说话，说话结束。
 
 ## 快速实现
@@ -14,21 +14,21 @@
 请参考 [接收回调](./../callbacks/receiving-callback.mdx) 文档开发好用于接收 AI Agent 事件通知的回调，并提供地址联系 ZEGO 技术支持进行配置。
 <Note title="说明">
 
-要接收用户和智能体状态的回调结果，请在[创建智能体实例](./../api-reference/agent-instance-management/create-agent-instance.mdx)时，配置相应的 [CallbackConfig.UserSpeakAction](./../api-reference/agent-instance-management/create-agent-instance.mdx#callbackconfig) 和 [CallbackConfig.AgentSpeakAction](./../api-reference/agent-instance-management/create-agent-instance.mdx#callbackconfig) 参数为 `1`。
+要接收用户和智能体实例状态的回调结果，请在[创建智能体实例](./../api-reference/agent-instance-management/create-agent-instance.mdx)时，配置相应的 [CallbackConfig.UserSpeakAction](./../api-reference/agent-instance-management/create-agent-instance.mdx#callbackconfig) 和 [CallbackConfig.AgentInstanceStatus](./../api-reference/agent-instance-management/create-agent-instance.mdx#callbackconfig) 参数为 `1`。
 
 </Note>
 
 回调内容示例如下：
 
 <CodeGroup>
-```json title="智能体说话状态回调" {5,7}
+```json title="智能体实例状态回调" {5,7}
 {
     "AppId": 1234567,
     "AgentInstanceId": "1912124734317838336",
     "Data": {
-        "Action": "SPEAK_BEGIN",// SPEAK_BEGIN: 开始说话 SPEAK_END: 说话结束
+        "Status": "LISTENING",// IDLE: 空闲 LISTENING: 正在听 THINKING: 正在想 SPEAKING: 正在做
     },
-    "Event": "AgentSpeakAction",
+    "Event": "AgentInstanceStatus",
     "Nonce": "7450395512627324902",
     "Signature": "fd9c1ce54e85bd92f48b0a805e82a52b0c0c6445",
     "Timestamp": 1745502313000,
@@ -82,7 +82,7 @@
 <Tabs>
 <Tab title="服务端">
 
-以下是服务端接收到智能体和用户说话状态事件后，通过 ZEGO Server API [发送自定义消息](https://doc-zh.zego.im/article/19553)的示例代码：
+以下是服务端接收到智能体和用户说话状态事件后，通过 ZEGO Server API [发送自定义消息](/real-time-video-server/api-reference/room/send-custom-command)的示例代码：
 
 
 ```javascript {27-30,47-72}
@@ -123,23 +123,23 @@ export class AgentCallbackController {
             logger.error('[AgentCallbackController] handleSendCustomCommand error:' + errMsg);
         }
     }
-    // 接收智能体及用户说话状态变化回调
+    // 接收智能体实例状态及用户说话状态变化回调
     callbackHandler = async (req: Request, res: Response) => {
         const RequestId = req.headers.RequestId as string;
         const payload = req.body as AIAgentCallbackPayload;
         const { AppId, AgentInstanceId, RoomId, AgentUserId, Event, Data } = payload;
 
-        // commonArgs的生成请参考 https://doc-zh.zego.im/article/19456#3
+        // commonArgs的生成请参考 https://doc-zh.zego.im/real-time-video-server/api-reference/accessing-server-apis#common-parameters
         const commonArgs = genCommonArgs(AppId, globalConfig.appEnvSecretMap[AppId]);
 
         switch (Event) {
-            case AgentEvent.AgentSpeakAction: {
-                const { Sequence, Action } = Data as AgentSpeakActionPayload;
+            case AgentEvent.AgentInstanceStatus: {
+                const { Sequence, Status } = Data as AgentInstanceStatusPayload;
                 const command = {
-                    eventType: 'AgentSpeakAction',
+                    eventType: 'AgentInstanceStatus',
                     data: {
                         sequence: Sequence,
-                        action: Action,
+                        status: Status,
                     },
                 };
                 await this.handleSendCustomCommand(commonArgs, RoomId, AgentInstanceId, command);
@@ -176,8 +176,8 @@ export class AgentCallbackController {
       try {
         const message = JSON.parse(command);
         switch (message.eventType) {
-          case "AgentSpeakAction":
-            // 处理智能体说话状态事件
+          case "AgentInstanceStatus":
+            // 处理智能体实例状态事件
             // 更新UI
             break;
           case "UserSpeakAction":
@@ -211,8 +211,8 @@ export class AgentCallbackController {
 
     NSString *eventType = msgDict[@"eventType"];
     if (eventType) {
-        if ([eventType isEqualToString:@"AgentSpeakAction"]) {
-            // 处理智能体说话状态事件
+        if ([eventType isEqualToString:@"AgentInstanceStatus"]) {
+            // 处理智能体实例状态事件
             // 更新UI
         } else if ([eventType isEqualToString:@"UserSpeakAction"]) {
             // 处理用户说话状态事件
@@ -233,8 +233,8 @@ ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
             JSONObject json = new JSONObject(command);
             if (json.has("eventType")) {
                 String eventType = json.getString("eventType");
-                if ("AgentSpeakAction".equals(eventType)) {
-                    // 处理智能体说话状态事件
+                if ("AgentInstanceStatus".equals(eventType)) {
+                    // 处理智能体实例状态事件
                     // 更新UI
                 } else if ("UserSpeakAction".equals(eventType)) {
                     // 处理用户说话状态事件
