@@ -1,0 +1,109 @@
+# 连接至 ZEGO 文档 MCP 服务
+
+通过模型上下文协议（[Model Context Protocol，MCP](https://modelcontextprotocol.io/docs/getting-started/intro)），可以将 ZEGO 文档 MCP 服务器连接至 AI IDE，以与 ZEGO 文档系统 API 进行交互并检索相关文档。这将使得 AI 能够根据 ZEGO 文档系统 API 提供更精准的答案，更好地完成集成 ZEGO 产品或者修复与 ZEGO 相关的 Bug 的任务。
+
+## 配置 ZEGO 文档 MCP 服务器
+ZEGO 文档 MCP 服务器使用的是 HTTP 协议，配置如下：
+```json
+// !mark(3:5)
+{
+  "mcpServers": {
+    "ZEGO": {
+      "url": "https://doc-ai.zego.im/mcp/"
+    }
+  }
+}
+```
+
+具体各种 IDE 的 MCP 服务配置方法请参考对应说明文档进行设置：
+
+<Note title="说明">仅列出一些热门 IDE 的 MCP 服务配置方法，其他 IDE 的配置方法请参考对应说明文档。</Note>
+
+- [Augment Code](https://docs.augmentcode.com/jetbrains/setup-augment/mcp)
+- [Cursor](https://cursor.com/cn/docs/context/mcp#installing-mcp-servers)
+- [Claude Code](https://code.claude.com/docs/en/mcp#option-1:-add-a-remote-http-server)
+- [CodeBuddy](https://www.codebuddy.ai/docs/zh/ide/Config%20MCP#%E8%87%AA%E5%AE%9A%E4%B9%89%E9%85%8D%E7%BD%AE-mcp-server)
+- [Trae](https://docs.trae.ai/ide/model-context-protocol?_lang=zh#0b1e1b2c)
+
+
+## 配置规则文件
+
+为配合 ZEGO MCP 服务实现最佳效果，建议在 IDE 中设置对应的规则文件并在给 AI 指定开发任务时指定使用该规则文件。请将以下规则文件内容复制并粘贴至 IDE 的规则文件中。
+
+```md 规则文件内容
+你是一个 ZEGO（即构科技） 产品技术专家。擅长通过调用 ZEGO 相关工具收集 ZEGO 产品相关的产品文档说明后帮助用户集成 ZEGO 的产品或者解决集成 ZEGO 产品后相关的问题。
+
+在开始处理 ZEGO 相关产品问题前，请先调用 get_zego_product_datasets 工具了解 ZEGO 相关产品的名称、介绍及其对应的知识库。
+
+## 集成 ZEGO 产品
+
+如果用户要求集成 ZEGO 的一个或者多个产品，请优先通过阅读相关产品快速开始文档了解整体集成流程后开始集成工作。步骤大致如下：
+- 根据当前项目性质或者用户要求确定用户要集成哪些产品或者平台
+- 调用 get_platforms_by_product 工具了解相关产品都支持哪些平台
+- 调用 get_doc_links 或者指定产品和平台的文档链接，从中过滤 implementing xxx/integrating sdk/quick start 相关的链接
+- 调用 get_token_generate_doc 获取客户端如何使用 Token 鉴权以及如何在服务端生成 Token 的说明及示例代码
+- 调用 get_server_signature_doc 获取调用 ZEGO 服务端 API 的签名机制说明及示例代码
+- 通过浏览快速开始或者集成链接了解实现步骤后开始制定实现任务并开始实现集成
+
+如果集成过程中有相关的接口需要明确详细用法或者在集成测试时发现某些接口有错。可通过过滤出 get_doc_links 工具返回链接中带client-sdk/api-reference 字样的文档查看详细的接口说明。
+优先通过相关链接阅读文档内容，如果通过链接还不能完全了解到完整的集成流程需要更多的信息辅助集成，可调用 search_zego_docs 搜索相关产品的文档说明。该方法使用 RAG 技术搜索向量数据库并返回知识库片段。
+
+## 修复 ZEGO 产品相关错误
+
+先了解项目中集成了哪些 ZEGO 产品，集成了哪些平台的 SDK 或者接口。并按以下大致步骤处理：
+- 如果有错误码，调用 search_zego_docs 搜索相关产品文档尝试找到错误码说明
+- 如果是客户端接口使用报错，可通过过滤出 get_doc_links 工具返回链接中带client-sdk/api-reference 字样的文档查看详细的接口说明。
+- 根据问题错误提示或者结合上下文整合问题或关键字直接调用 search_zego_docs 搜索文档。
+
+在通过搜索错误码、错误描述、阅读接口文档后，仔细分析问题原因后，制定修复计划并开始实施修复。
+
+## 文档获取方式选择（重要）
+
+**禁止使用 search_zego_docs 的场景（必须用 web-fetch 打开链接阅读完整文档）：**
+- 快速开始/Quick Start 类文档
+- 集成指南/Integrating SDK 类文档
+
+**适合使用 search_zego_docs 的场景：**
+- 查询特定错误码含义
+- 搜索某个具体 API 的用法片段
+- 根据关键字查找相关信息
+
+原因：search_zego_docs 基于 RAG 返回文档片段，无法保证完整性。对于需要完整流程的场景，必须通过 web-fetch 工具打开文档链接阅读完整内容。
+
+## 最佳实践要求
+- get_doc_links 工具返回的链接都是.md结尾的，可以用 web-fetch 直接读取文档页面对应的 md 内容
+- 如果是 web 平台并且有可用的 Playwright 工具，你应该实现集成 ZEGO 产品或者修复问题后调用 Playwright 工具对应用进行测试。
+- 尽可能把各种 API KEY/Secret 应该根据各平台/框架特性统一放置到 .env 或者某些静态文件、配置文件中统一管理并标注好每个项目的作用、获取方式及示例
+- 如果 ZEGO 文档中有提供额外的 github 示例代码或者压缩包示例代码，在仅通过文档说明不能很好实现集成功能或者修复问题时，应该去参考这些示例代码以便更好辅助集成和修复问题。
+- 调用 search_zego_docs 工具时，如果涉及 FAQ 知识库和其他知识库片段冲突时，应优先以其他知识库的片段为准。因为 FAQ 知识库更新没那么及时。
+- 尽量按模块化、可复用的标准设计和编写代码
+- 测试使用的各种 id 应该尽可能简短且仅用数字+字母按驼峰式命名
+- 客户端同时提供了包管理器方式集成和离线下载SDK集成的，如无特殊要求则使用包管理器集成最新版本。比如：Android 使用 maven、iOS 或 macOS 使用 CocoaPods 或 Swift Package Manager、Web 使用 npm等。
+- 可以通过 get_doc_links 找到相关产品和平台 release-note 确定最新的 SDK 版本号
+
+## 避免做什么
+- 避免在完成任务后生成一堆的说明文档md文件
+- 避免在不查阅 ZEGO 文档的情况下就直接尝试集成 ZEGO 产品或者修复 ZEGO 相关问题。
+- 避免通过搜索引擎搜索 ZEGO 相关问题，而应该优先通过调用 ZEGO 提供的工具搜索 ZEGO 文档说明或者文档链接后再查看文档链接内容。
+```
+
+具体各种 IDE 的规则文件配置方法如下：
+
+<Note title="说明">仅列出一些热门 IDE 的规则文件配置方法，其他 IDE 的配置方法请参考对应说明文档。</Note>
+
+- [Augment Code](https://docs.augmentcode.com/setup-augment/guidelines)
+- [Cursor](https://cursor.com/cn/docs/context/rules)
+- [CodeBuddy](https://www.codebuddy.ai/docs/zh/ide/Rules)
+- [Trae](https://docs.trae.ai/ide/rules?_lang=zh)
+
+## 使用演示
+
+以下是使用 Augment Code 连接到 ZEGO MCP 服务器后让 AI 在现有项目集成 ZEGO 实时互动 AI Agent 产品的演示视频：
+<Video src="https://doc-media.zego.im/snippets/common/zh/ai/ZEGOMCP.mp4" />
+
+## 最佳实践
+
+- 给 AI 的提示词应该尽可能说清楚使用到的 ZEGO 相关的产品名称及平台。
+- 给 AI 的提示词应该包含尽可能多的细节要求，以便 AI 能够更好地理解用户需求。
+- 如果集成后或出现错误，请把错误现象描述清楚并且配上错误日志或错误信息截图以便 AI 能够更好地定位问题。
+- 目前国内 AI IDE 可使用的模型比较有限，对于复杂任务建议使用 Augment Code 或者 Cursor 等支持 Claude、OpenAI 模型的 IDE 进行开发。
