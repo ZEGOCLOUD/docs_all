@@ -26,6 +26,9 @@ def read_json_files(src_dir: Path) -> List[Dict[str, Any]]:
         try:
             with p.open("r", encoding="utf-8") as f:
                 obj = json.load(f)
+            # 跳过非字典类型的 JSON（如 hotObject.json 是数组）
+            if not isinstance(obj, dict):
+                continue
             obj["__file_name"] = p.name
             result.append(obj)
         except Exception as e:
@@ -399,7 +402,7 @@ def rewrite_links_for_kind(text: str, platform: str, kind: str) -> str:
 
     # 使用普通字符串拼出模式，避免 raw f-string + 反斜杠混用导致转义混乱
     # ([^)]+) 会把后面 "xxx任意内容" 整段吃进去，如果原路径本身带 #anchor 也一并保留
-    pattern_str = "\\[([^\\]]+)\\]\\(/" + re.escape(platform) + "/(class|enum|interface|struct)/([^)]+)\\)"
+    pattern_str = "\\[([^\\]]+)\\]\\(/" + re.escape(platform) + "/(class|enum|interface|protocol|struct)/([^)]+)\\)"
     pattern = re.compile(pattern_str)
 
     def _repl(m: re.Match) -> str:
@@ -739,7 +742,7 @@ def convert_funclist_link(link_text: str, link_url: str) -> Tuple[str, str]:
     method_name_clean = method_name.replace("-", "").lower()
 
     # 拼接新链接: ./class.mdx#{method_name_clean}-{class_name_lower}-class
-    new_url = f"./{parent_type}.mdx#{method_name_clean}-{class_name_lower}-{parent_type}"
+    new_url = f"./{parent_type}.mdx#{method_name_clean}-{class_name_lower}"
 
     return (new_text, new_url)
 
