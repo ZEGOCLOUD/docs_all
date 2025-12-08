@@ -1,0 +1,243 @@
+---
+articleID: 14694
+---
+# CallKit user guide
+
+`zego-callkit-react-native` encapsulates some features of iOS CallKit and PushKit for React Native developers to implement Voice-over-IP (VoIP) calls on iOS devices. The connection method and features of this plugin are similar to those of iOS CallKit and PushKit. For more information, refer to the official Apple documentation on [CallKit](https://developer.apple.com/documentation/callkit?language=objc) and [PushKit](https://developer.apple.com/documentation/pushkit?language=objc).
+
+## Prerequisites
+
+- ZPNs SDK **2.6.0 or later** is integrated, and offline push notification is implemented. For more information, see [Implement offline push notification](./../Implement%20offline%20push%20notification.mdx).
+- Notification permission is obtained from the user.
+- **Push Notifications** is added to the **Capabilities** pane in your Xcode project.  
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZIM/offline_push_enable_pushNotification.png" /></Frame>
+
+## Add dependencies
+
+1. Navigate to the root directory of the project, run one of the following codes to install the dependencies.
+
+<CodeGroup>
+```bash title="npm"
+npm i zego-callkit-react-native
+```
+```bash title="yarn"
+yarn add zego-callkit-react-native
+```
+</CodeGroup>
+
+2. Import the SDK.
+
+```typescript
+import CallKit from 'zego-callkit-react-native';
+```
+
+3. Go to the iOS root directory, run the `pod install` command to install the dependencies.
+
+After completing the above steps, you can use the `zego-callkit-react-native` SDK in your project using JavaScript or TypeScript (recommended).
+
+## Initialize CallKit
+
+Call the `CallKit.setInitConfiguration` method to configure the VoIP feature before using it. For more about the configuration, refer to the official Apple documentation on [CXProviderConfiguration](https://developer.apple.com/documentation/callkit/cxproviderconfiguration?language=objc).
+
+```typescript
+CallKit.setInitConfiguration({localizedName:"Your app name or others"});
+```
+
+## Receive a VoIP notification
+
+When a VoIP notification is received, the App will bring up the call UI and trigger the `didReceiveIncomingPush`. For more details on the interface, please refer to the official Apple documentation on [didReceiveIncomingPushWithPayload](https://developer.apple.com/documentation/pushkit/pkpushregistrydelegate/2875784-pushregistry?language=objc).
+
+```typescript
+function handleIncomingPush(extras: Record<string, any>, uuid: string) {
+   // Get the payload field passed with the push notification.
+   const payload = extras['payload'];
+}
+CallKit.getInstance().on('didReceiveIncomingPush',handleIncomingPush);
+```
+
+## Launch the call incoming UI
+
+If an incoming call is received when the app is running at the backend, call the `CallKit.setInitConfiguration` method to initialize CallKit and then call the `reportIncomingCall` method to launch the call incoming UI, as shown in the following figure. Refer to the Apple official documentation [reportNewIncomingCallWithUUID](https://developer.apple.com/documentation/callkit/cxprovider/1930694-reportnewincomingcallwithuuid?language=objc).
+
+<Frame width="256" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZIM/ZPNS/incoming_call.jpeg" /></Frame>
+
+```typescript
+// Before pulling the CallKit, call `setInitConfiguration` at least once.
+CallKit.setInitConfiguration({localizedName: 'ZEGO'});
+
+// Create a CXCallUpdate object
+const cxCallUpdate = new CXCallUpdate({
+    remoteHandle: /* Set CXHandle object here */,
+    localizedCallerName: "Caller Name", // Caller name
+    supportsHolding: true,
+    supportsGrouping: false,
+    supportsUngrouping: false,
+    supportsDTMF: true,
+    hasVideo: false
+});
+
+// Generate a UUID, please use version 4 for UUID.
+const uuid = "your-unique-uuid-string"; // Please replace with the actual UUID
+
+// Call the reportIncomingCall method
+CallKit.getInstance().reportIncomingCall(cxCallUpdate, uuid)
+    .then(() => {
+        console.log("Incoming call reported successfully");
+    })
+    .catch(error => {
+        console.error("Error reporting incoming call: ", error);
+    });
+```
+
+After launching the call interface, to accept the invitation and initiate a real-time conversation, please refer to the usage of the [Video Call](https://www.zegocloud.com/docs/video-call/overview?platform=react-native&language=javascript) product. For more details, please refer to the [Implement a basic video call](https://www.zegocloud.com/docs/video-call/implement-basic-videocall?platform=react-native&language=javascript) section.
+
+## Decline an incoming call
+
+To decline an incoming call, call the `reportCallEnded` method. Refer to the Apple official documentation [reportCallWithUUID\:endedAtDate\:reason](https://developer.apple.com/documentation/callkit/cxprovider/1930701-reportcallwithuuid?language=objc).
+
+```typescript
+// `CXCallEndedReason` indicate the reason why an incoming call is ended. In the sample code, the call is declined by the caller.
+// `uuid` is the UUID obtained from the `didReceiveIncomingPush` method or that passed by the `reportIncomingCall` method.
+CallKit.getInstance().reportCallEnded(CXCallEndedReason.AnsweredElsewhere,"BE5832D3-DCAE-4B4C-9B51-33400A5EA69E");
+```
+
+## Receive event callbacks
+
+To listen for event callbacks of `CallKit`, implement the following callback functions before calling the ZPNs [registerPush](@registerPush) method. For details on the callbacks, please refer to the Apple official documentation on [didReceiveIncomingPushWithPayload](https://developer.apple.com/documentation/pushkit/pkpushregistrydelegate/2875784-pushregistry?language=objc), [performAnswerCallAction](https://developer.apple.com/documentation/callkit/cxproviderdelegate/1648270-provider?language=objc), [performEndCallAction](https://developer.apple.com/documentation/callkit/cxproviderdelegate/1648264-provider?language=objc), and [performSetMutedCallAction](https://developer.apple.com/documentation/callkit/cxproviderdelegate/1648269-provider?language=objc).
+
+```typescript
+// Callbacks when a VoIP push notification is received.
+// `uuid` is the unique ID of the call.
+function handleIncomingPush(extras: Record<string, any>, uuid: string) {
+    // The payload string is the same as the extended data carried in the `ZIMPushConfig` class.
+    const payload = extras['payload'];
+}
+CallKit.getInstance().on('didReceiveIncomingPush',handleIncomingPush);
+
+// The event that the user taps the Answer button.
+function handlePerformAnswerCallPush(action: CXAnswerCallAction) {
+    console.log("handlePerformAnswerCallPush User clicks to accept",action);
+    // Received successfully, call the action fulfill function
+    action.fulfill();
+}
+CallKit.getInstance().on('performAnswerCallAction',handlePerformAnswerCallPush);
+
+// The event that the user taps the Decline button.
+function handlePerformEndCallAction(action: CXEndCallAction) {
+   console.log("handlePerformEndCallAction User clicks to hang up", action);
+   // Hang up the phone, call the action fulfill function
+   action.fulfill();
+}
+CallKit.getInstance().on('performEndCallAction', handlePerformEndCallAction);
+
+// The event that the user taps the Mute button.
+function handlePerformSetMutedCallAction(action: CXSetMutedCallAction) {
+    console.log("handlePerformSetMutedCallAction User clicked mute", action);
+    // When the mute button is turned on, muted is true
+    const isMuted = action.muted;
+    // Add mute logic here
+    // Call the action fulfill function
+    action.fulfill();
+}
+CallKit.getInstance().on('performSetMutedCallAction', handlePerformSetMutedCallAction);
+```
+
+## Set the video or audio mode
+
+By default, the audio mode is used. This mode setting only affects the UI display, and the actual call effect needs to be implemented by you.
+
+The following table compares the UI in the two modes.
+
+<table>
+<tbody><tr>
+<th></th>
+<th>Video mode</th>
+<th>Audio mode</th>
+</tr>
+<tr>
+<td>Call notification</td>
+<td><Frame width="256" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZIM/ZPNS/video_mode.jpeg" /></Frame></td>
+<td><Frame width="256" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZIM/ZPNS/voice_mode.jpeg" /></Frame></td>
+</tr>
+<tr>
+<td>Call UI</td>
+<td><Frame width="256" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZIM/ZPNS/video_call.jpeg" /></Frame></td>
+<td><Frame width="256" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZIM/ZPNS/voice_call.jpeg" /></Frame></td>
+</tr>
+</tbody></table>
+
+### CallKit launch by the developer
+
+When calling the `setInitConfiguration` method for initialization, set `supportsVideo` to `true`. Refer to the official Apple documentation on [supportsVideo](https://developer.apple.com/documentation/callkit/cxproviderconfiguration/supportsvideo?language=objc) for details.    
+When calling the `reportIncomingCall` method to launch the call UI, set `hasVideo` to `true`. To redirect the user to the app after the user taps the Video button on the call UI, you also need to set `remoteHandle`. Refer to the official Apple documentation on [hasVideo](https://developer.apple.com/documentation/callkit/cxcallupdate/hasvideo?language=objc) and [remoteHandle](https://developer.apple.com/documentation/callkit/cxcallupdate/remotehandle?language=objc) for details.    
+
+```typescript
+// supportsVideo needs to be true when initializing
+const config = {
+    localizedName: 'localizedName',
+    supportsVideo: true // set supportsVideo to true
+};
+CallKit.setInitConfiguration(config);
+
+// CXCallUpdate hasVideo needs to be true
+const update = {
+    hasVideo: true, // set hasVideo to true
+    // If you want the "Video" button in the call interface to redirect to your app, you need to set remoteHandle
+    remoteHandle: {
+        type: 'CXHandleTypeGeneric', // set the appropriate type based on the actual situation
+        value: 'Caller\'s contact information' // set the caller's contact information
+    }
+};
+// Generate a unique id for this call, uuid version is v4
+const uuid = "";
+
+// Call the reportIncomingCall method
+CallKit.getInstance().reportIncomingCall(update, uuid);
+```
+
+### CallKit launch by ZPNs SDK
+
+When initiating a VoIP call, the initiator needs to set [ZIMPushConfig > iOSVoIPHasVideo](@iOSVoIPHasVideo) to true, and the receiver will automatically set CallKit to video mode based on this parameter.
+
+```typescript
+// Set pushConfig
+const pushConfig = {
+    title: "System call title", // Set the title of the system call
+    payload: "Business required payload", // Set the payload for business
+    resourcesID: "Contact ZEGO technical support to configure resourcesID", // Set the resource ID, need to contact ZEGO technical support for configuration
+    // Configure VoIP settings
+    voIPConfig: {
+        iOSVoIPHandleType: ZIMCXHandleType.generic, // Set the Handle type of iOS VoIP to generic
+        iOSVoIPHandleValue: "Li hua", // Set the sender's contact information
+        iOSVoIPHasVideo: true, // Set if it is a video call
+    }
+};
+```
+
+### Event callback after the user taps the Video button
+
+The following figure shows the call UI in video mode. If the user taps the Video button, the`- (BOOL)application:(UIApplication *)application continueUserActivity:(NSUserActivity *)userActivity restorationHandler:(void (^)(NSArray<id<UIUserActivityRestoring>> * _Nullable))restorationHandler` callback is triggered. 
+You can listen for and handle the callback in your project.
+
+<Frame width="256" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZIM/ZPNS/video_call.jpeg" /></Frame>
+
+```objc
+- (BOOL)application:(UIApplication *)application continueUserActivity:(NSUserActivity *)userActivity restorationHandler:(void (^)(NSArray<id<UIUserActivityRestoring>> * _Nullable))restorationHandler{
+    INInteraction *interaction = userActivity.interaction;
+    INIntent *intent = interaction.intent;
+    // When the user tap the Video button, the following condition is met. Note that the event can be triggered by tapping the button or an entry in the call history.
+    if([userActivity.activityType isEqual:@"INStartVideoCallIntent"]){
+        INPerson *person = [(INStartAudioCallIntent *)intent contacts][0];
+        // The `CXHandle` field in the `ZIMVoIPConfig` class is obtained, which can be used to implement your business logic.
+        CXHandle *handle = [[CXHandle alloc] initWithType:(CXHandleType)person.personHandle.type value:person.personHandle.value];
+        // The following sample UI information will be displayed in a pop-up window.
+        UIAlertController *alertView = [UIAlertController alertControllerWithTitle:@"tips" message:[NSString stringWithFormat:@"If the user action type is `INStartVideoCallIntent`, the video mode is used. User information: %@",handle.value] preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertAction *action = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        }];
+        [alertView addAction:action];
+        [[UIViewControllerCJHelper findCurrentShowingViewController] presentViewController:alertView animated:YES completion:nil];
+        return true;
+    }
+    return false;
+}
+```
