@@ -1,0 +1,420 @@
+---
+
+date: "2022-11-02"
+ce-comparison:
+  - "如何:how"
+  - "自定义:customize"
+  - "视频:video"
+  - "采集:capture"
+  - "旋转:rotation"
+  - "方式:method"
+---
+{/*TODO translate 本文所有图片都要翻译*/}
+import { Title } from './title';
+import ArticleMetadata from '../../zh/faq/ArticleMetadata';
+
+<Title>How to customize video capture rotation method?</Title>
+
+<ArticleMetadata language="en" product="Video Call / Live streaming" platform="iOS / Android" />
+
+
+
+- - -
+
+This document will introduce you how to customize the video capture rotation method.
+
+<Warning title="Note">
+
+
+For v2.23.0 and later versions, if you need to customize the video capture rotation method, to avoid conflicts with other video orientation modes, please do not call [setAppOrientationMode|\blank](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#set-app-orientation-mode) to set modes other than custom mode.
+
+</Warning>
+
+
+
+
+## Overview
+
+If you want to achieve a customized screen rotation effect during mobile video calls or live streaming, you can refer to the following three common implementation methods:
+
+- Fixed portrait
+- Fixed landscape
+- Auto-switch between portrait and landscape
+
+<Note title="Note">
+
+
+In the following examples, the rendering mode of the "receiving end" is the default "ZegoViewModeAspectFit" (proportional scaling, may have black borders). For details, please refer to [ZegoViewMode](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~enum~ZegoViewMode).
+
+</Note>
+
+
+
+**Fixed portrait**: Means the sending end fixes the video capture in portrait mode. When the receiving end device is in portrait mode, the video displayed fills the device screen in portrait mode. When the receiving end device is in landscape mode, the video displayed has a certain rotation angle relative to the sending end image (the following example shows a 90-degree counterclockwise rotation).
+
+- If the device rotation direction is locked:
+    <Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Android/Video-rotation/Fixed_portrait_screen.png" /></Frame></Frame>
+- If the device rotation direction is not locked:
+    <Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Android/Video-rotation/Fixed_portrait_screen_noUI.png" /></Frame></Frame>
+
+**Fixed landscape**: Means the sending end fixes the video capture in landscape mode. When the receiving end device is in landscape mode, the video displayed fills the device screen in landscape mode. When the receiving end device is in portrait mode, the video displayed has a certain rotation angle relative to the sending end image (the following example shows a 90-degree counterclockwise rotation).
+
+- If the device rotation direction is locked:
+    <Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Android/Video-rotation/Fixed_horizontal_screen.png" /></Frame></Frame>
+- If the device rotation direction is not locked:
+    <Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Android/Video-rotation/Fixed_horizontal_screen_noUI.png" /></Frame></Frame>
+
+**Auto-switch between portrait and landscape**: Provides video rotation functionality. Users can rotate the video 90, 180, or 270 degrees counterclockwise relative to the phone's upright position as needed. This helps users obtain the desired video rendering effect based on the video scenario. After video rotation, it will automatically adjust to adapt to the encoded image resolution.
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Android/Video-rotation/Switch_between_horizontal_and_portrait_01.png" /></Frame></Frame>
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Android/Video-rotation/Switch_between_horizontal_and_portrait_02.png" /></Frame></Frame>
+
+The interfaces called by the above three methods have differences. For detailed descriptions, please refer to the [Implementation Process](#implementation-process) in this document.
+
+## Download Sample Source Code
+
+Please refer to [Download Sample Source Code](https://doc-zh.zego.im/real-time-video-ios-oc/quick-start/run-example-code) to get the source code.
+
+For related source code, please check the files in the "/ZegoExpressExample/Examples/CommonFeatures/VideoRotation" directory.
+
+## Prerequisites
+
+Before implementing video capture rotation, please ensure:
+
+- You have integrated ZEGO Express SDK in your project and implemented basic real-time audio and video functionality. For details, please refer to [Quick Start - Integrate SDK](https://doc-zh.zego.im/real-time-video-android-java/quick-start/integrating-sdk) and [Quick Start - Implement Video Call](https://doc-zh.zego.im/real-time-video-android-java/quick-start/implementing-video-call).
+- You have created a project in [ZEGOCLOUD Console](https://console.zegocloud.com/) and applied for a valid AppID and AppSign. For details, please refer to "Project Information" in [Console - Project Management](https://doc-zh.zego.im/console/project-info).
+
+## Implementation Process
+
+### Fixed Portrait
+
+#### iOS
+
+When using portrait live streaming or video calls, the width resolution should be smaller than the height resolution. Assuming it is "360 × 640", you need to implement the function through the following steps.
+
+1. Call the [createEngine ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC~class~zego-express-engine#create-engine-with-app-id-app-sign-is-test-env-scenario-event-handler) interface to create an SDK engine instance. For details, please refer to "Create Engine" in [Quick Start - Implementation Process](https://doc-zh.zego.im/real-time-video-ios-oc/quick-start/implementing-video-call#1-初始化).
+
+```objc
+ZegoEngineProfile *profile = [[ZegoEngineProfile alloc] init];
+// Please get through official website registration, format: 1234567890
+profile.appID = appID;
+// Please get through official website registration
+profile.appSign = appSign;
+// For general scenario access, please choose the appropriate scenario based on your actual situation
+profile.scenario = ZegoScenarioDefault;
+// Create engine and register self as eventHandler callback. If you don't need to register callback, the eventHandler parameter can be passed nil. You can call "-setEventHandler:" method later to set callback
+[ZegoExpressEngine createEngineWithProfile:profile eventHandler:self];
+```
+
+2. (Optional) Call the [setVideoConfig ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC~class~zego-express-engine#set-video-config) interface to set the encoding resolution. The default value is "360 × 640". You can adjust it as needed. If you keep the default value, skip this step.
+The resolution setting for portrait live streaming is as follows:
+
+```objc
+ZegoVideoConfig *videoConfig = [[ZegoVideoConfig alloc] init];
+videoConfig.encodeResolution = CGSizeMake(360, 640);
+[[ZegoExpressEngine sharedEngine] setVideoConfig:videoConfig];
+```
+
+3. Call the [loginRoom ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC~class~zego-express-engine#login-room-user) interface to login to a room. For details, please refer to "Login Room" in [Quick Start - Implementation Process](https://doc-zh.zego.im/real-time-video-ios-oc/quick-start/implementing-video-call#2-登录房间).
+
+```objc
+ZegoUser *user = [ZegoUser userWithUserID:@"test_userid"];
+[[ZegoExpressEngine sharedEngine] loginRoom:@"test_roomid" user:user];
+```
+
+4. Call the [startPreview ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC~class~zego-express-engine#start-preview) interface to start local preview to display the local image. previewView is UIView (iOS) or NSView (macOS).
+
+```objc
+ZegoCanvas *previewCanvas = [ZegoCanvas canvasWithView:previewView];
+[[ZegoExpressEngine sharedEngine] startPreview:previewCanvas]；
+```
+
+5. Call the [startPublishingStream ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC~class~zego-express-engine#start-publishing-stream) interface to start publishing stream and push the local audio and video stream to the real-time audio and video cloud. For details, please refer to "Publishing Stream" in [Quick Start - Implementation Process](https://doc-zh.zego.im/real-time-video-ios-oc/quick-start/implementing-video-call#3-预览自己的画面并推送到-zego-音视频云).
+
+```objc
+[[ZegoExpressEngine sharedEngine] startPublishingStream:@"test_streamid"];
+```
+
+6. Use fixed portrait mode for live streaming or video calls.
+
+#### Android
+
+When using portrait live streaming or video calls, the width resolution should be smaller than the height resolution. Assuming it is "360 × 640", you need to implement the function through the following steps.
+
+1. Call the [createEngine ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#create-engine) interface to create an SDK engine instance. For details, please refer to "Create Engine" in [Quick Start - Implementation Process](https://doc-zh.zego.im/real-time-video-android-java/quick-start/implementing-video-call#初始化).
+
+
+```Java
+// Create engine, general scenario access, and register self as eventHandler callback
+// If you don't need to register callback, the eventHandler parameter can be passed null. You can call "setEventHandler:" method later to set callback
+ZegoEngineProfile profile = new ZegoEngineProfile();
+profile.appID = ;  // Please get through official website registration, format: 1234567890L
+profile.appSign = ;  // Please get through official website registration, format: "1234567890"
+profile.scenario = ZegoScenario.DEFAULT;  // For general scenario access, please choose the appropriate scenario based on your actual situation
+profile.application = getApplication();
+engine = ZegoExpressEngine.createEngine(profile, null);
+```
+
+2. (Optional) Call the [setVideoConfig ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#set-video-config) interface to set the encoding resolution. The default value is "360 × 640". You can adjust it as needed. If you keep the default value, skip this step.
+
+```java
+ZegoVideoConfig config = new ZegoVideoConfig();
+```
+
+The resolution setting for portrait live streaming is as follows:
+
+```java
+config.setEncodeResolution(360, 640);
+ZegoExpressEngine.getEngine().setVideoConfig(config);
+```
+
+3. Call the [loginRoom](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#login-room) interface to login to a room. For details, please refer to "Login Room" in [Quick Start - Implementation Process](https://doc-zh.zego.im/real-time-video-android-java/quick-start/implementing-video-call#登录房间).
+
+```java
+ZegoExpressEngine.getEngine().loginRoom("test_roomid", new ZegoUser("test_userid"), null);
+```
+
+4. Call the [startPreview ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#start-preview) interface to start local preview to display the local image. textureViewLocalPreview is a TextureView object in the layout.
+
+```java
+ZegoExpressEngine.getEngine().startPreview(new ZegoCanvas(textureViewLocalPreview));
+```
+
+5. Call the [startPublishingStream ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#start-publishing-stream) interface to start publishing stream and push the local audio and video stream to the real-time audio and video cloud. For details, please refer to "Publishing Stream" in [Quick Start - Implementation Process](https://doc-zh.zego.im/real-time-video-android-java/quick-start/implementing-video-call#预览自己的画面并推送到-zego-音视频云).
+
+```java
+ZegoExpressEngine.getEngine().startPublishingStream("test_streamid");
+```
+
+6. Use fixed portrait mode for live streaming or video calls.
+
+### Fixed Landscape
+
+#### iOS
+
+When using landscape live streaming or video calls, the width resolution should be larger than the height resolution. Assuming it is "640 × 360", you need to implement the function through the following steps.
+
+1. Call the [createEngine ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC~class~zego-express-engine#create-engine-with-app-id-app-sign-is-test-env-scenario-event-handler) interface to create an SDK engine instance. For details, please refer to "Create Engine" in [Quick Start - Implementation Process](https://doc-zh.zego.im/real-time-video-ios-oc/quick-start/implementing-video-call#1-初始化).
+
+
+```objc
+ZegoEngineProfile *profile = [[ZegoEngineProfile alloc] init];
+// Please get through official website registration, format: 1234567890
+profile.appID = appID;
+// Please get through official website registration
+profile.appSign = appSign;
+// For general scenario access, please choose the appropriate scenario based on your actual situation
+profile.scenario = ZegoScenarioDefault;
+// Create engine and register self as eventHandler callback. If you don't need to register callback, the eventHandler parameter can be passed nil. You can call "-setEventHandler:" method later to set callback
+[ZegoExpressEngine createEngineWithProfile:profile eventHandler:self];
+```
+
+2. Call the [setVideoConfig ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC~class~zego-express-engine#set-video-config) interface to set the encoding resolution to "640 × 360".
+
+The resolution setting for landscape live streaming is as follows:
+
+```objc
+ZegoVideoConfig *videoConfig = [[ZegoVideoConfig alloc] init];
+videoConfig.encodeResolution = CGSizeMake(640, 360);
+[[ZegoExpressEngine sharedEngine] setVideoConfig:videoConfig];
+```
+
+3. Call the [setAppOrientation](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC~class~zego-express-engine#set-app-orientation) interface to set the video orientation. If rotating 90 degrees counterclockwise, pass UIInterfaceOrientationLandscapeLeft. If rotating 90 degrees clockwise, pass UIInterfaceOrientationLandscapeRight.
+
+```objc
+[[ZegoExpressEngine sharedEngine] setAppOrientation:UIInterfaceOrientationLandscapeLeft];
+```
+
+4. Call the [loginRoom ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC~class~zego-express-engine#login-room-user) interface to login to a room. For details, please refer to "Login Room" in [Quick Start - Implementation Process](https://doc-zh.zego.im/real-time-video-ios-oc/quick-start/implementing-video-call#2-登录房间).
+
+```objc
+ZegoUser *user = [ZegoUser userWithUserID:@"test_userid"];
+[[ZegoExpressEngine sharedEngine] loginRoom:@"test_roomid" user:user];
+```
+
+5. Call the [startPreview ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC~class~zego-express-engine#start-preview) interface to start local preview to display the local image. previewView is UIView (iOS) or NSView (macOS).
+
+```objc
+ZegoCanvas *previewCanvas = [ZegoCanvas canvasWithView:previewView];
+[[ZegoExpressEngine sharedEngine] startPreview:previewCanvas]；
+```
+
+6. Call the [startPublishingStream ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC~class~zego-express-engine#start-publishing-stream) interface to start publishing stream and push the local audio and video stream to the real-time audio and video cloud. For details, please refer to "Publishing Stream" in [Quick Start - Implementation Process](https://doc-zh.zego.im/real-time-video-ios-oc/quick-start/implementing-video-call#3-预览自己的画面并推送到-zego-音视频云).
+
+```objc
+[[ZegoExpressEngine sharedEngine] startPublishingStream:@"test_streamid"];
+```
+
+7. Use fixed landscape mode for live streaming or video calls.
+
+
+#### Android
+
+When using landscape live streaming or video calls, the width resolution should be larger than the height resolution. Assuming it is "640 × 360", you need to implement the function through the following steps.
+
+1. Call the [createEngine ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#create-engine) interface to create an SDK engine instance. For details, please refer to "Create Engine" in [Quick Start - Implementation Process](https://doc-zh.zego.im/real-time-video-android-java/quick-start/implementing-video-call#初始化).
+
+
+```Java
+// Create engine, general scenario access, and register self as eventHandler callback
+// If you don't need to register callback, the eventHandler parameter can be passed null. You can call "setEventHandler:" method later to set callback
+ZegoEngineProfile profile = new ZegoEngineProfile();
+profile.appID = ;  // Please get through official website registration, format: 1234567890L
+profile.appSign = ;  // Please get through official website registration, format: "1234567890"
+profile.scenario = ZegoScenario.DEFAULT;  // For general scenario access, please choose the appropriate scenario based on your actual situation
+profile.application = getApplication();
+engine = ZegoExpressEngine.createEngine(profile, null);
+```
+
+2. Call the [setVideoConfig ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#set-video-config) interface to set the encoding resolution to "640 × 360".
+
+```java
+ZegoVideoConfig config = new ZegoVideoConfig();
+```
+
+The resolution setting for landscape live streaming is as follows:
+
+```java
+config.setEncodeResolution(640, 360);
+ZegoExpressEngine.getEngine().setVideoConfig(config);
+```
+
+3. Call the [setAppOrientation ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#set-app-orientation) interface to set the video orientation. If rotating 90 degrees counterclockwise, pass ZegoOrientation.ORIENTATION_90. If rotating 90 degrees clockwise, pass ZegoOrientation.ORIENTATION_270.
+
+```java
+ZegoExpressEngine.getEngine().setAppOrientation(ZegoOrientation.ORIENTATION_90);
+```
+
+4. Call the [loginRoom ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#login-room) interface to login to a room. For details, please refer to "Login Room" in [Quick Start - Implementation Process](https://doc-zh.zego.im/real-time-video-android-java/quick-start/implementing-video-call#登录房间).
+
+```java
+ZegoExpressEngine.getEngine().loginRoom("test_roomid", new ZegoUser("test_userid"), null);
+```
+
+5. Call the [startPreview ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#start-preview) interface to start local preview to display the local image. textureViewLocalPreview is a TextureView object in the layout.
+
+```java
+ZegoExpressEngine.getEngine().startPreview(new ZegoCanvas(textureViewLocalPreview));
+```
+
+6. Call the [startPublishingStream ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#start-publishing-stream) interface to start publishing stream and push the local audio and video stream to the real-time audio and video cloud. For details, please refer to "Publishing Stream" in [Quick Start - Implementation Process](https://doc-zh.zego.im/real-time-video-android-java/quick-start/implementing-video-call#预览自己的画面并推送到-zego-音视频云).
+
+```java
+ZegoExpressEngine.getEngine().startPublishingStream("test_streamid");
+```
+
+7. Use fixed landscape mode for live streaming or video calls.
+
+
+### Auto-switch between Portrait and Landscape
+
+#### iOS
+
+If the App is set to rotate the video image based on changes in gravity during live streaming or video calls, you need to listen to the screen rotation events of the corresponding platform and rotate the video direction accordingly.
+
+When developers use SDK capture, the switching between portrait and landscape is mainly done by calling the [setVideoConfig](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC~class~zego-express-engine#set-video-config) interface to set the encoding resolution and calling the [setAppOrientation ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC~class~zego-express-engine#set-app-orientation) interface to set the video orientation.
+
+
+
+1. Listen to device orientation changes.
+
+```objc
+[[UIDevice currentDevice] beginGeneratingDeviceOrientationNotifications];
+[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(orientationChanged:) name:UIDeviceOrientationDidChangeNotification object:[UIDevice currentDevice]];
+```
+
+2. In the callback of device orientation changes, modify the corresponding encoding resolution and set the video orientation.
+
+```objc
+- (void)orientationChanged:(NSNotification *)notification {
+    UIDevice *device = notification.object;
+
+    ZegoVideoConfig *videoConfig = [[ZegoExpressEngine sharedEngine] getVideoConfig];
+    UIInterfaceOrientation orientation = UIInterfaceOrientationUnknown;
+
+    switch (device.orientation) {
+        // Note that UIInterfaceOrientationLandscapeLeft is equal to UIDeviceOrientationLandscapeRight (and vice versa).
+        // This is because rotating the device to the left requires rotating the content to the right.
+        case UIDeviceOrientationLandscapeLeft:
+            orientation = UIInterfaceOrientationLandscapeRight;
+            videoConfig.encodeResolution = CGSizeMake(640, 360);
+            break;
+        case UIDeviceOrientationLandscapeRight:
+            orientation = UIInterfaceOrientationLandscapeLeft;
+            videoConfig.encodeResolution = CGSizeMake(640, 360);
+            break;
+        case UIDeviceOrientationPortrait:
+            orientation = UIInterfaceOrientationPortrait;
+            videoConfig.encodeResolution = CGSizeMake(360, 640);
+            break;
+        case UIDeviceOrientationPortraitUpsideDown:
+            orientation = UIInterfaceOrientationPortraitUpsideDown;
+            videoConfig.encodeResolution = CGSizeMake(360, 640);
+            break;
+        default:
+            // Unknown / FaceUp / FaceDown
+            break;
+    }
+
+    [[ZegoExpressEngine sharedEngine] setVideoConfig:videoConfig];
+    [[ZegoExpressEngine sharedEngine] setAppOrientation:orientation];
+}
+```
+
+When developers use [custom video capture](https://doc-zh.zego.im/real-time-video-ios-oc/video/custom-video-capture), after listening to device orientation changes, you can refer to the following two methods to implement auto-switch between portrait and landscape:
+
+- Handle video frame data yourself: In the callback of device orientation changes, rotate the captured video frame data, and then pass the processed data to the SDK through the [sendCustomVideoCapturePixelBuffer](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#send-custom-video-capture-pixel-buffer-timestamp) interface.
+- Handle video frame data through SDK: In the callback of device orientation changes, before passing the captured video frame data to the SDK, set the "rotation" in [ZegoVideoEncodedFrameParam](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoVideoEncodedFrameParam) according to the actual orientation, call the [sendCustomVideoCaptureEncodedData](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#send-custom-video-capture-encoded-data-params-timestamp) interface to pass the video frame data and orientation setting parameters to the SDK.
+
+#### Android
+
+
+If the App is set to rotate the video image based on changes in gravity during live streaming or video calls, you need to listen to the screen rotation events of the corresponding platform and rotate the video direction accordingly.
+
+When developers use SDK capture, the switching between portrait and landscape is mainly done by calling the [setVideoConfig ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#set-video-config) interface to set the encoding resolution and calling the [setAppOrientation ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#set-app-orientation) interface to set the video orientation.
+
+Listen to the "onConfigurationChanged" callback triggered by the screen rotation event in the corresponding Activity. In the event processing callback, modify the corresponding encoding resolution and inform the SDK of the App's orientation.
+
+```java
+@Override
+public void onConfigurationChanged(Configuration newConfig) {
+    super.onConfigurationChanged(newConfig);
+
+    // Checks the orientation of the screen
+
+    ZegoVideoConfig videoConfig = ZegoExpressEngine.getEngine().getVideoConfig();
+    ZegoOrientation orientation = ZegoOrientation.ORIENTATION_0;
+
+    if(Surface.ROTATION_0 ==  this.getWindowManager().getDefaultDisplay().getRotation()){
+        orientation = ZegoOrientation.ORIENTATION_0;
+        videoConfig.setEncodeResolution(360, 640);
+    }else if(Surface.ROTATION_180 ==  this.getWindowManager().getDefaultDisplay().getRotation()){
+        orientation = ZegoOrientation.ORIENTATION_180;
+        videoConfig.setEncodeResolution(360, 640);
+    }else if(Surface.ROTATION_270 ==  this.getWindowManager().getDefaultDisplay().getRotation()){
+        orientation = ZegoOrientation.ORIENTATION_270;
+        videoConfig.setEncodeResolution(640, 360);
+    }else if(Surface.ROTATION_90 ==  this.getWindowManager().getDefaultDisplay().getRotation()){
+        orientation = ZegoOrientation.ORIENTATION_90;
+        videoConfig.setEncodeResolution(640, 360);
+    }
+
+    ZegoExpressEngine.getEngine().setAppOrientation(orientation);
+    ZegoExpressEngine.getEngine().setVideoConfig(videoConfig);
+}
+```
+
+
+When developers use [custom video capture](https://doc-zh.zego.im/real-time-video-android-java/video/custom-video-capture), after listening to device orientation changes, you can refer to the following two methods to implement portrait and landscape switching:
+
+- Handle video frame data yourself: In the callback of device orientation changes, rotate the captured video frame data, and then pass the processed data to the SDK through the [sendCustomVideoCaptureTextureData](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~java_android~class~ZegoExpressEngine#send-custom-video-capture-texture-data) interface.
+- Handle video frame data through SDK: In the callback of device orientation changes, before passing the captured video frame data to the SDK, set the "rotation" in [ZegoVideoEncodedFrameParam](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~java_android~class~ZegoVideoEncodedFrameParam) according to the actual orientation, call the [sendCustomVideoCaptureEncodedData](https://docs.zegocloud.com/article/api?doc=Express_Video_SDK_API~java_android~class~ZegoExpressEngine#send-custom-video-capture-encoded-data) interface to pass the video frame data and orientation setting parameters to the SDK.
+
+<Warning title="Note">
+
+
+
+If the recorded live stream cannot be played, the possible reason is: Since the encoding resolution is modified when switching between portrait and landscape, some third-party players have poor compatibility with videos with modified resolutions, which may cause playback failures. Therefore, it is generally not recommended to modify the resolution when switching between portrait and landscape during live streaming or video calls.
+
+</Warning>
+
+

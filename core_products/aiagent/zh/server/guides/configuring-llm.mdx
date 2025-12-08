@@ -1,6 +1,9 @@
+import LLMValidator from '../LLMValidator.jsx';
+
 # 配置大语言模型
 
 为适应不同场景，您可能需要选择不同的大语言模型（LLM）提供商，包括火山豆包、MiniMax、阿里通义千问、阶跃星辰、DeepSeek 等，也可能更进一步使用完全自研的LLM。本文说明常见大语言模型厂商如何配置及相关注意事项。
+
 
 ## LLM 参数说明
 
@@ -16,15 +19,19 @@
 | TopP         | Float  | 否       | 采样方法，数值越小结果确定性越强；数值越大，结果越随机。                                                                                                                 |
 | Params       | Object | 否       | 其他 LLM 参数，例如使用的最大 Token 数限制等。不同的 LLM 供应商支持的配置不同，请参考对应文档按需填入。<Note title="说明">参数名与各厂商 LLM 的参数名保持一致。</Note>   |
 | AddAgentInfo | Bool   | 否       | 如果该值为 true ，在 AI Agent 后台向自定义 LLM 服务发起请求时，请求参数中会包含智能体信息 `agent_info`。该值默认为 false。在使用自定义 LLM 时可根据此参数内容做额外的业务逻辑。 |
+| AgentExtraInfo | Object   | 否       | Agent 扩展信息，服务器在请求 LLM 服务时会在请求参数中透传该参数。透传参数示例请参考[使用自定义 LLM](#use-custom-llm)。您可以使用此参数在自定义 LLM 服务中执行额外的业务逻辑。 |
 
 
 ## 使用第三方 LLM
 
 <Note title="说明">
-请先联系 ZEGO 技术支持开通第三方 LLM 服务，获取接入 Url 和 API Key。
-
 第三方 LLM 需要兼容 OpenAI 协议。
 </Note>
+<Warning title="注意">
+不同厂商不同模型的 max_tokens 参数最大值不同，请根据实际需求设置合理的值。如果不了解该参数含义，可以不设置该参数，这会使用默认值。
+- 如果 max_tokens 超过模型限制，可能会导致请求失败。
+- 如果 max_tokens 设置过小，可能会导致输出不完整，答案被截断。
+</Warning>
 
 您可以在注册智能体（[RegisterAgent](./../api-reference/agent-configuration-management/register-agent.mdx)）或创建智能体实例（[CreateAgentInstance](./../api-reference/agent-instance-management/create-agent-instance.mdx)）时设置 LLM 参数。
 
@@ -42,7 +49,7 @@
     "Temperature": 1,
     "TopP": 0.7,
     "Params": {
-        "max_tokens": 16384
+        "max_tokens": 4096
     }
 }
 ```
@@ -58,7 +65,7 @@
     "Temperature": 1,
     "TopP": 0.7,
     "Params": {
-        "max_tokens": 16384
+        "max_tokens": 4096
     }
 }
 ```
@@ -74,14 +81,14 @@
     "Temperature": 1,
     "TopP": 0.7,
     "Params": {
-        "max_tokens": 16384
+        "max_tokens": 4096
     }
 }
 ```
 </Tab>
 </Tabs>
 
-## 使用自定义 LLM
+## 使用自定义 LLM <a id="use-custom-llm" />
 
 AI Agent 后台使用 OpenAI API 协议调用 LLM 服务。因此，您也可以使用任何兼容 OpenAI 协议的自定义 LLM。这里的自定义 LLM 甚至可以在底层实现的时候调用多个子 LLM 模型或者进行 RAG 搜索、联网搜索后再进行整合输出。
 
@@ -105,7 +112,7 @@ AI Agent 后台使用 OpenAI API 协议调用 LLM 服务。因此，您也可以
     "model": "your model name", // 对应 LLM.Model 参数
     "temperature": 1, // 对应 LLM.Temperature 参数
     "top_p": 0.7, // 对应 LLM.TopP 参数
-    "max_tokens": 16384, // 对应 LLM.Params.max_tokens 参数
+    "max_tokens": 4096, // 对应 LLM.Params.max_tokens 参数
     "messages":[
         {
             "role": "system",
@@ -122,6 +129,11 @@ AI Agent 后台使用 OpenAI API 协议调用 LLM 服务。因此，您也可以
         "user_id": "用户的user id",
         "round_id": 1, //轮次id
         "time_stamp": 193243200 //毫秒级别时间戳
+    },
+    // 如果 LLM.AgentExtraInfo 参数有配置值，则会包含 agent_extra_info 信息
+    "agent_extra_info":{
+        "user_custom_key1" : "value1",
+        "user_custom_key2" : "value2",
     }
 }
 ```
@@ -148,6 +160,7 @@ data: [DONE]
 - 每条数据必须以 `data: ` 开头（注意冒号后有空格）。
 - 每条数据为单独一行或者行尾有换行符。
 - 最后一个有效数据必须包含 `"finish_reason":"stop"`。
+- 除最后一个有效数据可包含 `"finish_reason":"stop"`，其他数据必须把 `finish_reason` 设置为空字符串或者不设置 `finish_reason` 字段，否则会导致智能体不输出内容。
 - 最后必须发送一条结束数据：`data: [DONE]`。
 
 如果格式不正确可能会导致智能体不输出或者输出不完整。
@@ -463,3 +476,13 @@ async registerAgent(agentId: string, agentName: string) {
 
 详细使用案例请参考 [结合 RAG 使用 AI Agent](./../best-practices/use-ai-agent-with-rag.mdx)。
 
+## 校验 LLM 参数
+
+如果您在配置 LLM 参数时，不确定参数是否正确，可以使用 LLM 参数校验器进行校验。
+
+- 选择合适的 LLM 厂商、选择开发语言、填写 LLM 参数后即可点击校验按钮进行校验。
+- 用户消息可以填写一个用户消息用于测试 LLM 是否能正确理解用户意图并返回正确的响应。如果不填写，默认使用“你好,请介绍一下你自己”作为用户消息。
+- “示例代码” Tab 为对应语言的示例代码。
+- “实际请求LLM参数” 为实际发送给 LLM 的参数，您可以根据对比所选厂商的官方文档，确保参数填写正确。
+
+<LLMValidator lang="zh" />

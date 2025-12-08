@@ -1,0 +1,500 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+servers:
+  $ref: '../shared-components.yaml#/servers'
+tags:
+  - real-time-monitoring
+paths:
+  /:
+    get:
+      tags: [real-time-monitoring]
+      summary: 查看地区质量实时数据
+      description: |
+        查询指定地区（或所有地区）和指定平台（或所有平台）上 1 小时时间跨度内的质量数据，按分钟粒度返回。
+
+        <Note title="说明">调用频率限制（同一 AppID）：3 次/分，480 次/天。数据延迟：3分钟。</Note>
+      operationId: get-region-quality-detail
+      parameters:
+        - $ref: '#/components/parameters/Action'
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../shared-components.yaml#/components/parameters/IsTest'
+        - name: Region
+          in: query
+          description: |
+            国家或地区的名称。
+            
+            - `all`：默认值，表示所有国家和地区。
+            - 其他值：仅支持中文地名，具体值请参考 [星图 - 实时监控 - 业务监控 - 用户体验](https://prism.zego.im) 筛选 `地区` 后的下拉列表。
+            <img src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/51a706c402.jpeg" />
+          required: false
+          schema:
+            type: string
+            default: "all"
+        - name: Platform
+          in: query
+          description: |
+            平台类型。
+            
+            - `all`：默认值，全部平台。
+            - `native`：Native 平台（指除了 Web 和 小程序之外的所有平台）。
+            - `web`：Web 和小程序。
+            
+            > **注意**
+            >
+            > 有些指标可能不支持平台类型维度，返回值可能为空。
+          required: false
+          schema:
+            type: string
+            default: "all"
+            enum: [all, native, web]
+        - name: StartTs
+          in: query
+          description: 开始时间，UTC 时间戳，单位为毫秒。
+          required: true
+          schema:
+            type: number
+        - name: EndTs
+          in: query
+          description: 结束时间，UTC 时间戳，单位为毫秒。如果推流未结束，则可以用 0 或者当前时间戳表示进行中。
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetRegionQualityDetailResponse'
+components:
+  parameters:
+    Action:
+      name: Action
+      in: query
+      description: |
+        > 接口原型参数
+        >
+        > https://analytics-api.zego.im/?Action=GetRegionQualityDetail
+      required: true
+      schema:
+        type: string
+        enum: [GetRegionQualityDetail]
+      style: form
+      explode: true
+  schemas:
+    GetRegionQualityDetailResponse:
+      type: object
+      properties:
+        Code:
+          type: number
+          description: |
+            返回码。
+
+            <table>
+            <tbody><tr>
+            <th>返回码</th>
+            <th>说明</th>
+            <th>处理意见</th>
+            </tr>
+            <tr>
+            <td>0</td>
+            <td>成功。</td>
+            <td>-</td>
+            </tr>
+            <tr>
+            <td>500</td>
+            <td>接口错误。</td>
+            <td>请联系 ZEGO 技术支持。</td>
+            </tr>
+            <tr>
+            <td>10001</td>
+            <td>参数格式错误。</td>
+            <td>请检查参数。</td>
+            </tr>
+            <tr>
+            <td>10002</td>
+            <td>参数错误或参数无效。</td>
+            <td>请检查参数。</td>
+            </tr>
+            <tr>
+            <td>30002</td>
+            <td>接口请求频率超过上限。</td>
+            <td>请确认对应接口的 QPS 限制，降低请求频率。</td>
+            </tr>
+            </tbody></table>
+          example: 0
+        Message:
+          type: string
+          description: 操作结果描述。
+          example: "success"
+        RequestId:
+          type: string
+          description: 请求 ID。
+        Data:
+          type: object
+          description: 响应数据。
+          properties:
+            List:
+              type: array
+              description: 指标列表。
+              items:
+                type: object
+                properties:
+                  Timestamp:
+                    type: number
+                    description: UTC 时间戳，单位为毫秒。
+                    example: 1676961480000
+                  QualityInfo:
+                    type: array
+                    description: 质量列表。
+                    items:
+                      type: object
+                      properties:
+                        Region:
+                          type: string
+                          description: 国家或地区的名称。
+                          example: "中国"
+                        P2pDelayDetail:
+                          type: object
+                          description: 端到端延迟。
+                          properties:
+                            Total:
+                              type: number
+                              description: 分钟样本总数量。
+                            Rate1:
+                              type: number
+                              description: 在 (0, 400ms) 区间数量占比。
+                            Rate2:
+                              type: number
+                              description: 在 [400ms, 600ms) 区间数量占比。
+                            Rate3:
+                              type: number
+                              description: 在 [600ms, 800ms) 区间数量占比。
+                            Rate4:
+                              type: number
+                              description: 在 800ms 及以上数量占比。
+                        P2pPlrDetail:
+                          type: object
+                          description: 端到端丢包率分布。
+                          properties:
+                            Total:
+                              type: number
+                              description: 分钟样本总数量。
+                            Rate1:
+                              type: number
+                              description: 丢包率为 0 的数量占比。
+                            Rate2:
+                              type: number
+                              description: 丢包率在 (0, 5%) 的数量占比。
+                            Rate3:
+                              type: number
+                              description: 丢包率在 [5%, 10%) 的数量占比。
+                            Rate4:
+                              type: number
+                              description: 丢包率在 [10%, 50%) 的数量占比。
+                            Rate5:
+                              type: number
+                              description: 丢包率在 [50%, 100%] 的数量占比。
+                        VideoBreakDetail:
+                          type: object
+                          description: 视频卡顿率分布。
+                          properties:
+                            Total:
+                              type: number
+                              description: 分钟样本总数量。
+                            Rate1:
+                              type: number
+                              description: 卡顿率为 0 的数量占比。
+                            Rate2:
+                              type: number
+                              description: 卡顿率在 (0, 20%) 的数量占比。
+                            Rate3:
+                              type: number
+                              description: 卡顿率在 [20%, 50%) 的数量占比。
+                            Rate4:
+                              type: number
+                              description: 卡顿率在 [50%, 100%) 的数量占比。
+                            Rate5:
+                              type: number
+                              description: 卡顿率在 100% 的数量占比。
+                        AudioBreakDetail:
+                          type: object
+                          description: 音频卡顿率分布。
+                          properties:
+                            Total:
+                              type: number
+                              description: 分钟样本总数量。
+                            Rate1:
+                              type: number
+                              description: 卡顿率为 0 的数量占比。
+                            Rate2:
+                              type: number
+                              description: 卡顿率在 (0, 20%) 的数量占比。
+                            Rate3:
+                              type: number
+                              description: 卡顿率在 [20%, 50%) 的数量占比。
+                            Rate4:
+                              type: number
+                              description: 卡顿率在 [50%, 100%) 的数量占比。
+                            Rate5:
+                              type: number
+                              description: 卡顿率在 100% 的数量占比。
+                        LoginSuccessRateDetail:
+                          type: object
+                          description: 登录成功率。
+                          properties:
+                            LoginSuccessRate:
+                              type: number
+                              description: 登录成功率。
+                            LoginSuccessRate5s:
+                              type: number
+                              description: 5 秒内登录成功率。
+                        VideoFFTDetail:
+                          type: object
+                          description: 视频首帧耗时分布。
+                          properties:
+                            Total:
+                              type: number
+                              description: 分钟样本总数量。
+                            Rate1:
+                              type: number
+                              description: 耗时在 (0, 500ms] 的数量占比。
+                            Rate2:
+                              type: number
+                              description: 耗时在 (500ms, 1000ms] 的数量占比。
+                            Rate3:
+                              type: number
+                              description: 耗时在 (1000ms, 2000ms] 的数量占比。
+                            Rate4:
+                              type: number
+                              description: 耗时在 (2000, 5000ms] 的数量占比。
+                            Rate5:
+                              type: number
+                              description: 耗时在 5000ms 以上的数量占比。
+                        AudioFFTDetail:
+                          type: object
+                          description: 音频首帧耗时分布。
+                          properties:
+                            Total:
+                              type: number
+                              description: 分钟样本总数量。
+                            Rate1:
+                              type: number
+                              description: 耗时在 (0, 500ms] 的数量占比。
+                            Rate2:
+                              type: number
+                              description: 耗时在 (500ms, 1000ms] 的数量占比。
+                            Rate3:
+                              type: number
+                              description: 耗时在 (1000ms, 2000ms] 的数量占比。
+                            Rate4:
+                              type: number
+                              description: 耗时在 (2000, 5000ms] 的数量占比。
+                            Rate5:
+                              type: number
+                              description: 耗时在 5000ms 以上的数量占比。
+          example:
+            List:
+              - Timestamp: 1676961480000
+                QualityInfo:
+                  - Region: "中国"
+                    P2pDelayDetail:
+                      Total: 298
+                      Rate1: 0.9966
+                      Rate2: 0
+                      Rate3: 0
+                      Rate4: 0.0034
+                    P2pPlrDetail:
+                      Total: 1123
+                      Rate1: 0.9386
+                      Rate2: 0.0561
+                      Rate3: 0.0018
+                      Rate4: 0.0036
+                      Rate5: 0
+                    VideoBreakDetail:
+                      Total: 920
+                      Rate1: 0.9304
+                      Rate2: 0.0022
+                      Rate3: 0.0109
+                      Rate4: 0.0446
+                      Rate5: 0.012
+                    AudioBreakDetail:
+                      Total: 1123
+                      Rate1: 0.951
+                      Rate2: 0.016
+                      Rate3: 0.0107
+                      Rate4: 0.0098
+                      Rate5: 0.0125
+                    LoginSuccessRateDetail:
+                      LoginSuccessRate: 1
+                      LoginSuccessRate5s: 1
+                    VideoFFTDetail:
+                      Total: 39
+                      Rate1: 0.9231
+                      Rate2: 0
+                      Rate3: 0.0513
+                      Rate4: 0.0256
+                      Rate5: 0
+                    AudioFFTDetail:
+                      Total: 36
+                      Rate1: 0.9167
+                      Rate2: 0.0278
+                      Rate3: 0.0556
+                      Rate4: 0
+                      Rate5: 0
+              - Timestamp: 1676961540000
+                QualityInfo:
+                  - Region: "中国"
+                    P2pDelayDetail:
+                      Total: 298
+                      Rate1: 0.9966
+                      Rate2: 0
+                      Rate3: 0
+                      Rate4: 0.0034
+                    P2pPlrDetail:
+                      Total: 1123
+                      Rate1: 0.9386
+                      Rate2: 0.0561
+                      Rate3: 0.0018
+                      Rate4: 0.0036
+                      Rate5: 0
+                    VideoBreakDetail:
+                      Total: 920
+                      Rate1: 0.9304
+                      Rate2: 0.0022
+                      Rate3: 0.0109
+                      Rate4: 0.0446
+                      Rate5: 0.012
+                    AudioBreakDetail:
+                      Total: 1123
+                      Rate1: 0.951
+                      Rate2: 0.016
+                      Rate3: 0.0107
+                      Rate4: 0.0098
+                      Rate5: 0.0125
+                    LoginSuccessRateDetail:
+                      LoginSuccessRate: 1
+                      LoginSuccessRate5s: 1
+                    VideoFFTDetail:
+                      Total: 39
+                      Rate1: 0.9231
+                      Rate2: 0
+                      Rate3: 0.0513
+                      Rate4: 0.0256
+                      Rate5: 0
+                    AudioFFTDetail:
+                      Total: 36
+                      Rate1: 0.9167
+                      Rate2: 0.0278
+                      Rate3: 0.0556
+                      Rate4: 0
+                      Rate5: 0
+      example:
+        Code: 0
+        Message: "success"
+        Data:
+          List:
+            - Timestamp: 1676961480000
+              QualityInfo:
+                - Region: "中国"
+                  P2pDelayDetail:
+                    Total: 298
+                    Rate1: 0.9966
+                    Rate2: 0
+                    Rate3: 0
+                    Rate4: 0.0034
+                  P2pPlrDetail:
+                    Total: 1123
+                    Rate1: 0.9386
+                    Rate2: 0.0561
+                    Rate3: 0.0018
+                    Rate4: 0.0036
+                    Rate5: 0
+                  VideoBreakDetail:
+                    Total: 920
+                    Rate1: 0.9304
+                    Rate2: 0.0022
+                    Rate3: 0.0109
+                    Rate4: 0.0446
+                    Rate5: 0.012
+                  AudioBreakDetail:
+                    Total: 1123
+                    Rate1: 0.951
+                    Rate2: 0.016
+                    Rate3: 0.0107
+                    Rate4: 0.0098
+                    Rate5: 0.0125
+                  LoginSuccessRateDetail:
+                    LoginSuccessRate: 1
+                    LoginSuccessRate5s: 1
+                  VideoFFTDetail:
+                    Total: 39
+                    Rate1: 0.9231
+                    Rate2: 0
+                    Rate3: 0.0513
+                    Rate4: 0.0256
+                    Rate5: 0
+                  AudioFFTDetail:
+                    Total: 36
+                    Rate1: 0.9167
+                    Rate2: 0.0278
+                    Rate3: 0.0556
+                    Rate4: 0
+                    Rate5: 0
+            - Timestamp: 1676961540000
+              QualityInfo:
+                - Region: "中国"
+                  P2pDelayDetail:
+                    Total: 298
+                    Rate1: 0.9966
+                    Rate2: 0
+                    Rate3: 0
+                    Rate4: 0.0034
+                  P2pPlrDetail:
+                    Total: 1123
+                    Rate1: 0.9386
+                    Rate2: 0.0561
+                    Rate3: 0.0018
+                    Rate4: 0.0036
+                    Rate5: 0
+                  VideoBreakDetail:
+                    Total: 920
+                    Rate1: 0.9304
+                    Rate2: 0.0022
+                    Rate3: 0.0109
+                    Rate4: 0.0446
+                    Rate5: 0.012
+                  AudioBreakDetail:
+                    Total: 1123
+                    Rate1: 0.951
+                    Rate2: 0.016
+                    Rate3: 0.0107
+                    Rate4: 0.0098
+                    Rate5: 0.0125
+                  LoginSuccessRateDetail:
+                    LoginSuccessRate: 1
+                    LoginSuccessRate5s: 1
+                  VideoFFTDetail:
+                    Total: 39
+                    Rate1: 0.9231
+                    Rate2: 0
+                    Rate3: 0.0513
+                    Rate4: 0.0256
+                    Rate5: 0
+                  AudioFFTDetail:
+                    Total: 36
+                    Rate1: 0.9167
+                    Rate2: 0.0278
+                    Rate3: 0.0556
+                    Rate4: 0
+                    Rate5: 0
+

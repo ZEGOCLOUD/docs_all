@@ -1,0 +1,176 @@
+---
+
+date: "2023-03-30"
+ce-comparison:
+  - "如何:how"
+  - "理解:understand"
+  - "和:and"
+  - "使用:use"
+  - "SEI:SEI"
+  - "媒体:media"
+  - "补充:supplemental"
+  - "增强:enhancement"
+  - "信息:information"
+---
+import { Title } from './title';
+import ArticleMetadata from '../../zh/faq/ArticleMetadata';
+
+<Title>How to understand and use SEI (Supplemental Enhancement Information)?</Title>
+
+<ArticleMetadata language="en" product="Video Call / Audio Call / Live streaming" platform="iOS / Android / macOS / Windows / Web / Flutter" />
+
+
+
+- - -
+
+## Use Cases
+
+When developers have high frequency and real-time requirements for message sending, and message loss will not affect business logic, it is recommended to use SEI (Supplemental Enhancement Information). It is mainly used in the following scenarios:
+- Scenarios of sending large concurrent IM in one direction
+- Scenarios where text information needs to be synchronized with media streams in real-time, for example:
+  - Live quiz
+  - Lyrics synchronization
+  - Single stream custom audio waves
+  - Precise control of mixed stream video layout switching
+
+Supplemental Enhancement Information has the following advantages and disadvantages:
+
+- Advantages: High real-time performance; text information and media stream synchronization; no limit on the number of receivers, those who pull the stream can receive it.
+
+- Disadvantages: Since the transmission protocol of media streams is UDP protocol, there is a possibility of packet loss. When a video frame is lost during transmission, the supplemental enhancement information on that video frame will also be lost.
+
+## Concept Explanation
+
+<Note title="Note">
+
+
+Both H.264 and H.265 encoding support the use of SEI. The following explanation uses H.264 as an example.
+
+</Note>
+
+
+
+#### H.264 Raw Bitstream Structure
+
+H.264 raw bitstream (naked stream) is composed of one NALU after another. Its functions are divided into two layers, VCL (Video Coding Layer) and NAL (Network Abstraction Layer).
+
+To facilitate the extraction of NALU from the byte stream, the protocol specifies that a start code (StartCode) is added before each NALU: 0x000001 or 0x00000001.
+
+#### NALU Structure
+
+NALU (NAL Unit) = NALU header information (NAL header) corresponding to video encoding + one RBSP (Raw Byte Sequence Payload)
+
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/general/en/faq/NALU_structure.png" /></Frame></Frame>
+
+#### NALU Header Structure
+
+NALU Header consists of 8 bits, where the last 5 bits represent NAL Unit Type. The specific structure is shown in the figure below:
+
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/Header_structure.png" /></Frame></Frame>
+
+Common NAL Unit Types are as follows:
+
+| NAL Unit Type |  NAL Unit Content  |
+|---------|--------|
+|  1  | Non-IDR image, and slice without data partitioning.   |
+|  5  | IDR image.   |
+|  6  | Supplemental Enhancement Information (SEI).  |
+|  7  | Sequence Parameter Set (SPS).  |
+|  8  | Picture Parameter Set (PPS).  |
+|  11 | Stream end symbol.    |
+
+#### SEI payload type calculation method
+
+When starting to parse a NAL of type SEI, continuously read 8 bits in the RBSP until a non-0xff value is encountered, then accumulate the read values. The accumulated value is the SEI payload type.
+
+The SEI RBSP structure diagram is as follows:
+
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/RBSP_structure.png" /></Frame></Frame>
+
+#### SEI payload size calculation method
+
+The logic for reading SEI payload size is similar to SEI payload type, that is, read until a non-0xff value is encountered, which can support any length of SEI payload addition. Assuming the character sequence after SEI payload type is FF FF AA BB ...., then FF FF AA will be parsed as SEI payload size, which is 255 + 255 + 170 = 680.
+
+
+## Key Internal Implementation
+
+#### Injection and extraction timing of supplemental enhancement information
+
+Injection timing: After encoding, before network transmission.
+
+Extraction timing: After Jitter buffer, before decoding.
+
+The advantages are as follows:
+1. One set of code implements the injection and extraction logic of supplemental enhancement information for both secondary media packaging and SEI packaging.
+2. Without a video module, lacking a video encoding module, supplemental enhancement information can still be sent normally.
+3. It is convenient to implement custom format NALU assembly and disassembly.
+
+The disadvantages are as follows:
+When the encoder encodes a NALU, it will detect whether a keyword sequence such as "StartCode" appears inside the NALU and perform "competition prevention" processing. However, ZEGO has not implemented this, but instead reports an error internally and blocks the sending of this supplemental enhancement information.
+
+#### 4K Limitation
+
+Supplemental Enhancement Information is mainly used for text information transmission. To ensure that it does not occupy excessive bandwidth, the total length of inData passed by ZEGO cannot exceed 4096 Bytes.
+
+#### Transmission Media Driver
+
+- Audio and Video
+
+In audio and video scenarios, video will drive the transmission of supplemental enhancement information, and the timestamp used is the video timestamp.
+After the video encoder encodes a frame, it will assemble each supplemental enhancement information in the send queue into individual NALUs for transmission. Since video encoding drives the sending of supplemental enhancement information, if the video encoder does not output frames (such as turning off the camera), it will cause supplemental enhancement information to not be sent normally.
+
+- Pure Audio
+
+In pure audio scenarios, audio will drive the transmission of supplemental enhancement information, and the timestamp used is the audio timestamp.
+After the audio encoder encodes a frame, it will assemble each supplemental enhancement information in the send queue into individual NALUs for transmission.
+
+Different audio encoding formats have different encoding frame rates. For example, AAC-LC has an encoding frame rate of 20 to 25 frames, and OPUS has an encoding frame rate of about 50 frames. With audio driving and OPUS encoding, it can support 50 messages per second. When audio drives the transmission of supplemental enhancement information, it will ignore video stream transmission.
+
+If audio drives the transmission of supplemental enhancement information, and video is sent at this time, the timestamp of the video frame will have two types (based on audio timestamp and based on video timestamp). Due to the influence of different devices and processes, there is a certain gap between audio timestamp and video timestamp, and time reversal may occur.
+
+Similarly, it can be explained why switching between pure audio driving and video driving of supplemental enhancement information is not supported.
+
+The figure below shows the problem of time reversal when switching is allowed:
+
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/general/en/faq/Video_driver.png" /></Frame></Frame>
+
+#### Difference between single frame sending and sending with video frame
+
+- Single frame sending: Each NALU carrying supplemental enhancement information will be sent separately as a video frame.
+
+- Sending with video frame: Insert the supplemental enhancement information NALU that needs to be transmitted after the original bitstream of the video frame.
+
+#### Send queue size limitation
+
+The supplemental enhancement information sender maintains a maximum of 10 supplemental enhancement information in the internal send queue. Assuming there is no media to drive the sending of supplemental enhancement information or the sending frequency of supplemental enhancement information is too frequent, if more than 10 supplemental enhancement information are inserted within the driving transmission interval, the supplemental enhancement information that cannot be inserted into the send queue will be directly discarded.
+
+#### SideInfoZegoDefined Structure
+
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/SideInfoZegoDefined_structure.png" /></Frame></Frame>
+
+#### Receiver Data Encapsulation
+
+To be compatible with the SideInfoZegoDefined structure, the receiver will encapsulate the received supplemental enhancement information in the following format:
+
+<Frame width="512" height="auto" caption=""><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/MediaType_structure.png" /></Frame></Frame>
+
+Common MediaType types are as follows:
+
+| MediaType |  NAL Unit Content  |
+|---------|--------|
+|  1001  | Media information packaged by SDK using secondary media method.   |
+|  1003  | Layout information packaged by mixed stream server.   |
+|  1004  | Information with payload type = 5 in SEI, that is, when the "mediaInfoType" parameter is set to "SeiUserUnregisted" when enabling the sending of supplemental enhancement information.   |
+|  1005  |  Information with payload type = 243 in SEI, that is, when the "mediaInfoType" parameter is set to "SeiZegoDefined" when enabling the sending of supplemental enhancement information.  |
+
+## Related References
+
+For detailed feature introduction and implementation process, please refer to "Supplemental Enhancement Information". The related links for each platform are as follows.
+
+- iOS: [Supplemental Enhancement Information](https://doc-zh.zego.im/real-time-video-ios-oc/communication/sei)
+- Android: [Supplemental Enhancement Information](https://doc-zh.zego.im/real-time-video-android-java/communication/sei)
+- macOS: [Supplemental Enhancement Information](https://doc-zh.zego.im/real-time-video-macos-oc/communication/sei)
+- Windows: [Supplemental Enhancement Information](https://doc-zh.zego.im/real-time-video-windows-cpp/communication/sei)
+- Flutter: [Supplemental Enhancement Information](https://doc-zh.zego.im/real-time-video-flutter/communication/sei)
+
+

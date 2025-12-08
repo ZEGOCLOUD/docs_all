@@ -118,6 +118,10 @@ sequenceDiagram
 
 Please refer to [Integrate the SDK > 2.2 > Method 2](https://www.zegocloud.com/docs/video-call/sdk-integration?platform=android&language=java#2) to manually integrate the SDK. After integrating the SDK, follow these steps to initialize ZegoExpressEngine.
 
+<Warning title="Warning">
+You must use the ZEGO Express SDK version optimized for AI Agent from the [Download SDK and Demo](./../introduction/download.mdx) page, otherwise subtitles will not display properly.
+</Warning>
+
 <div>
 <Steps>
 <Step title="Add Permission Declaration">
@@ -159,6 +163,10 @@ ZegoExpressEngine.createEngine(zegoEngineProfile, null);
 :::if{props.platform="iOS"}
 
 Please refer to [Import the SDK > 2.2 > Method 3](https://www.zegocloud.com/docs/video-call/sdk-integration?platform=ios&language=objective-c) to manually integrate the SDK. After integrating the SDK, follow these steps to initialize ZegoExpressEngine.
+
+<Warning title="Warning">
+You must use the ZEGO Express SDK version optimized for AI Agent from the [Download SDK and Demo](./../introduction/download.mdx) page, otherwise subtitles will not display properly.
+</Warning>
 
 <div>
 <Steps>
@@ -211,8 +219,12 @@ Please refer to [Import the SDK > 2.2 > Method 3](https://www.zegocloud.com/docs
 
 :::if{props.platform="flutter"}
 
-Please refer to [Integrate the SDK > 2.2 > Method 1](https://www.zegocloud.com/docs/video-call/quickstart?platform=flutter&language=dart#2) to manually integrate the SDK. After integrating the SDK, follow these steps to initialize ZegoExpressEngine.
+Please refer to [Integrate the SDK > Method 1](https://www.zegocloud.com/docs/voice-call/sdk-integration?platform=flutter&language=dart#2) to integrate the SDK using "pub" dependency. After integrating the SDK, follow these steps to initialize ZegoExpressEngine.
 > If including web platform, please refer to [Import the SDK for Flutter Web projects](https://www.zegocloud.com/docs/video-call/quickstart?platform=flutter&language=dart#4_3) to manually import JS files.
+
+<Warning title="Warning">
+You must use the ZEGO Express SDK version optimized for AI Agent from the [Download SDK and Demo](./../introduction/download.mdx) page, otherwise subtitles will not display properly.
+</Warning>
 
 <div>
 <Steps>
@@ -289,7 +301,11 @@ await ZegoExpressEngine.createEngineWithProfile(
 
 :::if{props.platform="Web"}
 
-Please refer to [Integrate SDK > Method 2](https://www.zegocloud.com/docs/video-call/sdk-integration?platform=web&language=javascript#2_2) to use npm to integrate SDK v3.9.123 or above. After integrating the SDK, initialize ZegoExpressEngine as follows.
+Please refer to [Integrate SDK > Method 2](https://www.zegocloud.com/docs/video-call/sdk-integration?platform=web&language=javascript#2_2) to use npm to integrate the ZEGO Express SDK version optimized for AI Agent. After integrating the SDK, initialize ZegoExpressEngine as follows.
+
+<Warning title="Warning">
+You must use the ZEGO Express SDK version optimized for AI Agent from the [Download SDK and Demo](./../introduction/download.mdx) page, otherwise subtitles will not display properly.
+</Warning>
 
 1. Instantiate ZegoExpressEngine
 2. Check system requirements (WebRTC support and microphone permissions)
@@ -1026,6 +1042,7 @@ engineConfig.advancedConfig = @{
 <div>
 - Enable traditional audio 3A processing (Acoustic Echo Cancellation AEC, Automatic Gain Control AGC, and Noise Suppression ANS)
 - Set the room usage scenario to High Quality Chatroom, as the SDK will adopt different optimization strategies for different scenarios
+- Configure volume ducking to avoid sound conflicts
 - When pushing streams, configure the push parameters to automatically switch to available `videoCodec`
 </div>
 
@@ -1034,10 +1051,16 @@ engineConfig.advancedConfig = @{
 import { ZegoExpressEngine } from "zego-express-engine-webrtc";
 import { VoiceChanger } from "zego-express-engine-webrtc/voice-changer";
 
+// Import the volume ducking plugin package. Use version 3.11.0-aiagent.187.187
+// !mark(1:2)
+import { AudioRendererManager } from "/AudioRendererManager/AudioRendererManager";
+import { MediaElementRenderer } from "/AudioRendererManager/mediaElementRenderer";
+
 // Load audio processing module, must be called before new ZegoExpressEngine
 ZegoExpressEngine.use(VoiceChanger);
 
 // Instantiate ZegoExpressEngine, set room usage scenario to High Quality Chatroom
+// !mark
 const zg = new ZegoExpressEngine(appid, server, { scenario: 7 })
 
 // Traditional audio 3A processing is enabled by default in SDK
@@ -1045,8 +1068,40 @@ const zg = new ZegoExpressEngine(appid, server, { scenario: 7 })
 // Create local media stream
 const localStream = await zg.createZegoStream();
 
+// Configure volume ducking
+zg.callExperimentalAPI({
+  method: "enableVolumeDucking",
+  params: {
+    localStream,
+    enable: true
+  }
+});
+
+// Pass the player into the volume ducking plugin package
+let renderer;
+zg.callExperimentalAPI({ method: "getAudioContext" }).then((ac) => {
+  const audioMgr = AudioRendererManager.create(ac);
+  // Get the audio element
+  const audio = document.querySelector("audio");
+  renderer = audioMgr.getMediaElementRenderer(audio);
+});
+
+// Register volume ducking update callback
+zg.callExperimentalAPI({ method: "onVolumeDuckingUpdate", params: {} });
+zg.on("recvExperimentalAPI", (result) => {
+ const { method, content } = result;
+ if (method === "onVolumeDuckingUpdate") {
+  console.warn("onVolumeDuckingUpdate", content.gain);
+  // Set the agent stream volume to content.gain returned by the callback. Assume remoteView is the remoteView you created in the step of pulling the agent stream.
+  remoteView.setVolume(content.gain * 100); // volume range [0,100]
+  // Set the player volume to content.gain returned by the callback
+  renderer.setVolume(content.gain * 100); // volume range [0,100]
+ }
+});
+
 // Push local media stream, need to set automatic switching to available videoCodec
 await zg.startPublishingStream(userStreamId, localStream, {
+  // !mark
   enableAutoSwitchVideoCodec: true,
 });
 

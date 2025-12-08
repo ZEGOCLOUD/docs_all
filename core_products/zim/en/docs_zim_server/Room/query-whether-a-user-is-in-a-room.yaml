@@ -1,0 +1,177 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+tags:
+  - room
+
+paths:
+  /:
+    get:
+      tags: [room]
+      summary: QueryRoomMembers
+      description: |
+        Query whether users are in the specified room. By default, batch queries of up to 10 users are supported. If you need to adjust this, please contact ZEGOCLOUD Technical Support.
+
+        <Note title="QPS Limit"> 5 times/s, room-level limit</Note>
+      operationId: query-whether-a-user-is-in-a-room
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > API prototype parameter
+            >
+            > https://zim-api.zego.im/?Action=QueryRoomMembers
+          required: true
+          schema:
+            type: string
+            enum: [QueryRoomMembers]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - name: UserId
+          in: query
+          required: true
+          description: |
+            List of user IDs to query. By default, a maximum of 10 user IDs can be queried.
+
+            >**Note**
+            >
+            >UserId has a maximum length of 32 bytes, RoomID has a maximum length of 128 bytes. Both only support numbers, English characters, and '!', '#', '$', '%', '&', '(', ')', '+', '-', ':', ';', '<', '=', '.', '>', '?', '@', '[', ']', '^', '_', ' ', '{', '}', '|', '~'.
+
+            Example: UserId[]=a&UserId[]=b&UserId[]=c&UserId[]=d
+          schema:
+            type: array
+            maxItems: 10
+            items:
+              type: string
+              maxLength: 32
+              example: "user1"
+          style: form
+          explode: true
+        - name: RoomId
+          in: query
+          required: true
+          description: Room ID.
+          schema:
+            type: string
+            maxLength: 32
+            example: "room123"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryRoomMembersResponse'
+              example: 
+                Code: 0
+                Message: success
+                RequestId: "343649807833778782"
+                UserList:
+                  - user_id: "a"
+                    user_name: "UserNamea"
+                    avatar: "https://www.xxx.com/avatarA.png"
+                    extra: "Extraa"
+                  - user_id: "b"
+                    user_name: "UserNameb"
+                    avatar: "https://www.xxx.com/avatarB.png"
+                    extra: "Extrab"
+                ErrorList:
+                  - UserId: "c"
+                    SubCode: 660300012
+                  - UserId: "d"
+                    SubCode: 660200001
+
+
+components:
+  schemas:
+    QueryRoomMembersResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          description: |
+            Return code.
+
+            The following only lists the Code and SubCode related to the API business logic. For the complete return codes, please refer to [Return codes](/zim-server/return-codes).
+            <table>
+            <thead><tr><th>Code / SubCode</th><th>Description</th><th>Suggested Solution</th></tr></thead>
+            <tbody>
+            <tr><td>660000002</td><td>Parameter error</td><td>Please check the input parameters</td></tr>
+            <tr><td>660000011</td><td>Number of users exceeds the limit.</td><td>Please check the input user list.</td></tr>
+            <tr><td>660200001</td><td>User not registered</td><td>Please confirm if the user ID exists or if the user has logged out of the ZIM service.</td></tr>
+            <tr><td>660300006</td><td>Call frequency exceeds the limit.</td><td>Please try again later.</td></tr>
+            <tr><td>660300012</td><td>User is not in the room</td><td>No action required.</td></tr>
+            </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: Description of the request result.
+          example: "success"
+        RequestId:
+          type: string
+          description: Request ID.
+          example: "343649807833778782"
+        UserList:
+          type: array
+          description: Query result, i.e., the list of users in the specified room.
+          items:
+            type: object
+            properties:
+              user_id:
+                type: string
+                description: ID of the user in the specified room.
+                example: "a"
+              user_name:
+                type: string
+                description: Name of the user in the specified room.
+                example: "UserNamea"
+              avatar:
+                type: string
+                description: User avatar information, can be null.
+                nullable: true
+                example: "https://www.xxx.com/avatarA.png"
+              extra:
+                type: string
+                description: Extended information, can be null.
+                nullable: true
+                example: "Extraa"
+        ErrorList:
+          type: array
+          description: |
+            List of users not in the specified room.
+                <ul>
+                <li>When Code is 0:</li>
+                <li> If ErrorList is empty, all users are in the specified room.</li>
+                <li> If ErrorList is not empty, it means some users are not in the specified room. Please refer to SubCode for handling.</li>
+                </ul>
+                <ul>
+                <li>When Code is not 0:</li>
+                <li>If ErrorList is empty, it indicates parameter error, API frequency limit, or system error.</li>
+                <li>If ErrorList is not empty, it means all users are not in the specified room.</li>
+                </ul>
+          items:
+            type: object
+            properties:
+              UserId:
+                type: string
+                description: ID of the user not in the specified room.
+                example: "c"
+              SubCode:
+                type: number
+                description: |
+                  Return code for the reason the user is not in the specified room. For the complete return codes, please refer to the Code description or [Return codes](/zim-server/return-codes).
+                example: 660300012

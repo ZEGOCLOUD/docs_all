@@ -23,19 +23,13 @@ servers:
 components:
   # 共享的参数定义
   parameters:
+    # Re-export ZEGO global shared parameters for convenient local reference
     AppId:
-      name: AppId
-      in: query
-      description: AppId，ZEGO 分配的用户唯一凭证。
-      required: true
-      schema:
-        type: integer
-        format: uint32
-
+      $ref: "../../../../../snippets/common/zh/openapi/zego-shared-components.yaml#/components/parameters/AppId"
     SignatureNonce:
       name: SignatureNonce
       in: query
-      description: 随机字符串。
+      description: 💡公共参数。16 位 16 进制随机字符串（8 字节随机数的 hex 编码）。生成算法可参考 <a href="/aiagent-server/api-reference/accessing-server-apis#signature-example">签名示例</a>。
       required: true
       schema:
         type: string
@@ -43,25 +37,17 @@ components:
     Timestamp:
       name: Timestamp
       in: query
-      description: Unix 时间戳，单位为秒。最多允许 10 分钟的误差。
+      description: 💡公共参数。当前 Unix 时间戳，单位为秒。生成算法可参考 <a href="/aiagent-server/api-reference/accessing-server-apis#signature-example">签名示例</a>，最多允许 10 分钟的误差。
       required: true
       schema:
         type: integer
         format: int64
-
     SignatureVersion:
-      name: SignatureVersion
-      in: query
-      description: 签名版本号，默认值为 2.0。
-      required: true
-      schema:
-        type: string
-        enum: ["2.0"]
-
+      $ref: "../../../../../snippets/common/zh/openapi/zego-shared-components.yaml#/components/parameters/SignatureVersion"
     Signature:
       name: Signature
       in: query
-      description: 签名，用于验证请求的合法性。
+      description: 💡公共参数。签名，用于验证请求的合法性。请参考[签名机制](/aiagent-server/api-reference/accessing-server-apis#signature-mechanism)生成。
       required: true
       schema:
         type: string
@@ -187,7 +173,7 @@ components:
         AddAgentInfo:
           type: boolean
           description: |
-            如果此值为 true，AI Agent 服务器在请求 LLM 服务时会在请求参数中包含智能体信息。
+            如果此值为 true，AI Agent 服务器在请求 LLM 服务时会在请求参数中包含智能体信息（agent_info）。包含的智能体信息数示例请参考[使用自定义 LLM](/aiagent-server/guides/configuring-llm#use-custom-llm)。
             您可以使用此参数在自定义 LLM 服务中执行额外的业务逻辑。
 
             agent_info 的结构如下：
@@ -196,6 +182,22 @@ components:
             - agent_instance_id: 智能体实例 ID
           default: false
           example: false
+        AgentExtraInfo:
+          type: object
+          description: |
+            Agent 扩展信息，服务器在请求 LLM 服务时会在请求参数中透传该参数。透传参数示例请参考[使用自定义 LLM](/aiagent-server/guides/configuring-llm#use-custom-llm)。
+            您可以使用此参数在自定义 LLM 服务中执行额外的业务逻辑。
+          properties:
+            key:
+              type: string
+              description: 额外信息键。
+            value:
+              description: 额外信息值，可以是任意类型。
+          example: {
+            "user_custom_key1": "value1",
+            "user_custom_key2": "value2"
+          }
+
 
     TTS:
       type: object
@@ -206,7 +208,7 @@ components:
         Vendor:
           type: string
           description: 语音合成（TTS）服务提供商。详细请参考[配置 TTS > TTS 参数说明](/aiagent-server/guides/configuring-tts##tts-params)
-          enum: ["Aliyun", "ByteDance", "ByteDanceFlowing", "MiniMax", "CosyVoice"]
+          enum: ["Aliyun", "ByteDance","ByteDanceV3", "ByteDanceFlowing", "MiniMax", "CosyVoice"]
           example: "ByteDance"
         Params:
           type: object
@@ -268,6 +270,7 @@ components:
         TerminatorText:
           type: string
           maxLength: 4
+          example: "#-#"
           description: |
             可用于设置 TTS 的终止文本。若输入 TTS 的文本中出现匹配 TerminatorText 字符串的内容，则本轮 TTS 从 TerminatorText 字符串（包含）开始的内容将不再进行语音合成。
             > **📌 重要说明**
@@ -336,7 +339,7 @@ components:
           format: Int
           description: 每次调用 LLM 服务时使用的近期历史消息数量。影响 LLM 上下文理解能力，建议设置为 10-30。
           minimum: 0
-          maximum: 200
+          maximum: 500
           default: 20
           example: 20
         ZIM:
@@ -382,7 +385,7 @@ components:
           type: integer
           description: 创建智能体实例时，从 ZIM 服务获取多少条消息作为上下文。默认为 WindowSize 的值（取值上限）。
           minimum: 0
-          maximum: 200
+          maximum: 500
           example: 20
 
     CallbackConfig:
@@ -440,6 +443,22 @@ components:
           enum: [0, 1]
           default: 0
           example: 0
+        MaxIdleTime:
+          type: integer
+          description: 智能体实例的自动销毁时间。创建实例的用户（UserId）若超过 MaxIdleTime 不在 RTC 房间内，则智能体实例会自动销毁，并触发 Event 为 AgentInstanceDeleted 的[回调](/aiagent-server/callbacks/receiving-callback)，Data.Code 为 1202。默认为 120s，取值范围 [10, 1800]。
+          minimum: 10
+          maximum: 1800
+          default: 120
+          example: 120
+        DisableTTS:
+          type: boolean
+          description: |
+            是否禁用 TTS 功能。如果设置为 true，则智能体实例不会进行语音合成。
+            > **📌 重要说明**
+            >
+            > DisableTTS 为 true 时，调用[创建数字人智能体实例](/aiagent-server/api-reference/agent-instance-management/create-digital-human-agent-instance)及[主动调用 TTS](/aiagent-server/api-reference/agent-instance-control/send-agent-instance-tts)接口都会报错。
+          default: false
+          example: false
 
     DigitalHuman:
       type: object
@@ -456,7 +475,7 @@ components:
         EncodeCode:
           type: string
           description: 数字人视频编码格式
-          enum: [H264, VP8]
+          enum: [H264]
           default: "H264"
           example: "H264"
 

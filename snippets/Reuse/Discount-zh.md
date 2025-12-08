@@ -1,6 +1,8 @@
+
 <Note title="说明">
 
-[【ZEGO十年同行】实时互动升级季,核心产品限时特惠>>](https://www.zego.im/activity/2400001)
+[【 2025 双十一大促】AI 加持·互动升级 >>](https://www.zego.im/activity/2500011)
+
 </Note>
 
 

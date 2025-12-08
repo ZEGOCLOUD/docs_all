@@ -1,0 +1,161 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+paths:
+  /:
+    post:
+      tags:
+        - bot
+      summary: RobotRegister
+      description: |
+        By calling this API, you can register multiple bots.
+
+        <Note title="QPS Limit"> 20 times/s</Note>
+      operationId: register-bots
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > API prototype parameter
+            >
+            > https://zim-api.zego.im?Action=RobotRegister
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [RobotRegister]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterBotsRequest'
+      responses:
+        '200':
+            description: OK
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/RegisterBotsResponse'
+
+components:
+  schemas:
+    RegisterBotsRequest:
+      type: object
+      required: [UserInfo]
+      properties:
+        UserInfo:
+          type: array
+          description: List of bot user information. A maximum of 20 bots can be registered at a time.
+          maxItems: 20
+          items:
+            type: object
+            required: [UserId]
+            properties:
+              UserId:
+                type: string
+                description: Bot user ID. The length must not exceed 32 bytes and must start with @RBT#.
+                maxLength: 32
+                example: "@RBT#R1"
+              UserName:
+                type: string
+                description: Bot name. The length must not exceed 256 bytes.
+                maxLength: 256
+                example: "userNameA"
+              UserAvatar:
+                type: string
+                description: Bot avatar URL. The length must not exceed 500 bytes.
+                maxLength: 500
+                example: "https"
+          example:
+            - UserId: "@RBT#R1"
+              UserName: "userNameA"
+              UserAvatar: "https"
+            - UserId: "@RBT#R2"
+              UserName: "userNameB"
+              UserAvatar: "https"
+
+    RegisterBotsResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          description: |
+            Return code.
+
+            The following only lists the Code and SubCode related to the API business logic. For the complete return codes, please refer to [Return codes](/zim-server/return-codes).
+            > **Note**
+            >
+            > When you initiate a request to register multiple bots at the same time:
+            > <ul><li>If one or more bot user IDs are successfully registered, Code will return 0. In this case, please refer to the specific information in ErrorList to confirm the operation result.</li>
+            > <li>If all bot user IDs fail to register, Code will return the relevant return code. For details, please refer to <a href="/zim-server/return-codes" target="_blank">Return codes</a>.</li></ul>
+            <table>
+            <thead>
+            <tr><th>Code / SubCode</th><th>Description</th><th>Possible Reason</th><th>Suggested Solution</th></tr>
+            </thead>
+            <tbody>
+            <tr><td>660000001</td><td>General business error.</td><td>Server error.</td><td>Please retry, or contact ZEGOCLOUD Technical Support.</td></tr>
+            <tr><td>660000002</td><td>Input parameter error.</td><td>The input parameter is missing or invalid.</td><td>Please check the input parameters.</td></tr>
+            <tr><td>660300005</td><td>The call frequency exceeds the AppID-level limit.</td><td></td><td>Please try again later, or refer to the relevant documentation to understand the call frequency.</td></tr>
+            <tr><td>660000012</td><td>UserID length exceeds the limit.</td><td>The maximum length of UserID is 32 bytes.</td><td>Please confirm the length of UserID.</td></tr>
+            <tr><td>660700001</td><td>Request too frequent.</td><td>The request frequency exceeds 20 times/second.</td><td>Please try again later.</td></tr>
+            <tr><td>660700002</td><td>Bot already exists.</td><td>The UserID in the request already exists.</td><td>Please avoid registering the same UserID repeatedly.</td></tr>
+            <tr><td>660700006</td><td>UserName length exceeds the limit.</td><td>The maximum length of UserName is 256 bytes.</td><td>Please confirm the length of UserName.</td></tr>
+            <tr><td>660700007</td><td>UserAvatar URL length exceeds the limit.</td><td>The maximum length of UserAvatar URL is 500 bytes.</td><td>Please confirm the length of UserAvatar.</td></tr>
+            </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: Operation result description.
+          example: success
+        RequestId:
+          type: string
+          description: Request ID.
+          example: '343649807833778782'
+        ErrorList:
+          type: array
+          description: |
+            List of failure information.
+            - When Code is 0:
+              - If ErrorList is empty, all bot user IDs are successfully registered.
+              - If ErrorList is not empty, it means some bot user IDs failed to register. Please refer to SubCode and SubMessage for handling.
+            - When Code is not 0:
+              - If ErrorList is empty, it indicates parameter error, API frequency limit, or system error.
+              - If ErrorList is not empty, it means all bot user IDs failed to register. Please refer to SubCode and SubMessage for handling.
+          items:
+            type: object
+            properties:
+              UserId:
+                type: string
+                description: Bot user ID that failed to register.
+                example: "@RBT#R2"
+              SubCode:
+                type: number
+                description: |
+                  Specific return code for bot registration failure. For the complete return codes, please refer to the Code description or [Return codes](/zim-server/return-codes).
+                example: 660700002
+              SubMessage:
+                type: string
+                description: Reason description for bot registration failure.
+                example: "Bot already exists"
+      example:
+        Code: 0
+        Message: "success"
+        RequestId: "343649807833778782"
+        ErrorList: []

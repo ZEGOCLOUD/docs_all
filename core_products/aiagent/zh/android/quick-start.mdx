@@ -32,7 +32,7 @@ export const expressSDKMap = {
 </Card>
 </CardGroup>
 
-以下是客户端示例代码，，您可以参考示例代码来实现自己的业务逻辑。
+以下是客户端示例代码，您可以参考示例代码来实现自己的业务逻辑。
 
 <CardGroup cols={2}>
 :::if{props.platform=undefined}
@@ -116,6 +116,10 @@ sequenceDiagram
 
 请参考 [集成 SDK > 2.2 > 方式2](https://doc-zh.zego.im/article/3575#2) 手动集成 SDK。集成 SDK 后按以下步骤初始化 ZegoExpressEngine。
 
+<Warning title="注意">
+必须使用[下载 SDK 及 Demo](./../introduction/download.mdx)页面针对 AI Agent 优化的 ZEGO Express SDK 版本，否则无法正常显示字幕。
+</Warning>
+
 <div>
 <Steps>
 <Step title="添加权限声明">
@@ -157,6 +161,10 @@ ZegoExpressEngine.createEngine(zegoEngineProfile, null);
 :::if{props.platform="iOS"}
 
 请参考 [集成 SDK > 2.2 > 方式三](https://doc-zh.zego.im/article/3574#2_2) 手动集成 SDK。集成 SDK 后按以下步骤初始化 ZegoExpressEngine。
+
+<Warning title="注意">
+必须使用[下载 SDK 及 Demo](./../introduction/download.mdx)页面针对 AI Agent 优化的 ZEGO Express SDK 版本，否则无法正常显示字幕。
+</Warning>
 
 <div>
 <Steps>
@@ -209,8 +217,12 @@ ZegoExpressEngine.createEngine(zegoEngineProfile, null);
 
 :::if{props.platform="flutter"}
 
-请参考 [集成 SDK > 2.2 > 方式一](https://doc-zh.zego.im/article/13196#2_2) 手动集成 SDK。集成 SDK 后按以下步骤初始化 ZegoExpressEngine。
+请参考 [集成 SDK > 方式 1](https://doc-zh.zego.im/real-time-voice-flutter/quick-start/integrating-sdk#%E9%9B%86%E6%88%90-sdk-2) 以 “pub” 形式依赖集成 SDK。集成 SDK 后按以下步骤初始化 ZegoExpressEngine。
 > 如果包含web平台,  请参考 [集成 SDK > 3.4](https://doc-zh.zego.im/article/13196#3_3) 手动引入 JS文件。
+
+<Warning title="注意">
+必须使用[下载 SDK 及 Demo](./../introduction/download.mdx)页面针对 AI Agent 优化的 ZEGO Express SDK 版本，否则无法正常显示字幕。
+</Warning>
 
 <div>
 <Steps>
@@ -287,7 +299,11 @@ await ZegoExpressEngine.createEngineWithProfile(
 
 :::if{props.platform="Web"}
 
-请参考 [集成 SDK > 方式 1](https://doc-zh.zego.im/article/6839#2_1) 使用 npm 集成 SDK v3.9.123或更高版本。集成 SDK 后按以下步骤初始化 ZegoExpressEngine。
+请参考 [集成 SDK > 方式 1](/real-time-voice-web/quick-start/integrating-sdk#方式-1使用包管理器自动集成推荐) 使用 npm 集成针对 AI Agent 优化的 ZEGO Express SDK 版本。集成 SDK 后按以下步骤初始化 ZegoExpressEngine。
+
+<Warning title="注意">
+必须使用[下载 SDK 及 Demo](./../introduction/download.mdx)页面针对 AI Agent 优化的 ZEGO Express SDK 版本，否则无法正常显示字幕。
+</Warning>
 
 1 实例化 ZegoExpressEngine
 
@@ -1023,6 +1039,7 @@ engineConfig.advancedConfig = @{
 <div>
 - 开启传统音频 3A 处理（回声消除AEC、自动增益控制AGC、噪声抑制ANS）
 - 设置房间的使用场景为高品质语聊房场景，SDK 会针对不同的场景采取不同的优化策略
+- 配置音量闪避，避免声音冲突
 - 推流时，设置推流参数配置自动切换为可用的 `videoCodec`
 </div>
 
@@ -1031,10 +1048,16 @@ engineConfig.advancedConfig = @{
 import { ZegoExpressEngine } from "zego-express-engine-webrtc";
 import { VoiceChanger } from "zego-express-engine-webrtc/voice-changer";
 
+// 引入音量闪避插件包，请使用 3.11.0-aiagent.187.187 版本
+// !mark(1:2)
+import { AudioRendererManager } from "/AudioRendererManager/AudioRendererManager";
+import { MediaElementRenderer } from "/AudioRendererManager/mediaElementRenderer";
+
 // 加载音频处理模块，需要在 new ZegoExpressEngine 前调用
 ZegoExpressEngine.use(VoiceChanger);
 
 // 实例化 ZegoExpressEngine，设置房间的使用场景为高品质语聊房场景
+// !mark
 const zg = new ZegoExpressEngine(appid, server, { scenario: 7 })
 
 // 传统音频 3A 处理，SDK 默认开启
@@ -1042,8 +1065,40 @@ const zg = new ZegoExpressEngine(appid, server, { scenario: 7 })
 // 创建本地媒体流
 const localStream = await zg.createZegoStream();
 
+// 开启音量闪避
+zg.callExperimentalAPI({
+  method: "enableVolumeDucking",
+  params: {
+    localStream,
+    enable: true
+  }
+});
+
+// 将播放器传入音量闪避插件包
+let renderer;
+zg.callExperimentalAPI({ method: "getAudioContext" }).then((ac) => {
+  const audioMgr = AudioRendererManager.create(ac);
+  // 获取播放器元素
+  const audio = document.querySelector("audio");
+  renderer = audioMgr.getMediaElementRenderer(audio);
+});
+
+// 注册音量闪避更新回调
+zg.callExperimentalAPI({ method: "onVolumeDuckingUpdate", params: {} });
+zg.on("recvExperimentalAPI", (result) => {
+ const { method, content } = result;
+ if (method === "onVolumeDuckingUpdate") {
+  console.warn("onVolumeDuckingUpdate", content.gain);
+  // 设置智能体流音量为回调返回的 content.gain，假设 remoteView 为你在步骤 拉智能体流 时创建的 remoteView
+  remoteView.setVolume(content.gain * 100); // volume 取值范围 [0,100]
+  // 设置播放器音量为回调返回的 content.gain
+  renderer.setVolume(content.gain * 100); // volume 取值范围 [0,100]
+ }
+});
+
 // 推送本地媒体流，需要设置自动切换为可用的 videoCodec
 await zg.startPublishingStream(userStreamId, localStream, {
+  // !mark
   enableAutoSwitchVideoCodec: true,
 });
 
