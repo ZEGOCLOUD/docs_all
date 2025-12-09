@@ -264,6 +264,8 @@ def render_param_like(node: Dict[str, Any], obj_meta: Optional[Dict[str, str]] =
     name_raw = str(node.get("name", ""))
     prototype_raw = str(node.get("full_code", ""))
     desc_raw = str(node.get("desc", ""))
+    # overflow_anchor: 用于处理重载方法/属性的锚点后缀
+    anchor_suffix_raw = str(node.get("overflow_anchor", "") or "")
 
     # 顶层对象元信息（如果有）
     parent_file_raw = ""
@@ -379,6 +381,8 @@ def render_param_like(node: Dict[str, Any], obj_meta: Optional[Dict[str, str]] =
         attr_lines.append(f"  parent_name={quote_attr_value(parent_name_raw)}")
     if parent_type_raw:
         attr_lines.append(f"  parent_type={quote_attr_value(parent_type_raw)}")
+    if anchor_suffix_raw:
+        attr_lines.append(f"  anchor_suffix={quote_attr_value(anchor_suffix_raw)}")
 
     opening = "\n".join(attr_lines) + ">"
 
