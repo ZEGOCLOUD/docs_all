@@ -12,23 +12,27 @@ When using third-party LLM services or custom LLM services, you need to configur
 
 | Parameter       | Type            | Required | Description                                                                                                                                                  |
 |-----------------|-----------------|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Url             | String          | Yes      | LLM callback address, which must be compatible with the OpenAI protocol.                                                                                    |
+| Vendor          | String          | No       | The vendor type of the LLM interface.<ul><li>OpenAIChat: OpenAI's Chat Completions interface type (default).</li><li>OpenAIResponses: OpenAI's Responses API interface type.</li></ul> |
+| Url             | String          | Yes      | LLM callback address, which must be compatible with the OpenAI protocol.<ul><li>If Vendor is "OpenAIChat", it must be compatible with [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat).</li><li>If Vendor is "OpenAIResponses", it must be compatible with [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses).</li></ul> |
 | ApiKey          | String          | No       | Authentication credentials for accessing various models and related services provided by LLM.                                                               |
 | Model           | String          | Yes      | The model to call. Different LLM service providers support different configurations, please refer to the corresponding documentation.                      |
 | SystemPrompt    | String          | No       | System prompt. Can include role settings, prompts, and response examples.                                                                                   |
 | Temperature     | Float           | No       | Higher values will make the output more random, while lower values will make the output more focused and deterministic.                                     |
 | TopP            | Float           | No       | Sampling method, smaller values result in stronger determinism; larger values result in more randomness.                                                    |
 | Params          | Object          | No       | Other LLM parameters, such as maximum Token number limit, etc. Different LLM providers support different configurations, please refer to the corresponding documentation and fill in as needed. <Note title="Note">Parameter names should match those of each vendor's LLM.</Note> |
-| AddAgentInfo    | Bool            | No       | If this value is true, when the AI Agent backend sends requests to custom LLM services, the request parameters will include agent information `agent_info`. This value defaults to false. When using custom LLM, additional business logic can be implemented based on this parameter content. |
-| AgentExtraInfo  | Object          | No       | Agent extra information, which is passed to the LLM service when the server requests the LLM service. The example of the passed parameter is referred to [Using Custom LLM](#use-custom-llm). You can use this parameter to execute additional business logic in your custom LLM service. |
+| AddAgentInfo    | Bool            | No       | If this value is true, when the AI Agent backend sends requests to custom LLM services, the request parameters will include agent information `agent_info`. This value defaults to false. When using custom LLM, additional business logic can be implemented based on this parameter content. <Note title="Note">Only effective when Vendor is "OpenAIChat".</Note> |
+| AgentExtraInfo  | Object          | No       | Agent extra information, which is passed to the LLM service when the server requests the LLM service. The example of the passed parameter is referred to [Using Custom LLM](#use-custom-llm). You can use this parameter to execute additional business logic in your custom LLM service. <Note title="Note">Only effective when Vendor is "OpenAIChat".</Note> |
 
 ## Using Third-party LLMs
 
 <Note title="Note">
-Please contact ZEGOCLOUD Technical Support first to activate third-party LLM services and obtain the access Url and API Key.
-
 Third-party LLMs must be compatible with the OpenAI protocol.
 </Note>
+<Warning title="Warning">
+The max_tokens parameter maximum value varies for different vendors and models. Please set a reasonable value according to your actual needs. If you do not understand the meaning of this parameter, you can leave it unset and use the default value.
+- If max_tokens exceeds the model limit, the request may fail.
+- If max_tokens is set too small, the output may be incomplete and the response may be truncated.
+</Warning>
 
 You can set LLM parameters when registering an AI agent ([RegisterAgent](./../api-reference/agent-configuration-management/register-agent.mdx)) or creating an AI agent instance ([CreateAgentInstance](./../api-reference/agent-instance-management/create-agent-instance.mdx)).
 
@@ -36,22 +40,44 @@ Here are configuration samples for common LLM vendors:
 
 <Tabs>
 <Tab title="Volcano Ark">
-For model usage docs, read [Volcano Ark Large Model Service Platform](https://www.volcengine.com/docs/82379/1298454).
+
+Volcano Ark Large Model supports OpenAI Chat Completions API protocol, and some models (such as Doubao-Seed series) support OpenAI Responses API protocol. Please configure according to your actual needs:
+
+For model usage docs, read [Chat Completions API](https://www.volcengine.com/docs/82379/1298454).
 ```json
+// !mark(2)
 "LLM": {
-    "Url": "POST https://ark.ap-southeast.bytepluses.com/api/v3/chat/completions",
+    "Url": "https://ark.ap-southeast.bytepluses.com/api/v3/chat/completions",
     "ApiKey": "zego_test", // your api key (zego_test can be used during the integration testing period (within 2 weeks of AI Agent service activation))
     "Model": "doubao-1-5-pro-32k-250115",    // Your inference access point created on the Volcano Ark Large Model Platform
     "SystemPrompt": "You are Xiao Zhi, an adult female, a **companion assistant created by ZEGOCLOUD Technology**, knowledgeable in astronomy and geography, smart, wise, enthusiastic, and friendly.\nDialogue requirements: 1. Interact with users according to the character requirements.\n2. Do not exceed 100 words.",
     "Temperature": 1,
     "TopP": 0.7,
     "Params": {
-        "max_tokens": 16384
+        "max_tokens": 4096
+    }
+}
+```
+For model usage docs, read [Responses API](https://www.volcengine.com/docs/82379/1585128?lang=zh).
+```json
+// !mark(2:3)
+"LLM": {
+    "Vendor": "OpenAIResponses",
+    "Url": "https://ark.ap-southeast.bytepluses.com/api/v3/responses",
+    "ApiKey": "zego_test", // your api key (zego_test can be used during the integration testing period (within 2 weeks of AI Agent service activation))
+    "Model": "doubao-seed-1-6-flash-250828",    // Your inference access point created on the Volcano Ark Large Model Platform
+    "SystemPrompt": "You are Xiao Zhi, an adult female, a **companion assistant created by ZEGOCLOUD Technology**, knowledgeable in astronomy and geography, smart, wise, enthusiastic, and friendly.\nDialogue requirements: 1. Interact with users according to the character requirements.\n2. Do not exceed 100 words.",
+    "Temperature": 1,
+    "TopP": 0.7,
+    "Params": {
     }
 }
 ```
 </Tab>
 <Tab title="Qwen">
+
+Only supports OpenAI Chat Completions API protocol. Please configure according to your actual needs:
+
 For model usage docs, read [Alibaba Cloud Model Studio - OpenAI compatibility - Chat](https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope).
 ```json
 "LLM": {
@@ -62,12 +88,15 @@ For model usage docs, read [Alibaba Cloud Model Studio - OpenAI compatibility - 
     "Temperature": 1,
     "TopP": 0.7,
     "Params": {
-        "max_tokens": 16384
+        "max_tokens": 4096
     }
 }
 ```
 </Tab>
 <Tab title="MiniMax">
+
+Only supports OpenAI Chat Completions API protocol. Please configure according to your actual needs:
+
 For model usage docs, read [MiniMax - Chat Completion - API](https://www.minimax.io/platform/document/ChatCompletion%20v2?key=66701d281d57f38758d581d0#QklxsNSbaf6kM4j6wjO5eEek).
 
 ```json
@@ -79,7 +108,7 @@ For model usage docs, read [MiniMax - Chat Completion - API](https://www.minimax
     "Temperature": 1,
     "TopP": 0.7,
     "Params": {
-        "max_tokens": 16384
+        "max_tokens": 4096
     }
 }
 ```
@@ -93,7 +122,8 @@ The ZEGOCLOUD AI Agent server uses the OpenAI API protocol to call LLM services.
 <Steps titleSite="h3">
 
 <Step title="Implement Custom LLM" titleSize="h3">
-Create an interface that conforms to the OpenAI API protocol.
+
+Create an interface that conforms to the OpenAI Chat Completions API protocol.
 
 <Tabs>
 <Tab title="Interface Key Points">
@@ -110,7 +140,7 @@ Provide a `chat/completions` interface compatible with [platform.openai.com](htt
     "model": "your model name", // Corresponding to LLM.Model parameter
     "temperature": 1, // Corresponding to LLM.Temperature parameter
     "top_p": 0.7, // Corresponding to LLM.TopP parameter
-    "max_tokens": 16384, // Corresponding to LLM.Params.max_tokens parameter
+    "max_tokens": 4096, // Corresponding to LLM.Params.max_tokens parameter
     "messages":[
         {
             "role": "system",
@@ -468,6 +498,33 @@ You can now chat with your custom LLM.
 ### Best Practices
 
 Detailed usage cases please refer to [Use AI Agent with RAG](./../best-practices/use-ai-agent-with-rag.mdx).
+
+## How to Configure Multimodal LLM - Configure LLM with Text Input and Audio Output <a id="configure-multimodal-llm" />
+
+Compared to LLM requests with pure text input and output, requests with audio output have additional `modalities` field to specify output modality and `audio` field to specify output voice and format in the request body. These fields are specified in the `LLM.Params` parameter.
+
+<Note title="Note">
+Please specify `DisableTTS:true` in `AdvancedConfig` when calling [CreateAgentInstance](./../api-reference/agent-instance-management/create-agent-instance.mdx) or [CreateDigitalHumanAgentInstance](./../api-reference/agent-instance-management/create-digital-human-agent-instance.mdx) to disable TTS functionality.
+</Note>
+
+The following is an example of LLM audio output parameter configuration:
+```json
+"LLM": {
+    "Url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+    "ApiKey": "your_api_key",
+    "Model": "qwen3-omni-flash",
+    "SystemPrompt": "You are Xiao Zhi, an adult female, a **companion assistant created by ZEGOCLOUD Technology**, knowledgeable in astronomy and geography, smart, wise, enthusiastic, and friendly.\nDialogue requirements: 1. Interact with users according to the character requirements.\n2. Do not exceed 100 words.",
+    "Temperature": 1,
+    "TopP": 0.7,
+    "Params": {
+        "max_tokens": 1024,
+        "stream":true,
+        "stream_options":{"include_usage":true},
+        "modalities":["text","audio"],
+        "audio":{"voice":"Cherry","format":"pcm"}
+    }
+}
+```
 
 ## Validate LLM Parameters
 

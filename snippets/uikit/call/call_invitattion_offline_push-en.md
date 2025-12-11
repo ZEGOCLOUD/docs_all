@@ -19,7 +19,7 @@
 - 小程序</td>
 <td>- iOS
 - Android</td>
-<td>- [实现离线推送 - iOS](#12788)
-- [实现离线推送 - Android](#12788)</td>
+<td>- [实现离线推送 - iOS](https://doc-zh.zego.im/article/12788)
+- [实现离线推送 - Android](https://doc-zh.zego.im/article/12788)</td>
 </tr>
     </tbody></table>

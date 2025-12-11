@@ -1,0 +1,323 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+tags:
+  - conversation
+
+paths:
+  /:
+    post:
+      tags: [conversation]
+      summary: QueryPeerMsg
+      description: |
+        By calling this API, you can pull the message list of a one-on-one conversation for a specified user in pages.
+
+        <Note title="Note">The users corresponding to the parameters FromUserId and ToUserId must be logged in or registered.</Note>
+
+        <Note title="QPS Limit"> 20 times/s</Note>
+      operationId: query-the-message-list-of-one-on-one-chats
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > API prototype parameter
+            >
+            > https://zim-api.zego.im/?Action=QueryPeerMsg
+          required: true
+          schema:
+            type: string
+            enum: [QueryPeerMsg]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryPeerMsgRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryPeerMsgResponse'
+
+components:
+  schemas:
+    QueryPeerMsgRequest:
+      type: object
+      required: [FromUserId, ToUserId]
+      properties:
+        FromUserId:
+          type: string
+          description: |
+            To query the one-on-one conversation message list between user A and user B, fill in user A's UserID here (who has logged in to the ZIM service by calling the login method on the client, or has completed registration by calling the [server-side API](/zim-server/user/batch-register-users)).
+
+            > **Note**
+            >
+            > FromUserId only supports numbers, English characters, and "'!', '#', '$', '%', '&', '(', ')', '+', '', ':', ';', '<', '=', '.', '>', '?', '@', '[', ']', '^', '_', ' ', '{', '}', '|', '~'".
+          maxLength: 32
+          example: "u1"
+        ToUserId:
+          type: string
+          description: Fill in user B's UserID here.
+          maxLength: 32
+          example: "u2"
+        Limit:
+          type: number
+          description: |
+            Number of messages to retrieve at a time, value range is (0, 100], default is 10.
+            - When the value is ≤ 0, it is corrected to 10.
+            - When the value is > 100, it is corrected to 100.
+          minimum: 1
+          maximum: 100
+          default: 10
+          example: 10
+        Next:
+          type: number
+          description: |
+            Pagination flag. Fill in 0 for the first time, and then fill in the Next value returned last time. When the returned Next is 0, it means the message list has been fully retrieved.
+
+            For example, if the current one-on-one conversation has 250 messages, when calling this API to query:
+            - First call: Set Limit to 100, Next to 0, to query messages 1-100; the Next value in the returned result is num1.
+            - Second call: Set Limit to 100, Next to num1, to query messages 101-200; the Next value in the returned result is num2.
+            - Third call: Set Limit to 100, Next to num2, to query messages 201-250; the query is complete, and the Next value in the returned result is 0.
+          example: 0
+        WithEmptyMsg:
+          type: number
+          description: |
+            Whether the returned result includes recalled messages and messages deleted on the server.
+            - 0: Default value, not included.
+            - 1: Included.
+          enum: [0, 1]
+          default: 0
+          example: 0
+    QueryPeerMsgResponse:
+      type: object
+      properties:
+        Code:
+          type: number
+          description: |
+            Return code.
+
+            The following only lists the return codes related to the API business logic. For the complete return codes, please refer to [Return codes](/zim-server/return-codes).
+            <table>
+            <thead><tr><th>Return code</th><th>Description</th><th>Suggested Solution</th></tr></thead>
+            <tbody>
+            <tr><td>660000002</td><td>Input parameter error.</td><td>Please check the input parameters.</td></tr>
+            <tr><td>660300005</td><td>The API call frequency exceeds the AppID-level limit.</td><td>Please try again later.</td></tr>
+            <tr><td>660500002</td><td>FromUserId is not registered.</td><td>Please check if FromUserId is correct.</td></tr>
+            </tbody>
+            </table>
+        Message:
+          type: string
+          description: Description of the request result.
+          example: "success"
+        RequestId:
+          type: string
+          description: Request ID.
+          example: "343649807833778782"
+        Next:
+          type: number
+          description: |
+            Pagination flag.
+            - Non-zero: Indicates there are still messages not returned. You need to set this field to the request parameter Next to pull more messages.
+            - Zero: Indicates the complete message list has been returned.
+
+            > **Note**
+            >
+            > Apart from the above description, this field has no association with the list information. Please do not base any other logic on this.
+          example: 1000
+        List:
+          type: array
+          description: Message list. Results are returned in descending order by MsgTime.
+          items:
+            type: object
+            properties:
+              Sender:
+                type: string
+                description: Message sender ID.
+                example: "user1"
+              MsgType:
+                type: number
+                description: |
+                  Message type:
+                  - 1: Text.
+                  - 10: Combined.
+                  - 11: Image.
+                  - 12: File.
+                  - 13: Audio.
+                  - 14: Video.
+                  - 200: Custom.
+                example: 1
+              SubMsgType:
+                type: number
+                description: Specific custom type. The value is filled in by the user when sending a custom message, with a value range of [0,200]. This parameter is only meaningful when MsgType is 200 (custom type).
+              MsgBody:
+                type: string
+                description: |
+                  Message content.
+                  - When MsgType is 1 (text type) or 200 (custom type), MsgBody is the message content passed in when sending the message, and developers can directly read the message content.
+                  - When MsgType is one of the following types, MsgBody is a JSON string. Please use URLDecode to decode this JSON string and obtain the data of each field in the message according to the corresponding structure:
+                    - When MsgType is 11, 12, 13, 14 (multimedia message), please refer to the multimedia message parameter description of the MsgBody JSON string parsing result.
+                    - When MsgType is 10 (combined message), please refer to the combined message parameter description of the MsgBody JSON string parsing result.
+                example: "This is a message"
+                oneOf:
+                  - $ref: '#/components/schemas/multimedia messaging'
+                  - $ref: '#/components/schemas/multi-item messages'
+              MsgId:
+                type: number
+                description: Message ID, which can be used to determine the uniqueness of the message.
+                example: 971503777289036700
+              MsgSeq:
+                type: number
+                description: Message Seq.
+                example: 1
+              Payload:
+                type: string
+                description: Message extension field.
+                example: "Payload"
+              MsgTime:
+                type: number
+                description: Time when the server received the message, Unix timestamp in milliseconds (ms).
+                example: 1705895412000
+              IsEmpty:
+                type: number
+                description: |
+                  Whether it is an empty message.
+                  - 0: Not empty.
+                  - 1: Message has been deleted or expired.
+                  - 2: Message has been recalled.
+                example: 0
+          example:
+            - Sender: "user1"
+              MsgType: 1
+              MsgBody: "This is a message"
+              MsgId: 971503777289036700
+              MsgSeq: 1
+              Payload: "Payload"
+              MsgTime: 1705895412000
+              IsEmpty: 0
+    multimedia messaging:
+      type: object
+      description: |
+        Multimedia message body. When MsgType is 11, 12, 13, 14 (multimedia message), MsgBody is a JSON string.
+        Please use URLDecode to decode this JSON string and obtain the data of each field in the message according to the following structure.
+      required: [md5, file_name, file_size, download_url]
+      properties:
+        md5:
+          type: string
+          description: MD5 value of the file.
+          example: "5d41402abc4b2a76b9719d911017c592"
+        file_name:
+          type: string
+          description: File name.
+          example: "image.jpg"
+        file_size:
+          type: string
+          description: File size in bytes (B).
+          example: "1024"
+        download_url:
+          type: string
+          description: Download URL.
+          example: "https://example.com/download/image.jpg"
+        media_duration:
+          type: string
+          description: Audio/video duration in seconds (s).
+          example: "30"
+        origin_image_width:
+          type: integer
+          description: 🏞️If it is an image message, this property is included. Width of the original image in pixels (px).
+          example: 1920
+        origin_image_height:
+          type: integer
+          description: 🏞️If it is an image message, this property is included. Height of the original image in pixels (px).
+          example: 1080
+        large_image_download_url:
+          type: string
+          description: 🏞️If it is an image message, this property is included. Large image download URL.
+          example: "https://example.com/download/image_large.jpg"
+        large_image_width:
+          type: integer
+          description: 🏞️If it is an image message, this property is included. Width of the large image in pixels (px).
+          example: 1920
+        large_image_height:
+          type: integer
+          description: 🏞️If it is an image message, this property is included. Height of the large image in pixels (px).
+          example: 1080
+        thumbnail_download_url:
+          type: string
+          description: 🏞️If it is an image message, this property is included. Thumbnail download URL.
+          example: "https://example.com/download/image_thumb.jpg"
+        thumbnail_width:
+          type: integer
+          description: 🏞️If it is an image message, this property is included. Width of the thumbnail in pixels (px).
+          example: 200
+        thumbnail_height:
+          type: integer
+          description: 🏞️If it is an image message, this property is included. Height of the thumbnail in pixels (px).
+          example: 200
+        video_first_frame_download_url:
+          type: string
+          description: 🎬If it is a video message, this property is included. Download URL of the video first frame image.
+          example: "https://example.com/download/video_frame.jpg"
+        video_first_frame_width:
+          type: integer
+          description: 🎬If it is a video message, this property is included. Width of the video first frame image in pixels (px).
+          example: 1920
+        video_first_frame_height:
+          type: integer
+          description: 🎬If it is a video message, this property is included. Height of the video first frame image in pixels (px).
+          example: 1080
+    multi-item messages:
+      type: object
+      description: |
+        Combined message body. When MsgType is 10 (combined message), MsgBody is a JSON string.
+        Please use URLDecode to decode this JSON string and obtain the data of each field in the message according to the following structure.
+      required: [multi_msg]
+      properties:
+        multi_msg:
+          type: array
+          description: Combined message Item array.
+          items:
+            type: object
+            required: [msg_type]
+            properties:
+              msg_type:
+                type: integer
+                description: |
+                  Item type:
+                  - 1: Text.
+                  - 11: Image.
+                  - 12: File.
+                  - 13: Audio.
+                  - 14: Video.
+                  - 200: Custom message type.
+                example: 1
+              sub_msg_type:
+                type: integer
+                description: This parameter is returned only when msg_type is 200. Indicates the specific custom type, with a value range of [0,200].
+                example: 0
+              callback_content:
+                type: string
+                description: |
+                  Item content.
+                  - Only when msg_type is 1 or 200, you can directly read the message content in this parameter.
+                  - When Item is 11, 12, 13, or 14, please refer to the multimedia message structure in this document to understand the data of each field in the message.
+                example: "This is a text message"
+
+

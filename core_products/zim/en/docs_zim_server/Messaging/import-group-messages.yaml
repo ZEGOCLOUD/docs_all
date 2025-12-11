@@ -1,0 +1,182 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+tags:
+  - messaging
+
+paths:
+  /:
+    post:
+      tags: [messaging]
+      summary: ImportGroupMsg
+      description: |
+        If you are using another instant messaging service and want to integrate with ZIM, you can call this API to import the group's historical messages (in chronological order) to ZIM.
+
+        <Note title="Note">
+        The parameters FromUserId and GroupId only support numbers, English characters, and \'!'，'#'，'$'，'%'，'&'，'('，')'，'+'，'-'，':'，';'，'\<'，'='，'.'，'\>'，'?'，'@'，'['，']'，'^'，'_'，' '，'\{'，'\}'，'|'，'~'.
+
+        To provide developers with a better experience, ZEGOCLOUD recommends that developers use the latest version of the SDK.
+
+        If the sender requests to send a text message with MessageType 1, the sender's corresponding client (SDK version needs to be 2.7.0 or above) will also receive the message.
+
+        For sending and receiving custom messages with MessageType 200, the SDK version of the sender's and receiver's corresponding clients needs to be 2.8.0 or above.
+
+        If the receiver's SDK version is in the [2.0.0, 2.8.0) range, they can receive custom messages, but the message type will be displayed as unknown and the message content cannot be obtained. To obtain this message, please upgrade the SDK to version 2.8.0 or above.
+
+        If the receiver's SDK version is 1.x.x, they will not be able to receive custom messages, nor will they receive unknown messages.
+        </Note>
+        <Note title="QPS Limit"> 20 times/s</Note>
+
+        ## Verify the effect
+        After successfully importing messages, you can call the ZIM server-side API [Query the message list of group chats](/zim-server/conversation/query-the-message-list-of-group-chats) to confirm whether the group chat conversation messages have been imported completely.
+      operationId: import-group-messages
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > API prototype parameter
+            >
+            > https://zim-api.zego.im/?Action=ImportGroupMsg
+          required: true
+          schema:
+            type: string
+            enum: [ImportGroupMsg]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportGroupMessageRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportGroupMessageResponse'
+
+components:
+  schemas:
+    ImportGroupMessageRequest:
+      type: object
+      required: [FromUserId, GroupId, MessageType, Priority, MessageBody]
+      properties:
+        FromUserId:
+          type: string
+          description: User ID of the message sender (who has logged in to the ZIM service by calling the login method on the client, or has completed registration by calling the [server-side API](/zim-server/user/batch-register-users)).
+          maxLength: 32
+          example: "u1"
+        GroupId:
+          type: string
+          description: Group ID.
+          maxLength: 32
+          example: "r1"
+        MessageType:
+          type: number
+          description: |
+            Message type. For applicable types for group chat conversations, please refer to [MessageBody description](/zim-server/messaging/messagebody-introduction).
+            > Note
+            >
+            > Signaling messages are not supported.
+          example: 1
+        Priority:
+          type: number
+          description: |
+            Message priority (for details, please refer to [Basic concepts - Message priority](https://www.zegocloud.com/docs/zim-android/introduction/basic-concepts#message-priority)). Values are as follows:
+            - 1: Low.
+            - 2: Medium.
+            - 3: High.
+          enum: [1, 2, 3]
+          example: 1
+        MessageBody:
+          type: object
+          description: |
+            Message content. For specific parameter format, please refer to [MessageBody description](/zim-server/messaging/messagebody-introduction).
+            > Note
+            >
+            > The `OfflinePush` and `HasReceipt` fields are not supported.
+          example:
+            Message: "hello world"
+            ExtendedData: "d"
+        SubMsgType:
+          type: number
+          description: Specific custom type. The value is defined by you, with a value range of [0,200]. Required when MessageType is a custom message.
+          example: 200
+        SearchedContent:
+          type: string
+          description: Search field for custom messages. This field can only be filled in when MessageType is a custom message, with a default maximum length of 64 bytes. This field applies to the client. Unless this field is filled in, the associated custom message cannot be searched through the client.
+          example: "ex"
+        SendMessageTime:
+          type: number
+          description: |
+            Message sending timestamp (Unix, millisecond level). Please import in chronological order from earliest to latest.
+            - Pass 0 or do not pass: Use "current time".
+            - Other values: The earliest can be "current time - number of days for historical message retention specified by the package (for details, please refer to [Pricing - Version differences](/zim-android/introduction/pricing#version-differences)) * 86400000", and the latest must not be later than "current time".
+
+            Cannot be earlier than the number of days for historical message retention specified by the package (for details, please refer to [Pricing - Version differences](/zim-android/introduction/pricing#version-differences)), nor later than the current time.
+          example: 123
+    ImportGroupMessageResponse:
+      type: object
+      properties:
+        Code:
+          type: number
+          description: |
+            Return code.
+
+            The following only lists the return codes related to the API business logic. For the complete return codes, please refer to [Return codes](/zim-server/return-codes).
+            <table>
+            <tbody><tr>
+            <th>Return code</th>
+            <th>Description</th>
+            <th>Suggested Solution</th>
+            </tr>
+            <tr>
+            <td>660400001</td>
+            <td>The input message size exceeds the limit.</td>
+            <td>Please check the input message size.</td>
+            </tr>
+            <tr>
+            <td>660500002</td>
+            <td>Message sender has not logged in to the SDK.</td>
+            <td>Please have the user log in first before sending messages.</td>
+            </tr>
+            <tr>
+            <td>660600001</td>
+            <td>The input GroupId does not exist.</td>
+            <td>Please confirm if the input GroupId is correct.</td>
+            </tr>
+            </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: Description of the request result.
+          example: "success"
+        RequestId:
+          type: string
+          description: Request ID.
+          example: "343649807833778782"
+        MsgSeq:
+          type: number
+          description: Message seq.
+          example: 123
+      example:
+        Code: 0
+        Message: "success"
+        RequestId: "343649807833778782"
+        MsgSeq: 123
