@@ -1,0 +1,160 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+tags:
+  - user
+
+paths:
+  /:
+    get:
+      tags: [user]
+      summary: QueryUserOnlineState
+      description: |
+        Query the online status of users. Supports querying a single user or batch querying multiple users' online status.
+
+        <Note title="QPS Limit">20 times/s</Note>
+      operationId: query-users-online-status
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > API prototype parameter
+            >
+            > https://zim-api.zego.im/?Action=QueryUserOnlineState
+          required: true
+          schema:
+            type: string
+            enum: [QueryUserOnlineState]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - name: UserId
+          in: query
+          required: true
+          description: |
+            User ID list to query (who have logged in to the ZIM service by calling the login method on the client, or have completed registration by calling the [server-side API](https://www.zegocloud.com/docs/zim-server/user/batch-register-users)). A maximum of 100 user IDs can be queried.
+            
+            Example: UserId[]=a&UserId[]=b
+
+            >**Note**
+            >
+            > UserId Only supports numbers, English characters, and '!'，'#'，'$'，'%'，'&'，'('，')'，'+'，'-'，':'，';'，'<'，'='，'.'，'>'，'?'，'@'，'['，']'，'^'，'_'，' '，'{'，'}'，'|'，'~'。
+          schema:
+            type: array
+            maxItems: 100
+            items:
+              type: string
+              maxLength: 64
+              example: "a"
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryUserOnlineStateResponse'
+                example:
+                  Code: 0
+                  Message: success
+                  RequestId: "343649807833778782"
+                  Result:
+                    - UserId: "id1"
+                      Status: "Offline"
+                    - UserId: "id2"
+                      Status: "Online"
+                  ErrorList:
+                    - UserId: "id4"
+                      SubCode: 660200001
+
+components:
+  schemas:
+    QueryUserOnlineStateResponse:
+      type: object
+      properties:
+        Code:
+          type: number
+          description: |
+            Return code.
+
+            The following only lists the Code and SubCode related to the API business logic. For complete return codes, please refer to [Global Return Codes](/zim-server/return-codes).
+            <table>
+            <tbody><tr>
+            <th>Code / SubCode</th>
+            <th>Description</th>
+            </tr>
+            <tr>
+            <td>660000011</td>
+            <td>The number of users exceeds the limit.</td>
+            </tr>
+            <tr>
+            <td>660200001</td>
+            <td>Non-existent user ID.<br/>User has logged out.<br/>User was only registered through the server and has never logged in.</td>
+            </tr>
+            </tbody></table>
+          example: 0
+        Message:
+          type: string
+          description: Description of the request result.
+          example: "success"
+        RequestId:
+          type: string
+          description: Request ID.
+          example: "343649807833778782"
+        Result:
+          type: array
+          description: Query result of user status. Returned through this field when the user is online or offline.
+          items:
+            type: object
+            properties:
+              UserId:
+                type: string
+                description: ID of online or offline user.
+                example: "id1"
+              Status:
+                type: string
+                description: |
+                  User status, including:
+                  - Online：Online.
+                  - Offline：Offline.
+                enum: [Online, Offline]
+                example: "Offline"
+        ErrorList:
+          type: array
+          description: |
+            Query failure list. Returned through this field when the user ID does not exist or the user has logged out.
+            <ul>
+            <li>Code is 0:</li>
+            <li>ErrorList is empty, all user online statuses are successfully queried.</li>
+            <li>ErrorList is not empty, indicating that some user online status queries failed. Please refer to SubCode for processing.</li>
+            </ul>
+            <ul>
+            <li>Code is not 0:</li>
+            <li>ErrorList is empty, indicating parameter error, API frequency limit, or system error.</li>
+            <li>ErrorList is not empty, indicating that all user online status queries failed.</li>
+            </ul>
+          items:
+            type: object
+            properties:
+              UserId:
+                type: string
+                description: Non-existent user ID or ID of logged out user.
+                example: "id4"
+              SubCode:
+                type: number
+                description: |
+                  Return code when query fails. For complete return codes, please refer to the Code description or [Global Return Codes](/zim-server/return-codes).
+                example: 660200001

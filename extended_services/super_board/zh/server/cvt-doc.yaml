@@ -1,0 +1,526 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: './shared-components.yaml#/servers'
+
+tags:
+  - docs
+
+paths:
+  /:
+    post:
+      tags: [docs]
+      summary: StartTranscode
+      description: |
+
+        <Warning title="注意">
+          1. 本文档 API 接口均为最新服务端 API v2 接口，后续相关功能的新增都会在此更新。为了给开发者带来更好的体验，ZEGO 推荐开发者使用最新 API v2 接口。
+          2. 文件转码旧版 API 仅供 **2021-09-10** 前接入的旧用户维护使用。旧版接口文档请参考 [旧版服务端 API](https://doc-zh.zego.im/article/11997)。
+        </Warning>
+
+        ## 描述
+        通过本接口创建文件转码任务。
+
+        如果希望对已经转码过的文件进行重新转码，请设置 IsRestartTranscode 为 1，否则系统会默认不重新转码，直接返回转码成功。
+        <Warning title="注意">
+         本接口只能对已上传至 ZEGO 文件云服务的文件进行转码。如果文件未上传至 ZEGO 文件云服务，请先使用客户端 API 上传文件，详情请参考 [共享文件管理-上传文件](/super-board-ios/basic-func/file-manage#上传文件)。
+        </Warning>
+
+        ##  文件哈希值和大小计算示例
+
+        ### 文件哈希计算示例
+
+        文件哈希是对文件的内容进行计算得到的一个哈希值字符串，作用是用来对文件内容进行校验，服务器对收到的文件计算文件哈希值，然后和客户传递的文件哈希值进行比较，确保文件内容没有被篡改。
+
+        <CodeGroup>
+
+        ```go title="Go 文件哈希计算示例"
+        import (
+        	"crypto/md5"
+        	"fmt"
+        	"io"
+        	"os"
+        )
+
+        // fileName 文件路径+文件名 etc: /usr/local/aaa.sh
+        func main() {
+        	fileName := "/local/usr/test.go"
+        	str := GetFileMD5FromFile(fileName)
+        	fmt.Println(str)
+        }
+
+        func GetFileMD5FromFile(localFile string) (fileHash string) {
+        	fd, e := os.Open(localFile)
+        	if e != nil {
+        		return
+        	}
+        	defer fd.Close()
+        	fileHash = GetFileMD5(fd)
+        	return
+        }
+
+        func GetFileMD5(f io.Reader) string {
+        	h := md5.New()
+        	if _, err := io.Copy(h, f); err != nil {
+        		fmt.Println("%v", err)
+        	}
+        	return fmt.Sprintf("%x", h.Sum(nil))
+        }
+        ```
+
+        ```python title="Python 文件哈希计算示例"
+        import hashlib
+
+        # filename 文件路径+文件名 etc: /usr/local/aaa.sh
+        def md5(filename):
+            hash_md5 = hashlib.md5()
+            with open(filename, "rb") as f:
+                for chunk in iter(lambda: f.read(4096), b""):
+                    hash_md5.update(chunk)
+            return hash_md5.hexdigest()
+        ```
+
+        ```java title="Java 文件哈希计算示例"
+
+        import java.io.File;
+        import java.io.FileInputStream;
+        import java.math.BigInteger;
+        import java.security.MessageDigest;
+        import java.security.NoSuchAlgorithmException;
+
+        // fileName 文件路径+文件名 etc: /usr/local/aaa.sh
+        public static String getFileMD5(File filename) {
+            if (!filename.isFile()) {
+                return null;
+            }
+            MessageDigest digest = null;
+            FileInputStream in = null;
+            byte buffer[] = new byte[1024];
+            int len;
+            try {
+                digest = MessageDigest.getInstance("MD5");
+                in = new FileInputStream(filename);
+                while ((len = in.read(buffer, 0, 1024)) != -1) {
+                    digest.update(buffer, 0, len);
+                }
+                in.close();
+            } catch (Exception e) {
+                e.printStackTrace();
+                return null;
+            }
+            return toHex(digest.digest());
+        }
+
+        private static final char[] HEX_DIGITS = "0123456789abcdef".toCharArray();
+        public static String toHex(byte[] data) {
+            char[] chars = new char[data.length * 2];
+            for (int i = 0; i < data.length; i++) {
+                chars[i * 2] = HEX_DIGITS[(data[i] >> 4) & 0xf];
+                chars[i * 2 + 1] = HEX_DIGITS[data[i] & 0xf];
+            }
+            return new String(chars);
+        }
+        ```
+        ```php title="PHP 文件哈希计算示例"
+        // fileName 文件路径+文件名 etc: /usr/local/aaa.sh
+        $file = 'fileName';
+        echo 'MD5 file hash of ' . $file . ': ' . md5_file($file);
+        ```
+
+        ```js title="Node.js 文件哈希计算示例"
+        const fs = require("fs");
+        const path = require("path");
+        const crypto = require('crypto');
+
+        // fileName 文件路径+文件名 etc: /usr/local/aaa.sh
+        function test() {
+            const stream = fs.createReadStream(path.join('fileName'));
+            const hash = crypto.createHash('md5');
+            stream.on('data', chunk => {
+                hash.update(chunk, 'utf8');
+            });
+            stream.on('end', () => {
+                const md5 = hash.digest('hex');
+                console.log(md5);
+            });
+        }
+        ```
+
+
+        </CodeGroup>
+
+        ### 文件大小计算示例
+
+        <CodeGroup>
+
+        ```go title="Go 文件大小计算示例"
+        // fileName 文件路径+文件名 etc: /usr/local/aaa.sh
+        package main
+
+        import (
+        	"fmt"
+        	"os"
+        )
+
+        func main() {
+        	fileName := "/local/usr/test.go"
+        	fileSize := GetFileSize(fileName)
+        	fmt.Println(fileSize)
+        }
+
+        func GetFileSize(fileName string) int64 {
+        	fi, err := os.Stat(fileName)
+        	if err != nil {
+        		return 0
+        	}
+        	return fi.Size()
+        }
+        ```
+
+
+        ```python title="Python 文件大小计算示例"
+        # fileName 文件路径+文件名 etc: /usr/local/aaa.sh
+        import os
+        fsize = os.path.getsize(filename)
+        print(fileSize)
+        ```
+
+        ```java title="Java 文件大小计算示例"
+        // fileName 文件路径+文件名 etc: /usr/local/aaa.sh
+        public static long getFileSIze(String filename) {
+            File file = new File(filename);
+            if (!file.exists() || !file.isFile()) {
+                System.out.println("file not exist");
+                return -1;
+            }
+            return file.length();
+        }
+        ```
+
+        ```php title="PHP 文件大小计算示例"
+        // fileName 文件路径+文件名 etc: /usr/local/aaa.sh
+        $filename = 'somefile.txt';
+        echo $filename . ': ' . filesize($filename) . ' bytes';
+        ```
+
+        ```js title="Node.js 文件大小计算示例"
+        const fs = require("fs");
+
+        // fileName 文件路径+文件名 etc: /usr/local/aaa.sh
+        function getFileSize() {
+            const fsStat = fs.statSync(fileName）;
+            console.log(fsStat.size)
+        }
+        ```
+
+        </CodeGroup>
+
+        <Note title="说明">调用频率限制：10 次/秒。</Note>
+      operationId: cvt-doc
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://docs-api.zego.im/?Action=StartTranscode
+          required: true
+          schema:
+            type: string
+            enum: [StartTranscode]
+          style: form
+          explode: true
+        - $ref: './shared-components.yaml#/components/parameters/AppId'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: './shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: './shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartTranscodeRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartTranscodeResponse'
+
+components:
+  schemas:
+    StartTranscodeRequest:
+      type: object
+      required: [FileHash, FileName, FileType, DestinationFileType, FileSize, SourceFileUrl]
+      properties:
+        FileHash:
+          type: string
+          description: 源文件哈希，要求为 32 位的 MD5 哈希值。计算方法请参考文件哈希计算示例。
+          example: "8cb1bccbdf2e655a3b45f4b126ef8392"
+        FileName:
+          type: string
+          description: 源文件名称。
+          example: "demo.pptx"
+        FileType:
+          type: integer
+          format: int64
+          description: |
+            源文件类型参数，可设置为 1、2、4、8、16、32，各参数值说明如下：
+            - 1：ppt/pptx（静态文件，目标文件类型对应 256；动态文件，目标文件类型对应 512）
+            - 2：doc/docx（目标文件类型对应 256）
+            - 4：xls/xlsx（目标文件类型对应 256）
+            - 8：PDF（目标文件类型对应 256）
+            - 16：jpg/jpeg/png/bmp（目标文件类型对应 16）
+            - 32：txt（目标文件类型对应 256）
+          enum: [1, 2, 4, 8, 16, 32]
+          example: 1
+        DestinationFileType:
+          type: integer
+          format: int64
+          description: |
+            目标文件类型参数，可设置为 16、256、512，各参数值说明如下：
+            - 16：jpg/jpeg/png/bmp
+            - 256：向量和图片
+            - 512：动态 PPT
+          enum: [16, 256, 512]
+          example: 256
+        FileSize:
+          type: integer
+          format: int64
+          description: 源文件大小，单位为字节。计算方法请参考文件大小计算示例。
+          example: 1024
+        SourceFileUrl:
+          type: string
+          description: |
+            源文件下载链接。
+            > **说明**
+            >
+            > 出于安全考虑，建议使用带鉴权信息的下载 URL，并保证调用接口时 URL 有效期剩余半个小时以上。
+          example: "url"
+        IsRestartTranscode:
+          type: integer
+          format: int64
+          description: |
+            是否重新转码。
+            - 0：否，默认值
+            - 1：是
+            注意：首次转码不能填写1，否则报错。
+          enum: [0, 1]
+          example: 1
+        ThumbnailDefinition:
+          type: integer
+          format: int64
+          description: |
+            缩略图清晰度类型参数，可设置为 1、2、3，默认值是 1。如果不传递该参数，则使用默认清晰度：普通。各参数值说明如下：
+            - 1：普通
+            - 2：标清
+            - 3：高清
+
+            > **说明**
+            >
+            > 缩略图清晰度仅在转码前设置有效，作用于转码过程。如果需要改变转码后清晰度，请指定 IsRestartTranscode 为 1 后重新发起转码请求。
+          enum: [1, 2, 3]
+          example: 1
+        EnableVectorImage:
+          type: integer
+          description: |
+            输出文件是否转换为 svg 格式。
+            - 1：关闭
+            - 2：开启，默认值。
+          enum: [1, 2]
+          example: 2
+    StartTranscodeResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int64
+          description: |
+            错误码。
+
+            以下仅列出了接口业务相关的返回码，公共返回码请参考 [公共返回码](/super-board-server/common-error-codes)。
+
+            <table>
+            <tbody><tr>
+            <th>返回码</th>
+            <th>说明</th>
+            </tr>
+            <tr>
+            <td>60015</td>
+            <td>不支持的源文件类型。</td>
+            </tr>
+            <tr>
+            <td>60016</td>
+            <td>文件大小超过最大限制，默认限制：100 MB。</td>
+            </tr>
+            <tr>
+            <td>60017</td>
+            <td>Excel文件超过最大限制，默认限制：10 MB。</td>
+            </tr>
+            <tr>
+            <td>60021</td>
+            <td>源文件类型和目标文件类型不匹配。</td>
+            </tr>
+            </tbody></table>
+          example: 0
+        Message:
+          type: string
+          description: 错误描述。
+          example: "succeed"
+        RequestId:
+          type: string
+          description: 请求 ID。
+          example: "abcd123"
+        Data:
+          type: object
+          description: 响应对象。
+          properties:
+            FileHash:
+              type: string
+              description: 源文件哈希。
+              example: "abc"
+            FileType:
+              type: integer
+              format: int64
+              description: |
+                源文件类型参数，可设置为 1、2、4、8、16、32，各参数值说明如下：
+                - 1：ppt/pptx（静态文件，目标文件类型对应 256；动态文件，目标文件类型对应 512）
+                - 2：doc/docx（目标文件类型对应 256）
+                - 4：xls/xlsx（目标文件类型对应 256）
+                - 8：PDF（目标文件类型对应 256）
+                - 16：jpg/jpeg/png/bmp（目标文件类型对应 16）
+                - 32：txt（目标文件类型对应 256）
+              example: 1
+            DestinationFileType:
+              type: integer
+              format: int64
+              description: |
+                目标文件类型参数，可设置为 16、256、512，各参数值说明如下：
+                - 16：jpg/jpeg/png/bmp
+                - 256：向量和图片
+                - 512：动态 PPT
+              example: 256
+            FileName:
+              type: string
+              description: 源文件名称。
+              example: "demo.pptx"
+            FileSize:
+              type: integer
+              format: int64
+              description: 源文件大小，单位为字节。
+              example: 1024
+            Status:
+              type: integer
+              format: int64
+              description: |
+                文件转码状态，详情请参考 Status 字段说明表。
+
+                <b>Status 字段取值说明如下</b>
+                <table>
+                <tbody><tr>
+                <th>状态码</th>
+                <th>描述</th>
+                </tr>
+                <tr>
+                <td>1</td>
+                <td>未上传。</td>
+                </tr>
+                <tr>
+                <td>2</td>
+                <td>已上传。</td>
+                </tr>
+                <tr>
+                <td>4</td>
+                <td>排队中。</td>
+                </tr>
+                <tr>
+                <td>8</td>
+                <td>转码中。</td>
+                </tr>
+                <tr>
+                <td>16</td>
+                <td>转码成功。</td>
+                </tr>
+                <tr>
+                <td>32</td>
+                <td>转码失败。</td>
+                </tr>
+                <tr>
+                <td>64</td>
+                <td>转码任务已取消。</td>
+                </tr>
+                <tr>
+                <td>128</td>
+                <td>受密码保护的文档。</td>
+                </tr>
+                <tr>
+                <td>256</td>
+                <td>文件内容过大，例如文档页数过多。</td>
+                </tr>
+                <tr>
+                <td>512</td>
+                <td>Excel 文件标签数过多。</td>
+                </tr>
+                <tr>
+                <td>1024</td>
+                <td>文件内容为空。例如：PPT 内无幻灯片。</td>
+                </tr>
+                <tr>
+                <td>2048</td>
+                <td>转码服务器打开文件失败。</td>
+                </tr>
+                <tr>
+                <td>4096</td>
+                <td>不支持的目标文件类型。</td>
+                </tr>
+                <tr>
+                <td>8192</td>
+                <td>源文件为只读文件。</td>
+                </tr>
+                <tr>
+                <td>16384</td>
+                <td>转码服务器下载源文件失败。 可能的原因如下：<ul><li>无法从请求参数中的源文件 URL 下载文件。</li><li>请求参数中的文件哈希值不是 32 位的 MD5 哈希值。</li><li>请求参数中的文件哈希值和根据文件计算的哈希值不匹配。</li></ul></td>
+                </tr>
+                <tr>
+                <td>32768</td>
+                <td>检测到源文件中包含了转码工具无法处理的元素，如墨迹涂鸦等，请去掉这些元素后再进行转码。</td>
+                </tr>
+                <tr>
+                <td>32769</td>
+                <td>检测到 Word、Excel 和 PowerPoint 文件格式不合法，请确保源文件可以使用 Office 打开再进行转码。</td>
+                </tr>
+                <tr>
+                <td>32770</td>
+                <td>要转码的文件存在安全隐患，无法正常打开转码。请确保使用 Office 打开文件时不会提示编辑此文件可能会损害您的计算机</td>
+                </tr>
+                <tr>
+                <td>32771</td>
+                <td>动态 PPT 转码结束后，检测到有图片、音视频文件未正常导出，转码服务器将重试转码。</td>
+                </tr>
+                <tr>
+                <td>32772</td>
+                <td>文件大小过大，无法转码，请确保文件大小在限制的范围之内。</td>
+                </tr>
+                <tr>
+                <td>32773</td>
+                <td>打开文件时弹需要修复文件提示框（文件损坏）。</td>
+                </tr>
+                <tr>
+                <td>32774</td>
+                <td>EOF 错误（文件内容不完整）。</td>
+                </tr>
+                </tbody></table>
+              example: 8
+            TaskId:
+              type: string
+              description: 文件转码任务 ID。
+              example: "task"
+
