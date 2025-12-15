@@ -1,0 +1,161 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+tags:
+  - room
+
+paths:
+  /:
+    get:
+      tags: [room]
+      summary: QueryRoomUserList
+      description: |
+        Obtain information about room members based on the room ID, including the number of room users, user IDs, and names.
+
+        <Note title="QPS Limit"> 20 times/s</Note>
+      operationId: obtain-information-about-users-in-a-room
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > API prototype parameter
+            >
+            > https://zim-api.zego.im/?Action=QueryRoomUserList
+          required: true
+          schema:
+            type: string
+            enum: [QueryRoomUserList]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRoomUserListRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryRoomUserListResponse'
+              example:
+                Code: 0
+                Message: success
+                RequestId: "343649807833778782"
+                Count: 2
+                NextFlag: "0"
+                UserList:
+                  - UserId: "aaa"
+                    UserName: "UserA"
+                  - UserId: "bbb"
+                    UserName: "UserB"
+
+components:
+  schemas:
+    QueryRoomUserListRequest:
+      type: object
+      required: [RoomId]
+      properties:
+        RoomId:
+          type: string
+          description: Room ID, with a maximum length of 32 bytes. Only supports numbers, English characters, and '!', '#', '$', '%', '&', '(', ')', '+', '-', ':', ';', '<', '=', '.', '>', '?', '@', '[', ']', '^', '_', '{', '}', '|', '~'.
+          maxLength: 32
+          example: "room123"
+        Mode:
+          type: number
+          enum: [0, 1]
+          default: 0
+          description: |
+            Sort by user login time to the room:
+            - 0: In chronological order (default).
+            - 1: In reverse chronological order.
+        NextFlag:
+          type: string
+          description: |
+            Pagination flag. Leave it empty for the first call, and then fill in the NextFlag value returned from the previous call. When the returned NextFlag is 0, it means the room member list has been fully retrieved.
+
+            For example, if there are 250 members in the room, when calling this API to query the room member list:
+            - First call: Set Limit to 100, leave NextFlag empty, query users 1 to 100; the NextFlag value in the returned result is 1.
+            - Second call: Set Limit to 100, set NextFlag to 1, query users 101 to 200; the NextFlag value in the returned result is 2.
+            - Third call: Set Limit to 100, set NextFlag to 2, query users 201 to 250; query complete, the NextFlag in the returned result is 0.
+        Limit:
+          type: number
+          minimum: 0
+          maximum: 500
+          description: |
+            Number of users to query in a single call, with a value range of [0, 500]. This means calling this API once can return a maximum of 500 members.
+
+            When the number of members in the room exceeds Limit, you need to call this API multiple times <b>and keep Limit consistent</b>.
+
+            If left empty or greater than 500, the default value is 500.
+
+            If you need to increase the query result limit, please contact ZEGOCLOUD Technical Support for configuration.
+    QueryRoomUserListResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          description: |
+            Return code.
+
+            The following only lists the return codes related to the API business logic. For the complete return codes, please refer to [Return codes](/zim-server/return-codes).
+            <table>
+            <thead><tr><th>Return code</th><th>Description</th><th>Suggested Solution</th></tr></thead>
+            <tbody>
+            <tr><td>660000002</td><td>Parameter error.</td><td>Please check the request parameters.</td></tr>
+            <tr><td>660300001</td><td>Room does not exist.</td><td>Please check if the RoomId is correct or if the room has been destroyed.</td></tr>
+            <tr><td>660300006</td><td>Call frequency limit exceeded.</td><td>The call frequency is 20 times/s, please try again later.</td></tr>
+            <tr><td>660300007</td><td>Failed to get room.</td><td>Please contact ZEGOCLOUD Technical Support.</td></tr>
+            <tr><td>660300008</td><td>Failed to get room user list; the number of room users is empty, usually during the room delayed destruction period.</td><td>No action required.</td></tr>
+            </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: Description of the request result.
+          example: "success"
+        RequestId:
+          type: string
+          description: Request ID.
+          example: "343649807833778782"
+        Count:
+          type: number
+          description: Current number of users in the room.
+          example: 2
+        NextFlag:
+          type: string
+          description: |
+            Pagination flag. If not empty, it indicates that there is still user information that has not been returned, and you need to set this field to the request parameter NextFlag to retrieve more user information; if empty, it means all user information has been returned.
+            > **Note**
+            >
+            > Apart from the above description, this field has no association with the list information. Please do not base any other logic on it.
+          example: "0"
+        UserList:
+          type: array
+          description: Member list.
+          items:
+            type: object
+            properties:
+              UserId:
+                type: string
+                description: User ID.
+                example: "aaa"
+              UserName:
+                type: string
+                description: User name.
+                example: "UserA"
