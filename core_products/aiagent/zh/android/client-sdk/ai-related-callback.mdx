@@ -1,0 +1,205 @@
+# 智能体实例 SDK 端回调
+
+AI Agent 提供了丰富的状态信息。这些状态信息可通过 ZEGO Express SDK 的试验性 API 回调获取，使得在客户端上可以方便地实现状态切换 UI 效果，例如"聆听中"、"思考中"、“说话中”等状态。
+
+
+### 功能特点
+- 实时性：状态变化可以实时传递给所有参与者。
+-灵活性：使用自定义消息格式，便于集成和扩展。
+- 多状态支持：包括聆听、思考、说话和被打断等多种状态。
+
+
+### 消息格式
+
+:::if{props.platform=undefined}
+状态消息使用 JSON 格式，消息内容字段为 `msg_content`，里面包含字段如下：
+:::
+:::if{props.platform="web"}
+状态消息使用 JSON 格式，消息内容字段为 `msgContent`，里面包含字段如下：
+:::
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| Timestamp | int64 | 时间戳，单位为秒。 |
+| Seqld | int64 | 包序列号，保证有序性，不保证连续性 |
+| Round | int64 | 对话轮次，每次用户主动说话，轮次增加。保证有序性，不保证连续性 |
+| Cmd | Int | 1: 用户说话状态<br />3: 识别的 ASR 文本<br />4: LLM 回答文本（增量下发）<br />6: 智能体实例状态 |
+| Data | Object | 具体内容。见Data |
+
+#### Data
+
+Cmd 不同对应的 Data 也不同，具体如下：
+
+##### Cmd=1,用户说话状态
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| SpeakStatus | int | 1：说话开始，2: 说话结束 |
+
+
+:::if{props.platform=undefined}
+<Accordion title="示例消息" defaultOpen="false">
+```json
+{
+    "method": "liveroom.room.on_recive_room_channel_message",
+    "params": {
+        "msg_content": "{\"Timestamp\":1765510379,\"TimestampMs\":1765510379113,\"SeqId\":278800715,\"Round\":510359002,\"Cmd\":1,\"Legacy\":false,\"Data\":{\"SpeakStatus\":1,\"UserId\":\"38475\"}}",
+        "msg_type": 1,
+        "roomid": "ir_20p158E0",
+        "send_idname": "@RBT#38475_xiaozhi-sx_174722027",
+        "send_nickname": ""
+    }
+}
+```
+</Accordion>
+
+:::
+:::if{props.platform="web"}
+<Accordion title="示例消息" defaultOpen="false">
+```json
+{
+    "method": "onRecvRoomChannelMessage",
+    "content": {
+        "roomID": "wr_1765790410771",
+        "sendIDName": "38597_xiaozhi_437354554567",
+        "sendNickName": "小智",
+        "msgType": 1,
+        "msgContent": "{\"Timestamp\":1765790413,\"TimestampMs\":1765790413102,\"SeqId\":558853066,\"Round\":790411001,\"Cmd\":1,\"Legacy\":false,\"Data\":{\"SpeakStatus\":1,\"UserId\":\"38597\"}}"
+    }
+}
+```
+</Accordion>
+:::
+
+详细使用说明建议参考[展示用户和智能体实例状态 > 在客户端监听 ZEGO Express SDK 试验性 API 回调](/aiagent-server/guides/display-user-and-agent-status#listen-zego-express-sdk-experimental-api-callback)。
+
+##### Cmd=3,识别的ASR（用户说话）文本
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| Text | string | 用户语音识别结果文本<br />每次下发识别到的全量文本（整句是否结束，由EndFlag标志决定），支持文本纠正 |
+| MessageId | string | 消息 id。每轮 ASR 文本消息 id 唯一 |
+| EndFlag | bool | 结束标识。true 表示本轮 ASR 文本已发送结束,false表示后续还会有识别数据 |
+
+:::if{props.platform=undefined}
+<Accordion title="示例消息" defaultOpen="false">
+```json
+{
+    "method": "liveroom.room.on_recive_room_channel_message",
+    "params": {
+        "msg_content": "{\"Timestamp\":1765510386,\"TimestampMs\":1765510386723,\"SeqId\":278820712,\"Round\":510359003,\"Cmd\":3,\"Legacy\":false,\"Data\":{\"MessageId\":\"2051951657\",\"UserId\":\"38475\",\"Text\":\"你在哪里？\",\"StartFlag\":false,\"EndFlag\":true}}",
+        "msg_type": 1,
+        "roomid": "ir_20p158E0",
+        "send_idname": "@RBT#38475_xiaozhi-sx_174722027",
+        "send_nickname": ""
+    }
+}
+```
+</Accordion>
+:::
+:::if{props.platform="web"}
+<Accordion title="示例消息" defaultOpen="false">
+```json
+{
+    "method": "onRecvRoomChannelMessage",
+    "content": {
+        "roomID": "wr_1765790410771",
+        "sendIDName": "38597_xiaozhi_437354554567",
+        "sendNickName": "小智",
+        "msgType": 1,
+        "msgContent": "{\"Timestamp\":1765790414,\"TimestampMs\":1765790414021,\"SeqId\":558853290,\"Round\":790411001,\"Cmd\":3,\"Legacy\":false,\"Data\":{\"MessageId\":\"1036791849\",\"UserId\":\"38597\",\"Text\":\"你好。\",\"StartFlag\":false,\"EndFlag\":true}}"
+    }
+}
+```
+</Accordion>
+:::
+
+详细使用说明建议参考[展示字幕 > 在客户端监听 ZEGO Express SDK 试验性 API 回调](./../guides/display-subtitles.mdx#listen-zego-express-sdk-experimental-api-callback)
+
+
+##### Cmd=4,智能体应答文本
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| Text | string | 应答文本，每次下发增量文本答案 |
+| MessageId | string | 消息 id。每轮应答文本消息 id 唯一 |
+| EndFlag | bool | 结束标识。true 表示本轮 llm 文本已发送结束。 |
+
+:::if{props.platform=undefined}
+<Accordion title="示例消息" defaultOpen="false">
+```json
+{
+    "method": "liveroom.room.on_recive_room_channel_message",
+    "params": {
+        "msg_content": "{\"Timestamp\":1765510387,\"TimestampMs\":1765510387545,\"SeqId\":278828066,\"Round\":510359003,\"Cmd\":4,\"Legacy\":false,\"Data\":{\"MessageId\":\"2052097919\",\"UserId\":\"@RBT#38475_xiaozhi-sx_174722027\",\"Text\":\"我在数字世界随时等你哦 无论你想谈天说\",\"StartFlag\":true,\"EndFlag\":false}}",
+        "msg_type": 1,
+        "roomid": "ir_20p158E0",
+        "send_idname": "@RBT#38475_xiaozhi-sx_174722027",
+        "send_nickname": ""
+    }
+}
+```
+</Accordion>
+:::
+:::if{props.platform="web"}
+<Accordion title="示例消息" defaultOpen="false">
+```json
+{
+    "method": "onRecvRoomChannelMessage",
+    "content": {
+        "roomID": "wr_1765790410771",
+        "sendIDName": "38597_xiaozhi_437354554567",
+        "sendNickName": "小智",
+        "msgType": 1,
+        "msgContent": "{\"Timestamp\":1765790415,\"TimestampMs\":1765790415245,\"SeqId\":558855367,\"Round\":790411001,\"Cmd\":4,\"Legacy\":false,\"Data\":{\"MessageId\":\"1037244923\",\"UserId\":\"38597_xiaozhi_437354554567\",\"Text\":\"你好呀！\",\"StartFlag\":true,\"EndFlag\":false}}"
+    }
+}
+```
+</Accordion>
+:::
+
+详细使用说明建议参考[展示字幕 > 在客户端监听 ZEGO Express SDK 试验性 API 回调](./../guides/display-subtitles.mdx#listen-zego-express-sdk-experimental-api-callback)
+
+
+##### Cmd=6,智能体状态
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| Status | int | 智能体实例状态。0：空闲；1：正在听；2: 正在想；3: 正在说 |
+| OldStatus | int | 上一次智能体实例状态。值的含义同 Status|
+| Reason | string | 切换状态原因。 |
+
+:::if{props.platform=undefined}
+<Accordion title="示例消息" defaultOpen="false">
+```json
+{
+    "method": "liveroom.room.on_recive_room_channel_message",
+    "params": {
+        "msg_content": "{\"Timestamp\":1765510398,\"TimestampMs\":1765510398029,\"SeqId\":278800725,\"Round\":0,\"Cmd\":6,\"Legacy\":false,\"Data\":{\"OldStatus\":3,\"Status\":0,\"Reason\":\"tts_all_played\"}}",
+        "msg_type": 1,
+        "roomid": "ir_20p158E0",
+        "send_idname": "@RBT#38475_xiaozhi-sx_174722027",
+        "send_nickname": ""
+    }
+}
+```
+</Accordion>
+:::
+:::if{props.platform="web"}
+<Accordion title="示例消息" defaultOpen="false">
+```json
+{
+    "method": "onRecvRoomChannelMessage",
+    "content": {
+        "roomID": "wr_1765790410771",
+        "sendIDName": "38597_xiaozhi_437354554567",
+        "sendNickName": "小智",
+        "msgType": 1,
+        "msgContent": "{\"Timestamp\":1765790414,\"TimestampMs\":1765790414022,\"SeqId\":558853069,\"Round\":0,\"Cmd\":6,\"Legacy\":false,\"Data\":{\"OldStatus\":1,\"Status\":2,\"Reason\":\"llm_begin\"}}"
+    }
+}
+```
+</Accordion>
+:::
+
+详细使用说明建议参考[展示用户和智能体实例状态 > 在客户端监听 ZEGO Express SDK 试验性 API 回调](/aiagent-server/guides/display-user-and-agent-status#listen-zego-express-sdk-experimental-api-callback)。

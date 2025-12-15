@@ -1,0 +1,54 @@
+# Voice Interruption Sensitivity Adjustment
+
+## Feature Description
+Determine whether the user has truly started speaking to trigger speech recognition and determine whether to interrupt the AI's speech. After filtering environmental noise and other impacts, the main judgment is made through the following indicators:
+- Speaking volume threshold VADEnergyThreshold. The larger the volume, the more likely the user has started speaking.
+- Effective speech duration VADMinSpeechDur. The longer the duration, the more likely the user has started speaking.
+By reasonably adjusting these two parameters, you can prevent light sounds indicating agreement or thinking such as "um...", "oh...", "indeed...", etc., but it may also affect the recognition and interruption of short sentences with normal volume, such as "hello", "hi", "stop", etc. Therefore, it is necessary to adjust reasonably according to the interaction stage.
+
+## Parameter Description
+
+The parameters affecting voice interruption sensitivity are in the ASR parameters when creating/updating an agent instance. You can refer to [Create Agent Instance > Body > ASR Parameter Description](/aiagent-server/api-reference/agent-instance-management/create-agent-instance). Detailed description is as follows:
+
+| Parameter Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| VADSensitiveLevel | Int | No | Used to control the sensitivity level of VAD. Value range [0,3]:<br/>0: Medium sensitivity, default value<br/>1: Low sensitivity<br/>2: High sensitivity<br/>3: Custom mode, needs to be used with VADMinSpeechDur and VADEnergyThreshold |
+| VADMinSpeechDur | Int | No | Used to set the minimum speech duration threshold for VAD detection. Speech segments below this duration will be filtered. Unit is milliseconds, value range [0,1000]. The larger the value, the less likely to be falsely detected, but may cause some short speech to be missed.<br/>**Note:** Only effective when VADSensitiveLevel is set to 3 (custom mode). |
+| VADEnergyThreshold | Float | No | Used to set the energy threshold of VAD to distinguish between speech and noise. Value range [0,1]. The smaller the value, the higher the sensitivity; the larger the value, the lower the sensitivity. VAD determines whether it is speech by calculating the energy value of the audio signal. When the audio energy exceeds this threshold, it is determined as speech activity; below this threshold, it is considered silence or noise.<br/>**Note:** Only effective when VADSensitiveLevel is set to 3 (custom mode). |
+
+The AI Agent service currently provides three interrupt sensitivity options (VADSensitiveLevel), and their corresponding parameter values and effect descriptions are as follows:
+
+| Sensitivity Level VADSensitiveLevel | Parameter Values (VADMinSpeechDur, VADEnergyThreshold) | Non-meaningful short words, interjections, coughs, sneezes, etc. non-interrupt effect | Meaningful short words interrupt recognition effect |
+| --- | --- | --- | --- |
+| Low (VADSensitiveLevel=1) | 0.4, 100 | Good | Poor |
+| Medium (Default) (VADSensitiveLevel=0) | 0.2, 0 | Good | Good |
+| High (VADSensitiveLevel=2) | 0.1, 0 | Poor | Good |
+
+If the predefined sensitivity levels cannot meet your business requirements, you can set VADSensitiveLevel=3 (custom mode) to fine-tune the VADMinSpeechDur and VADEnergyThreshold parameters to control interrupt sensitivity.
+
+## Usage Examples
+
+### Using Default Interrupt Sensitivity VADSensitiveLevel <a id="using-default-interrupt-sensitivity-vadsensitivelevel" />
+When registering an agent or creating an agent instance, if you do not pass ASR parameters or only pass empty ASR parameters, the default VADSensitiveLevel = 0 (medium sensitivity) will be used. If you need to explicitly specify the VADSensitiveLevel parameter, pass the ASR related parameters:
+
+```json
+{
+    "ASR": {
+        "VADSensitiveLevel": 1 // 0 = medium (medium sensitivity, default value), 1 = low (low sensitivity), 2 = high (high sensitivity), 3 = custom (custom mode, needs to be used with VADMinSpeechDur and VADEnergyThreshold)
+    }
+}
+
+```
+
+### Custom Adjustment of Interrupt Parameters VADMinSpeechDur and VADEnergyThreshold
+When registering an agent or creating an agent instance, if you need to explicitly specify VADSensitiveLevel, VADMinSpeechDur, and VADEnergyThreshold parameters, pass the ASR related parameters:
+
+```json
+{
+    "ASR": {
+        "VADSensitiveLevel": 3, // 3 = custom (custom mode, needs to be used with VADMinSpeechDur and VADEnergyThreshold)
+        "VADMinSpeechDur": 100, // Used to set the minimum speech duration threshold for VAD detection. Speech segments below this duration will be filtered. Unit is milliseconds, value range [0,1000]. The larger the value, the less likely to be falsely detected, but may cause some short speech to be missed.
+        "VADEnergyThreshold": 0.1 // Used to set the energy threshold of VAD to distinguish between speech and noise. Value range [0,1]. The smaller the value, the higher the sensitivity; the larger the value, the lower the sensitivity. VAD determines whether it is speech by calculating the energy value of the audio signal. When the audio energy exceeds this threshold, it is determined as speech activity; below this threshold, it is considered silence or noise.
+    }
+}
+```
