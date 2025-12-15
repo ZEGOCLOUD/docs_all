@@ -29,34 +29,33 @@ paths:
           style: form
           explode: true
         # 引用共享的参数
-        - $ref: '../../../../../snippets/common/zh/openapi/zego-shared-components.yaml#/components/parameters/AppId'
-        - name: SignatureNonce
-          in: query
-          description: 💡公共参数。16 位 16 进制随机字符串（8 字节随机数的 hex 编码）。生成算法可参考 <a href="/cloud-realtime-asr/api-reference/accessing-server-apis#signature-example">签名示例</a>。
-          required: true
-          schema:
-            type: string
-        - name: Timestamp
-          in: query
-          description: 💡公共参数。当前 Unix 时间戳，单位为秒。生成算法可参考 <a href="/cloud-realtime-asr/api-reference/accessing-server-apis#signature-example">签名示例</a>，最多允许 10 分钟的误差。
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - name: SignatureVersion
-          $ref: "../../../../../snippets/common/zh/openapi/zego-shared-components.yaml#/components/parameters/SignatureVersion"
-        - name: Signature
-          in: query
-          description: 💡公共参数。签名，用于验证请求的合法性。请参考[签名机制](/cloud-realtime-asr/api-reference/accessing-server-apis#signature-mechanism)生成。
-          required: true
-          schema:
-            type: string
+        - $ref: './shared-components.yaml#/components/parameters/AppId'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: './shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: './shared-components.yaml#/components/parameters/Signature'
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/StartASRTaskRequest"
+            example:
+              RoomId: "string"
+              RecognitionRange: 1
+              ASR:
+                Vendor: "Tencent"
+                Params:
+                  engine_model_type: "16k_zh"
+                  hotword_list: "zego|10"
+                VADSilenceSegmentation: 500
+                PauseInterval: 800
+              StreamList:
+                - StreamId: "stremId1"
+                - StreamId: "stremId2"
+                - StreamId: "stremId3"
+              AdvancedConfig:
+                MaxIdleTime: 120
       responses:
         "200":
           description: 开始任务成功
@@ -75,44 +74,33 @@ components:
         RoomId:
           type: string
           description: RTC 房间 Id
+        RecognitionRange:
+          type: integer
+          description: 识别范围。0：房间内所有流，1：指定 StreamList。
+          enum: [0, 1]
+          example: 0
         ASR:
+          $ref: "./shared-components.yaml#/components/schemas/ASRConfig"
+        StreamList:
+          type: array
+          description: 需要识别的流列表，RecognitionRange 参数为 1 时生效。当 RecognitionRange 参数为 1 该参数不能为空。
+          items:
+            $ref: "./shared-components.yaml#/components/schemas/StreamListItem"
+          example:
+            - StreamId: "stremId1"
+            - StreamId: "stremId2"
+            - StreamId: "stremId3"
+        AdvancedConfig:
           type: object
-          description: ASR 参数
+          description: 高级配置参数。
           properties:
-            Vendor:
-              type: string
-              description: ASR 厂商。可参考[配置 ASR](/cloud-realtime-asr/configuring-asr) 参数说明。若需要阿里、微软识别厂商，请联系 ZEGO 商务开通。
-              enum: [Tencent, AliyunParaformer, AliyunGummy, Microsoft]
-              default: Tencent
-              example: "Tencent"
-            Params:
-              type: object
-              description: 厂商参数，具体使用方式参考[配置 ASR](/cloud-realtime-asr/configuring-asr) 中的 Params 参数说明。
-              example: {"engine_model_type": "16k_zh", "hotword_list": "zego|10"}
-            VADSilenceSegmentation:
-              type: number
-              description: |
-                用于设置用户说话停顿多少秒后，不再将两句话视为一句。
-                单位为 ms，范围 [200，2000]，默认为 500。
-                详细说明请参考[配置 ASR - 断句识别](/cloud-realtime-asr/configuring-asr#speech-segmentation-control)。
-              minimum: 200
-              maximum: 2000
-              default: 500
-              example: 500
-            PauseInterval:
-              type: number
-              description: |
-                用于设置用户说话停顿多少秒内，将两句话视为一句，即 ASR 多句拼接。
-                单位为 ms，范围 [200，2000]。
-                仅当此值大于 VADSilenceSegmentation 时，才会启用 ASR 多句拼接。
-                详细说明请参考[配置 ASR - 断句识别](/cloud-realtime-asr/configuring-asr#speech-segmentation-control)。
-              minimum: 200
-              maximum: 2000
-              example: 800
-            HotWord:
-              type: string
-              deprecated: true
-              description: 该参数已废弃。请通过 Params 厂商参数设置。
+            MaxIdleTime:
+              type: integer
+              description: RTC 房间内超过 MaxIdleTime 没有真实用户，后台自动停止识别任务，单位为秒。
+              minimum: 30
+              maximum: 1800
+              default: 120
+              example: 120
 
     StartASRTaskResponse:
       type: object
