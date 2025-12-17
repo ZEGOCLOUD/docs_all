@@ -1,1 +1,0 @@
-- 已在项目中集成 ZEGO Express SDK 和 ZEGO Mini Game SDK，实现基本的小游戏功能，详情请参考 [快速开始 - 集成](!ZegoMiniGameEngine-Integrate_SDK) 和 [快速开始 - 实现小游戏](!ZegoMiniGameEngine-Implement_mini_games)。

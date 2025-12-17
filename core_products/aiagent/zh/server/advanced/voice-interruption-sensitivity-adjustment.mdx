@@ -1,0 +1,54 @@
+# 语音活动检测 VAD 灵敏度
+
+## 功能说明
+判断用户是否真正开始说话，从而触发语音识别、判断是否打断AI说话。在过滤环境噪音等影响后，主要通过以下指标综合判断：
+- 说话音量阈值 VADEnergyThreshold。音量越大，则用户开始说话的可能性越大。
+- 有效语音时间长短 VADMinSpeechDur。时间越长，则用户开始说话的可能性越大。
+通过合理的调节这两个参数，可以防止轻声表示赞同或思考的“嗯···”、“喔···”、“确实···”等，但是也可能影响正常音量大小的短句识别和打断，例如“哈喽”、“你好”、“停”等。因此需要根据互动的环节进行合理调节。
+
+## 参数说明
+
+影响语音打断灵敏度的参数在创建/更新智能体实例的 ASR 参数中。可参考[创建智能体实例 > Body > ASR 参数说明](/aiagent-server/api-reference/agent-instance-management/create-agent-instance)。详细说明如下：
+
+| 参数名 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| VADdSensitiveLevel | Int | 否 | 用于控制 VAD 的敏感度级别。取值范围 [0,3]：<br/>0：中等敏感度,默认值<br/>1：低敏感度<br/>2：高敏感度<br/>3：自定义模式,需配合 VADMinSpeechDur 和 VADEnergyThreshold 使用 |
+| VADdMinSpeechDur | Int | 否 | 用于设置 VAD 检测的最小说话时长阈值,低于该时长的语音片段将被过滤。单位毫秒,取值范围 [0,1000]。值越大,越不容易误检,但可能会引起有些短语音漏检。<br/>**注意：** 仅在 VADSensitiveLevel 设置为 3（自定义模式）时生效。 |
+| VADdEnergyThreshold | Float | 否 | 用于设置 VAD 的能量阈值,用于区分语音和噪音。取值范围 [0,1]。值越小,灵敏度越高；值越大,灵敏度越低。VAD 通过计算音频信号的能量值来判断是否为语音,当音频能量超过此阈值时判定为语音活动,低于该阈值则认为是静音或噪音。<br/>**注意：** 仅在 VADSensitiveLevel 设置为 3（自定义模式）时生效。 |
+
+当前 AI Agent 服务默认提供三种打断灵敏度（VADSensitiveLevel）可选，其对应参数值和效果说明如下：
+
+|灵敏度等级 VADSensitiveLevel|参数值（VADdMinSpeechDur,VADdEnergyThreshold）|无意义短词、语气词、咳嗽、哈切等声音的不打断效果|有意义短词的打断识别效果|
+| --- | --- | --- | --- |
+| 低(VADSensitiveLevel=1) | 0.4,100 | 好 | 较差 |
+| 中(默认)(VADSensitiveLevel=0) | 0.2,0 | 较好 | 较好 |
+| 高(VADSensitiveLevel=2) | 0.1,0 | 差 | 好 |
+
+如果预定义的灵敏度等级无法满足业务需求，可以通过设置 VADdSensitiveLevel=3（自定义模式），更精细地调整 VADMinSpeechDur 和 VADEnergyThreshold 这两个参数控制打断灵敏度。
+
+## 使用示例
+
+### 使用默认打断灵敏度VADSensitiveLevel <a id="使用默认打断灵敏度vadsensitivelevel" />
+注册智能体、创建智能体实例时，不传入 ASR 参数或仅传入空的 ASR 参数，则使用默认的 VADSensitiveLevel = 0（中等敏感度）。若需显示指定 VADSensitiveLevel 参数，通过传入 ASR 相关参数：
+
+```json
+{
+    "ASR": {
+        "VADSensitiveLevel": 1 // 0 = medium（中等敏感度,默认值）,1 = low（低敏感度）,2 = high（高敏感度）,3 = custom（自定义模式,需配合 VADMinSpeechDur 和 VADEnergyThreshold 使用）
+    }
+}
+
+```
+
+### 自定义调节打断参数VADMinSpeechDur、VADEnergyThreshold
+注册智能体、创建智能体实例时，若需显示指定 VADSensitiveLevel、VADMinSpeechDur、VADEnergyThreshold 参数，通过传入 ASR 相关参数：
+
+```json
+{
+    "ASR": {
+        "VADSensitiveLevel": 3, // 3 = custom（自定义模式,需配合 VADMinSpeechDur 和 VADEnergyThreshold 使用）
+        "VADMinSpeechDur": 100, // 用于设置 VAD 检测的最小说话时长阈值,低于该时长的语音片段将被过滤。单位毫秒,取值范围 [0,1000]。值越大,越不容易误检,但可能会引起有些短语音漏检。
+        "VADEnergyThreshold": 0.1 // 用于设置 VAD 的能量阈值,用于区分语音和噪音。取值范围 [0,1]。值越小,灵敏度越高；值越大,灵敏度越低。VAD 通过计算音频信号的能量值来判断是否为语音,当音频能量超过此阈值时判定为语音活动,低于该阈值则认为是静音或噪音。
+    }
+}
+```

@@ -1,1 +1,0 @@
-调用 [startBroadcasting](@startBroadcasting) 接口开始广播后，就可以在这条流上，通过 [ZegoRealTimeSequentialDataManager](@-ZegoRealTimeSequentialDataManager) 对象的 [sendRealTimeSequentialData](@sendRealTimeSequentialData) 函数发送“实时有序数据”了。
