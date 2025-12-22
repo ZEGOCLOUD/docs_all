@@ -521,6 +521,10 @@ def generate_for(root: Path, kind: str, output_dir: Optional[Path] = None) -> No
     platform = root.name
     content = rewrite_links_for_kind(content, platform, kind)
 
+    # 在文件最前面添加 frontmatter
+    frontmatter = "---\ndocType: API\n---\n\n"
+    content = frontmatter + content
+
     # 确定输出目录
     if output_dir:
         # 如果指定了输出目录，确保目录存在
@@ -792,6 +796,11 @@ def convert_funclist_md(platform_dir: Path, output_dir: Optional[Path] = None) -
 
     # 替换所有链接
     new_content = re.sub(link_pattern, replace_link, content)
+
+    # 在文件最前面添加 frontmatter（如果还没有的话）
+    frontmatter = "---\ndocType: API\n---\n\n"
+    if not new_content.startswith("---"):
+        new_content = frontmatter + new_content
 
     # 确定输出文件路径
     if output_dir:
