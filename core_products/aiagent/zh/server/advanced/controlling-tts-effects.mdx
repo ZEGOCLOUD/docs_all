@@ -1,0 +1,111 @@
+# 控制智能体语音情绪
+
+## 场景说明
+
+目前部分大模型版本文字转语音（TTS），支持指定合成时所使用的情绪。
+在与 AI 进行实时语音互动场景下，可以搭配大语言模型 LLM 的系统提示词，实现让 AI 基于人设输出对应的情绪的能力，从而让AI更富有情感表现力。
+
+例如，MiniMax 的 Speech 系列支持在合成 TTS 时，指定多种（"happy" - 高兴, "sad" - 悲伤, "angry" - 愤怒, "fearful" - 害怕, "disgusted" - 厌恶, "surprised" - 惊讶, "calm" - 中性, "fluent" - 生动）情绪进行语音合成。具体可参考[同步语音合成 WebSocket](https://platform.minimaxi.com/docs/api-reference/speech-t2a-websocket) 详细参数说明。
+
+## 功能简介
+
+<Frame width="auto" height="auto" caption="">
+  <img src="https://doc-media.zego.im/core_products/aiagent/zh/server/advanced/controlling-tts-effects.png" alt="controlling-tts-effects.png"/>
+</Frame>
+
+<Warning title="注意">必须使用[注册智能体](/aiagent-server/api-reference/agent-configuration-management/register-agent)、[修改智能体](/aiagent-server/api-reference/agent-configuration-management/update-agent)、[创建智能体实例](/aiagent-server/api-reference/agent-instance-management/create-agent-instance)接口的 LLM.SystemPrompt 参数控制 LLM 回答时按 ZEGO 控制参数输出特定格式才能实现情绪控制效果。</Warning>
+
+### 支持情绪的模型及控制标签 <a id="support-tts-models-and-control-tags" />
+
+<Note title="说明">当前 ZEGO 支持两个模型能力，若您需要其他 TTS 模型，请联系 ZEGO 技术支持。</Note>
+
+- 音色/情绪列表可能会变更，请以 TTS 厂商提供的最新列表为准。
+- ZEGO 控制参数即 ZEGO AI Agent 会通过待合成的 TTS 文本中指定的参数统一控制 TTS 情绪。LLM 应该按 ZEGO 控制参数输出特定格式才能实现情绪控制效果，但是值还是与 TTS 厂家的音色/情绪名保持一致。
+
+|TTS厂商-100px | 支持的模型-120px | 支持的音色/情绪 | 体验方式-150px | ZEGO 控制参数|
+|------------|--------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------|-------------------------------------------|
+| MiniMax    | Speech 系列         | <ul><li>"happy" - 高兴</li><li>"sad" - 悲伤</li><li>"angry" - 愤怒</li><li>"fearful" - 害怕</li><li>"disgusted" - 厌恶</li><li>"surprised" - 惊讶</li><li>"calm" - 中性</li><li>"fluent" - 生动</li></ul><br/>其中某些情绪仅在某些模型中支持，更多情绪请参考[同步语音合成 WebSocket -> 任务开始 -> voice_setting -> emotion](https://platform.minimaxi.com/docs/api-reference/speech-t2a-websocket)| [语音调试台](https://platform.minimaxi.com/examination-center/voice-experience-center/t2a_v2) | \{"emotion": emotion\}                      |
+| 豆包语音(单向流式)   | 1.0、2.0 系列   | **中文音色举例**：<br/> <ul><li>"happy" - 高兴</li><li>"sad" - 悲伤</li><li>"angry" - 愤怒</li><li>"fearful" - 害怕</li><li>"disgusted" - 厌恶</li><li>"surprised" - 惊讶</li><li>"calm" - 中性</li><li>"fluent" - 生动</li></ul><br/>**英文音色举例**：<br/> <ul><li>"neutral" - 中性</li><li>"happy" - 高兴</li><li>"angry" - 愤怒</li><li>"sad" - 悲伤</li><li>"excited" - 兴奋</li><li>"chat" - 对话/闲聊</li><li>"warm" - 温暖</li><li>"affectionate" - 深情</li><li>"authoritative" - 权威</li></ul><br/>更多音色请参考[音色列表 -> 情感参数](https://www.volcengine.com/docs/6561/1257544?lang=zh#%E6%83%85%E6%84%9F%E5%8F%82%E6%95%B0%EF%BC%88emotion%EF%BC%89%EF%BC%9A) | [豆包语音合成大模型](https://www.volcengine.com/product/tts)中的多情感音色 | \{"emotion": emotion\}<br/>\{"emotion_scale": scale\} |
+
+## 实现智能体输出的语音内容指定情绪能力
+
+要实现该能力主要分为三步：1. 指定 LLM 文本中控制情绪的内容格式。2. 让 LLM 按照指定的控制情绪格式输出内容。3. 让 TTS 厂商根据情绪控制参数合成带情绪的语音（ZEGO AI Agent 自动处理）。
+
+### 前提条件
+
+1. 开通 AI Agent 服务
+2. 确认所使用的 TTS 模型或音色支持指定情感标签
+3. ZEGO AI Agent 服务支持对应的 TTS 模型及标签。参考[支持情绪的模型及控制标签](#support-tts-models-and-control-tags)
+
+### 使用步骤
+
+我们以指定 LLM 文本中以“[[”和“]]”包裹的文本为元数据，让 LLM 按照格式输出控制情绪控制参数元数据，然后提取出“emotion”和“emotion_scale”参数来控制语音情绪为例。
+
+<Steps>
+<Step title="指定 LLM 文本中控制情绪的内容格式">
+
+<Note title="说明">无需在注册智能体或创建智能体实例时再配置 FilterText.BeginCharacters 和 FilterText.EndCharacters 参数，因为元数据及标志符号将会被从 LLM 输出文本中移除。</Note>
+
+通过配置[创建智能体实例](/aiagent-server/api-reference/agent-instance-management/create-agent-instance)接口的 AdvancedConfig.LLMMetaInfo 参数，指定如何从 LLM 文本中提取控制情绪的元数据。例如：
+```json
+"LLMMetaInfo" : {
+    "BeginCharacters": "[[",
+    "EndCharacters": "]]"
+}
+```
+</Step>
+<Step title="让 LLM 按照指定的控制情绪格式输出内容">
+
+<Note title="说明">
+- 请按[支持情绪的模型及控制标签](#support-tts-models-and-control-tags)确定要使用哪家 TTS 厂商后，参考厂商对应的 ZEGO 控制参数格式再设置 LLM.SystemPrompt 的内容。
+- 元数据中 JSON 的 key 只能是 emotion 或者 emotion_scale，value 则必须与 TTS 厂商支持的情绪参数值完全相同。
+</Note>
+<Note title="说明">以下示例中，提示的 `emotion` 选值仅仅是示例，实际 TTS 厂商支持哪些情绪就可以让 LLM 输出的文本中包含哪些情绪。但是一般都不会包含所有情绪（比如一个人工客服应用不会让它有悲伤情绪）。</Note>
+
+以下是使用 MiniMax 和豆包语音 TTS 时，对应的 LLM.SystemPrompt 示例，仅供参考，请根据实际需求调整：
+<Tabs>
+<Tab title="MiniMax">
+```markdown
+# 角色
+您是一位智能语音助手，能够根据用户情绪动态调整回复语气，并在必要时为每句添加情感标签与语速控制。
+
+## 格式要求
+- **LLMMetaInfo** 为情感与语速控制的 JSON 字符串，**必须严格使用 [[ 和 ]] 包裹**。
+- JSON 键值对语法需完整，支持以下键（可任选其一或多个）：
+  - "emotion"（可选）：情绪类型，取值限于 ["happy","sad","angry","fearful","surprised","neutral"]。
+- **LLMMetaInfo 必须置于对应句子的最开头**，不得出现在句中或句尾。
+- 若相邻句子情绪或语速不同，需在变化句开头插入新的 LLMMetaInfo。
+
+## 示例
+- 用户：今天天气不错。
+  助手：
+  [[{"emotion":"happy"}]]今天确实是个好日子。
+  [[{"emotion":"sad"}]]昨天的遗憾虽仍在心头，但此刻只想好好享受阳光。
+```
+</Tab>
+<Tab title="豆包语音(单向流式)">
+```markdown
+# 角色
+您是一位智能语音助手，能够根据用户情绪动态调整回复语气，并在必要时为每句添加情感标签与语速控制。
+
+## 格式要求
+- **LLMMetaInfo** 为情感与语速控制的 JSON 字符串，**必须严格使用 [[ 和 ]] 包裹**。
+- JSON 键值对语法需完整，支持以下键（可任选其一或多个）：
+  - "emotion"（可选）：情绪类型，取值限于 ["happy","sad","angry","fear","surprised","neutral","hate","excited","coldness","tender"]。
+  - "emotion_scale"（可选）：情绪强度，范围 1–5 的浮点数（如 4）；强度非线性递增，3 与 5 可能感知相近。
+- **LLMMetaInfo 必须置于对应句子的最开头**，不得出现在句中或句尾。
+- 若相邻句子情绪或语速不同，需在变化句开头插入新的 LLMMetaInfo。
+
+## 内容要求
+- 情感与语速调整须与用户当前情绪及对话语境高度一致。
+
+## 示例
+- 用户：今天天气不错。
+  助手：
+  [[{"emotion":"happy","emotion_scale":3}]]今天确实是个好日子。
+  [[{"emotion":"sad","emotion_scale":4}]]昨天的遗憾虽仍在心头，但此刻只想好好享受阳光。
+```
+</Tab>
+</Tabs>
+</Step>
+</Steps>
