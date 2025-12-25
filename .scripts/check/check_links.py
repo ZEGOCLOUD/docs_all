@@ -197,22 +197,104 @@ def load_config(language):
         sys.exit(1)
     return config, repo_root
 
-def choose_instance(instances):
-    # 按组分类实例
+def build_instance_platform_map(config):
+    """从 themeConfig.instanceGroups 构建 instance_id -> platform 的映射"""
+    instance_platform_map = {}
+    instance_groups = config.get("themeConfig", {}).get("instanceGroups", [])
+    for group in instance_groups:
+        for inst_ref in group.get("instances", []):
+            inst_id = inst_ref.get("id", "")
+            platform = inst_ref.get("platform", "")
+            if inst_id:
+                instance_platform_map[inst_id] = platform
+    return instance_platform_map
+
+
+def get_instance_platform(instance, config):
+    """获取实例的 platform 信息
+
+    优先从 instance._platform 获取（如果已附加），
+    否则从 themeConfig.instanceGroups 中查找
+    """
+    # 如果已经附加了 _platform，直接返回
+    if "_platform" in instance:
+        return instance.get("_platform", "")
+
+    # 否则从 instanceGroups 中查找
+    inst_id = instance.get("id", "")
+    instance_groups = config.get("themeConfig", {}).get("instanceGroups", [])
+    for group in instance_groups:
+        for inst_ref in group.get("instances", []):
+            if inst_ref.get("id") == inst_id:
+                return inst_ref.get("platform", "")
+    return ""
+
+
+def build_instance_groups_map(config):
+    """从 themeConfig.instanceGroups 构建实例分组映射
+
+    返回:
+        groups: dict, key 为 group_id, value 为 {"name": ..., "instance_ids": [...]}
+        instance_platform_map: dict, key 为 instance_id, value 为 platform
+    """
     groups = {}
-    for inst in instances:
-        group_id = inst.get("navigationInfo", {}).get("group", {}).get("id", "未分组")
-        group_name = inst.get("navigationInfo", {}).get("group", {}).get("name", "未分组")
+    instance_platform_map = {}
+
+    instance_groups = config.get("themeConfig", {}).get("instanceGroups", [])
+    for group in instance_groups:
+        group_id = group.get("id", "未分组")
+        group_name = group.get("name", "未分组")
         if group_id not in groups:
             groups[group_id] = {
                 "name": group_name,
-                "instances": []
+                "instance_ids": []
             }
-        groups[group_id]["instances"].append(inst)
+        for inst_ref in group.get("instances", []):
+            inst_id = inst_ref.get("id", "")
+            platform = inst_ref.get("platform", "")
+            if inst_id:
+                groups[group_id]["instance_ids"].append(inst_id)
+                instance_platform_map[inst_id] = platform
+
+    return groups, instance_platform_map
+
+
+def choose_instance(instances, config):
+    """选择要检查的实例
+
+    Args:
+        instances: 顶层 instances 列表
+        config: 完整配置对象
+    """
+    # 从 themeConfig.instanceGroups 构建分组映射
+    groups_map, instance_platform_map = build_instance_groups_map(config)
+
+    # 构建 instance_id -> instance 的映射
+    instances_by_id = {inst.get("id"): inst for inst in instances}
+
+    # 按组分类实例（使用 instanceGroups 中的顺序）
+    groups = {}
+    for group_id, group_info in groups_map.items():
+        group_instances = []
+        for inst_id in group_info["instance_ids"]:
+            if inst_id in instances_by_id:
+                inst = instances_by_id[inst_id]
+                # 附加 platform 信息
+                inst["_platform"] = instance_platform_map.get(inst_id, "")
+                group_instances.append(inst)
+        if group_instances:
+            groups[group_id] = {
+                "name": group_info["name"],
+                "instances": group_instances
+            }
+
+    if not groups:
+        print('未找到任何分组，将显示所有实例。')
+        return instances
 
     # 显示组列表
     print('请选择要检查的组:')
-    # 按在 docuo.config.json 中出现的顺序排列（保持插入顺序）
+    # 按在 instanceGroups 中出现的顺序排列
     ordered_groups = list(groups.items())
     for idx, (group_id, group_info) in enumerate(ordered_groups, 1):
         print(f'{idx}. {group_info["name"]}')
@@ -232,7 +314,7 @@ def choose_instance(instances):
     sorted_instances = sorted(selected_group["instances"], key=lambda x: x.get("label", ""))
     for idx, inst in enumerate(sorted_instances, 1):
         label = inst.get("label", "(无名实例)")
-        platform = inst.get("navigationInfo", {}).get("platform", "")
+        platform = inst.get("_platform", "")
         if platform:
             display_name = f"{label} ({platform})"
         else:
@@ -259,6 +341,29 @@ def find_mdx_files(root_path):
                 mdx_files.append(os.path.join(dirpath, fname))
     return mdx_files
 
+def remove_paramfield_attrs(content):
+    """移除 ParamField 组件的属性部分，保留换行结构
+
+    ParamField 组件属性中的链接不需要检查，如：
+    prototype="[ZegoRoomState](./enum#zegoroomstate)"
+    """
+    # 匹配 <ParamField ... > 或 <ParamField ... />
+    # 正则处理属性值中可能包含 > 字符的情况
+    paramfield_regex = re.compile(
+        r'<ParamField\s+((?:[^>"\']+|"[^"]*"|\'[^\']*\')*?)(/?>)',
+        re.DOTALL
+    )
+
+    def replace_with_newlines(match):
+        # 保留属性部分中的换行符数量，以保持行号一致
+        attrs = match.group(1)
+        closing = match.group(2)
+        newline_count = attrs.count('\n')
+        return '<ParamField' + '\n' * newline_count + closing
+
+    return paramfield_regex.sub(replace_with_newlines, content)
+
+
 def extract_links_from_file(file_path):
     # 匹配多种类型的链接
     # 1. markdown链接: [xxx](url)
@@ -277,7 +382,12 @@ def extract_links_from_file(file_path):
     code_block_indent = None  # 缩进代码块的缩进级别
 
     with open(file_path, 'r', encoding='utf-8') as f:
-        for idx, line in enumerate(f, 1):
+        content = f.read()
+
+    # 移除 ParamField 组件的属性部分（保留换行结构以保持行号一致）
+    content = remove_paramfield_attrs(content)
+
+    for idx, line in enumerate(content.split('\n'), 1):
             # 检查是否进入/退出代码块（```标记的代码块）
             if line.strip().startswith('```'):
                 in_code_block = not in_code_block
@@ -465,8 +575,110 @@ def get_file_id(filename):
     name = name.lower().replace(' ', '-')
     return name
 
+def generate_slug_for_paramfield(text):
+    """将文本转为 ParamField 锚点格式：小写，移除特殊字符，空格转连字符
+
+    与 site-template/lib/trans-api-short-link/slug.ts 中的 generateSlug 保持一致
+    """
+    if not text:
+        return ''
+    result = text.lower()
+    # 移除非字母数字字符（保留空格和连字符）
+    result = re.sub(r'[^\w\s-]', '', result)
+    # 空格转连字符
+    result = re.sub(r'\s+', '-', result)
+    return result.strip()
+
+
+def parse_jsx_attributes(attrs_str):
+    """解析 JSX 属性字符串，提取 key="value" 或 key='value' 形式的属性"""
+    result = {}
+    # 匹配 key="value" 或 key='value'
+    attr_regex = re.compile(r'(\w+)\s*=\s*["\']([^"\']*)["\']')
+    for match in attr_regex.finditer(attrs_str):
+        result[match.group(1)] = match.group(2)
+    return result
+
+
+def extract_anchors_from_paramfield_attrs(name, parent_name, parent_type, anchor_suffix):
+    """从 ParamField 属性中提取所有可能的锚点
+
+    与 site-template/components/mdx/api/ParamField.tsx 中的锚点生成逻辑保持一致
+    """
+    anchors = []
+
+    # 1. 基础锚点名称（如有 anchor_suffix 则拼接）
+    anchor_base_name = f"{name}{anchor_suffix}" if anchor_suffix else name
+    primary_anchor = generate_slug_for_paramfield(anchor_base_name)
+    if primary_anchor:
+        anchors.append(primary_anchor)
+
+    # 2. 带 parent_name 的锚点（所有类型，包括 enum）
+    if parent_type and parent_name:
+        anchors.append(generate_slug_for_paramfield(f"{anchor_base_name}-{parent_name}"))
+        # 非 enum 类型还生成带 parent_type 的锚点
+        if parent_type != 'enum':
+            anchors.append(generate_slug_for_paramfield(f"{anchor_base_name}-{parent_name}-{parent_type}"))
+
+    # 3. OC 冒号方法名处理（如 "createEngineWithProfile:eventHandler:"）
+    if ':' in name:
+        first_segment = name.split(':')[0]
+        if first_segment and first_segment != name:
+            colon_anchor = generate_slug_for_paramfield(first_segment)
+            if colon_anchor and colon_anchor != primary_anchor and colon_anchor not in anchors:
+                anchors.append(colon_anchor)
+            # 同样生成带 parent_name 的变体
+            if parent_type and parent_name:
+                colon_with_parent = generate_slug_for_paramfield(f"{first_segment}-{parent_name}")
+                if colon_with_parent not in anchors:
+                    anchors.append(colon_with_parent)
+                if parent_type != 'enum':
+                    colon_with_parent_type = generate_slug_for_paramfield(f"{first_segment}-{parent_name}-{parent_type}")
+                    if colon_with_parent_type not in anchors:
+                        anchors.append(colon_with_parent_type)
+
+    return anchors
+
+
+def extract_paramfield_anchors(file_path):
+    """从 MDX 文件中提取所有 ParamField 组件生成的锚点"""
+    anchors = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # 将内容规范化为单行处理（去除换行），因为 ParamField 可能跨多行
+        normalized_content = content.replace('\r\n', ' ').replace('\n', ' ')
+
+        # 匹配 <ParamField ... > 或 <ParamField ... />
+        # 正则处理属性值中可能包含 > 字符的情况
+        paramfield_regex = re.compile(r'<ParamField\s+((?:[^>"\']+|"[^"]*"|\'[^\']*\')*?)(?:/>|>)')
+
+        for match in paramfield_regex.finditer(normalized_content):
+            attrs_str = match.group(1)
+            attrs = parse_jsx_attributes(attrs_str)
+
+            name = attrs.get('name', '')
+            if not name:
+                continue
+
+            parent_name = attrs.get('parent_name', '')
+            parent_type = attrs.get('parent_type', '')
+            anchor_suffix = attrs.get('anchor_suffix', '')
+
+            field_anchors = extract_anchors_from_paramfield_attrs(
+                name, parent_name, parent_type, anchor_suffix
+            )
+            anchors.extend(field_anchors)
+
+    except Exception:
+        pass
+
+    return anchors
+
+
 def extract_headings_from_file(file_path):
-    """从mdx文件中提取所有标题，并转换为锚点格式"""
+    """从mdx文件中提取所有锚点（标题 + ParamField 组件），并转换为锚点格式"""
     headings = []
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -524,6 +736,9 @@ def extract_headings_from_file(file_path):
             if anchor_id:
                 headings.append(anchor_id)
 
+        # 3. 提取 ParamField 组件生成的锚点
+        paramfield_anchors = extract_paramfield_anchors(file_path)
+        headings.extend(paramfield_anchors)
 
     except Exception:
         pass
@@ -904,7 +1119,7 @@ def check_git_mode():
             instance_locale = instance.get('locale', 'en')  # 默认为英文
 
             instance_label = instance.get("label", "未知实例")
-            platform = instance.get("navigationInfo", {}).get("platform", "")
+            platform = get_instance_platform(instance, config)
             display_name = f"{instance_label} ({platform})" if platform else instance_label
 
             print(f'\n正在检查实例: {display_name} [语言: {instance_locale}]')
@@ -1180,7 +1395,7 @@ def main():
     if not instances:
         print(f'{Fore.RED}未找到任何实例，请检查配置文件。{Style.RESET_ALL}')
         sys.exit(1)
-    selected_instances = choose_instance(instances)
+    selected_instances = choose_instance(instances, config)
 
     # 结构化结果：按实例名称 -> 错误类型 -> link_type -> 列表
     structured_results = {}
@@ -1194,7 +1409,7 @@ def main():
         if not os.path.isabs(instance_path):
             instance_path = os.path.join(repo_root, instance_path)
         instance_label = instance.get("label", "未知实例")
-        platform = instance.get("navigationInfo", {}).get("platform", "")
+        platform = get_instance_platform(instance, config)
         if platform:
             display_name = f"{instance_label} ({platform})"
         else:

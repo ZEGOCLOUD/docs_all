@@ -412,13 +412,20 @@ def rewrite_links_for_kind(text: str, platform: str, kind: str) -> str:
     def _repl(m: re.Match) -> str:
         label = m.group(1)
         link_type = m.group(2)
-        rest = m.group(3)  # xxx 任意内容
-        # 将锚点转为小写
-        rest_lower = rest.lower()
-        if link_type == kind:
-            new_url = f"#{rest_lower}"
+        rest = m.group(3)  # xxx 任意内容，可能包含 #anchor
+
+        # 检查是否包含锚点
+        if '#' in rest:
+            # 有锚点：取 # 后面的部分作为锚点，并移除连接符
+            anchor = rest.split('#', 1)[1].lower().replace('-', '')
         else:
-            new_url = f"./{link_type}#{rest_lower}"
+            # 无锚点：整个 rest 转小写作为锚点
+            anchor = rest.lower()
+
+        if link_type == kind:
+            new_url = f"#{anchor}"
+        else:
+            new_url = f"./{link_type}#{anchor}"
         return f"[{label}]({new_url})"
 
     return pattern.sub(_repl, text)
@@ -489,7 +496,7 @@ def generate_for(root: Path, kind: str, output_dir: Optional[Path] = None) -> No
     Args:
         root: 平台目录路径（如 express_video_sdk/zh/java_android）
         kind: 类型名称（如 class、enum、protocol 等）
-        output_dir: 可选的输出目录。如果指定，MDX 文件将生成到该目录；否则生成到 root 目录下
+        output_dir: 可选的输出目录。如果指定，文件将生成到该目录；否则生成到 root 目录下
     """
     src_dir = root / kind
     if not src_dir.exists() or not src_dir.is_dir():
@@ -502,6 +509,7 @@ def generate_for(root: Path, kind: str, output_dir: Optional[Path] = None) -> No
         return
 
     blocks: List[str] = []
+
     for obj in objs:
         blocks.append(render_api_field(obj))
 
@@ -513,17 +521,22 @@ def generate_for(root: Path, kind: str, output_dir: Optional[Path] = None) -> No
     platform = root.name
     content = rewrite_links_for_kind(content, platform, kind)
 
+    # 在文件最前面添加 frontmatter
+    frontmatter = "---\ndocType: API\n---\n\n"
+    content = frontmatter + content
+
     # 确定输出目录
     if output_dir:
         # 如果指定了输出目录，确保目录存在
         output_dir.mkdir(parents=True, exist_ok=True)
-        out_file = output_dir / f"{kind}.mdx"
+        out_mdx = output_dir / f"{kind}.mdx"
     else:
         # 默认输出到平台目录下
-        out_file = root / f"{kind}.mdx"
+        out_mdx = root / f"{kind}.mdx"
 
-    out_file.write_text(content, encoding="utf-8")
-    print(f"[OK] 生成 MDX: {out_file}")
+    # 写入 MDX 文件
+    out_mdx.write_text(content, encoding="utf-8")
+    print(f"[OK] 生成 MDX: {out_mdx}")
 
 
 def main(argv: List[str]) -> None:
@@ -784,6 +797,11 @@ def convert_funclist_md(platform_dir: Path, output_dir: Optional[Path] = None) -
     # 替换所有链接
     new_content = re.sub(link_pattern, replace_link, content)
 
+    # 在文件最前面添加 frontmatter（如果还没有的话）
+    frontmatter = "---\ndocType: API\n---\n\n"
+    if not new_content.startswith("---"):
+        new_content = frontmatter + new_content
+
     # 确定输出文件路径
     if output_dir:
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -825,8 +843,8 @@ def config_based_main(config_path: Optional[Path] = None) -> None:
 
     print(f"[INFO] 从配置文件读取到 {len(config)} 个映射")
 
-    # 遍历配置，处理每个源目录到目标目录的映射
-    for source_dir_str, target_dir_str in config.items():
+    # 遍历配置，处理每个目标目录到源目录的映射
+    for target_dir_str, source_dir_str in config.items():
         print(f"\n{'='*60}")
         print(f"[INFO] 处理映射:")
         print(f"  源目录: {source_dir_str}")
@@ -853,9 +871,9 @@ def config_based_main(config_path: Optional[Path] = None) -> None:
 
         print(f"[INFO] 发现类型: {', '.join(kinds)}")
 
-        # 为每个类型生成 MDX 文件
+        # 为每个类型生成 MDX 文件和对应的 JSON 配置文件
         for kind in kinds:
-            print(f"[INFO] 生成 {kind}.mdx")
+            print(f"[INFO] 生成 {kind}.mdx 和 {kind}.json")
             generate_for(source_dir, kind, target_dir)
 
         # 转换 funcList.md
