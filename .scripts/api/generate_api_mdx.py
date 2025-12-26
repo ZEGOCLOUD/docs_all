@@ -26,6 +26,9 @@ def read_json_files(src_dir: Path) -> List[Dict[str, Any]]:
         try:
             with p.open("r", encoding="utf-8") as f:
                 obj = json.load(f)
+            # 跳过非字典类型的 JSON（如 hotObject.json 是数组）
+            if not isinstance(obj, dict):
+                continue
             obj["__file_name"] = p.name
             result.append(obj)
         except Exception as e:
@@ -261,6 +264,8 @@ def render_param_like(node: Dict[str, Any], obj_meta: Optional[Dict[str, str]] =
     name_raw = str(node.get("name", ""))
     prototype_raw = str(node.get("full_code", ""))
     desc_raw = str(node.get("desc", ""))
+    # overflow_anchor: 用于处理重载方法/属性的锚点后缀
+    anchor_suffix_raw = str(node.get("overflow_anchor", "") or "")
 
     # 顶层对象元信息（如果有）
     parent_file_raw = ""
@@ -376,6 +381,8 @@ def render_param_like(node: Dict[str, Any], obj_meta: Optional[Dict[str, str]] =
         attr_lines.append(f"  parent_name={quote_attr_value(parent_name_raw)}")
     if parent_type_raw:
         attr_lines.append(f"  parent_type={quote_attr_value(parent_type_raw)}")
+    if anchor_suffix_raw:
+        attr_lines.append(f"  anchor_suffix={quote_attr_value(anchor_suffix_raw)}")
 
     opening = "\n".join(attr_lines) + ">"
 
@@ -399,22 +406,74 @@ def rewrite_links_for_kind(text: str, platform: str, kind: str) -> str:
 
     # 使用普通字符串拼出模式，避免 raw f-string + 反斜杠混用导致转义混乱
     # ([^)]+) 会把后面 "xxx任意内容" 整段吃进去，如果原路径本身带 #anchor 也一并保留
-    pattern_str = "\\[([^\\]]+)\\]\\(/" + re.escape(platform) + "/(class|enum|interface|struct)/([^)]+)\\)"
+    pattern_str = "\\[([^\\]]+)\\]\\(/" + re.escape(platform) + "/(class|enum|interface|protocol|struct)/([^)]+)\\)"
     pattern = re.compile(pattern_str)
 
     def _repl(m: re.Match) -> str:
         label = m.group(1)
         link_type = m.group(2)
-        rest = m.group(3)  # xxx 任意内容
-        # 将锚点转为小写
-        rest_lower = rest.lower()
-        if link_type == kind:
-            new_url = f"#{rest_lower}"
+        rest = m.group(3)  # xxx 任意内容，可能包含 #anchor
+
+        # 检查是否包含锚点
+        if '#' in rest:
+            # 有锚点：取 # 后面的部分作为锚点，并移除连接符
+            anchor = rest.split('#', 1)[1].lower().replace('-', '')
         else:
-            new_url = f"./{link_type}#{rest_lower}"
+            # 无锚点：整个 rest 转小写作为锚点
+            anchor = rest.lower()
+
+        if link_type == kind:
+            new_url = f"#{anchor}"
+        else:
+            new_url = f"./{link_type}#{anchor}"
         return f"[{label}]({new_url})"
 
     return pattern.sub(_repl, text)
+
+
+def generate_index_table(objs: List[Dict[str, Any]]) -> str:
+    """生成对象名称的索引表格（两列，按字母顺序排列）。
+
+    Args:
+        objs: JSON 对象列表
+
+    Returns:
+        Markdown 表格字符串
+    """
+    # 提取所有 object_name 并按字母顺序排序
+    names = []
+    for obj in objs:
+        name = str(obj.get("object_name", "")).strip()
+        if name:
+            names.append(name)
+
+    names.sort(key=str.lower)  # 不区分大小写排序
+
+    if not names:
+        return ""
+
+    # 生成表格行（每行两个单元格，无表头）
+    lines = []
+    lines.append("| | |")
+    lines.append("| --- | --- |")
+
+    for i in range(0, len(names), 2):
+        # 第一列
+        name1 = names[i]
+        anchor1 = name1.lower()
+        cell1 = f"[{name1}](#{anchor1})"
+
+        # 第二列（如果存在）
+        if i + 1 < len(names):
+            name2 = names[i + 1]
+            anchor2 = name2.lower()
+            cell2 = f"[{name2}](#{anchor2})"
+        else:
+            cell2 = ""
+
+        lines.append(f"| {cell1} | {cell2} |")
+
+    return "\n".join(lines)
 
 
 def render_api_field(obj: Dict[str, Any]) -> str:
@@ -482,7 +541,7 @@ def generate_for(root: Path, kind: str, output_dir: Optional[Path] = None) -> No
     Args:
         root: 平台目录路径（如 express_video_sdk/zh/java_android）
         kind: 类型名称（如 class、enum、protocol 等）
-        output_dir: 可选的输出目录。如果指定，MDX 文件将生成到该目录；否则生成到 root 目录下
+        output_dir: 可选的输出目录。如果指定，文件将生成到该目录；否则生成到 root 目录下
     """
     src_dir = root / kind
     if not src_dir.exists() or not src_dir.is_dir():
@@ -495,28 +554,42 @@ def generate_for(root: Path, kind: str, output_dir: Optional[Path] = None) -> No
         return
 
     blocks: List[str] = []
+
     for obj in objs:
         blocks.append(render_api_field(obj))
 
-    # 总文件第一行：与 kind 同名的一级标题（首字母大写，例如 "# Class"），后面紧跟各对象内容
+    # 总文件第一行：与 kind 同名的一级标题（首字母大写，例如 "# Class"）
     heading = f"# {kind.capitalize()}"
-    content = heading + "\n\n" + "\n\n".join(blocks) + "\n"
+
+    # 生成索引表格（两列，按字母顺序排列的对象链接）
+    index_table = generate_index_table(objs)
+
+    # 拼接内容：一级标题 + 索引表格 + 各对象内容
+    if index_table:
+        content = heading + "\n\n" + index_table + "\n\n" + "\n\n".join(blocks) + "\n"
+    else:
+        content = heading + "\n\n" + "\n\n".join(blocks) + "\n"
 
     # 重写当前平台下的相对链接
     platform = root.name
     content = rewrite_links_for_kind(content, platform, kind)
 
+    # 在文件最前面添加 frontmatter
+    frontmatter = "---\ndocType: API\n---\n\n"
+    content = frontmatter + content
+
     # 确定输出目录
     if output_dir:
         # 如果指定了输出目录，确保目录存在
         output_dir.mkdir(parents=True, exist_ok=True)
-        out_file = output_dir / f"{kind}.mdx"
+        out_mdx = output_dir / f"{kind}.mdx"
     else:
         # 默认输出到平台目录下
-        out_file = root / f"{kind}.mdx"
+        out_mdx = root / f"{kind}.mdx"
 
-    out_file.write_text(content, encoding="utf-8")
-    print(f"[OK] 生成 MDX: {out_file}")
+    # 写入 MDX 文件
+    out_mdx.write_text(content, encoding="utf-8")
+    print(f"[OK] 生成 MDX: {out_mdx}")
 
 
 def main(argv: List[str]) -> None:
@@ -739,7 +812,7 @@ def convert_funclist_link(link_text: str, link_url: str) -> Tuple[str, str]:
     method_name_clean = method_name.replace("-", "").lower()
 
     # 拼接新链接: ./class.mdx#{method_name_clean}-{class_name_lower}-class
-    new_url = f"./{parent_type}.mdx#{method_name_clean}-{class_name_lower}-{parent_type}"
+    new_url = f"./{parent_type}.mdx#{method_name_clean}-{class_name_lower}"
 
     return (new_text, new_url)
 
@@ -776,6 +849,11 @@ def convert_funclist_md(platform_dir: Path, output_dir: Optional[Path] = None) -
 
     # 替换所有链接
     new_content = re.sub(link_pattern, replace_link, content)
+
+    # 在文件最前面添加 frontmatter（如果还没有的话）
+    frontmatter = "---\ndocType: API\n---\n\n"
+    if not new_content.startswith("---"):
+        new_content = frontmatter + new_content
 
     # 确定输出文件路径
     if output_dir:
@@ -818,8 +896,8 @@ def config_based_main(config_path: Optional[Path] = None) -> None:
 
     print(f"[INFO] 从配置文件读取到 {len(config)} 个映射")
 
-    # 遍历配置，处理每个源目录到目标目录的映射
-    for source_dir_str, target_dir_str in config.items():
+    # 遍历配置，处理每个目标目录到源目录的映射
+    for target_dir_str, source_dir_str in config.items():
         print(f"\n{'='*60}")
         print(f"[INFO] 处理映射:")
         print(f"  源目录: {source_dir_str}")
@@ -846,9 +924,9 @@ def config_based_main(config_path: Optional[Path] = None) -> None:
 
         print(f"[INFO] 发现类型: {', '.join(kinds)}")
 
-        # 为每个类型生成 MDX 文件
+        # 为每个类型生成 MDX 文件和对应的 JSON 配置文件
         for kind in kinds:
-            print(f"[INFO] 生成 {kind}.mdx")
+            print(f"[INFO] 生成 {kind}.mdx 和 {kind}.json")
             generate_for(source_dir, kind, target_dir)
 
         # 转换 funcList.md

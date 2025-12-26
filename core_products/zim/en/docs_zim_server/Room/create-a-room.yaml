@@ -1,0 +1,155 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+tags:
+  - room
+
+paths:
+  /:
+    post:
+      tags: [room]
+      summary: CreateRoom
+      description: |
+        Developers can call this API to create a room. When creating a room, you can set custom room attributes. A room can have a maximum of 20 room attributes. If you need to increase the limit, please contact ZEGOCLOUD Technical Support.
+
+        <Note title="QPS Limit"> 20 times/s</Note>
+      operationId: create-a-room
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > API prototype parameter
+            >
+            > https://zim-api.zego.im/?Action=CreateRoom
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [CreateRoom]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoomRequest'
+            example:
+              FromUserId: "User1"
+              RoomId: "Room1"
+              RoomName: "RoomName1"
+              DestroyDelayTime: 3600
+              Attributes:
+                - Key: "k1"
+                  Value: "v1"
+                  AutoDelete: 0
+                - Key: "k2"
+                  Value: "v2"
+                  AutoDelete: 1
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommonResponse'
+
+components:
+  schemas:
+    CreateRoomRequest:
+      type: object
+      required: [FromUserId, RoomId]
+      properties:
+        FromUserId:
+          type: string
+          description: Operator, must be in registered status. This user will not automatically join the room. Only supports numbers, English characters, and '!', '#', '$', '%', '&', '(', ')', '+', '-', ':', ';', '<', '=', '.', '>', '?', '@', '[', ']', '^', '_', ' ', ',', '{'
+          maxLength: 32
+          example: "User1"
+        RoomId:
+          type: string
+          description: Room ID. Only supports numbers, English characters, and '!', '#', '$', '%', '&', '(', ')', '+', '-', ':', ';', '<', '=', '.', '>', '?', '@', '[', ']', '^', '_', ' ', ',', '{'
+          maxLength: 32
+          example: "Room1"
+        RoomName:
+          type: string
+          description: Room name. A string with a maximum length of 64 bytes.
+          maxLength: 64
+          example: "RoomName1"
+        DestroyDelayTime:
+          type: number
+          description: |
+            When the number of people in the room is 0, the room delayed destruction time in seconds. The maximum room delayed destruction time defaults to 10800 seconds.
+            <Warning title="Warning">When the room is delayed for destruction, room attributes and room user attributes are not retained by default. If you need to retain them, please contact ZEGOCLOUD Technical Support.</Warning>
+          maximum: 10800
+          example: 3600
+        Attributes:
+          type: array
+          description: Attribute information to be added.
+          items:
+            $ref: '#/components/schemas/CreateRoomAttribute'
+    CreateRoomAttribute:
+      type: object
+      required: [Key, Value]
+      properties:
+        Key:
+          type: string
+          description: Room attribute key.
+          example: "k1"
+        Value:
+          type: string
+          description: Room attribute value.
+          example: "v1"
+        AutoDelete:
+          type: number
+          description: |
+            Whether to automatically delete when the user exits.
+            <ul><li>0: Do not automatically delete;</li><li>1: Automatically delete.</li></ul>
+            When creating a room, FromUserId will not be added to the room. The deletion operation will only be triggered when the user first enters the room and then exits.
+          enum: [0, 1]
+          example: 0
+    CommonResponse:
+      type: object
+      properties:
+        Code:
+          type: int32
+          description: |
+            Return status code (0 indicates success).
+
+            The following only lists the return codes related to the API business logic. For the complete return codes, please refer to [Return codes](/zim-server/return-codes).
+            <table>
+            <thead><tr><th>Return code</th><th>Description</th><th>Solution</th></tr></thead>
+            <tbody>
+            <tr><td>660000002</td><td>Parameter error.</td><td>Please check the parameters.</td></tr>
+            <tr><td>660300005</td><td>Frequency limit.</td><td>Please try again later.</td></tr>
+            <tr><td>660300014</td><td>Room already exists.</td><td>Check if the room has already been created.</td></tr>
+            <tr><td>660300015</td><td>Number of rooms exceeds the limit.</td><td>Check if the number of rooms exceeds the limit, or contact technical support for expansion.</td></tr>
+            </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: Return status information.
+          example: "success"
+        RequestId:
+          type: string
+          description: Unique request identifier.
+          example: "req-123456789"
+        AttributeSeq:
+          type: int32
+          description: |
+            Records the total number of changes to all attributes (create, modify, delete) in the room, used to calibrate attributes and calculate the order of attribute changes. The AttributeSeq value increases by 1 each time an attribute changes.
+            > Note: When multiple attributes change at once, the AttributeSeq value will increase multiple times. For example, if 3 attributes are modified at once, the AttributeSeq value will increase by 3.
+          example: 2

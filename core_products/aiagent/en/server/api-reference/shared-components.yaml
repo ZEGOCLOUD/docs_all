@@ -103,12 +103,27 @@ components:
         - Url
         - Model
       properties:
+        Vendor:
+          type: string
+          description: |
+            The vendor type of the LLM interface.
+            - OpenAIChat: OpenAI's Chat Completions interface type.
+            - OpenAIResponses: OpenAI's Responses API interface type.
+          default: OpenAIChat
+          example: "OpenAIChat"
+          enum:
+            - OpenAIChat
+            - OpenAIResponses
         Url:
           type: string
           description: |
-            The endpoint that receives the request (can be your own service or any LLM service provider's service) and must be compatible with [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat).
+            The endpoint that receives the request (can be your own service or any LLM service provider's service).
+            If Vendor is OpenAIChat, it must be compatible with [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat).
+            For example: `https://api.openai.com/v1/chat/completions`
 
-            For example: https://api.openai.com/v1/chat/completions
+
+            If Vendor is OpenAIResponses, it must be compatible with [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses).
+            For example: `https://ark.cn-beijing.volces.com/api/v3/responses`
 
             > **📌 Important Note**
             >
@@ -178,6 +193,8 @@ components:
             - room_id: RTC room ID
             - user_id: User ID
             - agent_instance_id: AI agent instance ID
+
+            **📌 Important Note: Only effective when Vendor is "OpenAIChat".**
           default: false
           example: false
         AgentExtraInfo:
@@ -185,6 +202,8 @@ components:
           description: |
             Agent extra information, the server will pass this parameter in the request parameters when requesting the LLM service. The example of the extra information is as follows: [Using Custom LLM](/aiagent-server/guides/configuring-llm#use-custom-llm).
             You can use this parameter to execute additional business logic in your custom LLM service.
+
+            **📌 Important Note: Only effective when Vendor is "OpenAIChat".**
           properties:
             key:
               type: string
@@ -240,11 +259,12 @@ components:
         FilterText:
           type: array
           description: |
-            Filter the text within the specified punctuation marks from the content returned by the LLM, and then perform speech synthesis.
+            Filters out the text enclosed by specified punctuation marks from the input content to TTS (usually the content returned by LLM or the Text parameter of the SendAgentInstanceTTS API), and then performs speech synthesis. For example, in “(happily said) Welcome to ZEGOCLOUD!”, the content within the parentheses is filtered out before synthesis.
 
-            Note:
-            - The content that should be placed within the specified punctuation marks must be defined in LLM > SystemPrompt.
-            - This parameter cannot be updated when updating the AI agent instance.
+            <Note title="Note">
+              - Typically, you guide the LLM via prompts in LLM > SystemPrompt to specify which parts of the content should be enclosed within particular punctuation.<br/>
+              - This parameter cannot be updated when updating an agent instance.
+            </Note>
           items:
             type: object
             required:
@@ -270,10 +290,25 @@ components:
           maxLength: 4
           example: "#-#"
           description: |
-            Can be used to set the termination text of TTS. If the content in the input TTS text matches the TerminatorText string, the content from the TerminatorText string (including) will not be synthesized for this round of TTS.
+            Can be used to set the termination text for TTS. If the input to TTS (usually the content returned by LLM or the Text parameter of the SendAgentInstanceTTS API) contains the TerminatorText string, then the content from the TerminatorText string (inclusive) onward will no longer be synthesized in this TTS round.
             > **📌 Important Note**
             >
-            > Only one character can be set for bidirectional streaming.
+            > - For bidirectional streaming, only one character can be set.
+            >
+            > - Typically, the LLM is guided via prompts in LLM > SystemPrompt to specify which parts of the content should be enclosed with special punctuation.
+            > - This parameter cannot be updated when updating an agent instance.
+            >
+        CharacterFilter:
+          type: array
+          description: |
+            The specified strings in the content input to TTS (usually the content returned by LLM or the Text parameter of the SendAgentInstanceTTS API) will not be involved in speech synthesis. Each string in the array indicates a string to be filtered out, and each string can have up to 2 characters.
+
+            > **📌 Important Note**
+            >
+            > This parameter cannot be updated when updating an agent instance.
+          items:
+            type: string
+          example: ["#", "##", "-"]
 
     ASR:
       type: object
@@ -294,6 +329,10 @@ components:
             Set the number of seconds after which two sentences are no longer considered as one.
             Unit is ms, range [200, 2000], default is 500.
             Please refer to [Speech Segmentation Control](/aiagent-server/advanced/speech-segmentation-control) for details.
+
+            > **📌 Important Note**
+            >
+            > When Vendor is "Tencent" (default), the maximum value is 1500.
           minimum: 200
           maximum: 2000
           default: 500
@@ -308,6 +347,30 @@ components:
           minimum: 200
           maximum: 2000
           example: 800
+        VADSensitiveLevel:
+          type: number
+          format: int
+          description: |
+            VAD sensitivity, 0: medium sensitivity, default value; 1: low sensitivity; 2: high sensitivity; 3: custom mode, needs to be used in combination with VADMinSpeechDur and VADEnergyThreshold. Please refer to [Voice Interruption Sensitivity Adjustment](/aiagent-server/advanced/voice-interruption-sensitivity-adjustment) for details.
+          default: 0
+          enum: [0, 1, 2, 3]
+          example: 0
+        VADMinSpeechDur:
+          type: number
+          format: int
+          description: |
+            VAD minimum speech duration, unit ms, the larger the value, the less likely it is to be detected, but it may cause some short speech to be missed, the value range is [0, 1000].
+          minimum: 0
+          maximum: 1000
+          example: 100
+        VADEnergyThreshold:
+          type: number
+          format: float
+          description: |
+            VAD energy threshold, the smaller the value, the higher the sensitivity, the value range is [0, 1].
+          minimum: 0
+          maximum: 1
+          example: 0
         HotWord:
           type: string
           deprecated: true
@@ -418,9 +481,9 @@ components:
           description: Whether to enable server-side callback for user speech.
           enum: [0, 1]
           default: 0
-        AgentSpeakAction:
+        AgentInstanceStatus:
           type: integer
-          description: Whether to enable server-side callback for the AI agent speaking.
+          description: Whether to enable server-side callback for the AI agent instance status.
           enum: [0, 1]
           default: 0
         UserAudioData:
@@ -457,6 +520,24 @@ components:
             > When DisableTTS is true, the [Create Digital Human Agent Instance](/aiagent-server/api-reference/agent-instance-management/create-digital-human-agent-instance) and [Trigger TTS](/aiagent-server/api-reference/agent-instance-control/send-agent-instance-tts) interfaces will report errors.
           default: false
           example: false
+        LLMMetaInfo:
+          type: object
+          description: |
+            Used to control extracting metadata from the LLM output text as additional control parameters. The metadata should be a JSON object, usually controlled by the `LLM.SystemPrompt` parameter to guide the LLM to output content in a specified format. The exact JSON object format of the metadata will vary depending on feature requirements.
+            For usage examples and more details, see [Controlling Voice Emotions of the Agent](/aiagent-server/advanced/controlling-tts-effects).
+          properties:
+            BeginCharacters:
+              type: string
+              description: The starting symbol for marking metadata in the text. The content between this symbol and the EndCharacters is treated as metadata. Cannot be empty or only whitespace. Avoid using common characters and sentence delimiters.
+              example: "[["
+            EndCharacters:
+              type: string
+              description: The ending symbol for marking metadata in the text. The content between BeginCharacters and this symbol is treated as metadata. Cannot be empty or only whitespace. Avoid using common characters and sentence delimiters.
+              example: "]]"
+          required: []
+          example:
+            BeginCharacters: "[["
+            EndCharacters: "]]"
 
     DigitalHuman:
       type: object
@@ -473,7 +554,7 @@ components:
         EncodeCode:
           type: string
           description: Digital human video encoding format
-          enum: [H264, VP8]
+          enum: [H264]
           default: "H264"
           example: "H264"
 

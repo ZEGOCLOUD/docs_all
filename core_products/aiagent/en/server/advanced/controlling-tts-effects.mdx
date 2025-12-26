@@ -1,0 +1,118 @@
+# Controlling AI Agent Speech Emotion
+
+## Scenario Description
+
+Some TTS models support specifying the emotion used during synthesis.
+In the real-time voice interaction scenario with AI, you can combine the system prompt of the large language model LLM to enable the ability of the AI to output the corresponding emotion based on the persona, making the AI more expressive and emotional.
+
+For example, the Speech series of MiniMax supports specifying multiple emotions (“happy” - happy, “sad” - sad, “angry” - angry, “fearful” - fearful, “disgusted” - disgusted, “surprised” - surprised, “calm” - neutral, “fluent” - fluent) during TTS synthesis. For detailed parameter descriptions, please refer to [Synchronized Speech Synthesis WebSocket](https://platform.minimaxi.com/docs/api-reference/speech-t2a-websocket).
+
+## Feature Overview
+
+<Frame width="auto" height="auto" caption="">
+  <img src="https://doc-media.zego.im/core_products/aiagent/en/server/advanced/controlling-tts-effects.png" alt="controlling-tts-effects.png"/>
+</Frame>
+
+<Warning title="Note">You must use the LLM.SystemPrompt parameter of the [Register Agent](/aiagent-server/api-reference/agent-configuration-management/register-agent), [Update Agent](/aiagent-server/api-reference/agent-configuration-management/update-agent), and [Create Agent Instance](/aiagent-server/api-reference/agent-instance-management/create-agent-instance) interface to control the LLM to output the specific format according to the ZEGO control parameters when answering, in order to achieve the effect of controlling the emotion.</Warning>
+
+### Supported TTS Models and Control Tags <a id="support-tts-models-and-control-tags" />
+
+<Note title="Note">Currently, ZEGO supports two model capabilities. If you need other TTS models, please contact ZEGO Technical Support.</Note>
+
+- The timbre/emotion list may change, please refer to the latest list provided by the TTS vendor.
+- ZEGO control parameters mean that ZEGO AI Agent will uniformly control the TTS emotion through the specified parameters in the TTS text to be synthesized. The LLM should output the specific format according to the ZEGO control parameters to achieve the effect of controlling the emotion, but the value is still consistent with the timbre/emotion name of the TTS vendor.
+
+|TTS Vendor-100px | Supported Models-120px | Supported Timbre/Emotions-150px | Experience Way-150px | ZEGO Control Parameters|
+|------------|--------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------|-------------------------------------------|
+| MiniMax    | Speech Series         | <ul><li>"happy" - happy</li><li>"sad" - sad</li><li>"angry" - angry</li><li>"fearful" - fearful</li><li>"disgusted" - disgusted</li><li>"surprised" - surprised</li><li>"calm" - neutral</li><li>"fluent" - fluent</li></ul><br/>Some emotions are only supported in some models, please refer to [Synchronized Speech Synthesis WebSocket -> Task Start -> voice_setting -> emotion](https://platform.minimaxi.com/docs/api-reference/speech-t2a-websocket)| [Voice Debugging Console](https://platform.minimaxi.com/examination-center/voice-experience-center/t2a_v2) | \{"emotion": emotion\}                      |
+| Doubao TTS (Unidirectional Streaming) | 1.0, 2.0 Series | **Chinese timbre examples**:<br/> <ul><li>"happy" - happy</li><li>"sad" - sad</li><li>"angry" - angry</li><li>"fearful" - fearful</li><li>"disgusted" - disgusted</li><li>"surprised" - surprised</li><li>"calm" - neutral</li><li>"fluent" - fluent</li></ul><br/>**English timbre examples**:<br/> <ul><li>"neutral" - neutral</li><li>"happy" - happy</li><li>"angry" - angry</li><li>"sad" - sad</li><li>"excited" - excited</li><li>"chat" - chat/conversational</li><li>"warm" - warm</li><li>"affectionate" - affectionate</li><li>"authoritative" - authoritative</li></ul><br/>For more timbres, please refer to [Timbre List -> Emotion Parameters](https://www.volcengine.com/docs/6561/1257544?lang=zh#%E6%83%85%E6%84%9F%E5%8F%82%E6%95%B0%EF%BC%88emotion%EF%BC%89%EF%BC%9A) | Multiple emotional timbres in [Doubao TTS Model](https://www.volcengine.com/product/tts) | \{"emotion": emotion\}<br/>\{"emotion_scale": scale\} |
+
+## Implement the ability to specify the emotion of the voice content output by the AI agent
+
+To achieve this ability, it mainly involves three steps:
+1. Specify the format of the content in the LLM text that controls the emotion.
+2. Let the LLM output the content according to the specified control emotion format.
+3. Let the TTS vendor synthesize the voice with emotion control parameters (ZEGO AI Agent automatically handles it).
+
+### Prerequisites
+
+1. Enable AI Agent service
+2. Confirm that the TTS model or timbre used supports specifying the emotion tag
+3. ZEGO AI Agent service supports the corresponding TTS model and tag. Refer to [Supported TTS Models and Control Tags](#support-tts-models-and-control-tags)
+
+### Usage Steps
+
+We take the example of specifying the text in the LLM text that is wrapped in “[[” and “]]” as metadata, letting the LLM output the control emotion control parameter metadata according to the format, and then extracting the “emotion” and “emotion_scale” parameters to control the voice emotion.
+
+<Steps>
+<Step title="Specify the format of the content in the LLM text that controls the emotion">
+
+<Note title="Note">No need to configure the FilterText.BeginCharacters and FilterText.EndCharacters parameters again when registering the AI agent or creating the AI agent instance, because the metadata and flag symbols will be removed from the LLM output text.</Note>
+
+By configuring the AdvancedConfig.LLMMetaInfo parameter of the [Create Agent Instance](/aiagent-server/api-reference/agent-instance-management/create-agent-instance) interface, specify how to extract the metadata controlling the emotion from the LLM text. For example:
+```json
+"LLMMetaInfo" : {
+    "BeginCharacters": "[[",
+    "EndCharacters": "]]"
+}
+```
+</Step>
+<Step title="Let the LLM output the content according to the specified control emotion format">
+
+<Note title="说明">
+- Please refer to the ZEGO control parameter format corresponding to the TTS vendor after determining which TTS vendor to use according to [Supported TTS Models and Control Tags](#support-tts-models-and-control-tags).
+- The key in the metadata JSON can only be emotion or emotion_scale, and the value must be exactly the same as the emotion parameter value supported by the TTS vendor.
+</Note>
+<Note title="Note">The `emotion` value in the following examples is only an example. The actual emotions supported by the TTS vendor can be included in the text output by the LLM. However, generally, not all emotions are included (for example, a customer service application will not allow it to have a sad emotion).</Note>
+
+The following are the `LLM.SystemPrompt` examples corresponding to the [Register Agent](/aiagent-server/api-reference/agent-configuration-management/register-agent) and [Create Agent Instance](/aiagent-server/api-reference/agent-instance-management/create-agent-instance) interfaces when using MiniMax and ByteDance TTS, please refer to the actual needs for adjustment:
+<Tabs>
+<Tab title="MiniMax">
+```markdown
+# Role
+You are a smart voice assistant that can dynamically adjust the reply tone based on the user's mood and add emotional tags and speed control when necessary.
+
+## Format Requirements
+- **LLMMetaInfo** is a JSON string for emotion and speed control, **must be strictly wrapped in [[ and ]]**.
+- The JSON key-value pair syntax must be complete, and the following keys are supported (one or more can be selected):
+  - "emotion" (optional): emotion type, limited to ["happy","sad","angry","fearful","surprised","neutral"].
+- **LLMMetaInfo must be placed at the beginning of the corresponding sentence**, and cannot appear in the middle or at the end of the sentence.
+- If the emotions or speeds of adjacent sentences are different, a new LLMMetaInfo must be inserted at the beginning of the changing sentence.
+
+## Example
+- User: Today's weather is good.
+  Assistant:
+  [[{"emotion":"happy"}]] Today is indeed a good day.
+  [[{"emotion":"sad"}]] The regret of yesterday still lingers in my heart, but I just want to enjoy the sunshine now.
+```
+</Tab>
+<Tab title="ByteDance (unidirectional streaming)">
+```markdown
+# Role
+You are a smart voice assistant that can dynamically adjust the reply tone based on the user's mood and add emotional tags and speed control when necessary.
+
+## Format Requirements
+- **LLMMetaInfo** is a JSON string for emotion and speed control, **must be strictly wrapped in [[ and ]]**.
+- The JSON key-value pair syntax must be complete, and the following keys are supported (one or more can be selected):
+  - "emotion" (optional): emotion type, limited to ["happy","sad","angry","fearful","surprised","neutral"].
+  - "emotion_scale" (optional): emotion intensity, a float number between 1 and 5 (e.g. 4); the intensity is non-linearly increasing, and 3 and 5 may have similar perception.
+- **LLMMetaInfo must be placed at the beginning of the corresponding sentence**, and cannot appear in the middle or at the end of the sentence.
+- If the emotions or speeds of adjacent sentences are different, a new LLMMetaInfo must be inserted at the beginning of the changing sentence.
+
+## Content Requirements
+- The emotion and speed adjustments must be highly consistent with the user's current emotion and dialogue context.
+
+## Example
+- User: Today's weather is good.
+  Assistant:
+  [[{"emotion":"happy","emotion_scale":3}]] Today is indeed a good day.
+  [[{"emotion":"sad","emotion_scale":4}]] The regret of yesterday still lingers in my heart, but I just want to enjoy the sunshine now.
+```
+</Tab>
+</Tabs>
+</Step>
+<Step title="Let the TTS vendor synthesize the voice with emotion control parameters">
+
+Now you can start a voice conversation with the created AI agent instance! When the content output by the LLM contains emotion control parameters, the AI Agent service will automatically call the TTS vendor interface based on these parameters, allowing it to interact with you in a rich emotional voice performance. 🎉🎉🎉
+</Step>
+</Steps>
