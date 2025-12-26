@@ -30,6 +30,7 @@ function getProjectRoot() {
 function loadDocuoConfig() {
   const projectRoot = getProjectRoot();
   const configPath = path.join(projectRoot, 'docuo.config.json');
+  console.log('配置文件路径', configPath);
   if (!fs.existsSync(configPath)) {
     throw new Error('docuo.config.json not found');
   }

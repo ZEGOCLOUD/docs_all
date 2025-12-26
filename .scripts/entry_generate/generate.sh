@@ -68,9 +68,9 @@ run_generator() {
     cd "$SCRIPT_DIR"
     
     if [ $# -eq 0 ]; then
-        node index.js generate
+        node src/index.js generate
     else
-        node index.js generate "$1"
+        node src/index.js generate "$1"
     fi
 }
 
@@ -80,7 +80,7 @@ run_tests() {
     echo ""
     
     cd "$SCRIPT_DIR"
-    node test.js test
+    node src/test.js test
 }
 
 # 列出产品
@@ -89,7 +89,7 @@ list_products() {
     echo ""
     
     cd "$SCRIPT_DIR"
-    node index.js list
+    node src/index.js list
 }
 
 # 主程序

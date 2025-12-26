@@ -16,7 +16,7 @@ const {
 /**
  * 生成entry文档的头部内容
  */
-function generateHeader(productType, platform, locale = 'zh') {
+function generateHeader(productType, platform, locale = 'zh', routeBasePath) {
   const productConfig = PRODUCT_CONFIG[productType];
   if (!productConfig) {
     throw new Error(`Unknown product type: ${productType}`);
@@ -35,7 +35,7 @@ ${productConfig.description}
 
 <Button primary-color="NavyBlue" target="_blank" href="./../client-sdk/download-sdk.mdx">下载 SDK</Button>
 <Button primary-color="NavyBlue" target="_blank" href="./../quick-start/${productConfig.quickStartPath}.mdx">快速开始</Button>
-<Button primary-color="NavyBlue" target="_blank" href="${productConfig.apiPaths.client}">客户端 API</Button>
+<Button primary-color="NavyBlue" target="_blank" href="/${routeBasePath + productConfig.apiPaths.client}">客户端 API</Button>
 <Button primary-color="NavyBlue" target="_blank" href="${productConfig.apiPaths.server}">服务端 API</Button>
 
 ---
@@ -196,8 +196,8 @@ function generateSteps(productType, platform, locale = 'zh') {
 /**
  * 生成完整的entry文档内容
  */
-function generateEntryContent(productType, platform, locale = 'zh') {
-  const header = generateHeader(productType, platform, locale);
+function generateEntryContent(productType, platform, locale = 'zh', routeBasePath) {
+  const header = generateHeader(productType, platform, locale, routeBasePath);
   const steps = generateSteps(productType, platform, locale);
   const footer = '</Steps>';
   
