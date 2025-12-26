@@ -5,7 +5,7 @@ const PRODUCT_CONFIG = {
     icon: "https://doc-media.zego.im/sdk-doc/Pics/DeveloperCenter/homePage/product_img/icon_shishiyinshipin.png",
     description: "支持全球超低延迟多人视频、音频互动，为开发者提供便捷接入、高可靠、多平台互通的音视频服务。",
     apiPaths: {
-      client: "/real-time-voice-video-api/overview",
+      client: "/client-sdk/api-reference/function-list",
       server: "/real-time-video-server/api-reference/overview"
     },
     hasVideoCapability: true,
@@ -16,7 +16,7 @@ const PRODUCT_CONFIG = {
     icon: "https://doc-media.zego.im/sdk-doc/Pics/DeveloperCenter/homePage/product_img/icon_shishiyuyin.png",
     description: "支持全球超低延迟、超高音质的音频通话，为开发者提供便捷接入、高可靠、多平台互通的音视频服务。",
     apiPaths: {
-      client: "/real-time-voice-api/overview", 
+      client: "/client-sdk/api-reference/function-list", 
       server: "/real-time-voice-server/api-reference/overview"
     },
     hasVideoCapability: false,

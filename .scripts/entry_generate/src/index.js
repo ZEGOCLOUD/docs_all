@@ -16,7 +16,7 @@ function getAllProductPlatforms() {
   // 从docuo.config.json的instances中提取产品和平台信息
   docuoConfig.instances.forEach(instance => {
     // 跳过API实例
-    if (instance.navigationInfo?.tab !== '文档') {
+    if (instance.id.includes('api') || instance.id.includes('server')) {
       return;
     }
     
@@ -26,6 +26,7 @@ function getAllProductPlatforms() {
       const productType = pathParts[1];
       const locale = pathParts[2];
       const platform = pathParts[3];
+      const routeBasePath = instance.routeBasePath;
       
       // 只处理配置中定义的产品
       if (PRODUCT_CONFIG[productType]) {
@@ -33,7 +34,8 @@ function getAllProductPlatforms() {
           productType,
           platform,
           locale,
-          path: instance.path
+          path: instance.path,
+          routeBasePath
         });
       }
     }
@@ -45,11 +47,11 @@ function getAllProductPlatforms() {
 /**
  * 生成单个entry文档
  */
-function generateSingleEntry(productType, platform, locale = 'zh') {
+function generateSingleEntry(productType, platform, locale = 'zh', routeBasePath) {
   try {
     console.log(`正在生成 ${productType}/${platform}/${locale} 的entry文档...`);
 
-    const content = generateEntryContent(productType, platform, locale);
+    const content = generateEntryContent(productType, platform, locale, routeBasePath);
     const projectRoot = getProjectRoot();
     const outputPath = path.join(
       projectRoot,
@@ -85,8 +87,8 @@ function generateAllEntries() {
   let successCount = 0;
   let failCount = 0;
 
-  combinations.forEach(({ productType, platform, locale }) => {
-    const success = generateSingleEntry(productType, platform, locale);
+  combinations.forEach(({ productType, platform, locale, routeBasePath }) => {
+    const success = generateSingleEntry(productType, platform, locale, routeBasePath);
     if (success) {
       successCount++;
     } else {
@@ -123,8 +125,8 @@ function generateProductEntries(productType) {
   let successCount = 0;
   let failCount = 0;
 
-  combinations.forEach(({ productType, platform, locale }) => {
-    const success = generateSingleEntry(productType, platform, locale);
+  combinations.forEach(({ productType, platform, locale,routeBasePath }) => {
+    const success = generateSingleEntry(productType, platform, locale, routeBasePath);
     if (success) {
       successCount++;
     } else {
