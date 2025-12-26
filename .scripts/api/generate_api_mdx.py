@@ -431,6 +431,51 @@ def rewrite_links_for_kind(text: str, platform: str, kind: str) -> str:
     return pattern.sub(_repl, text)
 
 
+def generate_index_table(objs: List[Dict[str, Any]]) -> str:
+    """生成对象名称的索引表格（两列，按字母顺序排列）。
+
+    Args:
+        objs: JSON 对象列表
+
+    Returns:
+        Markdown 表格字符串
+    """
+    # 提取所有 object_name 并按字母顺序排序
+    names = []
+    for obj in objs:
+        name = str(obj.get("object_name", "")).strip()
+        if name:
+            names.append(name)
+
+    names.sort(key=str.lower)  # 不区分大小写排序
+
+    if not names:
+        return ""
+
+    # 生成表格行（每行两个单元格，无表头）
+    lines = []
+    lines.append("| | |")
+    lines.append("| --- | --- |")
+
+    for i in range(0, len(names), 2):
+        # 第一列
+        name1 = names[i]
+        anchor1 = name1.lower()
+        cell1 = f"[{name1}](#{anchor1})"
+
+        # 第二列（如果存在）
+        if i + 1 < len(names):
+            name2 = names[i + 1]
+            anchor2 = name2.lower()
+            cell2 = f"[{name2}](#{anchor2})"
+        else:
+            cell2 = ""
+
+        lines.append(f"| {cell1} | {cell2} |")
+
+    return "\n".join(lines)
+
+
 def render_api_field(obj: Dict[str, Any]) -> str:
     """将单个 JSON 对象渲染为 MDX 片段（不再使用 APIField）。"""
     name = escape_mdx_text(str(obj.get("object_name", "")))
@@ -513,9 +558,17 @@ def generate_for(root: Path, kind: str, output_dir: Optional[Path] = None) -> No
     for obj in objs:
         blocks.append(render_api_field(obj))
 
-    # 总文件第一行：与 kind 同名的一级标题（首字母大写，例如 "# Class"），后面紧跟各对象内容
+    # 总文件第一行：与 kind 同名的一级标题（首字母大写，例如 "# Class"）
     heading = f"# {kind.capitalize()}"
-    content = heading + "\n\n" + "\n\n".join(blocks) + "\n"
+
+    # 生成索引表格（两列，按字母顺序排列的对象链接）
+    index_table = generate_index_table(objs)
+
+    # 拼接内容：一级标题 + 索引表格 + 各对象内容
+    if index_table:
+        content = heading + "\n\n" + index_table + "\n\n" + "\n\n".join(blocks) + "\n"
+    else:
+        content = heading + "\n\n" + "\n\n".join(blocks) + "\n"
 
     # 重写当前平台下的相对链接
     platform = root.name
