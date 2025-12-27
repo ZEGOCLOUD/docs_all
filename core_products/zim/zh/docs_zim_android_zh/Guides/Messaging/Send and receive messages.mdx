@@ -13,24 +13,24 @@ import {
     ZIMMessageTypeMap,
     ZIMMultipleMessageMap,
     ZIMTextMessageMap,
-    queryConversationMap,
-    queryConversationListMap,
+    broadcastMessageReceivedMap,
     clearConversationTotalUnreadMessageCountMap,
     clearConversationUnreadMessageCountMap,
     conversationChangedMap,
+    disableUnreadMessageCountMap,
     downloadMediaFileMap,
+    groupMessageReceivedMap,
     isMentionAllMap,
     mentionedInfoListMap,
     mentionedUserIDsMap,
-    disableUnreadMessageCountMap,
     messageSentStatusChangedMap,
     multipleMediaUploadingProgressMap,
-    onMediaUploadingProgressMap,
     onMediaDownloadingProgressMap,
-    broadcastMessageReceivedMap,
+    onMediaUploadingProgressMap,
     peerMessageReceivedMap,
+    queryConversationListMap,
+    queryConversationMap,
     roomMessageReceivedMap,
-    groupMessageReceivedMap,
     sendMessageMap,
     setEventHandlerMap,
 } from "/snippets/zim/const-link.mdx"
@@ -1155,7 +1155,7 @@ typedef void (^ZIMMediaUploadingProgress)(ZIMMediaMessage *message, unsigned lon
 using ZIMMediaUploadingProgress = std::function<void(const std::shared_ptr<ZIMMediaMessage> &message, long long currentSize, long long totalSize)>;
 ```
 :::
-:::if{props.platform="Web|miniprogram"}
+:::if{props.platform="Web|miniprogram|rn|uniapp|harmonyos"}
 ```typescript
 type onMediaUploadingProgress = (message: ZIMMediaMessage, currentFileSize: number, totalFileSize: number) => void;
 ```
@@ -1163,11 +1163,6 @@ type onMediaUploadingProgress = (message: ZIMMediaMessage, currentFileSize: numb
 :::if{props.platform="UTS"}
 ```typescript
 type onMediaUploadingProgress = (message: ZIMMessage, currentFileSize: number, totalFileSize: number) => void;
-```
-:::
-:::if{props.platform="rn|uniapp|harmonyos"}
-```typescript
-type onMediaUploadingProgress = (message: ZIMMediaMessage, currentFileSize: number, totalFileSize: number) => void;
 ```
 :::
 :::if{props.platform="flutter"}
@@ -1316,7 +1311,8 @@ zim.sendMessage(messageCommandObj, toConversationID, conversationType, config, n
 ```
 :::
 :::if{props.platform="UTS|harmonyos"}
-```typescript
+<CodeGroup>
+```typescript title="UTS 插件"
 // 发送单聊 `Command` 信息
 // toConversationID 为 消息需要发送的会话 ID
 // 单聊时，toConversationID 即是对方的 userID；群组时，toConversationID 即是群组的 groupID；房间时，toConversationID 即是房间的 roomID
@@ -1340,6 +1336,36 @@ zim.sendMessage(messageCommandObj, toConversationID, conversationType, config, n
         // 发送失败
     });
 ```
+```typescript title="原生插件"
+// 发送单聊 `Command` 信息
+// toConversationID 为 消息需要发送的会话 ID
+// 单聊时，toConversationID 即是对方的 userID；群组时，toConversationID 即是群组的 groupID；房间时，toConversationID 即是房间的 roomID
+const toConversationID = ''; // 对方 userID
+const conversationType = 0; // 会话类型，取值为 单聊：0，房间：1，群组：2
+const config: ZIMMessageSendConfig = { 
+    priority: 1, // 设置消息优先级，取值为 低：1（默认），中：2，高：3
+};
+
+const notification: ZIMMessageSendNotification = {
+    onMessageAttached: (message: ZIMMessage) => {}
+}
+
+// 这里以 JSON 字符串 为例，需要将字符串转换为 Uint8Array
+// peerMessageReceived 收到 type 为 2 的 Command 消息时，需要将 Uint8Array 转换为 JSON 字符串
+const jsonText = JSON.stringify({ id: '111', name: '张三' });
+const uint8Array = new Uint8Array(Array.from(unescape(encodeURIComponent(jsonText))).map((val) => val.charCodeAt(0)));
+
+const messageCommandObj: ZIMMessage = { type: 2, message: uint8Array };
+
+zim.sendMessage(messageCommandObj, toConversationID, conversationType, config, notification)
+    .then((res: ZIMMessageSentResult) => {
+        // 发送成功
+    })
+    .catch((err: ZIMError) => {
+        // 发送失败
+    });
+```
+</CodeGroup>
 :::
 :::if{props.platform="flutter"}
 ```dart
@@ -2563,7 +2589,8 @@ zim.on('roomMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageRece
 :::
 
 :::if{props.platform="UTS"}
-```typescript
+<CodeGroup>
+```typescript title="UTS 插件"
 // 收到单聊消息的回调
 zim.onPeerMessageReceived((data) => {
     
@@ -2614,6 +2641,60 @@ zim.onGroupMessageReceived((data) => {
 zim.onRoomMessageReceived((data) => {
 });
 ```
+```typescript title="原生插件"
+// 收到单消息的回调
+zim.on('peerMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
+    
+    const config: ZIMMediaDownloadConfig = {messageInfoIndex: 0};
+
+    data.messageList.forEach((msg) => {
+        if (msg.type == 2) {
+            // 信令消息，这里以 JSON 字符串 为例，将 Uint8Array 消息内容转为 JSON 字符串
+            const uint8Array = msg.message;
+            const jsonText = decodeURIComponent(escape(String.fromCharCode(...Array.from(uint8Array))));
+            const jsonObj = JSON.parse(jsonText);
+        } else if (msg.type == 11 || msg.type == 12 || msg.type == 13 || msg.type == 14) {
+            // 下载富媒体文件消息
+            zim.downloadMediaFile(msg, 1, config, (_msg, currentFileSize, totalFileSize) => {
+                // 下载进度
+            })
+            .then((res: ZIMMediaDownloadedResult) => {
+                // 操作成功
+            })
+            .catch((err: ZIMError) => {
+                // 操作失败
+            })
+        } else if (msg.type == 10) {
+            // 下载组合消息中的富媒体文件
+            msg.messageInfoList.forEach((info, i) => {
+                if (info.type == 11 || info.type == 12 || info.type == 13 || info.type == 14) {
+                    // 设置为 item 的序号
+                    const infoConfig: ZIMMediaDownloadConfig = {messageInfoIndex: i};
+
+                    zim.downloadMediaFile(msg, 1, infoConfig, (_msg, currentFileSize, totalFileSize) => {
+                        // 下载进度
+                    })
+                    .then((res: ZIMMediaDownloadedResult) => {
+                        // 操作成功
+                    })
+                    .catch((err: ZIMError) => {
+                        // 操作失败
+                    })
+                } 
+            }
+        }
+    })
+});
+
+// 收到群组消息的回调
+zim.on('groupMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
+});
+
+// 收到房间消息的回调
+zim.on('roomMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
+});
+```
+</CodeGroup>
 :::
 :::if{props.platform="flutter"}
 ```dart
@@ -2726,12 +2807,7 @@ typedef void (^ZIMMediaDownloadingProgress)(ZIMMessage *message, unsigned long l
 using ZIMMediaDownloadingProgress = std::function<void(const std::shared_ptr<ZIMMessage> &message, unsigned int currentSize, unsigned int totalSize)>;
 ```
 :::
-:::if{props.platform="UTS"}
-```typescript
-type ZIMMediaDownloadingProgress = (message: ZIMMessage, currentFileSize: number, totalFileSize: number) => void;
-```
-:::
-:::if{props.platform="rn|uniapp|harmonyos"}
+:::if{props.platform="UTS|rn|uniapp|harmonyos"}
 ```typescript
 type ZIMMediaDownloadingProgress = (message: ZIMMessage, currentFileSize: number, totalFileSize: number) => void;
 ```
@@ -2806,11 +2882,18 @@ zim.on('conversationChanged', (zim: ZIM, data: ZIMEventOfConversationChangedResu
 ```
 :::
 :::if{props.platform="UTS"}
-```typescript
+<CodeGroup>
+```typescript title="UTS 插件"
 zim.onConversationChanged((data) => {
     console.log(data.info.mentionInfoList);
 });
 ```
+```typescript title="原生插件"
+zim.on('conversationChanged', (zim: ZIM, data: ZIMEventOfConversationChangedResult) => {
+    console.log(data.info.mentionInfoList);
+});
+```
+</CodeGroup>
 :::
 :::if{props.platform="flutter"}
 ```dart
@@ -2975,12 +3058,20 @@ zim.on('broadcastMessageReceived', (zim: ZIM, data: ZIMEventOfBroadcastMessageRe
 ```
 :::
 :::if{props.platform="UTS"}
-```typescript
+<CodeGroup>
+```typescript title="UTS 插件"
 // 用户接收全员推送消息
 zim.onBroadcastMessageReceived((data) => {
     console.log(data.message);
 });
 ```
+```typescript title="原生插件"
+// 用户接收全员推送消息
+zim.on('broadcastMessageReceived', (zim: ZIM, data: ZIMEventOfBroadcastMessageReceivedResult) => {
+    console.log(data.message);
+});
+```
+</CodeGroup>
 :::
 :::if{props.platform="flutter"}
 ```dart
@@ -3344,7 +3435,8 @@ zim.on('messageSentStatusChanged', (zim: ZIM, data: ZIMEventOfMessageSentStatusC
 ```
 :::
 :::if{props.platform="UTS"}
-```typescript
+<CodeGroup>
+```typescript title="UTS 插件"
 // 监听消息状态
 zim.onMessageSentStatusChanged((data) => {
     data.infos.forEach((info) => {
@@ -3352,6 +3444,15 @@ zim.onMessageSentStatusChanged((data) => {
     });  
 });
 ```
+```typescript title="原生插件"
+// 监听消息状态
+zim.on('messageSentStatusChanged', (zim: ZIM, data: ZIMEventOfMessageSentStatusChangedResult) => {
+    data.infos.forEach((info) => {
+        console.warn(info.message, info.status);
+    });  
+});
+```
+</CodeGroup>
 :::
 :::if{props.platform="flutter"}
 ```dart
