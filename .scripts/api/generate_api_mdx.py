@@ -476,6 +476,101 @@ def generate_index_table(objs: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def rewrite_links_for_split(text: str, platform: str, kind: str, relative_path: Optional[str] = None) -> str:
+    """重写 split 模式下的链接。
+
+    当配置了 relativePath 时，链接相对于总文件目录计算：
+    - 同 kind：{relativePath}/{kind}.mdx#{anchor}
+    - 不同 kind：{relativePath}/{other_kind}.mdx#{anchor}
+
+    Args:
+        text: 原始文本内容
+        platform: 平台名称（用于匹配链接）
+        kind: 当前类型（class、enum 等）
+        relative_path: 相对于总文件目录的路径（如 "../../api-reference"）
+
+    Returns:
+        重写后的文本
+    """
+    # 使用普通字符串拼出模式
+    pattern_str = "\\[([^\\]]+)\\]\\(/" + re.escape(platform) + "/(class|enum|interface|protocol|struct)/([^)]+)\\)"
+    pattern = re.compile(pattern_str)
+
+    def _repl(m: re.Match) -> str:
+        label = m.group(1)
+        link_type = m.group(2)
+        rest = m.group(3)  # xxx 任意内容，可能包含 #anchor
+
+        # 检查是否包含锚点
+        if '#' in rest:
+            # 有锚点：取 # 后面的部分作为锚点，并移除连接符
+            anchor = rest.split('#', 1)[1].lower().replace('-', '')
+        else:
+            # 无锚点：整个 rest 转小写作为锚点
+            anchor = rest.lower()
+
+        # 如果配置了 relativePath，链接指向总文件
+        if relative_path:
+            # 拼接相对路径 + 类型名 + 锚点
+            new_url = f"{relative_path}/{link_type}#{anchor}"
+        else:
+            # 没有 relativePath，使用当前目录下的文件
+            if link_type == kind:
+                new_url = f"#{anchor}"
+            else:
+                new_url = f"./{link_type}#{anchor}"
+
+        return f"[{label}]({new_url})"
+
+    return pattern.sub(_repl, text)
+
+
+def generate_split_mdx_for_object(obj: Dict[str, Any], kind: str, output_base_dir: Path,
+                                   platform: str = "", relative_path: Optional[str] = None) -> None:
+    """为单个对象生成独立的 MDX 文件（split 模式）。
+
+    Args:
+        obj: JSON 对象数据
+        kind: 类型名称（class、enum、protocol 等）
+        output_base_dir: 输出基础目录（会在其下创建 kind 子目录）
+        platform: 平台名称（用于链接重写）
+        relative_path: 相对于总文件目录的路径（用于链接重写）
+    """
+    object_name = str(obj.get("object_name", "")).strip()
+    if not object_name:
+        print(f"[WARN] 对象缺少 object_name，跳过")
+        return
+
+    # 生成该对象的内容
+    content = render_api_field(obj)
+
+    # 如果有 platform，重写链接
+    if platform:
+        content = rewrite_links_for_split(content, platform, kind, relative_path)
+
+    # 添加一级标题（对象名）
+    heading = f"# {object_name}"
+
+    # 添加 frontmatter
+    frontmatter = "---\ndocType: API\n---\n\n"
+
+    # 拼接内容
+    final_content = frontmatter + heading + "\n\n" + content + "\n"
+
+    # 在输出目录下按类型创建子目录
+    output_dir = output_base_dir / kind
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # 确定输出文件名：使用 object_name 作为文件名
+    # 转换为小写并替换空格和特殊字符为连字符
+    file_name = object_name.lower().replace(" ", "-").replace("/", "-").replace("\\", "-")
+    out_mdx = output_dir / f"{file_name}.mdx"
+
+    # 写入 MDX 文件
+    out_mdx.write_text(final_content, encoding="utf-8")
+    print(f"[OK] 生成独立 MDX: {out_mdx}")
+
+
 def render_api_field(obj: Dict[str, Any]) -> str:
     """将单个 JSON 对象渲染为 MDX 片段（不再使用 APIField）。"""
     name = escape_mdx_text(str(obj.get("object_name", "")))
@@ -867,8 +962,76 @@ def convert_funclist_md(platform_dir: Path, output_dir: Optional[Path] = None) -
     print(f"[OK] 生成 function-list.mdx: {out_file}")
 
 
+def parse_config_value(value: Any) -> List[Dict[str, Any]]:
+    """解析配置文件中的 value，返回标准化的目标配置列表。
+
+    Args:
+        value: 配置值，可以是字符串、对象或数组
+
+    Returns:
+        标准化的目标配置列表，每个配置包含：
+        - path: 目标目录路径
+        - type: 生成类型（"merge" 或 "split"）
+        - splitTypes: split 模式下要生成的类型列表
+        - withFunctionList: 是否生成 function-list.mdx
+        - relativePath: split 模式下分文件相对于总文件目录的相对路径
+    """
+    results = []
+
+    # 如果是字符串，转换为默认配置对象
+    if isinstance(value, str):
+        results.append({
+            "path": value,
+            "type": "merge",
+            "splitTypes": None,
+            "withFunctionList": True,  # 字符串默认生成 function-list
+            "relativePath": None
+        })
+    # 如果是字典，单个配置对象
+    elif isinstance(value, dict):
+        results.append({
+            "path": value.get("path", ""),
+            "type": value.get("type", "merge"),
+            "splitTypes": value.get("splitTypes"),
+            "withFunctionList": value.get("withFunctionList", False),  # 对象默认不生成
+            "relativePath": value.get("relativePath")
+        })
+    # 如果是列表，遍历处理每个元素
+    elif isinstance(value, list):
+        for item in value:
+            if isinstance(item, str):
+                results.append({
+                    "path": item,
+                    "type": "merge",
+                    "splitTypes": None,
+                    "withFunctionList": True,  # 字符串默认生成 function-list
+                    "relativePath": None
+                })
+            elif isinstance(item, dict):
+                results.append({
+                    "path": item.get("path", ""),
+                    "type": item.get("type", "merge"),
+                    "splitTypes": item.get("splitTypes"),
+                    "withFunctionList": item.get("withFunctionList", False),  # 对象默认不生成
+                    "relativePath": item.get("relativePath")
+                })
+            else:
+                print(f"[WARN] 忽略不支持的配置项类型: {type(item)}")
+    else:
+        print(f"[WARN] 忽略不支持的配置值类型: {type(value)}")
+
+    return results
+
+
 def config_based_main(config_path: Optional[Path] = None) -> None:
     """基于配置文件的批量生成模式。
+
+    新配置格式：
+    - key: 源目录路径
+    - value: 可以是字符串、对象或数组
+      - 字符串: 目标目录路径（等同于 merge 模式）
+      - 对象: { path: 目标目录, type: "merge"|"split", splitTypes: ["class", ...] }
+      - 数组: 包含多个字符串或对象
 
     Args:
         config_path: 配置文件路径，默认为脚本所在目录下的 config.json
@@ -896,16 +1059,13 @@ def config_based_main(config_path: Optional[Path] = None) -> None:
 
     print(f"[INFO] 从配置文件读取到 {len(config)} 个映射")
 
-    # 遍历配置，处理每个目标目录到源目录的映射
-    for target_dir_str, source_dir_str in config.items():
+    # 遍历配置，key 为源目录，value 为目标配置
+    for source_dir_str, target_config in config.items():
         print(f"\n{'='*60}")
-        print(f"[INFO] 处理映射:")
-        print(f"  源目录: {source_dir_str}")
-        print(f"  目标目录: {target_dir_str}")
+        print(f"[INFO] 处理源目录: {source_dir_str}")
 
         # 解析路径（相对于仓库根目录）
         source_dir = Path(source_dir_str)
-        target_dir = Path(target_dir_str)
 
         # 检查源目录是否存在
         if not source_dir.exists():
@@ -916,6 +1076,12 @@ def config_based_main(config_path: Optional[Path] = None) -> None:
             print(f"[ERROR] 源路径不是目录: {source_dir}")
             continue
 
+        # 解析目标配置
+        target_configs = parse_config_value(target_config)
+        if not target_configs:
+            print(f"[WARN] 源目录 {source_dir} 没有有效的目标配置")
+            continue
+
         # 动态扫描源目录下的类型
         kinds = get_kinds_from_platform(source_dir)
         if not kinds:
@@ -924,14 +1090,81 @@ def config_based_main(config_path: Optional[Path] = None) -> None:
 
         print(f"[INFO] 发现类型: {', '.join(kinds)}")
 
-        # 为每个类型生成 MDX 文件和对应的 JSON 配置文件
-        for kind in kinds:
-            print(f"[INFO] 生成 {kind}.mdx 和 {kind}.json")
-            generate_for(source_dir, kind, target_dir)
+        # 获取平台名称（源目录名，用于链接重写）
+        platform = source_dir.name
 
-        # 转换 funcList.md
-        print(f"[INFO] 转换 funcList.md")
-        convert_funclist_md(source_dir, target_dir)
+        # 处理每个目标配置
+        for target_cfg in target_configs:
+            target_dir_str = target_cfg.get("path", "")
+            gen_type = target_cfg.get("type", "merge")
+            split_types = target_cfg.get("splitTypes")
+            with_funclist = target_cfg.get("withFunctionList", False)
+            relative_path = target_cfg.get("relativePath")
+
+            if not target_dir_str:
+                print(f"[WARN] 跳过空路径的配置")
+                continue
+
+            target_dir = Path(target_dir_str)
+            print(f"[INFO]   -> 目标目录: {target_dir}, 类型: {gen_type}, withFunctionList: {with_funclist}")
+            if relative_path:
+                print(f"[INFO]   -> relativePath: {relative_path}")
+
+            # 处理 split 模式
+            if gen_type == "split":
+                # 确定要 split 的类型
+                types_to_split = split_types if split_types else kinds
+
+                if not types_to_split:
+                    print(f"[WARN] splitTypes 为空，跳过 split 模式")
+                    continue
+
+                print(f"[INFO]   -> split 类型: {', '.join(types_to_split)}")
+
+                # 为指定的每个类型生成独立的 MDX 文件
+                for kind in types_to_split:
+                    if kind not in kinds:
+                        print(f"[WARN]   -> 类型 {kind} 不存在，跳过")
+                        continue
+
+                    kind_dir = source_dir / kind
+                    objs = read_json_files(kind_dir)
+
+                    if not objs:
+                        print(f"[WARN]   -> 类型 {kind} 下没有 JSON 文件")
+                        continue
+
+                    print(f"[INFO]   -> 为 {kind} 类型的 {len(objs)} 个对象生成独立 MDX")
+
+                    for obj in objs:
+                        generate_split_mdx_for_object(obj, kind, target_dir,
+                                                       platform=platform,
+                                                       relative_path=relative_path)
+
+                # 转换 funcList.md（如果配置允许）
+                if with_funclist:
+                    funclist_file = source_dir / "funcList.md"
+                    if funclist_file.exists():
+                        print(f"[INFO]   -> 转换 funcList.md")
+                        convert_funclist_md(source_dir, target_dir)
+                    else:
+                        print(f"[WARN]   -> funcList.md 不存在，跳过")
+
+            # 处理 merge 模式（默认）
+            else:
+                # 为每个类型生成合并的 MDX 文件
+                for kind in kinds:
+                    print(f"[INFO]   -> 生成 {kind}.mdx")
+                    generate_for(source_dir, kind, target_dir)
+
+                # 转换 funcList.md（如果配置允许）
+                if with_funclist:
+                    funclist_file = source_dir / "funcList.md"
+                    if funclist_file.exists():
+                        print(f"[INFO]   -> 转换 funcList.md")
+                        convert_funclist_md(source_dir, target_dir)
+                    else:
+                        print(f"[WARN]   -> funcList.md 不存在，跳过")
 
     print(f"\n{'='*60}")
     print("[INFO] 所有映射处理完成")
