@@ -164,10 +164,10 @@ function generateReferenceStep(productConfig, instanceConfig) {
   const errorCodeLink = `/${routeBasePath}/client-sdk/error-code`;
 
   const features = [
-    { title: "客户端 API", link: productConfig.apiPaths.client },
+    { title: "客户端 API", link: "/"+routeBasePath+"/"+productConfig.apiPaths.client },
     { title: "服务端 API", link: productConfig.apiPaths.server },
     { title: "常见错误码", link: errorCodeLink },
-    { title: "常见问题", link: "/faq/overview" }
+    { title: "常见问题", link: "/"+routeBasePath+"/faq" }
   ];
 
   return `

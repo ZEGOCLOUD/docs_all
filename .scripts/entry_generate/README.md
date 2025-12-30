@@ -12,17 +12,6 @@
 - 🔄 **嵌套支持**: 支持处理嵌套的category结构（如小程序的微信/支付宝分类）
 - ✅ **完整覆盖**: 确保所有entry都包含参考文档Step
 
-## 🔧 最新修复
-
-### 修复问题1：确保所有entry都包含参考文档Step
-- **问题**: 某些产品的entry文档缺少参考文档Step
-- **修复**: 修改生成逻辑，让参考文档Step始终生成，不依赖sidebars.json中是否存在对应category
-- **结果**: 现在所有产品的所有平台都会包含参考文档Step
-
-### 修复问题2：小程序快速开始包含微信和支付宝小程序
-- **问题**: 小程序平台的快速开始Step没有显示微信小程序和支付宝小程序的内容
-- **修复**: 增强`groupFeaturesByTag`函数，支持递归处理嵌套的category结构
-- **结果**: 小程序平台现在正确显示微信小程序和支付宝小程序的所有文档链接
 
 ## 支持的产品
 
@@ -48,7 +37,7 @@
 
 ```bash
 # 生成所有entry文档
-.script/entry_generate/generate.sh generate
+.script/entry_generate/generate.sh [generate]
 
 # 生成指定产品的entry文档
 .script/entry_generate/generate.sh generate real-time-voice-video
@@ -167,3 +156,16 @@ npm run help
 2. 确保docuo.config.json中有对应的实例配置
 3. 确保有对应的sidebars.json文件
 4. 运行生成脚本即可
+
+## 🔧 最新修复
+
+### 修复问题1：确保所有entry都包含参考文档Step
+- **问题**: 某些产品的entry文档缺少参考文档Step
+- **修复**: 修改生成逻辑，让参考文档Step始终生成，不依赖sidebars.json中是否存在对应category
+- **结果**: 现在所有产品的所有平台都会包含参考文档Step
+
+### 修复问题2：小程序快速开始包含微信和支付宝小程序
+- **问题**: 小程序平台的快速开始Step没有显示微信小程序和支付宝小程序的内容
+- **修复**: 增强`groupFeaturesByTag`函数，支持递归处理嵌套的category结构
+- **结果**: 小程序平台现在正确显示微信小程序和支付宝小程序的所有文档链接
+
