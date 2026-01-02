@@ -1,0 +1,199 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: Real-time Voice/Video API Support
+    email: support@zegocloud.com
+
+tags:
+  - name: room
+
+servers:
+  $ref: '../../shared-components.yaml#/servers'
+
+paths:
+  /:
+    get:
+      tags:
+        - room
+      summary: SetForbidUserRule
+      description: |
+        设置用户封禁规则以封禁某些用户。设置成功后，您可以 [查询用户封禁规则](./describe-forbid-user-rules.mdx) 或 [删除用户封禁规则](./del-forbid-user-rule.mdx)。
+
+        设置用户封禁规则不会中断用户当前正在进行的推流，仅会对用户的下一次推流请求生效。若需立即封禁用户当前正在进行的推流，需单独使用[设置音视频流封禁规则](../forbid-stream-rule/set-forbid-stream-rule.mdx)，而非用户封禁规则。
+
+        <Note title="调用频率限制">同一个 AppID 下所有房间：10 次/秒。</Note>
+        <Accordion title="参数配置举例" defaultOpen="true">
+
+        - 假设需要封禁的用户是 user1，未登录房间 room1：
+
+            - RuleType 取值为 1、DisabledPrivilege[] 取值为 1 时，表示该 IP 地址对应的用户无法登录任何房间。
+            - RuleType 取值为 2、DisabledPrivilege[] 取值为 1 时，表示任何用户都无法登录 room1。
+            - RuleType 取值为 3、DisabledPrivilege[] 取值为 2 时，表示 user1 可以正常登录到任何房间，但无法在任何房间内推流。
+            - RuleType 取值为 4、DisabledPrivilege[] 取值为 2 时，表示 user1 可以正常登录到 room1，但无法在 room1 内推流。
+
+        - 假设需要封禁的用户是 user1，且已登录房间 room1，无论 RuleType 取值如何：
+
+            - DisabledPrivilege[] 取值为 1 或 1&2 时，user1 仍在 room1 内、但无法正常推流，需要调用 [踢出房间用户](./../kick-out-user.mdx) 接口踢出用户。
+            - DisabledPrivilege[] 取值为 2 时，user1 无法在 room1 内推流。
+        </Accordion>
+
+      operationId: set-forbid-user-rule
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://rtc-api.zego.im?Action=SetForbidUserRule
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [SetForbidUserRule]
+          style: form
+          explode: true
+        # 公共参数
+        - $ref: '../../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../../shared-components.yaml#/components/parameters/SignatureVersion'
+        # 业务参数
+        - name: RuleType
+          in: query
+          description: |
+            封禁规则类型：
+            - 1：通过 IP 地址封禁用户，最多可设置 100 条；
+            - 2：通过 RoomId 封禁用户，最多可设置 200 条；
+            - 3：通过 UserId 封禁用户，最多可设置 200 条；
+            - 4：通过 RoomId 和 UserId 封禁用户，最多可设置 200 条。
+
+            其中，最多可设置的规则条数，指同时在有效期内的规则条数，不包含已失效的规则。
+
+            如果您不需要某些规则，请及时调用 [删除用户封禁规则](./del-forbid-user-rule.mdx) 接口进行清理。
+
+          required: true
+          schema:
+            type: integer
+            format: int32
+            enum: [1, 2, 3, 4]
+        - name: IP
+          in: query
+          description: IP 地址。RuleType 为 1 时必填。
+          required: false
+          schema:
+            type: string
+        - name: RoomId
+          in: query
+          description: 房间 ID。RuleType 为 2、4 时必填。
+          required: false
+          schema:
+            type: string
+        - name: UserId
+          in: query
+          description: 用户 ID。RuleType 为 3、4 时必填。
+          required: false
+          schema:
+            type: string
+        - name: DisabledPrivilege
+          in: query
+          description: 封禁用户所能使用的功能。1：登录。2：推流。
+          required: true
+          schema:
+            type: array
+            items:
+              type: integer
+              format: int32
+              enum: [1, 2]
+            minItems: 1
+          style: form
+          explode: true
+        - name: EffectiveTime
+          in: query
+          description: 封禁规则有效时长，单位：秒，取值范围 1 ～ 86400（1 天）。
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 86400
+      responses:
+        "200":
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetForbidUserRuleResponse'
+
+components:
+  schemas:
+    SetForbidUserRuleResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int32
+          example: 0
+          description: |
+            返回码。以下仅列出了接口业务逻辑相关的部分返回码，完整返回码请参考 [全局返回码](/real-time-video-server/api-reference/return-codes)。
+
+            <table>
+              <thead>
+                <tr>
+                  <th>返回码</th>
+                  <th>说明</th>
+                  <th>处理建议</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>0</td>
+                  <td>请求成功。</td>
+                  <td>-</td>
+                </tr>
+                <tr>
+                  <td>1</td>
+                  <td>请求失败。</td>
+                  <td>请联系 ZEGO 技术支持处理。</td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td>输入参数错误。</td>
+                  <td>-</td>
+                </tr>
+                <tr>
+                  <td>9</td>
+                  <td>未开通当前接口的使用权限。</td>
+                  <td>请联系 ZEGO 技术支持处理。</td>
+                </tr>
+                <tr>
+                  <td>206</td>
+                  <td>App 请求 QPS 过高被限制。</td>
+                  <td>降低请求频率，或联系 ZEGO 技术支持提高 QPS 限制阈值。</td>
+                </tr>
+                <tr>
+                  <td>50123</td>
+                  <td>当前处于有效期内的封禁规则条数超过限制。</td>
+                  <td>请减少规则条数。</td>
+                </tr>
+              </tbody>
+            </table>
+        Message:
+          type: string
+          example: success
+          description: 操作结果描述。
+        RequestId:
+          type: string
+          example: TestRequestId1675674022729915000
+          description: 请求 ID。
+        Data:
+          type: object
+          properties:
+            ExpireTime:
+              type: integer
+              format: int64
+              example: 1704282648
+              description: 封禁规则的过期时间，Unix 时间戳，单位：秒。
+

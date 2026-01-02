@@ -1,0 +1,151 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: Real-time Voice/Video API Support
+    email: support@zegocloud.com
+
+tags:
+  - name: room
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+paths:
+  /:
+    get:
+      tags:
+        - room
+      summary: SendBarrageMessage
+      description: |
+        调用本接口在房间内推送弹幕消息，一般用于房间内有大量消息收发且不需要保证消息可靠性的场景。
+
+        客户端接收消息使用 ZEGO Express SDK 回调接口：
+
+        | |ZegoExpress SDK|LiveRoom SDK|
+        |-|-|-|
+        |iOS/macOS| onIMRecvBarrageMessage | onRecvBigRoomMessage |
+        |Android| onIMRecvBarrageMessage | onRecvBigRoomMessage |
+        |Windows| onIMRecvBarrageMessage |  OnRecvBigRoomMessage |
+        |Web| IMRecvBarrageMessage | onRecvBigRoomMessage |
+
+        <Note title="调用频率限制">同一个 AppID 下所有房间：100 次/秒（测试环境：10 次/秒）</Note>
+        <Warning title="注意">
+        - 在服务端通过某个 UserId 发送消息时，使用相同 UserId 的客户端不会收到该条消息，即发送方不能接收到自己发送的消息。
+        - 如果开发者需要让房间内的所有用户都收到消息，调用本接口时，应传入该房间用户之外的 UserId。
+        - 使用的 UserId 无需登录该房间，即可直接发送消息。
+        </Warning>
+
+      operationId: send-barrage-message
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://rtc-api.zego.im?Action=SendBarrageMessage
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [SendBarrageMessage]
+          style: form
+          explode: true
+        # 公共参数
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        # 业务参数
+        - name: RoomId
+          in: query
+          description: 房间 ID。
+          required: true
+          schema:
+            type: string
+        - name: UserId
+          in: query
+          description: 发送方用户 ID。
+          required: true
+          schema:
+            type: string
+        - name: UserName
+          in: query
+          description: 发送方用户名（与 UserId 一一对应）。
+          required: false
+          schema:
+            type: string
+        - name: MessageCategory
+          in: query
+          description: 消息分类。1：系统消息。2：聊天消息。
+          required: true
+          schema:
+            type: integer
+            format: uint32
+            enum: [1, 2]
+        - name: MessageContent
+          in: query
+          description: 消息内容，长度不能超过 1024 个字节。使用时，需对其内容执行 URL 编码（UrlEncode）处理。
+          required: true
+          schema:
+            type: string
+            maxLength: 1024
+      responses:
+        "200":
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendBarrageMessageResponse'
+
+components:
+  schemas:
+    SendBarrageMessageResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int32
+          example: 0
+          description: |
+            返回码。
+            以下仅列出了接口业务逻辑相关的部分返回码，完整返回码请参考 [全局返回码](/real-time-video-server/api-reference/return-codes)。
+            <table>
+              <thead>
+                <tr>
+                  <th>返回码</th>
+                  <th>说明</th>
+                  <th>处理建议</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1008</td>
+                  <td>消息内容 MessageContent 为空。</td>
+                  <td>请重试，或联系 ZEGO 技术支持处理。</td>
+                </tr>
+                <tr>
+                  <td>50012</td>
+                  <td>消息长度超过限制。</td>
+                  <td>请检查参数长度是否超过限制。</td>
+                </tr>
+              </tbody>
+            </table>
+        Message:
+          type: string
+          example: success
+          description: 操作结果描述。
+        RequestId:
+          type: string
+          example: 2237080460466033406
+          description: 请求 ID。
+        Data:
+          type: object
+          properties:
+            MessageId:
+              type: string
+              example: "1_1611647493487_29"
+              description: 消息 ID。
+

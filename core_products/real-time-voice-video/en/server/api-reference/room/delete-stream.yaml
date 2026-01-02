@@ -1,0 +1,140 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: Real-time Voice/Video API Support
+    email: support@zegocloud.com
+
+tags:
+  - name: room
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+paths:
+  /:
+    get:
+      tags:
+        - room
+      summary: DeleteStream
+      description: |
+        调用本接口删除某个房间的指定流，与 [踢出房间用户](/real-time-video-server/api-reference/room/kick-out-user) 不同的是，这路流对应的用户是仍在房间内的。可通过本接口强制“下麦”某个用户，或者在“一起看”场景里删掉增加的 CDN 直播流。
+
+        本接口仅用于抛出房间内流删除的相关通知，不会执行实际的停止推流操作。开发者需要从自己的客户端，调用 `stopPublishingStream` 接口停止推流，才会停止向流媒体传输音视频数据；相应的拉流端，需要调用客户端 `stopPlayingStream` 接口停止拉流，才会停止从流媒体接收音视频数据。
+
+        客户端接收房间内流减少的通知使用 ZEGO Express SDK 回调接口：
+
+        | |ZegoExpress SDK|LiveRoom SDK|
+        |-|-|-|
+        |iOS/macOS| onRoomStreamUpdate | onStreamUpdated |
+        |Android| onRoomStreamUpdate | onStreamUpdated |
+        |Windows| onRoomStreamUpdate |  OnStreamUpdated |
+        |Web| roomStreamUpdate | onStreamUpdated |
+
+        <Note title="调用频率限制">同一个 AppID 下所有房间：10 次/秒（测试环境：1 次/秒）</Note>
+
+        <Warning title="注意">
+        调用本服务端接口时：
+        - 不建议使用与房间内实际用户相同的 UserId，避免与客户端 SDK 的流删除行为产生冲突。可以使用特定的名称标识为服务端行为，例如：userId = “Server-Administrator”。
+        - 如果使用了与房间内实际用户相同的 UserId（不建议）时，相应操作人 UserId 的客户端不会收到本服务端接口触发的流删除回调，房间内的其他用户会收到流删除回调。
+        </Warning>
+
+      operationId: delete-stream
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://rtc-api.zego.im?Action=DeleteStream
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [DeleteStream]
+          style: form
+          explode: true
+        # 公共参数
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        # 业务参数
+        - name: RoomId
+          in: query
+          description: 房间 ID。
+          required: true
+          schema:
+            type: string
+        - name: UserId
+          in: query
+          description: 用户 ID。
+          required: true
+          schema:
+            type: string
+        - name: UserName
+          in: query
+          description: 用户名。
+          required: false
+          schema:
+            type: string
+        - name: StreamId
+          in: query
+          description: 流 ID。
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteStreamResponse'
+
+components:
+  schemas:
+    DeleteStreamResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int32
+          example: 0
+          description: |
+            返回码。
+
+            以下仅列出了接口业务逻辑相关的部分返回码，完整返回码请参考 [全局返回码](/real-time-video-server/api-reference/return-codes)。
+
+            <table>
+              <thead>
+                <tr>
+                  <th>返回码</th>
+                  <th>说明</th>
+                  <th>处理建议</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>124</td>
+                  <td>删除流信息失败。</td>
+                  <td>请重试，或联系 ZEGO 技术支持处理。</td>
+                </tr>
+                <tr>
+                  <td>138</td>
+                  <td>流信息不存在。</td>
+                  <td>请重试，或联系 ZEGO 技术支持处理。</td>
+                </tr>
+              </tbody>
+            </table>
+        Message:
+          type: string
+          example: success
+          description: 操作结果描述。
+        RequestId:
+          type: string
+          example: TestRequestId167562222222915000
+          description: 请求 ID。
+

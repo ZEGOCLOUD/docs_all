@@ -1,0 +1,176 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: Real-time Voice/Video API Support
+    email: support@zegocloud.com
+
+tags:
+  - name: room
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+paths:
+  /:
+    get:
+      tags:
+        - room
+      summary: AddStream
+      description: |
+        调用本接口可向指定房间增加一路流。多用于“一起看”场景，比如将 CDN 的直播流添加到指定房间，从而让房间内的用户获取流 ID，实现服务端控制指定房间的直播内容。
+
+        <Warning title="注意">
+        - 往指定房间增加流时需要保证该房间是存在的，本接口无法创建房间。若您希望增加流时，自动创建对应房间，请联系 ZEGO 技术支持开启相关功能。
+        - 本接口一般与 [删除房间流](/real-time-video-server/api-reference/room/delete-stream) 配合使用，比如业务上需要停止向某个房间广播流。
+        </Warning>
+
+        本接口仅用于抛出房间内流增加的相关通知，不会执行实际的推流操作。开发者需要从自己的客户端，调用 `startPublishingStream` 接口进行推流（或其它的推流方式），该条被增加的流才能被 `startPlayingStream` 接口拉流到。
+
+        客户端接收房间内流增加的通知使用 ZEGO Express SDK 回调接口：
+
+        | |ZegoExpress SDK|LiveRoom SDK|
+        |-|-|-|
+        |iOS/macOS| onRoomStreamUpdate | onStreamUpdated |
+        |Android| onRoomStreamUpdate | onStreamUpdated |
+        |Windows| onRoomStreamUpdate |  OnStreamUpdated |
+        |Web| roomStreamUpdate | onStreamUpdated |
+
+        <Note title="调用频率限制">同一个 AppID 下所有房间：10 次/秒（测试环境：1 次/秒）</Note>
+        <Warning title="注意">
+        - 不建议使用与房间内实际用户相同的 UserId，避免与客户端 SDK 的流新增行为产生冲突。可以使用特定的名称标识为服务端行为，例如：userId = “Server-Administrator”。
+        - 如果使用了与房间内实际用户相同的 UserId（不建议）时，需要注意以下事项：
+          - 相应操作人 UserId 的客户端不会收到本服务端接口触发的流增加回调。
+          - 如果实际房间内用户 UserId 没有推流，会触发相应 StreamId 的流删除逻辑。
+          - 如果实际房间内用户 UserId 退出房间，会触发相应 StreamId 的流删除逻辑。
+        </Warning>
+
+      operationId: add-stream
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://rtc-api.zego.im?Action=AddStream
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [AddStream]
+          style: form
+          explode: true
+        # 公共参数
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        # 业务参数
+        - name: RoomId
+          in: query
+          description: 房间 ID。
+          required: true
+          schema:
+            type: string
+        - name: UserId
+          in: query
+          description: 用户 ID。
+          required: true
+          schema:
+            type: string
+        - name: UserName
+          in: query
+          description: 用户名。
+          required: false
+          schema:
+            type: string
+        - name: StreamId
+          in: query
+          description: 流 ID，不超过 256 字节。
+          required: true
+          schema:
+            type: string
+            maxLength: 256
+        - name: StreamTitle
+          in: query
+          description: |
+            流标题，不超过 127 字节。
+            使用时，需对其内容执行 URL 编码（UrlEncode）处理。
+          required: false
+          schema:
+            type: string
+            maxLength: 127
+        - name: ExtraInfo
+          in: query
+          description: 流附加信息，不超过 1024 字节。
+          required: false
+          schema:
+            type: string
+            maxLength: 1024
+        - name: CensorFlag
+          in: query
+          description: |
+            是否允许送审标识。审核房间流列表时，当前流是否允许审核：0 表示允许，1 表示不允许。
+            > **📌 重要说明**
+            >
+            > - 当设置为不允许送审时，审核服务商将不会拉取此条流送审。
+            >
+            > - 在使用流注入方式实现跨房间 PK 的业务场景时，建议将此字段设置为"不允许"，以避免同一条流在多个房间内被重复送审。
+          required: false
+          schema:
+            type: integer
+            format: int32
+            enum: [0, 1]
+            default: 0
+      responses:
+        "200":
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddStreamResponse'
+
+components:
+  schemas:
+    AddStreamResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int32
+          example: 0
+          description: |
+            返回码。以下仅列出了接口业务逻辑相关的部分返回码，完整返回码请参考 [全局返回码](/real-time-video-server/api-reference/return-codes)。
+
+            <table>
+              <thead>
+                <tr>
+                  <th>返回码</th>
+                  <th>说明</th>
+                  <th>处理建议</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>123</td>
+                  <td>设置流信息失败。</td>
+                  <td>请重试，或联系 ZEGO 技术支持处理。</td>
+                </tr>
+                <tr>
+                  <td>1012</td>
+                  <td>多个用户操作同一个流。</td>
+                  <td>请检查逻辑。</td>
+                </tr>
+              </tbody>
+            </table>
+        Message:
+          type: string
+          example: success
+          description: 操作结果描述。
+        RequestId:
+          type: string
+          example: 4443515903608307334
+          description: 请求 ID。
+
