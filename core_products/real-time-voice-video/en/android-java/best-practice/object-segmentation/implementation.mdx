@@ -2,30 +2,30 @@
 articleID: 17832
 date: "2023-07-26"
 ---
-# 实现流程
+# Implementation Process
 
 - - -
 
-## 概述
+## Overview
 
-本篇文档介绍利用 ZIM SDK 与 ZEGO Express SDK中的主体分割与 Alpha 数据传输与渲染能力，实现多人同场景实时视频互动及房间内的麦位管理的原理和步骤。
+This document introduces the principles and steps of using the object segmentation and Alpha data transmission and rendering capabilities in ZIM SDK and ZEGO Express SDK to implement multi-user real-time video interaction in the same scenario and mic position management in the Room.
 
-大多数的视频互动，参与互动的用户各自被矩形视频区域分隔，画面中主体占画面的比例往往不到一半。这种情况下互动的体验，不同用户不同的背景容易给整体画面带来杂乱的观感，难以形成沉浸式的互动体验，如下图所示：
+In most video interactions, the users participating in the interaction are separated by their respective rectangular video areas, and the proportion of the main body in the picture is often less than half. In this case, the interaction experience, different users' different backgrounds can easily bring a messy visual experience to the overall picture, making it difficult to form an immersive interaction experience, as shown in the following figure:
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/group_video_chat.jpeg" /></Frame>
 
-为了提升互动体验，ZEGO Express SDK 除主体分割能力外，开创性地提供了 Alpha 数据传输功能。原理是将原始视频和经主体分割得到的 Alpha 信息拼接在原视频的下方，得到一个高 * 2 的视频。经过编码后传输给拉流端。拉流端会分离原始视频和 Alpha 数据，使用 Alpha 数据做渲染，可以形成视觉上只显示画面中的主体的效果。
+To improve the interaction experience, in addition to the object segmentation capability, ZEGO Express SDK innovatively provides the Alpha data transmission feature. The principle is to splice the original video and the Alpha information obtained by object segmentation below the original video to obtain a video with height * 2. After encoding, it is transmitted to the playing stream end. The playing stream end will separate the original video and Alpha data, and use the Alpha data for rendering, which can form an effect that visually only displays the main body in the picture.
 
-如下图所示，推流端的原始视频下方的 Alpha 信息用黑色代表这部分内容是透明的。拉流端在解码后，将黑色部分归一化为 Alpha 数据，便可以将对应的原视频画面对应的区域渲染成透明效果，在视图上只会展示人的主体部分，不会展示用户的真实背景。
+As shown in the following figure, the Alpha information below the original video of the publishing stream end uses black to represent that this part of the content is transparent. After decoding at the playing stream end, the black part is normalized into Alpha data, so that the corresponding area of the original video picture can be rendered into a transparent effect. On the view, only the main body part of the person will be displayed, and the user's real background will not be displayed.
 
-如需了解渲染部分的实现原理，请参考 [播放透明礼物特效](/real-time-video-android-java/other/play-transparent-gift-effects)。
+For information on the implementation principle of the rendering part, please refer to [Play Transparent Gift Effects](/real-time-video-android-java/other/play-transparent-gift-effects).
 
 <table>
 
 <tbody><tr>
-<th>推流画面</th>
-<th>拉流画面</th>
-<th>渲染后的显示效果</th>
+<th>Publishing Stream Picture</th>
+<th>Playing Stream Picture</th>
+<th>Display Effect After Rendering</th>
 </tr>
 <tr>
 <td><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/alphaLayoutTypeBottom.png" /></Frame></td>
@@ -34,107 +34,107 @@ date: "2023-07-26"
 </tr>
 </tbody></table>
 
-通过这种方式，可以将多个用户的主体渲染到同一个背景图或者背景视频上，虽然他们身处不同空间，依然可以在同一个场景下实时互动。
+In this way, the main bodies of multiple users can be rendered onto the same background picture or background video. Although they are in different spaces, they can still interact in real time in the same scenario.
 
-## 应用场景
+## Application Scenarios
 
 <table>
 
 <tbody><tr>
-<th>应用场景</th>
-<th>沉浸式会议、一起看电影</th>
-<th>主播连麦</th>
-<th>大型活动，如新闻发布会等</th>
+<th>Application Scenario</th>
+<th>Immersive Meeting, Watch Movies Together</th>
+<th>Host Co-hosting</th>
+<th>Large Events, such as Press Conferences, etc.</th>
 </tr>
 <tr>
-<th>图示</th>
+<th>Diagram</th>
 <td><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/videoOS_scene2.png" /></Frame></td>
 <td><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/scene_2.png" /></Frame></td>
 <td><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/videoOS_scene1.png" /></Frame></td>
 </tr>
 </tbody></table>
 
-## 方案架构
+## Solution Architecture
 
-本最佳实践的房间内业务的整体架构如下图所示。由于开发者业务后台仅管理房间列表，不涉及房间内业务，因此没有在下图中体现。其中：
+The overall architecture of the in-Room business of this best practice is shown in the following figure. Since the developer's business backend only manages the Room list and does not involve in-Room business, it is not reflected in the following figure. Where:
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/structure.jpeg" /></Frame>
 
-## 前提条件
+## Prerequisites
 
-- 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目管理 - 项目信息](/console/project-info)。
-- 已联系 ZEGO 商务人员，开通主体分割权限。
-- 已联系 ZEGO 技术支持，获取包含主体分割功能的实时音视频 SDK，并参考实时音视频的 [快速开始 - 集成](/real-time-video-android-java/quick-start/integrating-sdk) 集成 SDK。**如果您的项目曾集成了官网版本的实时音视频 SDK，需要替换。**
-- 已在 [ZEGO 控制台](https://console.zego.im) 自助开通 ZIM 服务（详情请参考控制台的 [服务配置 - 即时通讯 - 开通服务](/console/service-configuration/im/activate-service)），若无法开通 ZIM 服务，请联系 ZEGO 技术支持开通。
-- 已集成 ZIM SDK，详情请参考 [快速开始 - 实现基本收发消息](/zim-android/send-and-receive-messages#3-实现基本收发消息) 的 “集成 SDK”。
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Management - Project Information](/console/project-info).
+- You have contacted ZEGO business personnel to open the object segmentation permission.
+- You have contacted ZEGOCLOUD Technical Support to obtain the Video Call SDK containing the object segmentation feature, and integrated the SDK by referring to the Video Call's [Quick Start - Integration](/real-time-video-android-java/quick-start/integrating-sdk). **If your project has integrated the official website version of the Video Call SDK, you need to replace it.**
+- You have opened the ZIM service by yourself in the [ZEGOCLOUD Console](https://console.zegocloud.com) (for details, please refer to the Console's [Service Configuration - Instant Messaging - Open Service](/console/service-configuration/im/activate-service)). If you cannot open the ZIM service, please contact ZEGOCLOUD Technical Support to open it.
+- You have integrated the ZIM SDK. For details, please refer to "Integrate SDK" in [Quick Start - Implement Basic Send and Receive Messages](/zim-android/send-and-receive-messages#3-实现基本收发消息).
 
-## 实现流程
+## Implementation Process
 
-实现流程主要包含 6 个步骤，即初始化 SDK、加入房间、管理麦位、使用主体分割、拉流和退出房间。
+The implementation process mainly includes 6 steps, namely initializing SDK, joining Room, managing mic positions, using object segmentation, playing stream, and leaving Room.
 
-### 初始化 SDK
+### Initialize SDK
 
-- 在管理房间内的麦位之前，需要先初始化 ZIM SDK，并设置通知回调，以便监听 ZIM 事件，接口调用详情请参考 [即时通讯 - 实现基本消息收发](/zim-android/send-and-receive-messages#3-实现基本收发消息) 的 “2. 创建 ZIM 实例” 和 “3. 使用 EventHandler 协议”。
-- 在实现主体分割之前，需要先初始化 ZEGO Express SDK，同时设置通知回调，以便监听 Express 事件，接口调用详情请参考 [实时音视频 - 实现视频通话](/real-time-video-android-java/quick-start/implementing-video-call#初始化) 的 “初始化”。
+- Before managing mic positions in the Room, you need to initialize the ZIM SDK first and set the notification callback to listen for ZIM events. For interface call details, please refer to "2. Create ZIM Instance" and "3. Use EventHandler Protocol" in [Instant Messaging - Implement Basic Message Send and Receive](/zim-android/send-and-receive-messages#3-实现基本收发消息).
+- Before implementing object segmentation, you need to initialize the ZEGO Express SDK first and set the notification callback at the same time to listen for Express events. For interface call details, please refer to "Initialization" in [Video Call - Implementing Video Call](/real-time-video-android-java/quick-start/implementing-video-call#初始化).
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/init_Android.png" /></Frame>
 
-### 加入房间
+### Join Room
 
-- 为实现推流，用户需要先登录 RTC 房间，接口调用请参考 [实时音视频 - 实现视频通话](/real-time-video-android-java/quick-start/implementing-video-call#登录房间) 的 “登录房间”。
-- 本最佳实践通过修改 ZIM 房间属性实现用户上下麦的业务逻辑，因此，用户需要：
-    1. 登录 ZIM 服务，接口调用请参考 [即时通讯 - 实现基本消息收发](/zim-android/send-and-receive-messages#4-登录-zim) 的 “登录 ZIM”。
-    2. 用户需要创建或加入 ZIM 房间，详情请参考 [即时通讯 - 房间管理](/zim-android/guides/room/manage-rooms#创建房间加入房间) 的 “创建房间、加入房间”。
+- To implement publishing stream, users need to login to the RTC Room first. For interface calls, please refer to "Login Room" in [Video Call - Implementing Video Call](/real-time-video-android-java/quick-start/implementing-video-call#登录房间).
+- This best practice implements the business logic of users getting on and off the mic by modifying ZIM Room attributes. Therefore, users need to:
+    1. Login to the ZIM service. For interface calls, please refer to "Login ZIM" in [Instant Messaging - Implement Basic Message Send and Receive](/zim-android/send-and-receive-messages#4-登录-zim).
+    2. Users need to create or join a ZIM Room. For details, please refer to "Create Room, Join Room" in [Instant Messaging - Room Management](/zim-android/guides/room/manage-rooms#创建房间加入房间).
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/joinRoom_Android.png" /></Frame>
 
-### 管理麦位
+### Manage Mic Positions
 
-- 加入 ZIM 房间后，用户可通过查询房间所有属性了解房间内的麦位信息，接口调用详情请参考 [即时通讯 - 房间属性管理](/zim-android/guides/room/room-properties#获取房间属性) 的 “获取房间属性”。
-- 用户如需上麦，可通过修改房间属性，修改麦位信息，接口调用详情请参考 [即时通讯 - 房间属性管理](/zim-android/guides/room/room-properties#获取房间属性) 的 “设置房间属性”。
+- After joining the ZIM Room, users can understand the mic position information in the Room by querying all Room attributes. For interface call details, please refer to "Get Room Attributes" in [Instant Messaging - Room Attribute Management](/zim-android/guides/room/room-properties#获取房间属性).
+- If users need to get on the mic, they can modify the mic position information by modifying Room attributes. For interface call details, please refer to "Set Room Attributes" in [Instant Messaging - Room Attribute Management](/zim-android/guides/room/room-properties#获取房间属性).
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/micManagement_Android.png" /></Frame>
 
-### 使用主体分割
+### Use Object Segmentation
 
-1. 为在推流时传输经主体分割后的图像，需要设置透明通道，请参考 [实时音视频 - 主体分割](/real-time-video-android-java/video/object-segmentation#7可选使用-alpha-通道传输分割出的主体) 的 “使用 Alpha 通道传输分割出的主体”，了解如何调用 [enableAlphaChannelVideoEncoder](@enableAlphaChannelVideoEncoder) 设置透明通道。
+1. To transmit the image after object segmentation when publishing stream, you need to set the alpha channel. Please refer to "Use Alpha Channel to Transmit Segmented Main Body" in [Video Call - Object Segmentation](/real-time-video-android-java/video/object-segmentation#7可选使用-alpha-通道传输分割出的主体) to learn how to call [enableAlphaChannelVideoEncoder](@enableAlphaChannelVideoEncoder) to set the alpha channel.
 
-2. 由于手机前置摄像头捕捉的画面与实际左右相反，需要开启屏幕镜像，以便预览或拉流时，获取正确方向画面，接口调用详情请参考 [实时音视频 - 常用视频配置](/real-time-video-android-java/video/common-video-configuration#3-设置镜像模式) 的 “设置镜像模式”。
+2. Since the picture captured by the mobile phone's front camera is opposite to the actual left and right, you need to enable screen mirroring to obtain the correct direction picture when previewing or playing stream. For interface call details, please refer to "Set Mirror Mode" in [Video Call - Common Video Configuration](/real-time-video-android-java/video/common-video-configuration#3-设置镜像模式).
 
-3. 出于旋转手机屏幕时画面的美观角度，需要设置采集视频的朝向，接口调用详情请参考 [实时音视频 - 视频采集旋转](/real-time-video-android-java/video/video-capture-rotation)。
+3. For the aesthetic angle of the picture when rotating the mobile phone screen, you need to set the orientation of the captured video. For interface call details, please refer to [Video Call - Video Capture Rotation](/real-time-video-android-java/video/video-capture-rotation).
 
-4. 如需预览本端的画面，需先将用于渲染的 View 的 backgroundColor 属性为 clearColor（透明色），接口调用详情请参考 [实时音视频 - 主体分割](/real-time-video-android-java/video/object-segmentation#2-对-view-进行特殊设置) 的 “对 view 进行特殊设置”。
+4. If you need to preview the local picture, you need to set the backgroundColor property of the View used for rendering to clearColor (transparent color). For interface call details, please refer to "Make Special Settings for View" in [Video Call - Object Segmentation](/real-time-video-android-java/video/object-segmentation#2-对-view-进行特殊设置).
 
-    预览和推送本端画面，接口调用详情请参考 [实时音视频 - 主体分割](/real-time-video-android-java/video/object-segmentation#8-开始预览和推流) 的 “开始预览和推流”。
+    Preview and publish local picture. For interface call details, please refer to "Start Preview and Publishing Stream" in [Video Call - Object Segmentation](/real-time-video-android-java/video/object-segmentation#8-开始预览和推流).
 
-5. 开启主体分割，接收分割结果，接口调用详情请参考 [实时音视频 - 主体分割](/real-time-video-android-java/video/object-segmentation#5-监听主体分割状态回调) 的 “监听主体分割状态回调” 和 “使用主体分割实现多种业务功能”。
+5. Enable object segmentation and receive segmentation results. For interface call details, please refer to "Listen to Object Segmentation Status Callback" and "Use Object Segmentation to Implement Multiple Business Functions" in [Video Call - Object Segmentation](/real-time-video-android-java/video/object-segmentation#5-监听主体分割状态回调).
 
-    <Note title="说明">
-    由于 RTC 房间仅与推流有关，所以，开发者也可在 RTC 房间外预览主体分割的效果。
+    <Note title="Notes">
+    Since the RTC Room is only related to publishing stream, developers can also preview the effect of object segmentation outside the RTC Room.
     </Note>
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/previewAndPublishing_Android.png" /></Frame>
 
 
-### 拉流
+### Playing Stream
 
-用户收到 ZIM 事件通知，得知房间内有人上麦后：
-1. 将用于渲染的 TextureView 的 opaque 属性为 false（透明色），接口调用详情请参考 [实时音视频 - 主体分割](/real-time-video-android-java/video/object-segmentation#2-对-view-进行特殊设置) 的 “对 view 进行特殊设置”。
+After the user receives the ZIM event notification and learns that someone has gotten on the mic in the Room:
+1. Set the opaque property of the TextureView used for rendering to false (transparent color). For interface call details, please refer to "Make Special Settings for View" in [Video Call - Object Segmentation](/real-time-video-android-java/video/object-segmentation#2-对-view-进行特殊设置).
 
-    <Note title="说明">
-    如在预览时实现了对 TextureView 的设置，则可省略此步骤。
+    <Note title="Notes">
+    If the settings for TextureView have been implemented during preview, this step can be omitted.
     </Note>
 
-2. 拉取对方已实现主体分割的视频流，从而实现两个用户处在 “同一空间” 面对面对话的视觉效果。接口调用详情请参考 [实时音视频 - 主体分割](/real-time-video-android-java/video/object-segmentation#9可选在拉流端设置-alpha-通道渲染并拉流) 的 “开始拉流”。
-3. 如需结束拉流，接口调用详情可参考 [实时音视频 - 实现视频通话](/real-time-video-android-java/quick-start/implementing-video-call#停止音视频通话) 的 “停止音视频通话”。
+2. Play the video stream that has implemented object segmentation from the other party, thereby achieving the visual effect of two users having a face-to-face dialogue in "the same space". For interface call details, please refer to "Start Playing Stream" in [Video Call - Object Segmentation](/real-time-video-android-java/video/object-segmentation#9可选在拉流端设置-alpha-通道渲染并拉流).
+3. If you need to stop playing stream, for interface call details, please refer to "Stop Audio and Video Call" in [Video Call - Implementing Video Call](/real-time-video-android-java/quick-start/implementing-video-call#停止音视频通话).
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/playingStream_Android.png" /></Frame>
 
-### 退出房间
+### Leave Room
 
-1. 停止预览和推流，接口调用详情请参考 [实时音视频 - 实现视频通话](/real-time-video-android-java/quick-start/implementing-video-call#停止音视频通话) 的 “停止音视频通话”。
-2. 离开 ZIM 房间，接口调用详情请参考 [即时通讯 - 房间管理](/zim-android/guides/room/manage-rooms#离开房间) 的 “离开房间”。
-3. 退出 RTC 房间，接口调用详情请参考 [实时音视频 - 实现视频通话](/real-time-video-android-java/quick-start/implementing-video-call#停止音视频通话) 的 “停止音视频通话”。
+1. Stop preview and publishing stream. For interface call details, please refer to "Stop Audio and Video Call" in [Video Call - Implementing Video Call](/real-time-video-android-java/quick-start/implementing-video-call#停止音视频通话).
+2. Leave the ZIM Room. For interface call details, please refer to "Leave Room" in [Instant Messaging - Room Management](/zim-android/guides/room/manage-rooms#离开房间).
+3. Leave the RTC Room. For interface call details, please refer to "Stop Audio and Video Call" in [Video Call - Implementing Video Call](/real-time-video-android-java/quick-start/implementing-video-call#停止音视频通话).
 
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/logoutRoom_iOS.png" /></Frame>

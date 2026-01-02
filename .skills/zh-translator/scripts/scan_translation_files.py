@@ -36,9 +36,19 @@ def scan_directory(directory: str, file_types: List[str] = None) -> List[Dict[st
             # 只处理中文文档（路径中包含 /zh/ 的）
             if '/zh/' in str(file_path):
                 # 计算文件行数
+                line_count = 0
+                has_doctype_api = False
+
                 try:
                     with open(file_path, 'r', encoding='utf-8') as f:
-                        line_count = sum(1 for _ in f)
+                        lines = f.readlines()
+                        line_count = len(lines)
+
+                        # 检查是否包含 docType: API
+                        for line in lines[:20]:  # 只检查前 20 行
+                            if line.strip() == 'docType: API':
+                                has_doctype_api = True
+                                break
                 except Exception:
                     line_count = 0
 
@@ -47,64 +57,80 @@ def scan_directory(directory: str, file_types: List[str] = None) -> List[Dict[st
                     'relative_path': str(file_path.relative_to(dir_path)),
                     'suffix': file_path.suffix,
                     'line_count': line_count,
-                    'size_kb': file_path.stat().st_size / 1024
+                    'size_kb': file_path.stat().st_size / 1024,
+                    'has_doctype_api': has_doctype_api  # 新增字段标识是否为 API 文件
                 })
 
     return files
 
 
-def identify_api_files(files: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+def identify_api_files(files: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    识别 API 文件对（同名 mdx 和 yaml）
+    识别 API 文件对（同名 mdx 和 yaml）以及 docType: API 文件
 
     规则：
-    - 在 server 平台的 api-reference 目录下
-    - 存在同名的 .mdx 和 .yaml 文件
+    - 包含 docType: API 的文件自动跳过
+    - 在任意目录下存在同名的 .mdx 和 .yaml 文件
     - 这类文件只需要翻译 .yaml，.mdx 是自动生成的
 
     Returns:
         dict: {
-            'api_only_yaml': [...],  # 只需要翻译 yaml 的文件
-            'regular_files': [...]   # 普通文件
+            'doctype_api_files': [...],      # docType: API 文件（自动跳过）
+            'mdx_yaml_pairs': {              # 同名 mdx+yaml 文件对
+                'yaml_files': [...],         # 需要翻译的 yaml
+                'mdx_files': [...]           # 跳过的 mdx（自动生成）
+            },
+            'regular_files': [...]           # 普通文件
         }
     """
-    api_pairs = defaultdict(list)
     result = {
-        'api_only_yaml': [],
+        'doctype_api_files': [],  # docType: API 文件
+        'mdx_yaml_pairs': {
+            'yaml_files': [],  # 需要翻译的 yaml
+            'mdx_files': []    # 跳过的 mdx
+        },
         'regular_files': []
     }
 
-    # 按 basename 分组
+    # 第一步：分离 docType: API 文件
+    non_doctype_files = []
     for file_info in files:
-        file_path = file_info['path']
-        file_path_obj = Path(file_path)
-
-        # 检查是否在 server 平台的 api-reference 目录下
-        if '/server/' in file_path and '/api-reference/' in file_path:
-            basename = file_path_obj.stem
-            api_pairs[basename].append(file_info)
+        if file_info.get('has_doctype_api', False):
+            result['doctype_api_files'].append(file_info)
         else:
-            result['regular_files'].append(file_info)
+            non_doctype_files.append(file_info)
 
-    # 对于有同名 mdx 和 yaml 的文件，只保留 yaml
-    for basename, file_list in api_pairs.items():
-        yaml_files = [f for f in file_list if f['suffix'] == '.yaml']
-        mdx_files = [f for f in file_list if f['suffix'] == '.mdx']
+    # 第二步：在所有文件中查找同名的 mdx 和 yaml 对（不限于 api-reference 目录）
+    file_map = defaultdict(lambda: {'.mdx': None, '.yaml': None})
 
-        if yaml_files and mdx_files:
-            # 有成对的文件，只保留 yaml
-            result['api_only_yaml'].extend(yaml_files)
-        elif yaml_files:
+    for file_info in non_doctype_files:
+        file_path_obj = Path(file_info['path'])
+        basename = file_path_obj.stem  # 不带扩展名的文件名
+        suffix = file_info['suffix']
+
+        if suffix in ['.mdx', '.yaml']:
+            file_map[basename][suffix] = file_info
+
+    # 第三步：分类文件
+    for basename, file_dict in file_map.items():
+        mdx_file = file_dict['.mdx']
+        yaml_file = file_dict['.yaml']
+
+        if mdx_file and yaml_file:
+            # 有成对的 mdx 和 yaml 文件
+            result['mdx_yaml_pairs']['yaml_files'].append(yaml_file)
+            result['mdx_yaml_pairs']['mdx_files'].append(mdx_file)
+        elif yaml_file:
             # 只有 yaml，按普通文件处理
-            result['regular_files'].extend(yaml_files)
-        else:
-            # 只有 mdx 或其他情况，按普通文件处理
-            result['regular_files'].extend(file_list)
+            result['regular_files'].append(yaml_file)
+        elif mdx_file:
+            # 只有 mdx，按普通文件处理
+            result['regular_files'].append(mdx_file)
 
     return result
 
 
-def create_translation_batches(files: List[Dict[str, Any]], lines_per_batch: int = 500) -> List[Dict[str, Any]]:
+def create_translation_batches(files: List[Dict[str, Any]], lines_per_batch: int = 5000) -> List[Dict[str, Any]]:
     """
     将文件组织成翻译批次
 
@@ -182,25 +208,48 @@ def print_summary(result: Dict[str, Any]):
     print("📊 翻译扫描结果")
     print("="*70)
 
-    # API 文件统计
-    api_files = result['api_only_yaml']
-    print(f"\n🔧 API 文件（只需翻译 YAML，MDX 自动生成）：{len(api_files)} 个")
-    if api_files:
-        api_lines = sum(f['line_count'] for f in api_files)
-        print(f"   总行数：{api_lines} 行")
+    # docType: API 文件统计
+    doctype_api_files = result.get('doctype_api_files', [])
+    print(f"\n⏭️  docType: API 文件（自动跳过）：{len(doctype_api_files)} 个")
+    if doctype_api_files:
+        doctype_lines = sum(f['line_count'] for f in doctype_api_files)
+        print(f"   总行数：{doctype_lines} 行")
+        # 显示前 5 个文件
+        for f in doctype_api_files[:5]:
+            print(f"   - {f['relative_path']} ({f['line_count']} 行)")
+        if len(doctype_api_files) > 5:
+            print(f"   ... 还有 {len(doctype_api_files) - 5} 个文件")
+
+    # 同名 mdx+yaml 文件对统计
+    mdx_yaml_pairs = result.get('mdx_yaml_pairs', {})
+    yaml_to_translate = mdx_yaml_pairs.get('yaml_files', [])
+    mdx_to_skip = mdx_yaml_pairs.get('mdx_files', [])
+
+    if yaml_to_translate:
+        print(f"\n🔗 同名 MDX+YAML 文件对：{len(yaml_to_translate)} 对")
+        yaml_lines = sum(f['line_count'] for f in yaml_to_translate)
+        mdx_lines = sum(f['line_count'] for f in mdx_to_skip)
+        print(f"   ✅ 需翻译 YAML：{len(yaml_to_translate)} 个 ({yaml_lines} 行)")
+        print(f"   ⏭️  跳过 MDX（自动生成）：{len(mdx_to_skip)} 个 ({mdx_lines} 行)")
+        # 显示前 5 对文件
+        for i, (yaml_file, mdx_file) in enumerate(zip(yaml_to_translate[:5], mdx_to_skip[:5])):
+            print(f"   {i+1}. {yaml_file['relative_path']} → {yaml_file['line_count']} 行")
+            print(f"      {mdx_file['relative_path']} → 跳过")
+        if len(yaml_to_translate) > 5:
+            print(f"   ... 还有 {len(yaml_to_translate) - 5} 对文件")
 
     # 普通文件统计
     regular_files = result['regular_files']
-    md_files = [f for f in regular_files if f['suffix'] == '.md']
+    md_files = [f for f in regular_files if f['suffix'] == '.md' or f['suffix'] == '.mdx']
     yaml_files = [f for f in regular_files if f['suffix'] == '.yaml']
 
-    print(f"\n📄 Markdown 文件：{len(md_files)} 个")
     if md_files:
+        print(f"\n📄 Markdown/MDX 文件：{len(md_files)} 个")
         md_lines = sum(f['line_count'] for f in md_files)
         print(f"   总行数：{md_lines} 行")
 
-    print(f"\n📋 YAML 文件（非 API）：{len(yaml_files)} 个")
     if yaml_files:
+        print(f"\n📋 YAML 文件：{len(yaml_files)} 个")
         yaml_lines = sum(f['line_count'] for f in yaml_files)
         print(f"   总行数：{yaml_lines} 行")
 
@@ -257,7 +306,7 @@ def main():
         sys.exit(1)
 
     directory = sys.argv[1]
-    lines_per_batch = int(sys.argv[2]) if len(sys.argv) > 2 else 500
+    lines_per_batch = int(sys.argv[2]) if len(sys.argv) > 2 else 5000
 
     print(f"🔍 扫描目录：{directory}")
     print(f"⚙️  每批目标行数：{lines_per_batch}")
@@ -274,22 +323,34 @@ def main():
     categorized = identify_api_files(files)
 
     # 合并所有需要翻译的文件
-    all_files = categorized['api_only_yaml'] + categorized['regular_files']
+    mdx_yaml_pairs = categorized.get('mdx_yaml_pairs', {})
+    yaml_files = mdx_yaml_pairs.get('yaml_files', [])
+    regular_files = categorized['regular_files']
 
-    # 创建翻译批次
-    batches = create_translation_batches(all_files, lines_per_batch)
+    files_to_translate = yaml_files + regular_files
+    all_files = (
+        categorized.get('doctype_api_files', []) +
+        mdx_yaml_pairs.get('yaml_files', []) +
+        mdx_yaml_pairs.get('mdx_files', []) +
+        regular_files
+    )
+
+    # 创建翻译批次（只翻译非 docType: API 的文件）
+    batches = create_translation_batches(files_to_translate, lines_per_batch)
 
     # 计算统计信息
-    total_lines = sum(f['line_count'] for f in all_files)
+    total_lines = sum(f['line_count'] for f in files_to_translate)
 
     # 构建结果
     result = {
         'directory': directory,
-        'total_files': len(all_files),
+        'total_files': len(files_to_translate),
         'total_lines': total_lines,
-        'api_only_yaml': categorized['api_only_yaml'],
-        'regular_files': categorized['regular_files'],
+        'doctype_api_files': categorized.get('doctype_api_files', []),
+        'mdx_yaml_pairs': categorized.get('mdx_yaml_pairs', {}),
+        'regular_files': regular_files,
         'all_files': all_files,
+        'files_to_translate': files_to_translate,
         'batches': batches,
         'lines_per_batch': lines_per_batch
     }
