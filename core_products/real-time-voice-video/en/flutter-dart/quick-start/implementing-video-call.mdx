@@ -2,122 +2,122 @@
 articleID: 7634
 date: "2025-01-21"
 ---
-# 实现视频通话
+# Implementing Video Call
 
 ---
 
 
-## 功能简介
+## Feature Introduction
 
-<Warning title="注意">
+<Warning title="Note">
 
 
-本文档适用于以下平台： Android、iOS、Windows、Web、Linux。
+This document applies to the following platforms: Android, iOS, Windows, Web, Linux.
 
 </Warning>
 
 
-本文将介绍如何快速实现一个简单的实时音视频通话。
+This document will introduce how to quickly implement a simple real-time audio and video call.
 
-相关概念解释:
+Explanation of related concepts:
 
-- ZEGO Express SDK：由 ZEGO 提供的实时音视频 SDK，能够为开发者提供便捷接入、高清流畅、多平台互通、低延迟、高并发的音视频服务。
-- 流：指一组按指定编码格式封装，不断发送中的音视频数据。一个用户可以同时推多条流（例如，一条推摄像头数据一条推屏幕共享数据）也可以同时拉多条流。每条流都由一个流 ID（streamID）标识。
-- 推流：把采集阶段封包好的音视频数据流推送到 ZEGO 实时音视频云的过程。
-- 拉流：从 ZEGO 实时音视频云将已有音视频数据流拉取播放的过程。
-- 房间：是 ZEGO 提供的音视频空间服务，用于组织用户群，同一房间内的用户可以互相收发实时音视频及消息。
-    1. 用户需要先登录某个房间，才能进行推流、拉流操作。
-    2. 用户只能收到自己所在房间内的相关消息（用户进出、音视频流变化等）。
-    3. 每个房间由一个 AppID 内唯一的 AppID 标识。所所有使用同一个 AppID 登录房间的用户即属于同一个房间。
-
-
-
-更多相关概念请参考 [术语说明](/glossary/term-explanation)。
+- ZEGO Express SDK: A real-time audio and video SDK provided by ZEGO, providing developers with convenient integration, high definition and smoothness, multi-platform interoperability, low latency, and high concurrency audio and video services.
+- Stream: Refers to a group of audio and video data that is continuously being sent, encapsulated in a specified encoding format. A user can publish multiple streams at the same time (for example, one for camera data and one for screen sharing data) and can also play multiple streams at the same time. Each stream is identified by a stream ID (streamID).
+- Publish stream: The process of pushing the packaged audio and video data stream from the capture stage to the ZEGO real-time audio and video cloud.
+- Play stream: The process of pulling and playing existing audio and video data streams from the ZEGO real-time audio and video cloud.
+- Room: An audio and video space service provided by ZEGO, used to organize user groups. Users in the same room can send and receive real-time audio and video and messages to each other.
+    1. Users need to login to a room first before they can publish/play streams.
+    2. Users can only receive related messages in the room they are in (user join/leave, audio and video stream changes, etc.).
+    3. Each room is identified by a unique AppID within an AppID. All users who use the same AppID to login to the room belong to the same room.
 
 
-## 前提条件
 
-在实现基本的实时音视频功能之前，请确保：
+For more related concepts, please refer to [Term Explanation](/glossary/term-explanation).
 
-- 已在项目中集成 ZEGO Express SDK，实现基本的实时音视频功能，详情请参考 [快速开始 - 集成](/real-time-video-flutter/quick-start/integrating-sdk)。
-- 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目管理](/console/project-info) 中的“项目信息”。
 
-<Warning title="注意">
+## Prerequisites
 
-SDK 同时也支持 Token 鉴权，若您对项目安全性有更高要求，建议您升级鉴权方式，详情请参考 [如何从 AppSign 鉴权升级为 Token 鉴权](http://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo)。
+Before implementing basic real-time audio and video functions, please ensure:
+
+- ZEGO Express SDK has been integrated into the project to implement basic real-time audio and video functions. For details, please refer to [Quick Start - Integration](/real-time-video-flutter/quick-start/integrating-sdk).
+- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com), and a valid AppID and AppSign have been applied for. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+
+<Warning title="Note">
+
+The SDK also supports Token authentication. If you have higher requirements for project security, it is recommended to upgrade the authentication method. For details, please refer to [How to upgrade from AppSign authentication to Token authentication](https://www.zegocloud.com/docs/faq/token_upgrade?product=ExpressVideo).
 </Warning>
 
 
-## 使用步骤
+## Usage Steps
 
-用户通过 ZEGO Express SDK 进行视频通话的基本流程为：
+The basic process for users to make video calls through ZEGO Express SDK is as follows:
 
-用户 A、B  加入房间，用户 B 预览并将音视频流推送到 ZEGO 云服务（推流），用户 A 收到用户 B 推送音视频流的通知之后，在通知中播放用户 B 的音视频流（拉流）。
+User A and B join the room. User B previews and publishes the audio and video stream to the ZEGO cloud service (Publish stream). After user A receives the notification of user B's published audio and video stream, user A plays user B's audio and video stream in the notification (Play stream).
 
 <Frame width="512" height="auto" caption="">
   <img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/common_usage_new.png" />
 </Frame>
 
-整个推拉流过程的 API 调用时序如下图：
+The API call sequence of the entire publish/play process is as follows:
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml_createEngineWithProfile_2.png" /></Frame>
 
 <a id="CreateEngine"> </a>
 
-### 1 创建引擎
+### 1 Create Engine
 
-**1. 创建界面（可选）**
+**1. Create Interface (Optional)**
 
-<Accordion title="添加界面元素" defaultOpen="false">
-在开始之前，推荐开发者添加以下界面元素，方便实现基本的实时音视频功能。
+<Accordion title="Add Interface Elements" defaultOpen="false">
+Before starting, it is recommended that developers add the following interface elements to facilitate the implementation of basic real-time audio and video functions.
 
-- 本地预览窗口
-- 远端视频窗口
-- 结束按钮
+- Local preview window
+- Remote video window
+- End button
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/UI.jpg" /></Frame>
 </Accordion>
 
-**2. 引入 SDK**
+**2. Import SDK**
 
-在项目中引入 SDK。
+Import the SDK in the project.
 
 ```dart
 import 'package:zego_express_engine/zego_express_engine.dart';
 ```
 
-**3. 创建引擎**
+**3. Create Engine**
 
-调用 [createEngineWithProfile](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/createEngineWithProfile.html) 接口，将申请到的 AppID 和 AppSign 传入参数 “appID” 和 “appSign”。 为防止 “appsign” 暴露，Web 平台请勿传入 “appsign”。
+Call the [createEngineWithProfile](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/createEngineWithProfile.html) interface and pass the applied AppID and AppSign to the parameters "appID" and "appSign". To prevent "appsign" from being exposed, please do not pass "appsign" on the Web platform.
 
-<Warning title="注意">
+<Warning title="Note">
 
 
-SDK 同时也支持 Token 鉴权，若您对项目安全性有更高要求，建议您升级鉴权方式，可参考 [如何从 AppSign 鉴权升级为 Token 鉴权](http://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo)。
+The SDK also supports Token authentication. If you have higher requirements for project security, it is recommended to upgrade the authentication method. For details, please refer to [How to upgrade from AppSign authentication to Token authentication](https://www.zegocloud.com/docs/faq/token_upgrade?product=ExpressVideo).
 
 </Warning>
 
-<Warning title="注意">如果是语音场景，请务必调用 `enableCamera(false)` 关闭摄像头，避免启动视频采集推流产生额外的视频流量。</Warning>
+<Warning title="Note">If it is a voice scenario, be sure to call `enableCamera(false)` to turn off the camera to avoid starting video capture and publishing stream, which will generate additional video traffic.</Warning>
 
 
 ```dart
 ZegoEngineProfile profile = ZegoEngineProfile(
-    appID, // 请通过官网注册获取，格式为：1234567890
-    ZegoScenario.General, // 通用场景接入
-    appSign: appSign，// 请通过官网注册获取，格式为：'0123456789012345678901234567890123456789012345678901234567890123'（共64个字符），Web 平台无需传入
-    enablePlatformView: true); //Web 平台需为true
-// 创建引擎
+    appID, // Please obtain through official website registration, format: 1234567890
+    ZegoScenario.General, // General scenario access
+    appSign: appSign, // Please obtain through official website registration, format: '0123456789012345678901234567890123456789012345678901234567890123' (64 characters in total), no need to pass in for Web platform
+    enablePlatformView: true); // Web platform needs to be true
+// Create engine
 ZegoExpressEngine.createEngineWithProfile(profile);
 ```
 
-**4. 设置回调**
+**4. Set Callbacks**
 
-创建引擎后，开发者可以根据需要选择使用匿名函数实现回调函数，并将其赋值给引擎实例对应的回调函数属性以注册回调
+After creating the engine, developers can choose to use anonymous functions to implement callback functions as needed, and assign them to the corresponding callback function properties of the engine instance to register callbacks
 
-<Warning title="注意">
+<Warning title="Note">
 
 
-为避免错过事件通知，建议在创建引擎后立即注册回调
+To avoid missing event notifications, it is recommended to register callbacks immediately after creating the engine
 
 </Warning>
 
@@ -126,46 +126,46 @@ ZegoExpressEngine.createEngineWithProfile(profile);
 
 <a id="createroom"></a>
 
-### 2 登录房间
+### 2 Login Room
 
-**1. 登录**
+**1. Login**
 
-传入用户 ID 参数 “userID” 创建 ZegoUser 用户对象后，调用 [loginRoom ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) 接口，传入房间 ID 参数 “roomID” 和用户参数 “user”，登录房间。如果房间不存在，调用该接口时会创建并登录此房间。
+After creating a ZegoUser user object by passing in the user ID parameter "userID", call the [loginRoom](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) interface, pass in the room ID parameter "roomID" and user parameter "user", and login to the room. If the room does not exist, calling this interface will create and login to this room.
 
-- 同一个 AppID 内，需保证 “roomID” 信息的全局唯一。
-- 同一个 AppID 内，需保证 “userID” 全局唯一，建议开发者将其设置成一个有意义的值，可将 “userID” 与自己业务账号系统进行关联。
-- “ZegoUser” 的构造方法 [ZegoUser.id](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoUser/ZegoUser.id.html) 会将 “userName” 设为与传的参数 “userID” 一样。“userID” 不能为 “null”，否则会导致登录房间失败。
+- Within the same AppID, ensure that "roomID" information is globally unique.
+- Within the same AppID, ensure that "userID" is globally unique. It is recommended that developers set it to a meaningful value and associate "userID" with their own business account system.
+- The constructor method of "ZegoUser" [ZegoUser.id](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoUser/ZegoUser.id.html) will set "userName" to be the same as the passed parameter "userID". "userID" cannot be "null", otherwise login to the room will fail.
 
 
 ```dart
-// 创建用户对象
+// Create user object
 ZegoUser user = ZegoUser.id('user1');
-// 只有传入 “isUserStatusNotify” 参数取值为 “true” 的 ZegoRoomConfig，才能收到 onRoomUserUpdate 回调。
+// Only by passing in a ZegoRoomConfig with the "isUserStatusNotify" parameter set to "true" can you receive the onRoomUserUpdate callback.
 ZegoRoomConfig config = ZegoRoomConfig.defaultConfig();
 config.isUserStatusNotify = true;
-// 如果您使用 appsign 的方式鉴权，token 参数不需填写；如果需要使用更加安全的 鉴权方式： token 鉴权，Web 平台仅支持 token 鉴权，请参考[如何从 AppSign 鉴权升级为 Token 鉴权](https://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo&platform=all)
+// If you use appsign for authentication, you do not need to fill in the token parameter; if you need to use a more secure authentication method: token authentication, Web platform only supports token authentication, please refer to [How to upgrade from AppSign authentication to Token authentication](https://www.zegocloud.com/docs/faq/token_upgrade?product=ExpressVideo&platform=all)
 // config.token = "xxxx";
-// 开始登录房间
+// Start logging in to the room
 ZegoExpressEngine.instance.loginRoom('room1', user, config: config);
 ```
 
-**2. 监听登录房间后的事件回调**
+**2. Listen to Event Callbacks After Logging in to the Room**
 
 
-根据实际应用需要，在登录房间后监听想要关注的事件通知，比如房间状态更新、用户状态更新、流状态更新等。
+According to actual application needs, listen to the event notifications you care about after logging in to the room, such as room state updates, user state updates, stream state updates, etc.
 
-- [onRoomStateUpdate](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomStateUpdate.html)：房间状态更新回调。登录房间后，当房间连接状态发生变更（如出现房间断开，登录认证失败等情况），SDK 会通过该回调通知。
-- [onRoomUserUpdate](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomUserUpdate.html)：用户状态更新回调。登录房间后，当房间内有用户新增或删除时，SDK 会通过该回调通知。
+- [onRoomStateUpdate](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomStateUpdate.html): Room state update callback. After logging in to the room, when the room connection state changes (such as room disconnection, login authentication failure, etc.), the SDK will notify through this callback.
+- [onRoomUserUpdate](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomUserUpdate.html): User state update callback. After logging in to the room, when users are added to or deleted from the room, the SDK will notify through this callback.
 
-    只有调用 [loginRoom](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) 接口登录房间时传入 [ZegoRoomConfig](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoRoomConfig-class.html) 配置，且 “isUserStatusNotify” 参数取值为 “true” 时，用户才能收到 [onRoomUserUpdate](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomUserUpdate.html) 回调。
+    Only when calling the [loginRoom](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) interface to login to the room and passing in the [ZegoRoomConfig](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoRoomConfig-class.html) configuration, and the "isUserStatusNotify" parameter is set to "true", users can receive the [onRoomUserUpdate](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomUserUpdate.html) callback.
 
-- [onRoomStreamUpdate](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomStreamUpdate.html)：流状态更新回调。登录房间后，当房间内有用户新推送或删除音视频流时，SDK 会通过该回调通知。
+- [onRoomStreamUpdate](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomStreamUpdate.html): Stream state update callback. After logging in to the room, when users in the room newly publish or delete audio and video streams, the SDK will notify through this callback.
 
-<Warning title="注意">
+<Warning title="Note">
 
 
-- 只有调用 [loginRoom](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) 接口登录房间时传入 [ZegoRoomConfig](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoRoomConfig-class.html) 配置，且 “isUserStatusNotify” 参数取值为 “true” 时，用户才能收到 [onRoomUserUpdate](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomUserUpdate.html) 回调。
-- 通常情况下，如果某个用户想要播放其他用户推送的视频，可以在收到流状态更新（新增）的回调中，调用 [startPlayingStream](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/startPlayingStream.html) 接口拉取远端推送的音视频流。
+- Only when calling the [loginRoom](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) interface to login to the room and passing in the [ZegoRoomConfig](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoRoomConfig-class.html) configuration, and the "isUserStatusNotify" parameter is set to "true", users can receive the [onRoomUserUpdate](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomUserUpdate.html) callback.
+- Normally, if a user wants to play videos published by other users, they can call the [startPlayingStream](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/startPlayingStream.html) interface in the callback of stream state update (addition) to play the audio and video stream published by the remote user.
 
 </Warning>
 
@@ -174,75 +174,75 @@ ZegoExpressEngine.instance.loginRoom('room1', user, config: config);
 
 ```dart
 
-// 以下为常用的房间相关回调
-// 房间状态更新回调
+// The following are common room-related callbacks
+// Room state update callback
 ZegoExpressEngine.onRoomStateUpdate = (String roomID, ZegoRoomState state, int errorCode, Map<String, dynamic> extendedData) {
-    // 根据需要实现事件回调
+    // Implement event callbacks as needed
 };
 
-// 用户状态更新
+// User state update
 ZegoExpressEngine.onRoomUserUpdate = (String roomID, ZegoUpdateType updateType, List<ZegoUser> userList) {
-    // 根据需要实现事件回调
+    // Implement event callbacks as needed
 };
 
-// 流状态更新
+// Stream state update
 ZegoExpressEngine.onRoomStreamUpdate = (String roomID, ZegoUpdateType updateType, List<ZegoStream> streamList) {
-    // 根据需要实现事件回调
+    // Implement event callbacks as needed
 };
 
 ```
 
 <a id="publishingStream"></a>
 
-### 3 推流
+### 3 Publish Stream
 
-**1. 开始推流**
+**1. Start Publishing Stream**
 
-调用 [startPublishingStream](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPublishingStream.html) 接口，传入流 ID 参数 “streamID”，向远端用户发送本端的音视频流。
+Call the [startPublishingStream](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPublishingStream.html) interface and pass in the stream ID parameter "streamID" to send the local audio and video stream to remote users.
 
-<Warning title="注意">
+<Warning title="Note">
 
 
-同一个 AppID 内，需保证 “streamID” 全局唯一。如果同一个 AppID 内，不同用户各推了一条 “streamID” 相同的流，会导致后推流的用户推流失败。
+Within the same AppID, ensure that "streamID" is globally unique. If within the same AppID, different users each publish a stream with the same "streamID", it will cause the later publishing user to fail to publish stream.
 
 </Warning>
 
 
 
 ```dart
-// 开始推流
+// Start publishing stream
 ZegoExpressEngine.instance.startPublishingStream("streamID");
 ```
 
-**2. 启用本地渲染和预览（可选）**
+**2. Enable Local Rendering and Preview (Optional)**
 
-<Accordion title="将画面渲染后启动本地预览" defaultOpen="false">
-使用 `createCanvasView` 创建 `widget`，添加到视图后，从 `onViewCreated` 回调返回一个 `viewID`，调用 [startPreview](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPreview.html) 接口传入 `viewID` 启动本地预览
+<Accordion title="Start Local Preview After Rendering the Screen" defaultOpen="false">
+Use `createCanvasView` to create a `widget`, add it to the view, return a `viewID` from the `onViewCreated` callback, and call the [startPreview](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPreview.html) interface with `viewID` to start local preview
 
-Flutter 的渲染方式有两种：PlatformView 与 TextureRenderer。
-- Android、iOS 及 MacOS 可以通过创建引擎时设置 “enablePlatformView” 参数，选择使用 TextureRenderer 还是 PlatformView。
-- Web 平台仅支持 PlatformView 的方式，且不存在资源和稳定性问题。
-- Windows、Linux 目前仅支持 TextureRenderer 的方式。
+Flutter has two rendering methods: PlatformView and TextureRenderer.
+- Android, iOS, and MacOS can choose to use TextureRenderer or PlatformView by setting the "enablePlatformView" parameter when creating the engine.
+- The Web platform only supports the PlatformView method, and there are no resource and stability issues.
+- Windows and Linux currently only support the TextureRenderer method.
 
-<Note title="说明">
+<Note title="Note">
 
-与 TextureRenderer 相比，PlatformView 占用资源稍高，且稳定性偏低，但随着 Flutter 版本迭代，鲁棒性不断提高。
+Compared with TextureRenderer, PlatformView consumes slightly more resources and has lower stability, but with Flutter version iteration, robustness continues to improve.
 
 </Note>
 
 
 
 
-**createCanvasView接口使用展示**
+**createCanvasView Interface Usage Demonstration**
 
-- 接口内部会根据创建引擎时设置的 “enablePlatformView” 参数及平台支持的方式，自动选择使用 TextureRenderer 或者 PlatformView 。
-- Android、iOS 及 MacOS 平台会根据创建引擎时设置 “enablePlatformView” 参数，选择使用 TextureRenderer 还是 PlatformView。
-- Web、Windows 和 Linux 不会受创建引擎时设置 “enablePlatformView” 参数影响，只使用支持的方式。
+- The interface will automatically choose to use TextureRenderer or PlatformView based on the "enablePlatformView" parameter set when creating the engine and the methods supported by the platform.
+- Android, iOS, and MacOS platforms will choose to use TextureRenderer or PlatformView based on the "enablePlatformView" parameter set when creating the engine.
+- Web, Windows, and Linux will not be affected by the "enablePlatformView" parameter set when creating the engine, only using the supported method.
 
-获取预览用的 Widget，然后使用 viewID 创建一个 ZegoCanvas 对象，开始预览。
+Get the Widget for preview, then use the viewID to create a ZegoCanvas object and start previewing.
 
 ```dart
-// 将此 Widget 加入到页面的渲染树中以显示预览画面
+// Add this Widget to the page's rendering tree to display the preview screen
 _previewViewWidget = await ZegoExpressEngine.instance.createCanvasView((viewID) {
     _previewViewID = viewID;
 
@@ -255,57 +255,57 @@ _previewViewWidget = await ZegoExpressEngine.instance.createCanvasView((viewID) 
 ```
 </Accordion>
 
-**3. 监听推流后的事件回调**
+**3. Listen to Event Callbacks After Publishing Stream**
 
 
-根据实际应用需要，在推流后监听想要关注的事件通知，比如推流状态更新等。
+According to actual application needs, listen to the event notifications you care about after publishing stream, such as publishing stream state updates, etc.
 
-[onPublisherStateUpdate](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onPublisherStateUpdate.html)：推流状态更新回调。调用推流接口成功后，当推流状态发生变更（如出现网络中断导致推流异常等情况），SDK 在重试推流的同时，会通过该回调通知。
+[onPublisherStateUpdate](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPublisherStateUpdate.html): Publishing stream state update callback. After successfully calling the publishing stream interface, when the publishing stream state changes (such as network interruption causing publishing stream exceptions, etc.), the SDK will notify through this callback while retrying to publish stream.
 
 ```dart
-// 常用的推流相关回调
-// 推流状态更新回调
+// Common publishing stream related callbacks
+// Publishing stream state update callback
 ZegoExpressEngine.onPublisherStateUpdate = (String streamID, ZegoPublisherState state, int errorCode, Map<String, dynamic> extendedData) {
-    // 根据需要实现事件回调
+    // Implement event callbacks as needed
 };
 ```
 
-<Note title="说明">如果您需要了解 ZEGO Express SDK 的摄像头/视频/麦克风/音频/扬声器相关接口，请参考 [常见问题 - 如何实现开关摄像头/视频画面/麦克风/音频/扬声器？](http://doc-zh.zego.im/faq/How_to_switch_devices)。</Note>
+<Note title="Note">If you need to know about ZEGO Express SDK's camera/video/microphone/audio/speaker related interfaces, please refer to [FAQ - How to implement switching camera/video screen/microphone/audio/speaker?](https://www.zegocloud.com/docs/faq/How_to_switch_devices).</Note>
 
 <a id="PlayingStream"></a>
 
-### 4 拉流
+### 4 Play Stream
 
-调用 [startPlayingStream](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/startPlayingStream.html) 接口，根据传入的流 ID 参数 “streamID”，拉取远端推送的音视频流，并根据需要渲染拉流画面。
+Call the [startPlayingStream](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/startPlayingStream.html) interface, based on the passed stream ID parameter "streamID", to play the audio and video stream published by the remote user, and render the playing stream screen as needed.
 
-- 若仅需拉音频流，不需要显示拉流画面，可直接调用 [startPlayingStream](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/startPlayingStream.html) 接口。
+- If you only need to play audio stream and do not need to display the playing stream screen, you can directly call the [startPlayingStream](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/startPlayingStream.html) interface.
 
 ```dart
 ZegoExpressEngine.instance.startPlayingStream(streamID);
 ```
 
-- 若需要在拉流的同时，渲染拉流画面，Flutter 的渲染方式有两种：PlatformView 与 TextureRenderer。
-    - Android 和 iOS 可以通过创建引擎时设置 “enablePlatformView” 参数，选择使用 TextureRenderer 还是 PlatformView。
-    - Web 平台仅支持 PlatformView 的方式，且不存在资源和稳定性问题。
-    - Windows、MacOS 目前仅支持 TextureRenderer 的方式。
+- If you need to render the playing stream screen while playing stream, Flutter has two rendering methods: PlatformView and TextureRenderer.
+    - Android and iOS can choose to use TextureRenderer or PlatformView by setting the "enablePlatformView" parameter when creating the engine.
+    - The Web platform only supports the PlatformView method, and there are no resource and stability issues.
+    - Windows and MacOS currently only support the TextureRenderer method.
 
-<Note title="说明">
+<Note title="Note">
 
-与 TextureRenderer 相比，PlatformView 占用资源稍高，且稳定性偏低，但随着 Flutter 版本迭代，鲁棒性不断提高。
+Compared with TextureRenderer, PlatformView consumes slightly more resources and has lower stability, but with Flutter version iteration, robustness continues to improve.
 
 </Note>
 
 
-**createCanvasView接口使用展示**
+**createCanvasView Interface Usage Demonstration**
 
-- 接口内部会根据创建引擎时设置的 “enablePlatformView” 参数及平台支持的方式，自动选择使用 TextureRenderer 或者 PlatformView 。
-- Android、iOS 及 MacOS 平台会根据创建引擎时设置 “enablePlatformView” 参数，选择使用 TextureRenderer 还是 PlatformView。
-- Web、Windows 和 Linux 不会受创建引擎时设置 “enablePlatformView” 参数影响，只使用支持的方式。
+- The interface will automatically choose to use TextureRenderer or PlatformView based on the "enablePlatformView" parameter set when creating the engine and the methods supported by the platform.
+- Android, iOS, and MacOS platforms will choose to use TextureRenderer or PlatformView based on the "enablePlatformView" parameter set when creating the engine.
+- Web, Windows, and Linux will not be affected by the "enablePlatformView" parameter set when creating the engine, only using the supported method.
 
-获取预览用的 Widget，然后使用 viewID 创建一个 ZegoCanvas 对象，开始预览。
+Get the Widget for preview, then use the viewID to create a ZegoCanvas object and start previewing.
 
 ```dart
-// 将此 Widget 加入到页面的渲染树中以显示预览画面
+// Add this Widget to the page's rendering tree to display the preview screen
 _playViewWidget = await ZegoExpressEngine.instance.createCanvasView((viewID) {
     _playViewID = viewID;
 
@@ -317,63 +317,63 @@ _playViewWidget = await ZegoExpressEngine.instance.createCanvasView((viewID) {
 });
 ```
 
-**2. 监听拉流后的事件回调**
+**2. Listen to Event Callbacks After Playing Stream**
 
-根据实际应用需要，在拉流后监听想要关注的事件通知，比如拉流状态更新等。
+According to actual application needs, listen to the event notifications you care about after playing stream, such as playing stream state updates, etc.
 
-[onPlayerStateUpdate](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onPlayerStateUpdate.html)：拉流状态更新回调。调用拉流接口成功后，当拉流状态发生变更（如出现网络中断导致推流异常等情况），SDK 在重试拉流的同时，会通过该回调通知。
+[onPlayerStateUpdate](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPlayerStateUpdate.html): Playing stream state update callback. After successfully calling the playing stream interface, when the playing stream state changes (such as network interruption causing publishing stream exceptions, etc.), the SDK will notify through this callback while retrying to play stream.
 
 ```dart
-// 常用的拉流相关回调
-// 拉流状态相关回调
+// Common playing stream related callbacks
+// Playing stream state related callbacks
 ZegoExpressEngine.onPlayerStateUpdate = (String streamID, ZegoPlayerState state, int errorCode, Map<String, dynamic> extendedData) {
-    // 根据需要实现事件回调
+    // Implement event callbacks as needed
 };
 ```
 
-### 5 在线测试推拉流功能
+### 5 Test Publish and Play Stream Functions Online
 
-在真机中运行项目，运行成功后，可以看到本端视频画面。
+Run the project on a real device. After running successfully, you can see the local video screen.
 
-为方便体验，ZEGO 提供了一个 [Web 端调试示例](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html)，在该页面下，输入相同的 AppID、RoomID，输入不同的 UserID、以及对应的 [Token](/console/development-assistance/temporary-token)，即可加入同一房间与真机设备互通。当成功开始音视频通话时，可以听到远端的音频，看到远端的视频画面。
+For convenience, ZEGO provides a [Web Debug Demo](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html). On this page, enter the same AppID and RoomID, enter different UserIDs and corresponding [Token](/console/development-assistance/temporary-token), and you can join the same room to communicate with real device devices. When the audio and video call starts successfully, you can hear the remote audio and see the remote video screen.
 
 
 
-### 6 停止推拉流
+### 6 Stop Publish and Play Stream
 
 <a id="stopPublishingStream"></a>
 
-**1. 停止推流/预览/渲染**
+**1. Stop Publishing Stream/Preview/Rendering**
 
-调用 [stopPublishingStream](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/stopPublishingStream.html) 接口停止向远端用户发送本端的音视频流。
+Call the [stopPublishingStream](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/stopPublishingStream.html) interface to stop sending the local audio and video stream to remote users.
 
 ```dart
-// 停止推流
+// Stop publishing stream
 ZegoExpressEngine.instance.stopPublishingStream();
 ```
 
-如果启用了本地预览，调用 [stopPreview](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/stopPreview.html) 接口停止预览。
+If local preview is enabled, call the [stopPreview](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/stopPreview.html) interface to stop preview.
 
 ```dart
-// 停止预览
+// Stop preview
 ZegoExpressEngine.instance.stopPreview();
 ```
 
-如果预览时使用了 createCanvasView，需要调用 [destroyCanvasView](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressCanvasViewUtils/destroyCanvasView.html) 接口销毁。
+If createCanvasView was used during preview, call the [destroyCanvasView](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressCanvasViewUtils/destroyCanvasView.html) interface to destroy it.
 
 ```dart
-// _previewViewID 为调用 [createCanvasView] 时得到的 viewID
+// _previewViewID is the viewID obtained when calling [createCanvasView]
 ZegoExpressEngine.instance.destroyCanvasView(_previewViewID);
 ```
 
-**2. 停止拉流/渲染**
+**2. Stop Playing Stream/Rendering**
 
-调用 [stopPlayingStream](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/stopPlayingStream.html) 接口停止拉取远端推送的音视频流。
+Call the [stopPlayingStream](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/stopPlayingStream.html) interface to stop playing the audio and video stream published by remote users.
 
-<Warning title="注意">
+<Warning title="Note">
 
 
-如果开发者通过 [onRoomStreamUpdate](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomStreamUpdate.html) 回调收到了音视频流 “减少” 的通知，请及时调用 [stopPlayingStream ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/stopPlayingStream.html) 接口停止拉流，避免拉到空流、产生额外的成本；或者，开发者可以根据自己的业务需求，选择合适的时机，主动调用 [stopPlayingStream ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/stopPlayingStream.html) 接口停止拉流。
+If the developer receives a notification of audio and video stream "decrease" through the [onRoomStreamUpdate](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomStreamUpdate.html) callback, please call the [stopPlayingStream](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/stopPlayingStream.html) interface in time to stop playing stream, to avoid playing empty streams and generating additional costs; or, developers can choose the appropriate timing according to their own business needs and actively call the [stopPlayingStream](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/stopPlayingStream.html) interface to stop playing stream.
 
 </Warning>
 
@@ -381,31 +381,31 @@ ZegoExpressEngine.instance.destroyCanvasView(_previewViewID);
 
 
 ```dart
-// 停止拉流
+// Stop playing stream
 ZegoExpressEngine.instance.stopPlayingStream(streamID);
 ```
 
-如果拉流时使用了 createCanvasView，需要调用 [destroyCanvasView](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressCanvasViewUtils/destroyCanvasView.html) 接口销毁。
+If createCanvasView was used during playing stream, call the [destroyCanvasView](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressCanvasViewUtils/destroyCanvasView.html) interface to destroy it.
 
 ```dart
-// _playViewID 为调用 [createCanvasView] 时得到的 viewID
+// _playViewID is the viewID obtained when calling [createCanvasView]
 ZegoExpressEngine.instance.destroyCanvasView(_playViewID);
 ```
 
-### 7 退出房间
+### 7 Logout Room
 
-调用 [logoutRoom](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/logoutRoom.html) 接口退出房间。
+Call the [logoutRoom](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/logoutRoom.html) interface to logout of the room.
 
 ```dart
-// 退出房间
+// Logout of room
 ZegoExpressEngine.instance.logoutRoom('room1');
 ```
 
-### 8 销毁引擎
+### 8 Destroy Engine
 
-调用 [destroyEngine](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/dart_flutter/zego_express_engine/ZegoExpressEngine/destroyEngine.html) 接口销毁引擎，用于释放 SDK 使用的资源。
+Call the [destroyEngine](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/destroyEngine.html) interface to destroy the engine, used to release resources used by the SDK.
 
 ```dart
-// 销毁引擎
+// Destroy engine
 ZegoExpressEngine.destroyEngine();
 ```
