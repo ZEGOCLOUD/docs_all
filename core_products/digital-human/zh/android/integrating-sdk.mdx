@@ -14,11 +14,44 @@ date: "2024-05-06"
 - Android SDK 25、Android SDK Build-Tools 25.0.2、Android SDK Platform-Tools 25.x.x 或以上版本。
 - Android 6.0（API 23）及以上版本的设备或模拟器，支持音视频能力且已连接互联网。
 
-## 集成数字人 SDK
+## 集成 SDK
 
-数字人 SDK 已发布在 Maven 仓库，推荐使用依赖管理方式集成。
+数字人功能由 ZEGO Express SDK 提供基础音视频能力，数字人 SDK 提供渲染和交互能力。推荐按以下步骤进行集成。
 
-### 添加 Maven 仓库
+### 1 导入 SDK
+
+#### 集成 ZEGO Express SDK
+
+由于当前数字人功能需要使用针对 AI Agent 优化的 ZEGO Express SDK，支持以下两种集成方式：
+
+<Tabs>
+<Tab title="方式 1：Maven 集成（推荐）">
+
+在应用模块 `app/build.gradle` 中添加以下依赖：
+
+```groovy
+dependencies {
+    // 针对 数字人 优化的 ZEGO Express SDK
+    implementation 'im.zego:express-private:3.22.0.46726'
+}
+```
+
+</Tab>
+<Tab title="方式 2：手动集成">
+
+1. 请从[下载页面](./introduction/download.mdx)获取针对 AI Agent 优化的 ZEGO Express SDK。
+2. 参考 [集成Express SDK](https://doc-zh.zego.im/article/3575#2) 文档将 SDK 集成到您的项目中。
+2. 将 SDK 的 `ZegoExpressEngine.jar` 文件拷贝到应用模块的 `libs` 目录下。
+3. 将 `armeabi-v7a`、`arm64-v8a` 等目录下的 `.so` 文件拷贝到对应的 `jniLibs` 目录下（通常为 `app/src/main/jniLibs`）。
+
+</Tab>
+</Tabs>
+
+#### 集成数字人 SDK
+
+数字人 SDK 已发布在 Maven 仓库，可通过以下方式集成。
+
+**1. 添加 Maven 仓库**
 
 根据 Android Gradle Plugin 版本选择配置方式：
 
@@ -33,7 +66,7 @@ dependencyResolutionManagement {
   repositories {
       google()
       mavenCentral()
-      maven { url 'https://maven.zego.im' }   // 数字人 SDK 仓库
+      maven { url 'https://maven.zego.im' }   // ZEGO SDK 仓库
   }
 }
 ```
@@ -48,7 +81,7 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        maven { url 'https://maven.zego.im' }   // 数字人 SDK 仓库
+        maven { url 'https://maven.zego.im' }   // ZEGO SDK 仓库
     }
 }
 ```
@@ -56,48 +89,64 @@ allprojects {
 </Tab>
 </Tabs>
 
-### 添加依赖
+**2. 添加依赖**
 
 在应用模块 `app/build.gradle` 中加入数字人 SDK 依赖：
 
 ```groovy
 dependencies {
     // 数字人 SDK
-    implementation "im.zego:digitalmobile:1.3.0.43"
+    implementation "im.zego:digitalmobile:1.4.0"
 }
 ```
 
-<Warning title="注意">数字人 SDK 支持 Android 6.0 (API 23) 及以上版本。</Warning>
+### 2 初始化 SDK
 
-## 设置权限
+集成 SDK 后，按以下步骤配置权限并初始化 ZEGO Express SDK。
 
-根据业务需要在 `app/src/main/AndroidManifest.xml` 声明基础网络与音频权限，并在运行时申请录音权限（如需采集音频）：
+<Steps>
+<Step title="添加权限声明">
+进入 "app/src/main" 目录，打开 "AndroidManifest.xml" 文件，添加权限。
 
-```xml
+```xml AndroidManifest.xml
 <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 <uses-permission android:name="android.permission.INTERNET" />
 <uses-permission android:name="android.permission.RECORD_AUDIO" />
+<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 ```
-
-<Warning title="注意">Android 6.0 及以上需要在运行时申请 `RECORD_AUDIO` 等敏感权限。</Warning>
+</Step>
+<Step title="运行时申请录音权限">
 
 ```java
-String[] permissionNeeded = {"android.permission.RECORD_AUDIO"};
-
-if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-    boolean granted = ContextCompat.checkSelfPermission(this, "android.permission.RECORD_AUDIO")
-            == PackageManager.PERMISSION_GRANTED;
-    if (!granted) {
-        // 101 为 requestCode，可自定义大于 0 的值
-        requestPermissions(permissionNeeded, 101);
-    }
-}
+private final ActivityResultLauncher<String> requestPermissionLauncher = registerForActivityResult(
+    new ActivityResultContracts.RequestPermission(), new ActivityResultCallback<Boolean>() {
+        @Override
+        public void onActivityResult(Boolean isGranted) {
+            if (isGranted) {
+                // 同意权限
+            }
+        }
+    });
+//发起请求
+requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);
 ```
+</Step>
+<Step title="创建并初始化 ZegoExpressEngine">
+
+```java {3}
+ZegoEngineProfile zegoEngineProfile = new ZegoEngineProfile();
+zegoEngineProfile.appID = ; // 从即构控制台获取的 appId
+zegoEngineProfile.scenario = ZegoScenario.HIGH_QUALITY_CHATROOM;
+zegoEngineProfile.application = getApplication();
+ZegoExpressEngine.createEngine(zegoEngineProfile, null);
+```
+</Step>
+</Steps>
 
 ## 防止混淆代码
 
-在 `proguard-rules.pro` 中添加保持规则，避免混淆数字人相关类名：
+在 `proguard-rules.pro` 中添加保持规则，避免混淆 ZEGO 相关类名：
 
 ```txt
 -keep class **.zego.**{*;}
