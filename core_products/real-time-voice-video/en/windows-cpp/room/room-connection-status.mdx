@@ -2,156 +2,157 @@
 articleID: 18664
 date: "2024-11-18"
 ---
-# 房间连接状态说明
+# Room Connection Status
 
 - - -
 
-用户在使用 ZEGO Express SDK 进行音视频通话或直播时，需要先加入房间才能收到来自同一房间内的其他用户的流新增/删除、用户进出等回调通知，所以用户在房间内的连接状态决定了用户是否能正常使用音视频业务。
+When users use ZEGO Express SDK for audio and video calls or live streaming, they need to join a room first to receive callback notifications for stream additions/deletions and user entries/exits from other users in the same room. Therefore, the user's connection status in the room determines whether users can normally use audio and video services.
 
-本文主要介绍如何判断用户在房间内的连接状态，以及各个连接状态的转化过程。
+This document mainly introduces how to judge the user's connection status in the room, and the conversion process of each connection status.
 
-## 监听房间连接状态
+## Monitor Room Connection Status
 
-用户可通过 [onRoomStateChanged](@onRoomStateChanged) 回调，实时监听自己在房间内的连接状态变化。当用户房间连接状态发生改变时，SDK 会触发该回调，并在回调中给出房间连接状态发生改变的原因（即房间连接状态）和相关错误码。
+Users can monitor their connection status changes in the room in real time through the [onRoomStateChanged](@onRoomStateChanged) callback. When the user's room connection status changes, the SDK will trigger this callback and provide the reason for the room connection status change (i.e., room connection status) and relevant error codes in the callback.
 
-因网络质量不佳而导致的房间连接中断，SDK 内部会自动进行重试，详情请参考 [房间断线重连](/real-time-video-windows-cpp/room/room-connection-status) 章节。
+For room connection interruptions caused by poor network quality, the SDK will automatically retry internally. For details, please refer to the [Room Disconnection and Reconnection](/real-time-video-windows-cpp/room/room-connection-status) section.
 
-**房间状态说明**
+**Room Status Description**
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/Android/express_roomstate_change_android.png" /></Frame>
 
-房间连接状态会因多种情况互相转化，开发者可通过房间连接状态发生改变的原因 [ZegoRoomStateChangedReason](@-ZegoRoomStateChangedReason) （即房间连接状态）结合 errorCode 做相应的业务逻辑处理。
+Room connection status will convert to each other due to various situations. Developers can make corresponding business logic processing based on the reason for the room connection status change [ZegoRoomStateChangedReason](@-ZegoRoomStateChangedReason) (i.e., room connection status) combined with errorCode.
 
-| 状态及 Reason 枚举值 | 含义 | 触发进入该状态的常见事件 |
+| Status and Reason Enumeration Value | Meaning | Common Events Triggering Entry to This Status |
 | --- | --- | --- |
-| Logining(ZEGO_ROOM_STATE_CHANGED_REASON_LOGINING) | 正在登录房间。当调用 [loginRoom] 登录房间或 [switchRoom] 切换到目标房间时，进入该状态，表示正在请求连接服务器。通常通过该状态进行应用界面的展示。 | - 调用 [loginRoom] 登录房间，此时会先进入该状态，此时 errorCode 为 0。<br/>- 调用 [switchRoom] 切换到目标房间时，SDK 内部请求登录目标房间，此时 errorCode 为 0。 |
-| Logined(ZEGO_ROOM_STATE_CHANGED_REASON_LOGINED) | 登录房间成功。当登录房间或切换房间成功后，进入该状态，表示登录房间已经成功，用户可以正常收到房间内的其他用户和所有流信息增删的回调通知。 | - 调用 [loginRoom] 登录房间成功，此时 errorCode 为 0。<br/>- 调用 [switchRoom] 切换到目标房间时，SDK 内部登录目标房间成功，此时 errorCode 为 0。 |
-| LoginFailed(ZEGO_ROOM_STATE_CHANGED_REASON_LOGIN_FAILED) | 登录房间失败。当登录房间或切换房间失败后，进入该状态，表示登录房间或切换房间已经失败，例如 AppID、AppSign 或 Token 不正确等。 | - 当使用 Token 鉴权功能时，传入的 Token 错误，此时 errorCode 为 1002033。<br/>- 当因为网络问题导致登录房间超时，此时 errorCode 为 1002053。<br/>- 当切换到目标房间时，SDK 内部登录目标房间失败，此时 errorCode 请参考以上登录错误说明。 |
-| Reconnecting(ZEGO_ROOM_STATE_CHANGED_REASON_RECONNECTING) | 房间连接临时中断。如果因为网络质量不佳产生的中断，SDK 会进行内部重试。 | 当因为网络质量不佳导致房间连接临时中断并进行重连，此时 errorCode 为 1002051。 |
-| Reconnected(ZEGO_ROOM_STATE_CHANGED_REASON_RECONNECTED) | 房间重新连接成功。如果因为网络质量不佳产生的中断，SDK 会进行内部重试，重连成功后进入该状态。 | 当因为网络质量不佳导致房间连接临时中断后重连成功，此时 errorCode 为 0。 |
-| Reconnected(ZEGO_ROOM_STATE_CHANGED_REASON_RECONNECTED) | 房间重新连接失败。如果因为网络质量不佳产生的中断，SDK 会进行内部重试，重连失败后进入该状态。 | 当因为网络质量不佳导致房间连接临时中断后重连失败，此时 errorCode 为 1002053。 |
-| KickOut(ZEGO_ROOM_STATE_CHANGED_REASON_KICK_OUT) | 被服务器踢出房间。例如有相同用户名在其他地方登录房间导致本端被踢出房间，会进入该状态。 | - 用户被踢出房间（由于 userID 相同的用户在其他地方登录），此时 errorCode 为 1002050。<br/>- 用户被踢出房间（开发者主动调用后台的 [踢出房间用户](/real-time-video-server/api-reference/room/kick-out-user) 接口），此时 errorCode 为 1002055。 |
-| Logout(ZEGO_ROOM_STATE_CHANGED_REASON_LOGOUT) | 登出房间成功。没有登录房间前默认为该状态，当调用 [logoutRoom] 登出房间成功或 [switchRoom] 内部登出当前房间成功后，进入该状态。 | - 当调用 [logoutRoom] 登出房间成功后，此时 errorCode 为 0。<br/>- 当调用 [switchRoom] 切换房间时，SDK 内部登出当前房间成功。 |
-| LogoutFailed(ZEGO_ROOM_STATE_CHANGED_REASON_LOGOUT_FAILED) | 登出房间失败。当调用 [logoutRoom] 登出房间失败或 [switchRoom] 内部登出当前房间失败后，进入该状态。 | 在多房间场景下，当调用 [logoutRoom] 登出某个房间时，房间 ID 不存在，此时 errorCode 为 1002002。<br/>登出房间失败后请根据实际失败原因再次尝试登出，否则在心跳超时前其他用户都能看到该用户。 |
+| Logining(ZEGO_ROOM_STATE_CHANGED_REASON_LOGINING) | Logging in to the room. When calling [loginRoom] to log in to the room or [switchRoom] to switch to the target room, enter this status, indicating that a request is being made to connect to the server. Usually, this status is used to display the application interface. | - Call [loginRoom] to log in to the room, and will enter this status first, at this time errorCode is 0.<br/>- Call [switchRoom] to switch to the target room, the SDK internally requests to log in to the target room, at this time errorCode is 0. |
+| Logined(ZEGO_ROOM_STATE_CHANGED_REASON_LOGINED) | Successfully logged in to the room. After successfully logging in to or switching rooms, enter this status, indicating that logging in to the room has been successful, and users can normally receive callback notifications for additions and deletions of all other users and all stream information in the room. | - Call [loginRoom] to log in to the room successfully, at this time errorCode is 0.<br/>- Call [switchRoom] to switch to the target room, the SDK internally logs in to the target room successfully, at this time errorCode is 0. |
+| LoginFailed(ZEGO_ROOM_STATE_CHANGED_REASON_LOGIN_FAILED) | Failed to log in to the room. After failing to log in to or switch rooms, enter this status, indicating that logging in to the room or switching rooms has failed, such as incorrect AppID, AppSign, or Token, etc. | - When using the Token authentication function, the passed-in Token is incorrect, at this time errorCode is 1002033.<br/>- When logging in to the room times out due to network issues, at this time errorCode is 1002053.<br/>- When switching to the target room, the SDK internally fails to log in to the target room, at this time errorCode please refer to the above login error description. |
+| Reconnecting(ZEGO_ROOM_STATE_CHANGED_REASON_RECONNECTING) | Room connection temporarily interrupted. If the interruption is caused by poor network quality, the SDK will perform internal retry. | When the room connection is temporarily interrupted due to poor network quality and reconnecting, at this time errorCode is 1002051. |
+| Reconnected(ZEGO_ROOM_STATE_CHANGED_REASON_RECONNECTED) | Room reconnection successful. If the interruption is caused by poor network quality, the SDK will perform internal retry. After successful reconnection, enter this status. | When the room connection is temporarily interrupted due to poor network quality and then reconnection is successful, at this time errorCode is 0. |
+| Reconnected(ZEGO_ROOM_STATE_CHANGED_REASON_RECONNECTED) | Room reconnection failed. If the interruption is caused by poor network quality, the SDK will perform internal retry. After failed reconnection, enter this status. | When the room connection is temporarily interrupted due to poor network quality and then reconnection fails, at this time errorCode is 1002053. |
+| KickOut(ZEGO_ROOM_STATE_CHANGED_REASON_KICK_OUT) | Kicked out of the room by the server. For example, when a user with the same username logs in to the room elsewhere, causing the local end to be kicked out of the room, this status will be entered. | - User is kicked out of the room (because a user with the same userID logs in elsewhere), at this time errorCode is 1002050.<br/>- User is kicked out of the room (developer actively calls the backend's [Kick Out User](/real-time-video-server/api-reference/room/kick-out-user) interface), at this time errorCode is 1002055. |
+| Logout(ZEGO_ROOM_STATE_CHANGED_REASON_LOGOUT) | Successfully logged out of the room. This is the default status before logging in to the room. After successfully calling [logoutRoom] to log out of the room or [switchRoom] internally logging out of the current room successfully, enter this status. | - When calling [logoutRoom] to log out of the room successfully, at this time errorCode is 0.<br/>- When calling [switchRoom] to switch rooms, the SDK internally logs out of the current room successfully. |
+| LogoutFailed(ZEGO_ROOM_STATE_CHANGED_REASON_LOGOUT_FAILED) | Failed to log out of the room. After failing to call [logoutRoom] to log out of the room or [switchRoom] internally logging out of the current room failing, enter this status. | In multi-room scenarios, when calling [logoutRoom] to log out of a room, the room ID does not exist, at this time errorCode is 1002002.<br/>After failing to log out of the room, please try to log out again according to the actual failure reason, otherwise other users can see this user before the heartbeat times out. |
 
 
-开发者可参考以下代码处理常见业务事件：
+Developers can refer to the following code to handle common business events:
 
 ```cpp
 void onRoomStateChanged(const std::string &roomID, ZegoRoomStateChangedReason reason, int errorCode, const std::string &extendedData) {
     if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_LOGINING)
     {
-        // 登录中
-        // 当调用 loginRoom 登录房间或 switchRoom 切换到目标房间时，进入该状态，表示正在请求连接服务器。
+        // Logging in
+        // When calling loginRoom to log in to the room or switchRoom to switch to the target room, enter this status, indicating that a request is being made to connect to the server.
     }
     else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_LOGINED)
     {
-        /// 登录成功
-        // 当前是开发者主动调用 loginRoom 登录成功，或调用 switchRoom 切换房间成功触发的回调。这里可以处理首次登录房间成功的业务逻辑，比如拉取聊天室、直播间基础信息。
+        /// Login successful
+        // Currently triggered by the developer's active call to loginRoom for successful login, or calling switchRoom for successful room switching. Here you can handle the business logic of first successful login to the room, such as pulling chat room and live room basic information.
     }
     else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_LOGIN_FAILED)
     {
-        // 登录失败
+        // Login failed
         if (errorCode == 1002033) {
-            //当使用登录房间鉴权的功能时，传入的 Token 错误或者过期
+            //When using the login room authentication function, the passed-in Token is incorrect or expired
         }
     }
     else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_RECONNECTING)
     {
-        // 重连中
-        // 当前是 SDK 断线重连成功触发的回调，这里建议展示一些重连的 UI
+        // Reconnecting
+        // Currently triggered by successful SDK disconnection and reconnection. Here it is recommended to display some reconnection UI
     }
     else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_RECONNECTED)
     {
-        // 重连成功
+        // Reconnection successful
     }
     else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_RECONNECT_FAILED)
     {
-        // 重连失败
-        // 当房间连接彻底断开时，SDK 不会再进行重连，开发者如果需要再次登录房间，可以主动调用 loginRoom 接口
-        // 此时可以在业务中退出房间/直播间/课堂，或者手动调用接口再次登录
+        // Reconnection failed
+        // When the room connection is completely disconnected, the SDK will not retry reconnection anymore. If developers need to log in to the room again, they can actively call the loginRoom interface
+        // At this time, you can exit the room/live room/classroom in the business, or manually call the interface to log in again
     }
     else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_KICK_OUT)
     {
-        // 被踢出房间
+        // Kicked out of the room
         if (errorCode == 1002050) {
-            // 用户被踢出房间（由于 userID 相同的用户在其他地方登录）
+            // User is kicked out of the room (because a user with the same userID logs in elsewhere)
         }
         else if (errorCode == 1002055) {
-            // 用户被踢出房间（开发者主动调用后台的踢人接口）
+            // User is kicked out of the room (developer actively calls the backend's kick out user interface)
         }
     }
     else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_LOGOUT)
     {
-        // 登出成功
-        // 开发者主动调用 logoutRoom 登出房间成功
-        // 或调用 switchRoom 切换房间，SDK 内部登出当前房间成功
-        // 开发者可以在这里处理主动登出房间回调的逻辑
+        // Logout successful
+        // Developer actively calls logoutRoom to log out of the room successfully
+        // Or calls switchRoom to switch rooms, SDK internally logs out of the current room successfully
+        // Developers can handle the logic of active logout room callback here
     }
     else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_LOGOUT_FAILED)
     {
-        // 登出失败
-        // 开发者主动调用 logoutRoom 登出房间失败
-        // 或调用 switchRoom 切换房间，SDK 内部登出当前房间失败
-        // 错误的原因可能有登出房间 ID 错误或者不存在
+        // Logout failed
+        // Developer actively calls logoutRoom to log out of the room failing
+        // Or calls switchRoom to switch rooms, SDK internally logs out of the current room failing
+        // The reason for the error may be incorrect logout room ID or does not exist
     }
 }
 ```
 
 
-## 房间断线重连
+## Room Disconnection and Reconnection
 
-用户登录房间后，因网络信号问题/网络类型切换问题导致的与房间断连，SDK 内部会进行自动重连。用户与房间断连后重连有三种情况：
+After users log in to the room, disconnection from the room caused by network signal issues/network type switching issues will be automatically reconnected by the SDK internally. There are three situations for users reconnection after disconnection from the room:
 
-- 在 ZEGO 服务端判断用户 A 心跳超时前重连成功
-- 在 ZEGO 服务端判断用户 A 心跳超时后重连成功
-- 用户 A 重连失败
+- Successful reconnection before the ZEGO server determines that user A's heartbeat has timed out
+- Successful reconnection after the ZEGO server determines that user A's heartbeat has timed out
+- User A fails to reconnect
 
-<Note title="说明">
+<Note title="Note">
 
 
-- 心跳超时时间为 90s
-- 重试超时时间为 20min
+- Heartbeat timeout time is 90s
+- Retry timeout time is 20min
 </Note>
 
 
-下图以用户 A 和用户 B 已登录同一个房间的情况下，用户 A 与房间断连后重连的情况为例：
+The following diagram takes the case where user A and user B have logged in to the same room, and user A reconnects after disconnection from the room as an example:
 
-**情况一：在 ZEGO 服务端判断用户 A 心跳超时前重连成功**
+**Case 1: Successful reconnection before the ZEGO server determines that user A's heartbeat has timed out**
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/roomconnect1.png" /></Frame>
 
-如果用户 A 短暂断线，但是在 90s 内重连成功了，那么用户 B 不会收到 [onRoomUserUpdate](@onRoomUserUpdate) 的回调通知。
+If user A briefly disconnects, but successfully reconnects within 90s, then user B will not receive the callback notification of [onRoomUserUpdate](@onRoomUserUpdate).
 
-- T0 = 0s：用户 A 的 SDK 收到客户端发起的 [loginRoom](@loginRoom__2) 请求。
-- T1 ≈ T0 + 120 ms：通常在调用 [loginRoom](@loginRoom__2) 120 ms 后，客户端可以加入房间。加入房间过程中，用户 A 的客户端会收到 2 次 [onRoomStateChanged](@onRoomStateChanged) 回调，分别通知客户端正在连接房间（Logining）以及连接房间成功（Logined）。
-- T2 ≈ T1 + 100 ms：因网络传输延迟，用户 B 约在 100 ms 后收到 [onRoomUserUpdate](@onRoomUserUpdate) 回调以通知客户端用户 A 加入房间。
-- T3：某个时间点，用户 A 因网络断开等原因导致上行网络变差。SDK 会尝试重新加入房间，同时客户端会收到 [onRoomStateChanged](@onRoomStateChanged) 回调以通知客户端用户 A 正在断线重连。
-- T5 = T3 + time（小于 90s）：用户 A 在重连时间内恢复网络，重连成功。会收到 [onRoomStateChanged](@onRoomStateChanged) 回调以通知客户端用户 A 重连成功。
+- T0 = 0s: User A's SDK receives the [loginRoom](@loginRoom__2) request initiated by the client.
+- T1 ≈ T0 + 120 ms: Usually 120 ms after calling [loginRoom](@loginRoom__2), the client can join the room. During the room joining process, user A's client will receive 2 [onRoomStateChanged](@onRoomStateChanged) callbacks, respectively notifying the client that it is connecting to the room (Logining) and that connecting to the room is successful (Logined).
+- T2 ≈ T1 + 100 ms: Due to network transmission delay, user B receives the [onRoomUserUpdate](@onRoomUserUpdate) callback about 100 ms later to notify the client that user A has joined the room.
+- T3: At a certain time point, user A's uplink network becomes worse due to network disconnection or other reasons. The SDK will try to rejoin the room, and the client will receive the [onRoomStateChanged](@onRoomStateChanged) callback to notify the client that user A is disconnecting and reconnecting.
+- T5 = T3 + time (less than 90s): User A restores the network within the reconnection time and reconnects successfully. Will receive the [onRoomStateChanged](@onRoomStateChanged) callback to notify the client that user A has successfully reconnected.
 
-**情况二：在 ZEGO 服务端判断用户 A 心跳超时后重连成功**
+**Case 2: Successful reconnection after the ZEGO server determines that user A's heartbeat has timed out**
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/connect3.jpg" /></Frame>
 
-- T0、T1、T2、T3 时刻的情况同 [情况一：在服务端判断用户 A 心跳超时前重连成功](/real-time-video-windows-cpp/room/room-connection-status) 中的 T0、T1、T2、T3。
+- The situations at moments T0, T1, T2, T3 are the same as T0, T1, T2, T3 in [Case 1: Successful reconnection before the server determines that user A's heartbeat has timed out](/real-time-video-windows-cpp/room/room-connection-status).
 
-- T4' ≈ T3 + 90s：用户 B 此时收到 [onRoomUserUpdate](@onRoomUserUpdate) 回调以通知用户 A 已断线。
+- T4' ≈ T3 + 90s: User B receives the [onRoomUserUpdate](@onRoomUserUpdate) callback at this time to notify that user A has disconnected.
 
-- T5' = T3 + time（大于 90s，小于 20 min）：用户 A 在重连时间内恢复网络，重连成功。会收到 [onRoomStateChanged](@onRoomStateChanged) 回调以通知客户端用户 A 重连成功。
+- T5' = T3 + time (greater than 90s, less than 20 min): User A restores the network within the reconnection time and reconnects successfully. Will receive the [onRoomStateChanged](@onRoomStateChanged) callback to notify the client that user A has successfully reconnected.
 
-- T6' ≈ T5' + 100ms：因网络传输延迟，用户 B 约在 100 ms 后收到 [onRoomUserUpdate](@onRoomUserUpdate) 回调以通知客户端用户 A 加入房间。
+- T6' ≈ T5' + 100ms: Due to network transmission delay, user B receives the [onRoomUserUpdate](@onRoomUserUpdate) callback about 100 ms later to notify the client that user A has joined the room.
 
-**情况三：用户 A 重连失败**
+**Case 3: User A fails to reconnect**
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/FAQ/Reconnect3.png" /></Frame>
 
-- T0、T1、T2、T3 时刻的情况同 [情况一：在 ZEGO 服务端判断用户 A 心跳超时前重连成功](/real-time-video-windows-cpp/room/room-connection-status) 中的 T0、T1、T2、T3。
+- The situations at moments T0, T1, T2, T3 are the same as T0, T1, T2, T3 in [Case 1: Successful reconnection before the ZEGO server determines that user A's heartbeat has timed out](/real-time-video-windows-cpp/room/room-connection-status).
 
-- T4'' ≈ T3 + 90s：用户 B 此时收到 [onRoomUserUpdate](@onRoomUserUpdate) 回调以通知用户 A 已断线。
+- T4'' ≈ T3 + 90s: User B receives the [onRoomUserUpdate](@onRoomUserUpdate) callback at this time to notify that user A has disconnected.
 
-- T5'' = T3 + 20 min：如果用户 A 连续 20min 内无法重新加入房间，SDK 不再继续尝试重新连接。用户 A 将会收到 [onRoomStateChanged](@onRoomStateChanged) 回调以通知客户端重连失败。
+- T5'' = T3 + 20 min: If user A cannot rejoin the room within 20 minutes, the SDK will no longer continue to try to reconnect. User A will receive the [onRoomStateChanged](@onRoomStateChanged) callback to notify the client that reconnection has failed.
 
 
-## 相关文档
+## Related Documentation
 
-[Express SDK 是否支持断线重连机制？](https://doc-zh.zego.im/faq/reconnect?product=ExpressVideo&platform=windows)
+[Does Express SDK support disconnection and reconnection mechanism?](https://www.zegocloud.com/docs/faq/reconnect?product=ExpressVideo&platform=windows)
+

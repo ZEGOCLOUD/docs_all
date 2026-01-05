@@ -1,100 +1,97 @@
 ---
 articleID: 16916
 ---
-# 多人状态实时同步
+# Real-Time Multi-User Status Synchronization
 
 - - -
 
-## 功能简介
+## Feature Introduction
 
+Since version 3.0.0, ZEGO Express SDK has added real-time multi-user status synchronization functionality, providing ordered, high-frequency, low-latency, large-scale status synchronization services to help developers quickly implement real-time information synchronization capabilities for player positions, actions, avatars, etc. in virtual gameplay, while supporting up to 10,000 users online simultaneously in a single scenario.
 
-ZEGO Express SDK 从 3.0.0 版本起，新增多人状态实时同步功能，提供有序、高频、低延时、大规模的状态同步服务，帮助开发者快速实现虚拟玩法中玩家的位置、动作、形象等实时信息同步能力，同时单场景中支持 1 万个用户同时在线。
-
-在大型虚拟世界中，用户一般不需要感知较远的场景或远端用户，ZEGO 提供 AOI（Area Of Interest）能力，用于减免获取用户可见范围外的信息，极大减少客户流量成本、用户端流量及性能消耗。
+In large virtual worlds, users generally do not need to perceive distant scenarios or remote users. ZEGO provides AOI (Area Of Interest) capability to eliminate the need to obtain information outside the user's visible range, greatly reducing customer traffic costs, user-side traffic, and performance consumption.
 
 <Frame width="512" height="auto" caption="">
   <img src="https://doc-media.zego.im/sdk-doc/Pics/Express/state_sync_aoi.jpg" />
 </Frame>
 
-### 概念解释
+### Concept Explanation
 
-- 场景：用户需要先登录场景，进入同一个场景的用户才可以进行状态信息的同步。
-- AOI（Area of interest）范围：用户感兴趣区域的正方形大小，在虚拟场景中一般为用户的可见范围，该范围实时跟随用户的位置，仅会同步 AOI 范围内远端的用户信息。
+- Scenario: Users need to login to the scenario first. Only users who enter the same scenario can synchronize status information.
+- AOI (Area of Interest) Range: The square size of the user's area of interest, which is generally the user's visible range in virtual scenarios. This range follows the user's position in real-time and only synchronizes remote user information within the AOI range.
 
+### Application Scenarios
 
-### 应用场景
+- Metaverse scenarios such as virtual offices, virtual exhibitions, virtual social, virtual KTV, etc.
+- General scenarios requiring ultra-high frequency, low latency, large-scale information or control command synchronization.
 
-- 虚拟办公、虚拟会展、虚拟社交、虚拟 KTV 等元宇宙场景。
-- 需要超高频、低延时、大规模同步信息或控制指令的通用场景。
+## Prerequisites
 
-## 前提条件
+<Warning title="Attention">
 
-<Warning title="注意">
+Using this service will incur corresponding fees. Please contact ZEGO business personnel for specific fee information.
 
-
-使用该服务会产生相应的费用，请联系 ZEGO 商务人员了解具体的费用情况。
 </Warning>
 
-在实现状态同步前，请确保：
-- 已联系 ZEGO 技术支持进行特殊编包并开通状态同步服务。
-- 已在项目中集成 ZEGO Express SDK。
-- 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目管理](/console-old/project-management)。
+Before implementing status synchronization, ensure that:
+- You have contacted ZEGO Technical Support for special packaging and enabled the status synchronization service.
+- You have integrated ZEGO Express SDK into your project.
+- You have created a project in the [ZEGOCLOUD Console](https://console.zego.im) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Management](/console-old/project-management).
 
-## 实现流程
+## Implementation Flow
 
-### 1 创建引擎
+### 1 Create Engine
 
-调用 [createEngine](@createEngine) 接口，将申请到到 AppID 和 AppSign 传入参数 “appID” 和 “appSign”，创建引擎单例对象。引擎当前只支持同时创建一个实例，超出后将返回 null。
+Call the [createEngine](@createEngine) interface, passing the obtained AppID and AppSign to the "appID" and "appSign" parameters, to create an engine singleton object. The engine currently only supports creating one instance at a time; exceeding this will return null.
 
 ```cpp
 ZegoEngineProfile profile;
-/** 请通过官网注册获取，格式为 123456789 */
+/** Please obtain through official website registration, format: 123456789L */
 profile.appID = appID;
-/** 64个字符，请通过官网注册获取，格式为"0123456789012345678901234567890123456789012345678901234567890123" */
+/** 64 characters, please obtain through official website registration, format: "0123456789012345678901234567890123456789012345678901234567890123" */
 profile.appSign = appSign;
-/** 通用场景接入 */
+/** General scenario access */
 profile.scenario = ZegoScenario::ZEGO_SCENARIO_DEFAULT;
-/** 创建引擎，并注册 self 为 eventHandler 回调。不需要注册回调的话，eventHandler 参数可以传 nil，后续可调用 "-setEventHandler:" 方法设置回调 */
+/** Create engine and register self as eventHandler callback. If you don't need to register callback, eventHandler parameter can be nil, and you can call "-setEventHandler:" method later to set callback */
 engine_ = ZegoExpressSDK::createEngine(profile, nullptr);
 ```
 
-### 2 创建范围场景模块
+### 2 Create Range Scenario Module
 
-调用 [createRangeScene](@createRangeScene) 接口创建范围场景实例，当前只支持同时创建一个实例，超出后将返回 null。
+Call the [createRangeScene](@createRangeScene) interface to create a range scenario instance. Currently only one instance can be created at a time; exceeding this will return null.
 
 ```cpp
-/** 创建范围场景 */
+/** Create range scenario */
 range_scene_ = engine_->createRangeScene();
 ```
 
-### 3 监听范围场景事件回调
+### 3 Listen to Range Scenario Event Callbacks
 
-根据需要调用 [IZegoRangeScene.setEventHandler](@setEventHandler-IZegoRangeScene)
-接口设置范围场景事件回调，用于监听范围场景状态、登录状态、进出 AOI 通知等。调用 [IZegoRangeSceneItem.setEventHandler](@setEventHandler-IZegoRangeSceneItem) 接口设置范围场景物品管理类事件回调，用于监听物品进入离开 AOI 范围、物品绑定状态变更、物品状态和命令更新事件。
+As needed, call the [IZegoRangeScene.setEventHandler](@setEventHandler-IZegoRangeScene) interface to set range scenario event callbacks, used to listen to range scenario status, login status, enter/leave AOI notifications, etc. Call the [IZegoRangeSceneItem.setEventHandler](@setEventHandler-IZegoRangeSceneItem) interface to set range scenario item management class event callbacks, used to listen to item enter/leave AOI range, item binding status change, item status and command update events.
 
 ```cpp
-/** 设置范围场景事件回调 */
+/** Set range scenario event callback */
 range_scene_->setEventHandler(rangeSceneCallbackCenter);
 range_scene_->getRangeSceneItem()->setEventHandler(rangeSceneCallbackCenter);
 ```
 
-### 4 登录场景
+### 4 Login to Scenario
 
-调用 [loginScene](@loginScene) 接口，传入场景参数：sceneID、user、position、broadcastMode，即可登录场景。
+Call the [loginScene](@loginScene) interface, passing scenario parameters: sceneID, user, position, broadcastMode, to login to the scenario.
 
-<Warning title="注意">
+<Warning title="Attention">
 
+- Within the same AppID, ensure userID is globally unique. Developers are advised to set it to a meaningful value and can associate userID with their business account system.
+- userID cannot be empty, otherwise login to the scenario will fail.
 
-- 同一个 AppID 内，需保证 userID 全局唯一，建议开发者将其设置成一个有意义的值，可将 userID 与自己业务账号系统进行关联。
-- userID 不能为空，否则会导致登录场景失败。
 </Warning>
 
 ```cpp
-/** 登录场景参数 */
+/** Login to scenario parameters */
 ZegoSceneParam param;
-/** 创建用户 */
+/** Create user */
 ZegoUser user = ZegoUser(user_id, user_name);
-/** 设置用户的场景坐标、运动朝向、摄像机朝向 */
+/** Set user's scenario coordinates, motion orientation, camera orientation */
 ZegoPosition position;
 memset(&position, 0, sizeof(ZegoPosition));
 for (int i = 0; i < 3; ++i) {
@@ -106,38 +103,38 @@ for (int i = 0; i < 3; ++i) {
     position.cameraOrientation.axisRight[i] = user_orientation_right_[i];
     position.cameraOrientation.axisUp[i] = user_orientation_up_[i];
 }
-/** 设置场景 ID */
+/** Set scenario ID */
 param.sceneID = scene_id;
-/** (可选)配置模版 ID */
+/** (Optional) Configure template ID */
 param.templateID = template_id;
 param.user = user;
 param.position = position;
-/** 设置用户登录场景的广播模式 */
+/** Set user's broadcast mode for logging into the scenario */
 param.broadcastMode = ZegoBroadcastModeAll::ZEGO_BROADCAST_MODE_ALL;
 range_scene_->loginScene(param, [](int errorCode, const ZegoSceneConfig &config) {
 });
 ```
 
-<Warning title="注意">
+<Warning title="Attention">
 
+If you need to customize templates, please refer to [Server API - Scenario Template Configuration](/real-time-video-server/api-reference/scene/set-scene-template) for details.
 
-如果您需要自定义模板，详情请参考 [服务端 API - 场景模版配置](/real-time-video-server/api-reference/scene/set-scene-template)。
 </Warning>
 
-### 5 同步状态
+### 5 Synchronize Status
 
-通过 [updateUserStatus](@updateUserStatus)、[updateUserCommand](@updateUserCommand) 接口更新用户状态及用户命令。通过 [onUserStatusUpdate](@onUserStatusUpdate)、[onUserCommandUpdate](@onUserCommandUpdate) 回调接收 AOI 范围内的远端用户位置、命令等状态信息。
+Update user status and user commands through the [updateUserStatus](@updateUserStatus) and [updateUserCommand](@updateUserCommand) interfaces. Receive status information such as positions and commands of remote users within the AOI range through the [onUserStatusUpdate](@onUserStatusUpdate) and [onUserCommandUpdate](@onUserCommandUpdate) callbacks.
 
-<Note title="说明">
+<Note title="Description">
 
+- User status (status, S) is a full update, user commands are incremental updates (command, C), user status can be calculated from a previous user status through a series of user commands.
+- The model for user status updates should be Si->Ci->Ci+1->Ci+2->...Ci+j->S(i+1)->C(i+1)+1->C(i+1)+2->...C(i+1)+k->S(i+2)->C(i+2)->...
+- The status synchronization service will ensure that incremental updates (commands) between two full status updates (Si, Si+1) arrive in order.
 
-- 用户状态（status，S）是全量更新，用户命令是增量更新（command，C），用户状态可以由前一个用户状态经过一系列用户命令计算得出。
-- 用户更新状态的模型应是 Si->Ci->Ci+1->Ci+2->...Ci+j->S(i+1)->C(i+1)+1->C(i+1)+2->...C(i+1)+k->S(i+2)->C(i+2)->...
-- 状态同步服务将保证 Si、Si+1 两个全量状态（status）之间的增量更新（command）有序到达。
 </Note>
 
 ```cpp
-/** 设置用户的场景坐标、运动朝向、摄像机朝向 */
+/** Set user's scenario coordinates, motion orientation, camera orientation */
 ZegoPosition position;
 memset(&position, 0, sizeof(ZegoPosition));
 for (int i = 0; i < 3; ++i) {
@@ -149,41 +146,41 @@ for (int i = 0; i < 3; ++i) {
     position.cameraOrientation.axisRight[i] = user_orientation_right_[i];
     position.cameraOrientation.axisUp[i] = user_orientation_up_[i];
 }
-/** 更新用户状态 */
+/** Update user status */
 int status_res = range_scene_->updateUserStatus(position, channel, status, status.length());
-/** 更新用户命令 */
+/** Update user command */
 int command_res = range_scene_->updateUserCommand(position, channel, command, command.length());
 ```
 
-### 6（可选）获取场景内用户数、获取 AOI 范围内用户列表
+### 6 (Optional) Get User Count in Scenario, Get User List Within AOI Range
 
-<Accordion title="获取场景内用户数、获取 AOI 范围内用户列表" defaultOpen="false">
-可以根据需要调用 [getUserCount](@getUserCount)、[getUserListInView](@getUserListInView) 接口获取场景内用户数、AOI 范围内用户列表。
+<Accordion title="Get User Count in Scenario, Get User List Within AOI Range" defaultOpen="false">
+As needed, call the [getUserCount](@getUserCount) and [getUserListInView](@getUserListInView) interfaces to get the user count in the scenario and the user list within the AOI range.
 
 ```cpp
-/** 获取场景内用户数 */
+/** Get user count in scenario */
 range_scene_->getUserCount([](int errorCode, unsigned int count) {
 });
 
-/** 获取 AOI 范围内用户列表 */
+/** Get user list within AOI range */
 range_scene_->getUserListInView([](int errorCode, const std::vector<std::string> &userList) {
 });
 ```
 </Accordion>
 
-### 7（可选）物品状态与竞争锁
+### 7 (Optional) Item Status and Competitive Lock
 
-<Accordion title="物品状态与竞争锁" defaultOpen="false">
-通过物品状态同步可以实现虚拟场景中物品移动及放置玩法，如放置系统、踢球等。通过物品锁可以实现物品抢夺玩法，如捡装备、抢椅子等，可根据需求进行设置。
+<Accordion title="Item Status and Competitive Lock" defaultOpen="false">
+Item status synchronization can implement item movement and placement gameplay in virtual scenarios, such as placement systems, ball kicking, etc. Item locks can implement item grabbing gameplay, such as equipment pickup, musical chairs, etc., which can be set as needed.
 
-1. 创建物品
+1. Create Item
 
-根据需要调用 [createItem](@createItem) 接口在场景内创建物品。
+As needed, call the [createItem](@createItem) interface to create items in the scenario.
 
 ```cpp
-/** 创建物品参数 */
+/** Create item parameters */
 ZegoItemParam param;
-/** 设置物品的场景坐标、运动朝向 */
+/** Set item's scenario coordinates, motion orientation */
 ZegoPosition position;
 memset(&position, 0, sizeof(ZegoPosition));
 for (int i = 0; i < 3; ++i) {
@@ -192,41 +189,41 @@ for (int i = 0; i < 3; ++i) {
     position.motionOrientation.axisRight[i] = item_orientation_right_[i];
     position.motionOrientation.axisUp[i] = item_orientation_up_[i];
 }
-/** 设置物品 ID */
+/** Set item ID */
 param.itemID = item_id;
-/** 设置物品最大绑定人数上限 */
+/** Set maximum binding user limit for item */
 param.capacity = capacity;
 param.position = position;
-/** 设置创建物品模式 */
+/** Set create item mode */
 param.createMode = ZegoCreateItemMode::ZEGO_CREATE_ITEM_MODE_NO_BIND;
 range_scene_->getRangeSceneItem()->createItem(param, [](int errorCode, long long itemID) {
 });
 ```
 
-2. 绑定物品
+2. Bind Item
 
-如果需要对物品进行操作（即更新物品状态命令），首先需要调用 [bindItem](@bindItem) 绑定物品。
+If you need to operate on an item (i.e., update item status commands), you first need to call [bindItem](@bindItem) to bind the item.
 
 ```cpp
 range_scene_->getRangeSceneItem()->bindItem(item_id, [](int errorCode, long long itemID) {
 });
 ```
 
-3. 同步物品状态
+3. Synchronize Item Status
 
-通过 [updateItemStatus](@updateItemStatus)、[updateItemCommand](@updateItemCommand) 接口更新物品状态及物品命令。通过 [onItemStatusUpdate](@onItemStatusUpdate)、[onItemCommandUpdate](@onItemCommandUpdate) 回调接收 AOI 范围内的远端物品位置、命令等状态信息。
+Update item status and item commands through the [updateItemStatus](@updateItemStatus) and [updateItemCommand](@updateItemCommand) interfaces. Receive status information such as positions and commands of remote items within the AOI range through the [onItemStatusUpdate](@onItemStatusUpdate) and [onItemCommandUpdate](@onItemCommandUpdate) callbacks.
 
-<Note title="说明">
+<Note title="Description">
 
+- Before updating item status and commands, you need to bind the item first.
+- Item status (status, S) is a full update, item commands are incremental updates (command, C), item status can be calculated from a previous item status through a series of item commands.
+- The model for item status updates should be Si->Ci->Ci+1->Ci+2->...Ci+j->S(i+1)->C(i+1)+1->C(i+1)+2->...C(i+1)+k->S(i+2)->C(i+2)->...
+- The status synchronization service will ensure that incremental updates (commands) between two full status updates (Si, Si+1) arrive in order.
 
-- 在更新物品状态和命令前，需要先绑定物品。
-- 物品状态（status，S）是全量更新，物品命令是增量更新（command，C），物品状态可以由前一个物品状态经过一系列物品命令计算得出。
-- 物品更新状态的模型应是 Si->Ci->Ci+1->Ci+2->...Ci+j->S(i+1)->C(i+1)+1->C(i+1)+2->...C(i+1)+k->S(i+2)->C(i+2)->...
-- 状态同步服务将保证 Si、Si+1 两个全量状态（status）之间的增量更新（command）有序到达。
 </Note>
 
 ```cpp
-/** 设置物品的场景坐标、运动朝向 */
+/** Set item's scenario coordinates, motion orientation */
 ZegoPosition position;
 memset(&position, 0, sizeof(ZegoPosition));
 for (int i = 0; i < 3; ++i) {
@@ -235,27 +232,27 @@ for (int i = 0; i < 3; ++i) {
     position.motionOrientation.axisRight[i] = item_orientation_right_[i];
     position.motionOrientation.axisUp[i] = item_orientation_up_[i];
 }
-/** 更新物品状态 */
+/** Update item status */
 range_scene_->getRangeSceneItem()->updateItemStatus(item_id, position, channel, status, status.length(),[](int errorCode, long long itemID) {
 });
 
-/** 更新物品命令 */
+/** Update item command */
 range_scene_->getRangeSceneItem()->updateItemCommand(item_id, position, channel, command, command.length(),[](int errorCode, long long itemID) {
 });
 ```
 
-4. 解绑物品
+4. Unbind Item
 
-如果无需对物品进行操作（即更新物品状态命令），可以调用 [unbindItem](@unbindItem) 解绑物品。
+If you no longer need to operate on an item (i.e., update item status commands), you can call [unbindItem](@unbindItem) to unbind the item.
 
 ```cpp
 range_scene_->getRangeSceneItem()->unbindItem(item_id, [](int errorCode, long long itemID) {
 });
 ```
 
-5. 销毁物品
+5. Destroy Item
 
-根据需要调用 [destroyItem](@destroyItem) 销毁场景内的物品。
+As needed, call [destroyItem](@destroyItem) to destroy items in the scenario.
 
 ```cpp
 range_scene_->getRangeSceneItem()->destroyItem(item_id, [](int errorCode, long long itemID) {
@@ -263,28 +260,28 @@ range_scene_->getRangeSceneItem()->destroyItem(item_id, [](int errorCode, long l
 ```
 </Accordion>
 
-### 8 退出场景
+### 8 Logout of Scenario
 
-调用 [logoutScene](@logoutScene) 接口退出场景。
+Call the [logoutScene](@logoutScene) interface to logout of the scenario.
 
 ```cpp
-/** 退出场景 */
+/** Logout of scenario */
 range_scene_->logoutScene([](int errorCode) {
 });
 ```
 
-### 9 销毁范围场景模块
+### 9 Destroy Range Scenario Module
 
-当不再使用范围场景模块时，可以调用 [destroyRangeScene](@destroyRangeScene) 接口销毁范围场景模块。
+When the range scenario module is no longer needed, you can call the [destroyRangeScene](@destroyRangeScene) interface to destroy the range scenario module.
 
 ```cpp
 engine_->destroyRangeScene(range_scene_);
 range_scene_ = nullptr;
 ```
 
-### 10 销毁引擎
+### 10 Destroy Engine
 
-当不再使用 ZEGO Express SDK 时，可以调用 [destroyEngine](@destroyEngine) 销毁引擎。
+When ZEGO Express SDK is no longer needed, you can call [destroyEngine](@destroyEngine) to destroy the engine.
 
 ```cpp
 ZegoExpressSDK::destroyEngine(engine_);
