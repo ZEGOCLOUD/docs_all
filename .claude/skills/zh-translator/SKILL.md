@@ -1,13 +1,13 @@
 ---
 name: zh-translator
-description: 中文文档翻译助手。用于将中文文档翻译成英文，支持 Markdown 文档和 OpenAPI YAML 文件。支持基于 git commit 历史分析改动、指定目录扫描、或批量翻译新产品文档。使用术语一致性对照表确保翻译质量。触发词：翻译、批量翻译、新产品翻译、目录翻译、翻译任务、translate、批量文档翻译。当用户提到这些关键词时自动调用此 skill。
+description: 中文文档翻译助手。用于将中文文档翻译成英文，支持 Markdown 文档和 OpenAPI YAML 文件。支持基于 git commit 历史分析改动、指定目录扫描翻译 OpenAPI YAML。使用术语一致性对照表确保翻译质量。触发词：翻译、目录翻译、翻译任务、translate。当用户提到这些关键词时自动调用此 skill。
 ---
 
 # 中文文档翻译助手
 
 ## 概述
 
-本 Skill 提供系统化的中文到英文翻译工作流，支持两种文件类型：
+本 Skill 提供系统化的中文到英文翻译工作流，支持两种场景：
 - **Markdown 文档翻译**：基于 git commit 历史分析改动
 - **OpenAPI YAML 翻译**：指定目录扫描并翻译
 
@@ -20,7 +20,11 @@ description: 中文文档翻译助手。用于将中文文档翻译成英文，�
 
 ## 使用场景
 
-当用户需要翻译修改过的 Markdown 文档、OpenAPI YAML 配置、指定 commit 范围翻译、批量翻译目录下所有文件（新产品批量翻译）时使用。
+当用户需要翻译以下内容时使用：
+- **修改过的 Markdown 文档**：基于 git commit 历史分析改动
+- **OpenAPI YAML 配置**：指定目录扫描并翻译
+
+**注意**：批量翻译新产品文档请使用 `/trans-batch` skill。
 
 ## ⚠️ 核心规则（必须遵守）
 
@@ -258,49 +262,6 @@ python3 .scripts/analyze_changes.py . abc123 def456
 - 如果描述是单行且包含中文冒号 `：`，必须改为多行描述（使用 `|`）
 - 保留 YAML 结构和缩进，保持键名不变
 
-### 场景 3：批量翻译目录下所有文件（新产品）
-
-**使用脚本**：`scan_translation_files.py`
-
-```bash
-# 默认批次大小（5000 行/批）
-python3 .skills/zh-translator/scripts/scan_translation_files.py docs/zh/product
-
-# 自定义批次大小
-python3 .skills/zh-translator/scripts/scan_translation_files.py docs/zh/product 3000
-```
-
-**输出内容**：
-1. **统计摘要**：API 文件数量、Markdown 文件数量和行数、YAML 文件数量和行数、总批次、大文件列表（>500 行）
-2. **批次计划**：每批包含的文件列表、每批的总行数和文件数、大文件标记
-3. **智能识别**：自动识别 API 文件对（mdx + yaml），仅翻译 `.yaml`
-
-**流程**：
-1. 扫描目录并生成翻译计划
-2. 向用户展示扫描结果并等待确认
-3. **初始化进度记录文件**：在目标目录创建 `.translation-progress.json`
-4. 逐批次翻译
-   - **小文件**（< 100 行）：多个文件一批
-   - **中等文件**（100-500 行）：1-2 个文件一批
-   - **大文件**（> 500 行）：单独成批，分段翻译（每段不超过 2000 行）
-5. **每批次完成后**：
-   - 更新 `.translation-progress.json` 文件
-   - 报告进度并暂停，等待用户确认
-6. 全部完成后提供总结报告，标记 `status: "completed"`
-
-**大文件分段翻译示例**：
-```
-⚠️ 处理大文件：path/to/large_file.md (2500 行)
-📍 第 1/2 段（第 1-1250 行）
-[翻译第 1 段...]
-
-✅ 第 1 段完成
-📍 第 2/2 段（第 1251-2500 行）
-[翻译第 2 段...]
-
-✅ 大文件翻译完成：path/to/large_file.md
-```
-
 ---
 
 ## 重要说明
@@ -332,7 +293,6 @@ python3 .skills/zh-translator/scripts/scan_translation_files.py docs/zh/product 
 
 ### scripts/
 - **analyze_changes.py**：Git 变更分析脚本，用于识别改动的 markdown 文件
-- **scan_translation_files.py**：目录扫描脚本，用于批量翻译场景
 
 ### .translate/
 **术语对照表（维护在项目根目录的 `.translate/` 下）：**
