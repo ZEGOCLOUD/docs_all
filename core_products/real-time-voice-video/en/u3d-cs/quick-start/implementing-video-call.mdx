@@ -2,102 +2,102 @@
 articleID: 8620
 date: "2025-01-21"
 ---
-# 实现视频通话
+# Implementing Video Call
 
 ---
 
-## 功能简介
+## Function Overview
 
-本文将介绍如何快速实现一个简单的实时音视频通话。
+This article will introduce how to quickly implement a simple real-time audio/video call.
 
-相关概念解释:
+Related concept explanations:
 
-- ZEGO Express SDK：由 ZEGO 提供的实时音视频 SDK，能够为开发者提供便捷接入、高清流畅、多平台互通、低延迟、高并发的音视频服务。
-- 流：指一组按指定编码格式封装，不断发送中的音视频数据。一个用户可以同时推多条流（例如一条推摄像头数据，一条推屏幕共享数据）也可以同时拉多条流。每条流都由一个流 ID（streamID）标识。
-- 推流：把封包好的音视频数据流推送到 ZEGO 实时音视频云的过程。
-- 拉流：从 ZEGO 实时音视频云将已有音视频数据流拉取播放的过程。
-- 房间：是 ZEGO 提供的音视频空间服务，用于组织用户群，同一房间内的用户可以互相收发实时音视频及消息。
-    1. 用户需要先登录某个房间，才能进行推流、拉流操作。
-    2. 用户只能收到自己所在房间内的相关消息（用户进出、音视频流变化等）。
-    3. 每个房间由一个 ApplD 内唯一的 roomlD 标识。所有使用同一个 roomID 登录房间的用户即属于同房间。
+- ZEGO Express SDK: A real-time audio/video SDK provided by ZEGO that can provide developers with convenient access, high definition and smoothness, multi-platform interoperability, low latency, and high concurrency audio/video services.
+- Stream: Refers to a group of audio/video data that is continuously sent in a specified encoding format. A user can publish multiple streams at the same time (for example, one for camera data, one for screen sharing data) and can also play multiple streams at the same time. Each stream is identified by a stream ID (streamID).
+- Publishing stream: The process of pushing packaged audio/video data streams to ZEGO real-time audio/video cloud.
+- Playing stream: The process of pulling and playing existing audio/video data streams from ZEGO real-time audio/video cloud.
+- Room: An audio/video space service provided by ZEGO, used to organize user groups. Users in the same room can send and receive real-time audio/video and messages to each other.
+    1. Users need to login to a room first before they can publish and play streams.
+    2. Users can only receive relevant messages in the room they are in (user enter/leave, audio/video stream changes, etc.).
+    3. Each room is identified by a unique roomID within an AppID. All users who login to the room using the same roomID belong to the same room.
 
 
 
-更多相关概念请参考 [术语说明](/glossary/term-explanation)。
+For more related concepts, please refer to [Term Explanation](/glossary/term-explanation).
 
-## 前提条件
+## Prerequisites
 
-在实现基本的实时音视频功能之前，请确保：
+Before implementing basic real-time audio/video functionality, please ensure:
 
-- 已在项目中集成 ZEGO Express SDK，实现基本的实时音视频功能，详情请参考 [快速开始 - 集成](/real-time-video-u3d-cs/quick-start/integrating-sdk)。
-- 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目管理](/console/project-info) 中的“项目信息”。
+- You have integrated ZEGO Express SDK in the project and implemented basic real-time audio/video functionality. For details, please refer to [Quick Start - Integration](/real-time-video-u3d-cs/quick-start/integrating-sdk).
+- You have created a project in [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for valid AppID and AppSign. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
 
-<Warning title="注意">
+<Warning title="Warning">
 
-SDK 同时也支持 Token 鉴权，若您对项目安全性有更高要求，建议您升级鉴权方式，详情请参考 [如何从 AppSign 鉴权升级为 Token 鉴权](http://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo)。
+The SDK also supports Token authentication. If you have higher security requirements for the project, it is recommended that you upgrade the authentication method. For details, please refer to [How to upgrade from AppSign authentication to Token authentication](https://www.zegocloud.com/docs/faq/token_upgrade?product=ExpressVideo).
 </Warning>
 
-## 使用步骤
+## Usage Steps
 
-用户通过 ZEGO Express SDK 进行视频通话的基本流程为：
+The basic process for users to make video calls through ZEGO Express SDK is:
 
-用户 A、B  加入房间，用户 B 预览并将音视频流推送到 ZEGO 云服务（推流），用户 A 收到用户 B 推送音视频流的通知之后，在通知中播放用户 B 的音视频流（拉流）。
+Users A and B join a room. User B previews and pushes the audio/video stream to ZEGO cloud service (publishing stream). After User A receives the notification of User B's published audio/video stream, User A plays User B's audio/video stream in the notification (playing stream).
 
 <Frame width="512" height="auto" caption="">
   <img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/common_usage_new.png" />
 </Frame>
 
-整个推拉流过程的 API 调用时序如下图：
+The API call sequence for the entire publishing and playing stream process is shown below:
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml_video_u3d.png" /></Frame>
 
 <a id="CreateEngine"> </a>
 
-### 创建引擎
+### Create Engine
 
-**1. 创建界面（可选）**
+**1. Create Interface (Optional)**
 
-<Accordion title="添加界面元素" defaultOpen="false">
-在开始之前，推荐开发者添加以下界面元素，方便实现基本的实时音视频功能。
+<Accordion title="Add Interface Elements" defaultOpen="false">
+Before starting, it is recommended that developers add the following interface elements to facilitate the implementation of basic real-time audio/video functionality.
 
-- 本地预览窗口
-- 远端视频窗口
-- 结束按钮
+- Local preview window
+- Remote video window
+- End button
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/UI_PC.jpg" /></Frame>
 </Accordion>
 
-**2. 创建引擎并监听回调**
+**2. Create Engine and Listen to Callbacks**
 
-调用 CreateEngine 接口，将申请到到 AppID 和 AppSign 传入参数 “appId” 和 “appSign”，创建引擎单例对象。
-
-
-开发者可以根据需要选择使用匿名函数来实现回调函数，并赋值给引擎实例对应的回调委托注册回调。
-
-<Warning title="注意">
+Call the CreateEngine interface, pass the applied AppID and AppSign into the parameters "appId" and "appSign", and create an engine singleton object.
 
 
-为避免错过任何通知，建议在创建引擎后立即监听回调
+Developers can choose to use anonymous functions to implement callback functions as needed, and assign them to the corresponding callback delegates of the engine instance to register callbacks.
+
+<Warning title="Warning">
+
+
+To avoid missing any notifications, it is recommended to listen to callbacks immediately after creating the engine.
 
 </Warning>
 
-<Warning title="注意">如果是语音场景，请务必调用 `enableCamera(false)` 关闭摄像头，避免启动视频采集推流产生额外的视频流量。</Warning>
+<Warning title="Warning">If it is an audio scenario, be sure to call `enableCamera(false)` to turn off the camera to avoid starting video capture and publishing stream, which generates additional video traffic.</Warning>
 
 
 
 
 ```cs
-// 定义 SDK 引擎对象
+// Define SDK engine object
 ZegoExpressEngine engine;
 
 ZegoEngineProfile profile = new ZegoEngineProfile();
-profile.appID = appID; // 请通过官网注册获取，格式为 123456789
-profile.appSign = appSign; // 请通过官网注册获取，格式为"0123456789012345678901234567890123456789012345678901234567890123"，64个字符
-profile.scenario = ZegoScenario.HighQualityVideoCall; // 高品质音视频通话场景接入（请根据实际情况选择合适的场景）
-// 初始化SDK
+profile.appID = appID; // Please obtain through official website registration, format is 123456789
+profile.appSign = appSign; // Please obtain through official website registration, format is "0123456789012345678901234567890123456789012345678901234567890123", 64 characters
+profile.scenario = ZegoScenario.HighQualityVideoCall; // High-quality audio/video call scenario access (please choose the appropriate scenario according to actual situation)
+// Initialize SDK
 engine = ZegoExpressEngine.CreateEngine(profile);
 
-// 设置 SDK 回调委托
+// Set SDK callback delegates
 engine.OnRoomStateUpdate = (roomID, state, errorCode, extendedData) => {
 
 };
@@ -105,74 +105,72 @@ engine.OnRoomStateUpdate = (roomID, state, errorCode, extendedData) => {
 
 <a id="createroom"></a>
 
-### 登录房间
+### Login Room
 
-**1. 登录**
+**1. Login**
 
-创建 ZegoUser 用户对象，设置用户信息 “userID” 和 “userName” 后，调用 LoginRoom，传入房间 ID 参数 “roomId” 和用户参数 “user”，登录房间。如果房间不存在，调用该接口时会创建并登录此房间。
+Create a ZegoUser user object, set user information "userID" and "userName", then call LoginRoom, pass in the room ID parameter "roomId" and user parameter "user", and login to the room. If the room does not exist, calling this interface will create and login to this room.
 
-- 同一个 AppID 内，需保证 “roomId” 全局唯一。
-- 同一个 AppID 内，需保证 “userId” 全局唯一，建议开发者将其设置成一个有意义的值，可将 “userId” 与自己业务账号系统进行关联。
-- “userId” 不能为空，否则会导致登录房间失败。
-- 在 WebGL 环境中运行时，仅支持 Token 鉴权，Token 不能为空，请参考 [使用 Token 鉴权](/real-time-video-u3d-cs/communication/using-token-authentication)。
+- Within the same AppID, ensure that "roomId" is globally unique.
+- Within the same AppID, ensure that "userId" is globally unique. It is recommended that developers set it to a meaningful value and associate "userId" with their own business account system.
+- "userId" cannot be empty, otherwise login to the room will fail.
+- When running in WebGL environment, only Token authentication is supported. Token cannot be empty. Please refer to [Use Token Authentication](/real-time-video-u3d-cs/communication/using-token-authentication).
 
 ```cs
-// 创建用户
+// Create user
 ZegoUser user = new ZegoUser();
 user.userId="xxx";
 user.userName="xxxx";
-// 只有传入 “isUserStatusNotify” 参数取值为 “true” 的 ZegoRoomConfig，才能收到 onRoomUserUpdate 回调。
+// Only by passing in ZegoRoomConfig with the "isUserStatusNotify" parameter set to "true" can you receive the onRoomUserUpdate callback.
 ZegoRoomConfig roomConfig = new ZegoRoomConfig();
-// 如果您使用 AppSign 的方式鉴权，Token 参数不需填写（除 WebGL 平台外）；如果需要使用更加安全的 鉴权方式：Token 鉴权，请参考[如何从 AppSign 鉴权升级为 Token 鉴权](https://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo&platform=all)
-// 在WebGL平台上，“token” 不能为空
+// If you use AppSign for authentication, the Token parameter does not need to be filled in (except for WebGL platform); if you need to use a more secure authentication method: Token authentication, please refer to [How to upgrade from AppSign authentication to Token authentication](https://www.zegocloud.com/docs/faq/token_upgrade?product=ExpressVideo&platform=all)
+// On WebGL platform, "token" cannot be empty
 roomConfig.token = "xxxx";
 roomConfig.isUserStatusNotify = true;
-// 登录房间
+// Login room
 engine.LoginRoom("123666", user, roomConfig);
 ```
 
-**2. 监听登录房间后的事件回调**
+**2. Listen to Event Callbacks After Login Room
 
 
-根据实际需要，在登录房间后监听想要关注的事件通知，比如房间状态更新、用户状态更新、流状态更新等。
+According to actual needs, listen to event notifications you want to pay attention to after login to the room, such as room status updates, user status updates, stream status updates, etc.
 
-- OnRoomStateUpdate：房间状态更新回调。登录房间后，当房间连接状态发生变更（如出现房间断开，登录认证失败等情况），SDK 会通过该回调通知。
-- OnRoomUserUpdate：用户状态更新回调。登录房间后，当房间内有用户新增或删除时，SDK 会通过该回调通知。
+- OnRoomStateUpdate: Room status update callback. After login to the room, when the room connection status changes (such as room disconnection, login authentication failure, etc.), the SDK will notify through this callback.
+- OnRoomUserUpdate: User status update callback. After login to the room, when users are added to or deleted from the room, the SDK will notify through this callback.
 
-    只有调用 loginRoom 接口登录房间时传入 ZegoRoomConfig 配置，且 “isUserStatusNotify” 参数取值为 “true” 时，用户才能收到 onRoomUserUpdate 回调。
+    Only when calling the loginRoom interface to login to the room and passing in ZegoRoomConfig configuration, and the "isUserStatusNotify" parameter is set to "true", can users receive the onRoomUserUpdate callback.
 
-- OnRoomStreamUpdate：流状态更新回调。登录房间后，当房间内有用户新推送或删除音视频流时，SDK 会通过该回调通知。
+- OnRoomStreamUpdate: Stream status update callback. After login to the room, when users in the room add or delete audio/video streams, the SDK will notify through this callback.
 
-事件回调皆为 ZegoExpressEngine 的委托，开发者直接将自己实现的回调处理函数赋值给 ZegoExpressEngine 对应的委托，即可收到回调并进行处理。
+Event callbacks are delegates of ZegoExpressEngine. Developers can directly assign their implemented callback handling functions to the corresponding delegates of ZegoExpressEngine to receive callbacks and handle them.
 
-<Warning title="注意">
+<Warning title="Warning">
 
 
-- 只有调用 loginRoom 接口登录房间时传入 ZegoRoomConfig 配置，且 “isUserStatusNotify” 参数取值为 “true” 时，用户才能收到 onRoomUserUpdate 回调。
-- 通常情况下，如果某个用户想要播放其他用户推送的视频，可以在收到流状态更新（新增）的回调中，调用 startPlayingStream 接口拉取远端推送的音视频流。
-
-</Warning>
+- Only when calling the loginRoom interface to login to the room and passing in ZegoRoomConfig configuration, and the "isUserStatusNotify" parameter is set to "true", can users receive the onRoomUserUpdate callback.
+- Normally, if a user wants to play videos published by other users, they can call the startPlayingStream interface in the stream status update (addition) callback to play remote published audio/video streams.
 
 
 
 
 ```cs
-// 房间状态更新回调
+// Room status update callback
 public void OnRoomStateUpdate(string roomId, ZegoRoomState state, int errorCode, string extendedData) {
-    // 根据需要实现事件回调
+    // Implement event callback as needed
 }
 
-// 用户状态更新回调
+// User status update callback
 private void OnRoomUserUpdate(string roomId, ZegoUpdateType updateType, List<ZegoUser> userList, uint userCount) {
-    // 根据需要实现事件回调
+    // Implement event callback as needed
 }
 
-// 流状态更新回调
+// Stream status update callback
 private void OnRoomStreamUpdate(string roomId, ZegoUpdateType updateType, List<ZegoStream> streamInfoList, uint streamInfoCount) {
-    // 根据需要实现事件回调
+    // Implement event callback as needed
 }
 
-// 赋值给 ZegoExpressEngine 对应的事件委托
+// Assign to corresponding event delegates of ZegoExpressEngine
 engine.onRoomStateUpdate = OnRoomStateUpdate;
 engine.onRoomUserUpdate = OnRoomUserUpdate;
 engine.onRoomStreamUpdate = OnRoomStreamUpdate;
@@ -180,16 +178,16 @@ engine.onRoomStreamUpdate = OnRoomStreamUpdate;
 
 <a id="publishingStream"></a>
 
-### 推流
+### Publishing Stream
 
-**1. 开始推流**
+**1. Start Publishing Stream**
 
-调用 StartPublishingStream 接口，传入流 ID 参数 “streamId”，向远端用户发送本端的音视频流。
+Call the StartPublishingStream interface, pass in the stream ID parameter "streamId", and send the local audio/video stream to remote users.
 
-<Warning title="注意">
+<Warning title="Warning">
 
 
-同一个 AppID 内，需保证 “streamId” 全局唯一。如果同一个 AppID 内，不同用户各推了一条 “streamId” 相同的流，会导致后推流的用户推流失败。
+Within the same AppID, ensure that "streamId" is globally unique. If different users within the same AppID publish streams with the same "streamId", the user who publishes later will fail to publish stream.
 
 
 </Warning>
@@ -198,28 +196,28 @@ engine.onRoomStreamUpdate = OnRoomStreamUpdate;
 
 
 ```cs
-// 开始推流
+// Start publishing stream
 engine.StartPublishingStream("stream1");
 ```
 
 
-**2. 启用本地预览（可选）**
+**2. Enable Local Preview (Optional)**
 
-<Accordion title="设置预览视图并启动本地预览" defaultOpen="false">
-开发者如果希望看到自己本端的画面，可调用 StartPreview 接口启动本地预览。
+<Accordion title="Set Preview View and Start Local Preview" defaultOpen="false">
+If developers want to see their local画面, they can call the StartPreview interface to start local preview.
 
-由于 Android 设备和 iOS 设备的屏幕方向存在 Portrait、PortraitUpsideDown、LandscapeLeft、LandscapeRight 四种方向，为保证推流预览和拉流的显示界面始终在正确的方向，需要先添加推流预览和拉流的显示界面自适应横竖屏代码，请参考 [快速开始 - 集成](/real-time-video-u3d-cs/quick-start/integrating-sdk) 中的 “4 界面自适应”。
+Since Android devices and iOS devices have four screen orientations: Portrait, PortraitUpsideDown, LandscapeLeft, and LandscapeRight, to ensure that the publishing stream preview and playing stream display interface are always in the correct direction, you need to first add adaptive horizontal and vertical screen code for the publishing stream preview and playing stream display interface. Please refer to "4 Interface Adaptation" in [Quick Start - Integration](/real-time-video-u3d-cs/quick-start/integrating-sdk).
 
-Unity 支持通过 RawImage 和 Renderer 两种渲染器进行预览。
+Unity supports preview through two renderers: RawImage and Renderer.
 
-- 方式一：RawImage
+- Method 1: RawImage
 
-创建 RawImage。
+Create RawImage.
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Unity3D/ZegoExpressEngine/QuickStart/create-raw-image.png" /></Frame>
 
 
-预览显示到 RawImage 上。
+Preview displayed on RawImage.
 
 ```cs
 RawImageVideoSurface localVideoSurface = null;
@@ -229,118 +227,118 @@ mainLocalVideoPlane = GameObject.Find("MainPreViewRawImage");
 
 if (mainLocalVideoPlane != null && localVideoSurface == null)
 {
-    // 添加一个 RawImageVideoSurface 组件，渲染器为 RawImage
+    // Add a RawImageVideoSurface component, renderer is RawImage
     localVideoSurface = mainLocalVideoPlane.AddComponent<RawImageVideoSurface>();
-    // 设置为本地预览画面
+    // Set as local preview画面
     localVideoSurface.SetCaptureVideoInfo();
-    // 设置视频源为engine
+    // Set video source to engine
     localVideoSurface.SetVideoSource(engine);
 }
 
-// 调用开始预览接口
+// Call start preview interface
 engine.StartPreview();
 ```
 
-- 方式二：Renderer
+- Method 2: Renderer
 
-创建带 Renderer 的 Plane。
+Create a Plane with Renderer.
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Unity3D/ZegoExpressEngine/QuickStart/create-renderer.png" /></Frame>
 
 
-预览到 Plane 的 Renderer 上。
+Preview to Plane's Renderer.
 
 ```cs
-GameObject go = GameObject.CreatePrimitive(PrimitiveType.Plane);//代码创建的Plane
+GameObject go = GameObject.CreatePrimitive(PrimitiveType.Plane);//Plane created by code
 
 if (go == null)
 {
     return;
 }
 go.name = "preview-render";
-// 保证画面能够在屏幕显示
+// Ensure the画面 can be displayed on the screen
 go.transform.Rotate(90.0f, -180.0f, 0.0f);
 go.transform.position = new Vector3(0.0f, 0.0f, 0.0f);
 go.transform.localScale = new Vector3(0.36f, 1f, 0.64f);
 
-// 添加一个 RendererVideoSurface 组件，渲染器为 Renderer
+// Add a RendererVideoSurface component, renderer is Renderer
 RendererVideoSurface renderer = go.AddComponent<RendererVideoSurface>();
-// 设置为本地预览画面
+// Set as local preview画面
 renderer.SetCaptureVideoInfo();
-// 设置视频源为engine
+// Set video source to engine
 renderer.SetVideoSource(engine);
 
-// 调用开始预览接口
+// Call start preview interface
 engine.StartPreview();
 ```
 </Accordion>
 
 
-**3. 监听推流后的事件回调**
+**3. Listen to Event Callbacks After Publishing Stream
 
 
-根据实际应用需要，在推流后监听想要关注的事件通知，比如推流状态更新、推流质量等。
+According to actual application needs, listen to event notifications you want to pay attention to after publishing stream, such as publishing stream status updates, publishing stream quality, etc.
 
-- OnPublisherStateUpdate：推流状态更新回调。调用推流接口成功后，当推流状态发生变更（如出现网络中断导致推流异常等情况），SDK 在重试推流的同时，会通过该回调通知。
-- OnPublisherQualityUpdate：推流质量回调。调用推流接口成功后，定时回调音视频流质量数据（如分辨率、帧率、码率等）。
+- OnPublisherStateUpdate: Publishing stream status update callback. After successfully calling the publishing stream interface, when the publishing stream status changes (such as network interruption causing publishing stream exceptions, etc.), while the SDK retries publishing stream, it will notify through this callback.
+- OnPublisherQualityUpdate: Publishing stream quality callback. After successfully calling the publishing stream interface, it periodically calls back audio/video stream quality data (such as resolution, frame rate, bitrate, etc.).
 
-事件回调皆为 ZegoExpressEngine 的委托，开发者直接将自己实现的回调处理函数赋值给 ZegoExpressEngine 对应的委托，即可收到回调并进行处理。
+Event callbacks are delegates of ZegoExpressEngine. Developers can directly assign their implemented callback handling functions to the corresponding delegates of ZegoExpressEngine to receive callbacks and handle them.
 
 ```cs
-// 推流状态更新回调
+// Publishing stream status update callback
 public void OnPublisherStateUpdate(string streamId, ZegoPublisherState state, int errorCode, string extendedData)
 {
-    // 根据需要实现事件回调
+    // Implement event callback as needed
 }
 
-// 推流质量回调
+// Publishing stream quality callback
 private void OnPublisherQualityUpdate(string streamId, ZegoPublishStreamQuality quality)
 {
-    // 根据需要实现事件回调
+    // Implement event callback as needed
 }
 
 
-// 赋值给 ZegoExpressEngine 对应的事件委托
+// Assign to corresponding event delegates of ZegoExpressEngine
 engine.onPublisherStateUpdate = OnPublisherStateUpdate;
 engine.onPublisherQualityUpdate = OnPublisherQualityUpdate;
 engine.StartPublishingStream("stream1");
 ```
 
-<Note title="说明">如果您需要了解 ZEGO Express SDK 的摄像头/视频/麦克风/音频/扬声器相关接口，请参考 [常见问题 - 如何实现开关摄像头/视频画面/麦克风/音频/扬声器？](http://doc-zh.zego.im/faq/How_to_switch_devices)。</Note>
+<Note title="Note">If you need to understand ZEGO Express SDK's camera/video/microphone/audio/speaker related interfaces, please refer to [FAQ - How to implement switching camera/video画面/microphone/audio/speaker?](https://www.zegocloud.com/docs/faq/How_to_switch_devices).</Note>
 
 
 <a id="PlayingStream"></a>
 
-### 拉流
+### Playing Stream
 
-**1. 开始拉流**
+**1. Start Playing Stream**
 
-调用 StartPlayingStream 接口，根据传入的流 ID 参数 “streamID”，拉取远端推送的音视频流。
+Call the StartPlayingStream interface, and play the remote published audio/video stream according to the passed stream ID parameter "streamID".
 
-<Note title="说明">
+<Note title="Note">
 
 
-
-远端用户推送的 “streamID” 可以从 ZegoExpressEngine 委托中的 OnRoomStreamUpdate 回调中获得。
-
-</Note>
+The "streamID" published by remote users can be obtained from the OnRoomStreamUpdate callback in ZegoExpressEngine delegates.
 
 
 
 
 
-由于 Android 设备和 iOS 设备的屏幕方向存在 Portrait、PortraitUpsideDown、LandscapeLeft、LandscapeRight 四种方向，为保证推流预览和拉流的显示界面始终在正确的方向，需要先添加推流预览和拉流的显示界面自适应横竖屏代码，请参考 [快速开始 - 集成](/real-time-video-u3d-cs/quick-start/integrating-sdk) 中的 “4 界面自适应”。
 
-Unity3D 支持通过 RawImage 和 Renderer 两种渲染器进行拉流渲染。
 
-- 方式一：RawImage
 
-创建 RawImage。
+Since Android devices and iOS devices have four screen orientations: Portrait, PortraitUpsideDown, LandscapeLeft, and LandscapeRight, to ensure that the publishing stream preview and playing stream display interface are always in the correct direction, you need to first add adaptive horizontal and vertical screen code for the publishing stream preview and playing stream display interface. Please refer to "4 Interface Adaptation" in [Quick Start - Integration](/real-time-video-u3d-cs/quick-start/integrating-sdk).
+
+Unity3D supports playing stream rendering through two renderers: RawImage and Renderer.
+
+- Method 1: RawImage
+
+Create RawImage.
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Unity3D/ZegoExpressEngine/QuickStart/create-raw-image.png" /></Frame>
 
 
-预览显示到 RawImage 上。
+Preview displayed on RawImage.
 
 ```cs
 private const float Offset = 100;
@@ -353,7 +351,7 @@ if (go == null)
 }
 
 go.name = "play-rawimage";
-// 动态创建RawImage
+// Dynamically create RawImage
 go.AddComponent<RawImage>();
 GameObject canvas = GameObject.Find("Canvas");
 if (canvas != null)
@@ -365,25 +363,25 @@ float yPos = UnityEngine.Random.Range(Offset, Screen.height / 2f - Offset);
 go.transform.localPosition = new Vector3(xPos, yPos, 0f);
 go.transform.localScale = new Vector3(3f, 4f, 1f);
 
-// 添加一个 RawImageVideoSurface 组件，渲染器为 RawImage
+// Add a RawImageVideoSurface component, renderer is RawImage
 RawImageVideoSurface videoSurface = go.AddComponent<RawImageVideoSurface>();
-// 设置想要显示的视频流id
+// Set the video stream id you want to display
 videoSurface.SetPlayVideoInfo("123");
-// 设置视频源为engine
+// Set video source to engine
 videoSurface.SetVideoSource(engine);
 
-// 调用拉流接口
+// Call playing stream interface
 engine.StartPlayingStream("123");
 ```
 
-- 方式二：Renderer
+- Method 2: Renderer
 
-创建带 Renderer 的 Plane。
+Create a Plane with Renderer.
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Unity3D/ZegoExpressEngine/QuickStart/create-renderer.png" /></Frame>
 
 
-预览到 Plane 的 Renderer 上。
+Preview to Plane's Renderer.
 
 ```cs
 remoteVideoPlane = GameObject.Find("PlayRender");
@@ -391,127 +389,126 @@ if (remoteVideoPlane != null)
 {
     if (remoteVideoSurface == null)
     {
-        // 添加一个 RendererVideoSurface 组件，渲染器为 Renderer
+        // Add a RendererVideoSurface component, renderer is Renderer
         remoteVideoSurface = remoteVideoPlane.AddComponent<RendererVideoSurface>();
-        // 保证画面能够在屏幕显示
+        // Ensure the画面 can be displayed on the screen
         remoteVideoSurface.transform.Rotate(90.0f, -180.0f, 0.0f);
         remoteVideoSurface.transform.position = new Vector3(0.0f, 0.0f, 0.0f);
         remoteVideoSurface.transform.localScale = new Vector3(0.36f, 1f, 0.64f);
     }
     if (remoteVideoSurface != null)
     {
-        // 设置想要显示的视频流id
+        // Set the video stream id you want to display
         remoteVideoSurface.SetPlayVideoInfo("123");
-        // 设置视频源为 engine
+        // Set video source to engine
         remoteVideoSurface.SetVideoSource(engine);
     }
 }
 
-// 调用拉流接口
-engine.StartPlayingStream(“123”);
+// Call playing stream interface
+engine.StartPlayingStream("123");
 ```
 
 
 
-**2. 监听拉流后的事件回调**
+**2. Listen to Event Callbacks After Playing Stream
 
 
-根据实际应用需要，在拉流后监听想要关注的事件通知，比如拉流状态更新、拉流质量、流媒体事件等。
+According to actual application needs, listen to event notifications you want to pay attention to after playing stream, such as playing stream status updates, playing stream quality, streaming media events, etc.
 
-- OnPlayerStateUpdate：拉流状态更新回调。调用拉流接口成功后，当拉流状态发生变更（如出现网络中断导致推流异常等情况），SDK 在重试拉流的同时，会通过该回调通知。
-- OnPlayerQualityUpdate：拉流质量回调。拉流成功后每 3 秒会收到此回调，通过该回调可以获取拉取的音视频流的帧率，码率，RTT，丢包率等质量数据，实时监控拉取流的健康情况。
-- OnPlayerMediaEvent：流媒体事件回调。当拉流发生音视频卡顿以及恢复等事件发生时会触发此回调。
+- OnPlayerStateUpdate: Playing stream status update callback. After successfully calling the playing stream interface, when the playing stream status changes (such as network interruption causing publishing stream exceptions, etc.), while the SDK retries playing stream, it will notify through this callback.
+- OnPlayerQualityUpdate: Playing stream quality callback. After playing stream is successful, this callback will be received every 3 seconds. Through this callback, you can obtain quality data such as frame rate, bitrate, RTT, packet loss rate of the played audio/video stream, and monitor the health status of the played stream in real time.
+- OnPlayerMediaEvent: Streaming media event callback. This callback is triggered when events such as audio/video freezing and recovery occur during playing stream.
 
-事件回调皆为 ZegoExpressEngine 的委托，开发者直接将自己实现的回调处理函数赋值给 ZegoExpressEngine 对应的委托，即可收到回调并进行处理。
+Event callbacks are delegates of ZegoExpressEngine. Developers can directly assign their implemented callback handling functions to the corresponding delegates of ZegoExpressEngine to receive callbacks and handle them.
 
 ```cs
-// 拉流状态更新回调
+// Playing stream status update callback
 public void OnPlayerStateUpdate(string streamId, ZegoPlayerState state, int errorCode, string extendedData)
 {
-    // 根据需要实现事件回调
+    // Implement event callback as needed
 }
 
-// 拉流质量回调
+// Playing stream quality callback
 private void OnPlayerQualityUpdate(string streamId, ZegoPlayStreamQuality quality)
 {
-    // 根据需要实现事件回调
+    // Implement event callback as needed
 }
 
-// 流媒体事件回调；请注意，该回调在 WebGL 平台不支持
+// Streaming media event callback; please note, this callback is not supported on WebGL platform
 private void OnPlayerMediaEvent(string streamId, ZegoPlayerMediaEvent mediaEvent)
 {
-    // 根据需要实现事件回调
+    // Implement event callback as needed
 }
 
-// 赋值给 ZegoExpressEngine 对应的事件委托
+// Assign to corresponding event delegates of ZegoExpressEngine
 engine.onPlayerStateUpdate = OnPlayerStateUpdate;
 
-// 请注意，onPlayerMediaEvent 事件回调在 WebGL 平台不支持
+// Please note, onPlayerMediaEvent event callback is not supported on WebGL platform
 engine.onPlayerMediaEvent = OnPlayerMediaEvent;
 engine.onPlayerQualityUpdate = OnPlayerQualityUpdate;
 engine.StartPlayingStream("123");
 ```
 
-### 在线测试推拉流功能
+### Test Publishing and Playing Stream Functionality Online
 
-在真机中运行项目，运行成功后，可以看到本端视频画面。
+Run the project on a real device. After running successfully, you can see the local video画面.
 
-为方便体验，ZEGO 提供了一个 [Web 端调试示例](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html)，在该页面下，输入相同的 AppID、RoomID，输入不同的 UserID、以及对应的 [Token](/console/development-assistance/temporary-token)，即可加入同一房间与真机设备互通。当成功开始音视频通话时，可以听到远端的音频，看到远端的视频画面。
+To facilitate the experience, ZEGO provides a [Web Debugging Example](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html). On this page, enter the same AppID and RoomID, enter different UserIDs, and the corresponding [Token](/console/development-assistance/temporary-token), to join the same room and interoperate with the real device. When the audio/video call starts successfully, you can hear the remote audio and see the remote video画面.
 
 
 <a id="StopPublishingStream"> </a>
 
-### 停止推拉流
+### Stop Publishing and Playing Stream
 
-**1. 停止推流/预览**
+**1. Stop Publishing Stream/Preview**
 
-调用 StopPublishingStream 接口停止向远端用户发送本端的音视频流。
+Call the StopPublishingStream interface to stop sending local audio/video streams to remote users.
 
 ```cs
-// 停止推流
+// Stop publishing stream
 engine.StopPublishingStream();
 ```
 
-如果启用了本地预览，调用 StopPreview 接口停止预览。
+If local preview is enabled, call the StopPreview interface to stop preview.
 
 ```cs
-// 停止本地预览
+// Stop local preview
 engine.StopPreview();
 ```
 
-**2. 停止拉流**
+**2. Stop Playing Stream**
 
-调用 StopPlayingStream 接口停止拉取远端推送的音视频流。
+Call the StopPlayingStream interface to stop playing remote published audio/video streams.
 
-<Warning title="注意">
+<Warning title="Warning">
 
 
-如果开发者通过 OnRoomStreamUpdate 回调收到了音视频流 “减少” 的通知，请及时调用 StopPlayingStream 接口停止拉流，避免拉到空流、产生额外的成本；或者，开发者可以根据自己的业务需求，选择合适的时机，主动调用 StopPlayingStream 接口停止拉流。
+If developers receive an audio/video stream "decrease" notification through the OnRoomStreamUpdate callback, please call the StopPlayingStream interface in time to stop playing stream to avoid playing empty streams and generating additional costs; or, developers can choose the appropriate timing according to their business needs and actively call the StopPlayingStream interface to stop playing stream.
 
 </Warning>
 
 
-
 ```csharp
-// 停止拉流
+// Stop playing stream
 engine.StopPlayingStream("123");
 ```
 
 
-### 退出房间
+### Logout Room
 
-调用 LogoutRoom 接口退出房间。
+Call the LogoutRoom interface to logout of the room.
 
 ```cs
-// 退出房间
+// Logout room
 engine.LogoutRoom("123666");
 ```
 
-### 销毁引擎
+### Destroy Engine
 
-调用 DestroyEngine 接口销毁引擎，用于释放 SDK 使用的资源。
+Call the DestroyEngine interface to destroy the engine, which is used to release resources used by the SDK.
 
 ```cs
-// 销毁引擎实例
+// Destroy engine instance
 ZegoExpressEngine.DestroyEngine();
 ```
