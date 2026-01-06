@@ -2,100 +2,101 @@
 articleID: 16461
 date: "2024-09-27"
 ---
-# 多人状态实时同步
+# Real-Time Multi-User Status Synchronization
 
 - - -
 
-## 功能简介
+## Feature Overview
 
 
-ZEGO Express SDK 从 3.0.0 版本起，新增多人状态实时同步功能，提供有序、高频、低延时、大规模的状态同步服务，帮助开发者快速实现虚拟玩法中玩家的位置、动作、形象等实时信息同步能力，同时单场景中支持 1 万个用户同时在线。
+Starting from version 3.0.0, ZEGO Express SDK has added real-time multi-user status synchronization functionality, providing an ordered, high-frequency, low-latency, large-scale status synchronization service to help developers quickly implement real-time information synchronization capabilities for player positions, actions, appearances, etc., in virtual gameplay. A single scene supports up to 10,000 users online simultaneously.
 
-在大型虚拟世界中，用户一般不需要感知较远的场景或远端用户，ZEGO 提供 AOI（Area Of Interest）能力，用于减免获取用户可见范围外的信息，极大减少客户流量成本、用户端流量及性能消耗。
+In large virtual worlds, users generally do not need to perceive distant scenes or remote users. ZEGOCLOUD provides AOI (Area Of Interest) capability to eliminate information acquisition outside the user's visible range, greatly reducing customer traffic costs, client-side traffic, and performance consumption.
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/state_sync_aoi.jpg" /></Frame>
 
-### 概念解释
+### Concept Explanation
 
-- 场景：用户需要先登录场景，进入同一个场景的用户才可以进行状态信息的同步。
-- AOI（Area of interest）范围：用户感兴趣区域的正方形大小，在虚拟场景中一般为用户的可见范围，该范围实时跟随用户的位置，仅会同步 AOI 范围内远端的用户信息。
-
-
-### 应用场景
-
-- 虚拟办公、虚拟会展、虚拟社交、虚拟 KTV 等元宇宙场景。
-- 需要超高频、低延时、大规模同步信息或控制指令的通用场景。
-
-## 前提条件
-
-<Warning title="注意">
+- **Scene**: Users need to log in to a scene first. Only users who enter the same scene can synchronize status information.
+- **AOI (Area of interest) range**: The square size of the user's area of interest, generally the user's visible range in a virtual scene. This range follows the user's position in real-time and only synchronizes user information from remote users within the AOI range.
 
 
-使用该服务会产生相应的费用，请联系 ZEGO 商务人员了解具体的费用情况。
+### Application Scenarios
+
+- Metaverse scenarios such as virtual offices, virtual exhibitions, virtual social networking, virtual KTV, etc.
+- General scenarios requiring ultra-high-frequency, low-latency, large-scale synchronization of information or control commands.
+
+## Prerequisites
+
+<Warning title="Caution">
+
+
+Using this service will incur corresponding fees. Please contact ZEGOCLOUD business personnel to learn about specific fee details.
 </Warning>
 
-在实现状态同步前，请确保：
-- 已联系 ZEGO 技术支持进行特殊编包并开通状态同步服务。
-- 已在项目中集成 ZEGO Express SDK。
-- 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目管理](/console-old/project-management)。
+Before implementing status synchronization, ensure that:
 
-## 实现流程
+- You have contacted ZEGOCLOUD Technical Support for special packaging and enabled the status synchronization service.
+- You have integrated the ZEGO Express SDK into your project.
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, see [Console - Project Management](/console-old/project-management).
 
-### 1 创建引擎
+## Implementation Flow
 
-调用 [createEngineWithProfile](@createEngineWithProfile) 接口，将申请到到 AppID 和 AppSign 传入参数 “appID” 和 “appSign”，创建引擎单例对象。引擎当前只支持同时创建一个实例，超出后将返回 null。
+### 1 Create Engine
+
+Call the [createEngineWithProfile](@createEngineWithProfile) interface, pass the applied AppID and AppSign into the parameters "appID" and "appSign", and create an engine singleton object. The engine currently only supports creating one instance at a time. Beyond that, it will return null.
 
 ```objc
 ZegoEngineProfile *profile = [[ZegoEngineProfile alloc] init];
-/** 请通过官网注册获取，格式为 123456789 */
+/** Please obtain through official website registration, format: 123456789 */
 profile.appID = appID;
-/** 64个字符，请通过官网注册获取，格式为"0123456789012345678901234567890123456789012345678901234567890123" */
+/** 64 characters, please obtain through official website registration, format: "0123456789012345678901234567890123456789012345678901234567890123" */
 profile.appSign = appSign;
-/** 通用场景接入 */
+/** General scenario access */
 profile.scenario = ZegoScenarioDefault;
-/** 创建引擎，并注册 self 为 eventHandler 回调。不需要注册回调的话，eventHandler 参数可以传 nil，后续可调用 "-setEventHandler:" 方法设置回调 */
+/** Create engine and register self as eventHandler callback. If you don't need to register callback, the eventHandler parameter can be nil. You can call "-setEventHandler:" method later to set callback */
 [ZegoExpressEngine createEngineWithProfile:profile eventHandler:self];
 ```
 
-### 2 创建范围场景模块
+### 2 Create Range Scene Module
 
-调用 [createRangeScene](@createRangeScene) 接口创建范围场景实例，当前只支持同时创建一个实例，超出后将返回 null。
+Call the [createRangeScene](@createRangeScene) interface to create a range scene instance. Currently only one instance can be created at a time. Beyond that, it will return null.
 
 ```objc
-/** 定义范围场景对象 */
+/** Define range scene object */
 ZegoRangeScene *rangeScene;
 
-/** 创建范围场景 */
+/** Create range scene */
 rangeScene = [[ZegoExpressEngine sharedEngine] createRangeScene];
 ```
 
-### 3 监听范围场景事件回调
+### 3 Listen to Range Scene Event Callbacks
 
-根据需要调用 [setEventHandler](@setEventHandler-ZegoRangeScene)接口设置范围场景事件回调，用于监听范围场景状态、登录状态、进出 AOI 通知等。调用 [ZegoRangeSceneItem.setEventHandler](@setEventHandler-ZegoRangeSceneItem) 口设置范围场景物品管理类事件回调，用于监听物品进入或离开 AOI 范围、物品绑定状态变更、物品状态和命令更新事件。
+Call the [setEventHandler](@setEventHandler-ZegoRangeScene) interface as needed to set range scene event callbacks for listening to range scene status, login status, enter/leave AOI notifications, etc. Call the [ZegoRangeSceneItem.setEventHandler](@setEventHandler-ZegoRangeSceneItem) interface to set range scene item management class event callbacks for listening to item enter/leave AOI range events, item binding status changes, item status and command update events.
 
 ```objc
-/** 设置范围场景事件回调 */
+/** Set range scene event callback */
 [rangeScene setEventHandler:self];
 [[rangeScene getRangeSceneItem] setEventHandler:self];
 ```
 
-### 4 登录场景
+### 4 Login to Scene
 
-调用 [loginScene](@loginScene) 接口，传入场景参数：sceneID、user、position、broadcastMode，即可登录场景。
+Call the [loginScene](@loginScene) interface, pass in scene parameters: sceneID, user, position, broadcastMode, to log in to the scene.
 
-<Warning title="注意">
+<Warning title="Caution">
 
 
-- 同一个 AppID 内，需保证 userID 全局唯一，建议开发者将其设置成一个有意义的值，可将 userID 与自己业务账号系统进行关联。
-- userID 不能为空，否则会导致登录场景失败。
+- Within the same AppID, ensure that userID is globally unique. It is recommended that developers set it to a meaningful value and associate userID with their own business account system.
+- userID cannot be empty, otherwise logging in to the scene will fail.
 </Warning>
 
 ```objc
-/** 登录场景参数 */
+/** Login scene parameters */
 ZegoSceneParam *param = [[ZegoSceneParam alloc] init];
-/** 创建用户 */
+/** Create user */
 ZegoUser *user = [[ZegoUser alloc] initWithUserID:userID userName:userName];
-/** 设置用户的场景坐标、运动朝向、摄像机朝向 */
+/** Set user's scene coordinates, motion orientation, and camera orientation */
 ZegoPosition *position = [[ZegoPosition alloc] init];
 ZegoPositionOrientation *motionOrientation = [[ZegoPositionOrientation alloc] init];
 ZegoPositionOrientation *cameraOrientation = [[ZegoPositionOrientation alloc] init];
@@ -108,38 +109,38 @@ cameraOrientation.axisUp = [NSArray arrayWithObjects:rotateMatrixUp[0], rotateMa
 position.coordinate = [NSArray arrayWithObjects:coordinate[0], coordinate[1], coordinate[2], nil];
 position.motionOrientation = motionOrientation;
 position.cameraOrientation = cameraOrientation;
-/** 设置场景 ID */
+/** Set scene ID */
 param.sceneID = sceneID;
-/** (可选)配置模版 ID */
+/** (Optional) Configure template ID */
 param.templateID = templateID;
 param.user = user;
 param.position = position;
-/** 设置用户登录场景的广播模式 */
+/** Set user's broadcast mode when logging in to the scene */
 param.broadcastMode = ZegoBroadcastModeAll;
 [rangeScene loginScene:param callback:^(int errorCode, ZegoSceneConfig * _Nonnull config) {}];
 ```
 
-<Warning title="注意">
+<Warning title="Caution">
 
 
-如果您需要自定义模板，详情请参考 [服务端 API - 场景模版配置](/real-time-video-server/api-reference/scene/set-scene-template)。
+If you need to customize templates, please refer to [Server API - Scene Template Configuration](/real-time-video-server/api-reference/scene/set-scene-template).
 </Warning>
 
 
-### 5 同步状态
+### 5 Synchronize Status
 
-通过 [updateUserStatus](@updateUserStatus)、[updateUserCommand](@updateUserCommand) 接口更新用户状态及用户命令。通过 [userStatusUpdate](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoRangeSceneEventHandler#range-scene-user-status-update-position-channel-status)、[userCommandUpdate](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoRangeSceneEventHandler#range-scene-user-command-update-position-channel-command) 回调接收 AOI 范围内的远端用户位置、命令等状态信息。
+Update user status and user commands through the [updateUserStatus](@updateUserStatus) and [updateUserCommand](@updateUserCommand) interfaces. Receive status information such as remote user positions and commands within the AOI range through the [userStatusUpdate](https://www.zegocloud.com/docs/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoRangeSceneEventHandler#range-scene-user-status-update-position-channel-status) and [userCommandUpdate](https://www.zegocloud.com/docs/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoRangeSceneEventHandler#range-scene-user-command-update-position-channel-command) callbacks.
 
-<Note title="说明">
+<Note title="Note">
 
 
-- 用户状态（status，S）是全量更新，用户命令是增量更新（command，C），用户状态可以由前一个用户状态经过一系列用户命令计算得出。
-- 用户更新状态的模型应是 Si->Ci->Ci+1->Ci+2->...Ci+j->S(i+1)->C(i+1)+1->C(i+1)+2->...C(i+1)+k->S(i+2)->C(i+2)->...
-- 状态同步服务将保证 Si、Si+1 两个全量状态（status）之间的增量更新（command）有序到达。
+- User status (status, S) is a full update, user commands are incremental updates (command, C), and user status can be calculated from a previous user status through a series of user commands.
+- The model for user status updates should be Si->Ci->Ci+1->Ci+2->...Ci+j->S(i+1)->C(i+1)+1->C(i+1)+2->...C(i+1)+k->S(i+2)->C(i+2)->...
+- The status synchronization service will guarantee that incremental updates (commands) between two full statuses (status) Si and Si+1 arrive in order.
 </Note>
 
 ```objc
-/** 设置用户的场景坐标、运动朝向、摄像机朝向 */
+/** Set user's scene coordinates, motion orientation, and camera orientation */
 ZegoPosition *position = [[ZegoPosition alloc] init];
 ZegoPositionOrientation *motionOrientation = [[ZegoPositionOrientation alloc] init];
 ZegoPositionOrientation *cameraOrientation = [[ZegoPositionOrientation alloc] init];
@@ -152,42 +153,42 @@ cameraOrientation.axisUp = [NSArray arrayWithObjects:rotateMatrixUp[0], rotateMa
 position.coordinate = [NSArray arrayWithObjects:coordinate[0], coordinate[1], coordinate[2], nil];
 position.motionOrientation = motionOrientation;
 position.cameraOrientation = cameraOrientation;
-/** 更新用户状态 */
+/** Update user status */
 NSData *status = [NSData data];
 [rangeScene updateUserStatus:position channel:0 status:status];
 
-/** 更新用户命令 */
+/** Update user command */
 NSData *command = [NSData data];
 [rangeScene updateUserCommand:position channel:0 command:command];
 ```
 
-### 6（可选）获取场景内用户数、获取 AOI 范围内用户列表
+### 6 (Optional) Get User Count in Scene and Get User List within AOI Range
 
-<Accordion title="获取场景内用户数、获取 AOI 范围内用户列表" defaultOpen="false">
-可以根据需要调用 [getUserCount](@getUserCount)、[getUserListInView](@getUserListInView) 接口获取场景内用户数、AOI 范围内用户列表。
+<Accordion title="Get User Count in Scene and Get User List within AOI Range" defaultOpen="false">
+You can call the [getUserCount](@getUserCount) and [getUserListInView](@getUserListInView) interfaces as needed to get the user count in the scene and the user list within the AOI range.
 
 ```objc
-/** 获取场景内用户数 */
+/** Get user count in scene */
 [rangeScene getUserCount:^(int errorCode, unsigned int count) {}];
 
-/** 获取 AOI 范围内用户列表 */
+/** Get user list within AOI range */
 [rangeScene getUserListInView:^(int errorCode, NSArray<NSString *> * _Nonnull userList) {}];
 ```
 </Accordion>
 
-### 7（可选）物品状态与竞争锁
+### 7 (Optional) Item Status and Competitive Lock
 
-<Accordion title="物品状态与竞争锁" defaultOpen="false">
-通过物品状态同步可以实现虚拟场景中物品移动及放置玩法，如放置系统、踢球等。通过物品锁可以实现物品抢夺玩法，如捡装备、抢椅子等，可根据需求进行设置。
+<Accordion title="Item Status and Competitive Lock" defaultOpen="false">
+Through item status synchronization, you can implement item movement and placement gameplay in virtual scenes, such as placement systems, ball kicking, etc. Through item locks, you can implement item grabbing gameplay, such as picking up equipment, grabbing chairs, etc., which can be set according to requirements.
 
-1. 创建物品
+1. Create Item
 
-根据需要调用 [createItem](@createItem) 接口在场景内创建物品。
+Call the [createItem](@createItem) interface as needed to create an item in the scene.
 
 ```objc
-/** 创建物品参数 */
+/** Create item parameters */
 ZegoItemParam *param = [[ZegoItemParam alloc] init];
-/** 设置物品的场景坐标、运动朝向 */
+/** Set item's scene coordinates and motion orientation */
 ZegoPosition *position = [[ZegoPosition alloc] init];
 ZegoPositionOrientation *motionOrientation = [[ZegoPositionOrientation alloc] init];
 motionOrientation.axisForward = [NSArray arrayWithObjects:rotateMatrixForward[0], rotateMatrixForward[1], rotateMatrixForward[2], nil];
@@ -195,39 +196,39 @@ motionOrientation.axisRight = [NSArray arrayWithObjects:rotateMatrixRight[0], ro
 motionOrientation.axisUp = [NSArray arrayWithObjects:rotateMatrixUp[0], rotateMatrixUp[1], rotateMatrixUp[2], nil];
 position.coordinate = [NSArray arrayWithObjects:coordinate[0], coordinate[1], coordinate[2], nil];
 position.motionOrientation = motionOrientation;
-/** 设置物品 ID */
+/** Set item ID */
 param.itemID = itemID;
-/** 设置物品最大绑定人数上限 */
+/** Set maximum number of users bound to the item */
 param.capacity = capacity;
 param.position = position;
-/** 设置创建物品模式 */
+/** Set create item mode */
 param.createMode = ZegoCreateItemModeNoBind;
 [[rangeScene getRangeSceneItem] createItem:param callback:^(int errorCode, long long itemID) {}];
 ```
 
-2. 绑定物品
+2. Bind Item
 
-如果需要对物品进行操作（即更新物品状态命令），首先需要调用 [bindItem](@bindItem) 绑定物品。
+If you need to operate on an item (i.e., update item status commands), you first need to call [bindItem](@bindItem) to bind the item.
 
 ```objc
 [[rangeScene getRangeSceneItem] bindItem:itemID callback:^(int errorCode, long long itemID) {}];
 ```
 
-3. 同步物品状态
+3. Synchronize Item Status
 
-通过 [updateItemStatus](@updateItemStatus)、[updateItemCommand](@updateItemCommand) 接口更新物品状态及物品命令。通过 [itemStatusUpdate](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoRangeSceneItemEventHandler#range-scene-item-status-update-position-channel-status)、[itemCommandUpdate](https://doc-zh.zego.im/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoRangeSceneItemEventHandler#range-scene-item-command-update-position-channel-command) 回调接收 AOI 范围内的远端物品位置、命令等状态信息。
+Update item status and item commands through the [updateItemStatus](@updateItemStatus) and [updateItemCommand](@updateItemCommand) interfaces. Receive status information such as remote item positions and commands within the AOI range through the [itemStatusUpdate](https://www.zegocloud.com/docs/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoRangeSceneItemEventHandler#range-scene-item-status-update-position-channel-status) and [itemCommandUpdate](https://www.zegocloud.com/docs/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoRangeSceneItemEventHandler#range-scene-item-command-update-position-channel-command) callbacks.
 
-<Note title="说明">
+<Note title="Note">
 
 
-- 在更新物品状态和命令前，需要先绑定物品。
-- 物品状态（status，S）是全量更新，物品命令是增量更新（command，C），物品状态可以由前一个物品状态经过一系列物品命令计算得出。
-- 物品更新状态的模型应是 Si->Ci->Ci+1->Ci+2->...Ci+j->S(i+1)->C(i+1)+1->C(i+1)+2->...C(i+1)+k->S(i+2)->C(i+2)->...
-- 状态同步服务将保证 Si、Si+1 两个全量状态（status）之间的增量更新（command）有序到达。
+- Before updating item status and commands, you need to bind the item first.
+- Item status (status, S) is a full update, item commands are incremental updates (command, C), and item status can be calculated from a previous item status through a series of item commands.
+- The model for item status updates should be Si->Ci->Ci+1->Ci+2->...Ci+j->S(i+1)->C(i+1)+1->C(i+1)+2->...C(i+1)+k->S(i+2)->C(i+2)->...
+- The status synchronization service will guarantee that incremental updates (commands) between two full statuses (status) Si and Si+1 arrive in order.
 </Note>
 
 ```objc
-/** 设置物品的场景坐标、运动朝向 */
+/** Set item's scene coordinates and motion orientation */
 ZegoPosition *position = [[ZegoPosition alloc] init];
 ZegoPositionOrientation *motionOrientation = [[ZegoPositionOrientation alloc] init];
 motionOrientation.axisForward = [NSArray arrayWithObjects:rotateMatrixForward[0], rotateMatrixForward[1], rotateMatrixForward[2], nil];
@@ -235,26 +236,26 @@ motionOrientation.axisRight = [NSArray arrayWithObjects:rotateMatrixRight[0], ro
 motionOrientation.axisUp = [NSArray arrayWithObjects:rotateMatrixUp[0], rotateMatrixUp[1], rotateMatrixUp[2], nil];
 position.coordinate = [NSArray arrayWithObjects:coordinate[0], coordinate[1], coordinate[2], nil];
 position.motionOrientation = motionOrientation;
-/** 更新物品状态 */
+/** Update item status */
 NSData *status = [NSData data];
 [[rangeScene getRangeSceneItem] updateItemStatus:itemID position:position channel:0 status:status callback:^(int errorCode, long long itemID) {}];
 
-/** 更新物品命令 */
+/** Update item command */
 NSData *command = [NSData data];
 [[rangeScene getRangeSceneItem] updateItemCommand:itemID position:position channel:0 command:command callback:^(int errorCode, long long itemID) {}];
 ```
 
-4. 解绑物品
+4. Unbind Item
 
-如果无需对物品进行操作（即更新物品状态命令），可以调用 [unbindItem](@unbindItem) 解绑物品。
+If you don't need to operate on an item (i.e., update item status commands), you can call [unbindItem](@unbindItem) to unbind the item.
 
 ```objc
 [[rangeScene getRangeSceneItem] unbindItem:itemID callback:^(int errorCode, long long itemID) {}];
 ```
 
-5. 销毁物品
+5. Destroy Item
 
-根据需要调用 [destroyItem](@destroyItem) 销毁场景内的物品。
+Call [destroyItem](@destroyItem) as needed to destroy items in the scene.
 
 ```objc
 [[rangeScene getRangeSceneItem] destroyItem:itemID callback:^(int errorCode, long long itemID) {}];
@@ -262,26 +263,26 @@ NSData *command = [NSData data];
 </Accordion>
 
 
-### 8 退出场景
+### 8 Logout from Scene
 
-调用 [logoutScene](@logoutScene) 接口退出场景。
+Call the [logoutScene](@logoutScene) interface to log out from the scene.
 
 ```objc
-/** 退出场景 */
+/** Logout from scene */
 [rangeScene logoutScene:^(int errorCode) {}];
 ```
 
-### 9 销毁范围场景模块
+### 9 Destroy Range Scene Module
 
-当不再使用范围场景模块时，可以调用 [destroyRangeScene](@destroyRangeScene) 接口销毁范围场景模块。
+When the range scene module is no longer needed, you can call the [destroyRangeScene](@destroyRangeScene) interface to destroy the range scene module.
 
 ```objc
 [[ZegoExpressEngine sharedEngine] destroyRangeScene:rangeScene];
 ```
 
-### 10 销毁引擎
+### 10 Destroy Engine
 
-当不再使用 ZEGO Express SDK 时，可以调用 [destroyEngine](@destroyEngine) 销毁引擎。
+When the ZEGO Express SDK is no longer needed, you can call [destroyEngine](@destroyEngine) to destroy the engine.
 
 ```objc
 [ZegoExpressEngine destroyEngine:nil];
