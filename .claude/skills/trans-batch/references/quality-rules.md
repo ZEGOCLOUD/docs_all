@@ -55,6 +55,96 @@ description: |
 
 ---
 
+## MDX 组件标签处理
+
+### ⚠️ 保持闭合标签（最重要）
+
+**规则**：
+- ✅ **必须保留所有 MDX 组件的闭合标签**
+- ✅ **自闭合标签保持自闭合格式**
+- ✅ **成对标签必须同时保留开始和结束标签**
+
+**常见组件**：
+- `<Note title="...">...</Note>`
+- `<Tabs>...</Tabs>`
+- `<TabItem>...</TabItem>`
+- `<Card>...</Card>`
+- `<Accordion>...</Accordion>`
+- `<details>...</details>`
+- `<summary>...</summary>`
+
+### 示例
+
+**原文**：
+```mdx
+<Note title="说明">
+该工程为 CMake 工程，您可以使用 `VS Code` 或其他任意 IDE 打开，`./ZegoExpressExample` 目录，以便查看源码。
+</Note>
+```
+
+**❌ 错误翻译**（丢失闭合标签）：
+```mdx
+<Note title="Description">
+This project is a CMake project. You can use `VS Code` or any other IDE to open the `./ZegoExpressExample` directory to view the source code.
+```
+
+**✅ 正确翻译**（保留闭合标签）：
+```mdx
+<Note title="Description">
+
+This project is a CMake project. You can use `VS Code` or any other IDE to open the `./ZegoExpressExample` directory to view the source code.
+
+</Note>
+```
+
+### 自闭合标签
+
+**原文**：
+```mdx
+<Video src="/path/to/video.mp4" />
+```
+
+**翻译**：
+```mdx
+<Video src="/path/to/video.mp4" />
+```
+
+### 嵌套组件
+
+**原文**：
+```mdx
+<Tabs>
+<TabItem value="java">
+
+Java 代码示例
+
+</TabItem>
+<TabItem value="python">
+
+Python 代码示例
+
+</TabItem>
+</Tabs>
+```
+
+**翻译**：
+```mdx
+<Tabs>
+<TabItem value="java">
+
+Java code example
+
+</TabItem>
+<TabItem value="python">
+
+Python code example
+
+</TabItem>
+</Tabs>
+```
+
+---
+
 ## 转义字符处理
 
 ### MDX/JSX 特殊字符
@@ -321,6 +411,13 @@ ZEGO 控制台 → ZEGOCLOUD Console
 
 翻译完成后，检查以下项目：
 
+### 语法完整性（最关键）
+- [ ] **所有 MDX 组件闭合标签已保留**（开始和结束标签成对出现）
+- [ ] **自闭合标签格式正确**（如 `<Component />`）
+- [ ] **嵌套组件层级正确**（开始和结束顺序对应）
+- [ ] 没有 JSX/MDX 语法错误（如有需要已添加转义符）
+
+### 内容准确性
 - [ ] 所有中文标点符号已转为英文标点
 - [ ] 没有中文和中文标点符号残留
 - [ ] 代码块保持原样
@@ -330,7 +427,6 @@ ZEGO 控制台 → ZEGOCLOUD Console
 - [ ] Markdown 格式保持完整
 - [ ] 表格结构正确
 - [ ] 术语与术语表一致
-- [ ] 没有 JSX/MDX 语法错误（如有需要已添加转义符）
 - [ ] YAML 描述如包含冒号已改为多行
 - [ ] Frontmatter 键名保持不变，值已翻译
 - [ ] 没有随意扩写或捏造内容

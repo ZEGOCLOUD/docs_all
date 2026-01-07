@@ -10,6 +10,8 @@ Usage:
 2. Use AI to translate the collected labels (only /en/ paths need translation)
 3. Create a Python dict with the translations
 4. Pass the translations to this script via --translations argument
+
+IMPORTANT: This script must be run from the workspace root directory.
 """
 
 import argparse
@@ -18,6 +20,45 @@ import json
 import sys
 from pathlib import Path
 from typing import Any, Dict
+
+
+def get_workspace_root() -> Path:
+    """
+    Find the workspace root directory by looking for marker files.
+
+    Marker files (in order of priority):
+    - docuo.config.json or docuo.config.en.json (DOCUO project)
+    - .git (Git repository)
+    - package.json (Node.js project)
+
+    Returns:
+        Path: workspace root directory
+
+    Note:
+        Falls back to current directory if no markers found.
+    """
+    current = Path.cwd().resolve()
+
+    # Search up to 10 levels up
+    for _ in range(10):
+        markers = [
+            'docuo.config.json',
+            'docuo.config.en.json',
+            '.git',
+            'package.json'
+        ]
+
+        for marker in markers:
+            if (current / marker).exists():
+                return current
+
+        parent = current.parent
+        if parent == current:  # Reached root
+            break
+        current = parent
+
+    # Fallback to current directory if no markers found
+    return Path.cwd()
 
 
 def process_tag_item(
@@ -92,8 +133,9 @@ def update_tag_labels(
         print(f"Error reading {sidebars_path}: {e}", file=sys.stderr)
         return False
 
+    workspace_root = get_workspace_root()
     try:
-        rel_path = sidebars_path.relative_to(Path.cwd())
+        rel_path = sidebars_path.relative_to(workspace_root)
     except ValueError:
         rel_path = sidebars_path
 

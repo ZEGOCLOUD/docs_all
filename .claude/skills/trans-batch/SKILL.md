@@ -1,9 +1,40 @@
 ---
 name: trans-batch
-description: 批量翻译新产品文档。智能扫描中文目录，自动过滤API文档、YAML生成的MDX等不需要翻译的文件，预处理全复用文档，按文件大小分批翻译。触发词：批量翻译、新产品翻译、批量文档翻译、trans-batch。使用场景：(1) 翻译新产品所有中文文档到英文 (2) 批量翻译目录下所有文件 (3) 需要进度跟踪和断点续传的大规模翻译任务。
+description: 批量翻译新产品文档。智能扫描中文目录，自动过滤API文档、YAML生成的MDX等不需要翻译的文件，预处理全复用文档，按文件大小分批翻译。触发词：批量翻译、新产品翻译、批量文档翻译、trans-batch。使用场景：(1) 翻译新产品所有中文文档到英文 (2) 批量翻译目录下所有文件 (3) 需要进度跟踪和断点续传的大规模翻译任务 (4) 查漏补缺，检查并翻译遗漏的文档。
 ---
 
 # 批量翻译新产品文档
+
+## ⚠️ 重要要求
+
+**所有脚本必须在 workspace 根目录下运行**,以确保正确解析文件路径。
+
+Workspace 根目录通过以下标记文件识别:
+- `docuo.config.json` 或 `docuo.config.en.json` (DOCUO 项目)
+- `.git` (Git 仓库)
+- `package.json` (Node.js 项目)
+
+**正确运行方式**:
+```bash
+# 确保在 workspace 根目录
+cd /path/to/workspace
+pwd  # 应该显示 workspace 根目录
+
+# 然后运行脚本
+python3 .claude/skills/trans-batch/scripts/scan_batch_translation.py <source_dir>
+```
+
+**错误示例**:
+```bash
+# ❌ 错误:在子目录中运行
+cd core_products/real-time-voice-video/zh/flutter
+python3 ../../../.claude/skills/trans-batch/scripts/scan_batch_translation.py .
+
+# ✅ 正确:在 workspace 根目录运行
+cd /path/to/workspace
+python3 .claude/skills/trans-batch/scripts/scan_batch_translation.py \
+  core_products/real-time-voice-video/zh/flutter
+```
 
 ## 快速开始
 
@@ -19,10 +50,21 @@ description: 批量翻译新产品文档。智能扫描中文目录，自动过�
 
 ## 工作流程
 
+### 模式 A：完整批量翻译（推荐新产品）
+
+**步骤 0-5**：翻译新产品所有文档
+
 ### 1. 扫描文档
 ```bash
-python3 .claude/skills/trans-batch/scripts/scan_batch_translation.py <源目录> > scan_result.json
+# 脚本会自动将 scan_result.json 保存到目标目录（与 sidebars.json 同级）
+python3 .claude/skills/trans-batch/scripts/scan_batch_translation.py <源目录>
 ```
+
+**说明**：
+- 脚本会自动计算目标目录（将源目录的 `/zh/` 替换为 `/en/`）
+- 例如：源目录 `core_products/real-time-voice-video/zh/flutter` → 输出到 `core_products/real-time-voice-video/en/flutter/scan_result.json`
+- 如需自定义输出目录：`--output-dir <自定义路径>`
+- 兼容旧版本：添加 `--stdout` 参数可输出到 stdout（需要手动重定向）
 
 ### 2. 准备目标目录
 ```bash
@@ -36,13 +78,20 @@ fi
 
 ### 3. 预处理全复用文档（必选）
 ```bash
-python3 .claude/skills/trans-batch/scripts/preprocess_reuse_docs.py scan_result.json > preprocess_result.json
+# 脚本会自动将 preprocess_result.json 保存到目标目录（与 scan_result.json 同级）
+python3 .claude/skills/trans-batch/scripts/preprocess_reuse_docs.py <目标目录>/scan_result.json
 ```
+
+**说明**：
+- 脚本会从 `scan_result.json` 读取 `target_directory` 字段，自动输出到同一目录
+- 输出文件：`<目标目录>/preprocess_result.json`
+- 如需自定义输出目录：`--output-dir <自定义路径>`
+- 兼容旧版本：添加 `--stdout` 参数可输出到 stdout（需要手动重定向）
 
 ### 4. 创建进度报告
 ```bash
 python3 .claude/skills/trans-batch/scripts/progress_manager.py create \
-  <目标目录> <源目录> scan_result.json preprocess_result.json
+  <目标目录> <源目录> <目标目录>/scan_result.json <目标目录>/preprocess_result.json
 ```
 
 ### 5. 逐批次翻译
@@ -70,6 +119,70 @@ python3 .claude/skills/trans-batch/scripts/progress_manager.py show <目标目�
 
 # 5.6 重复 5.1-5.5 继续下一批
 ```
+
+---
+
+### 模式 B：查漏补缺（已有英文实例）
+
+适用场景：英文实例已存在，但部分文档未翻译。
+
+**触发词**：用户说"查漏补缺"、"检查遗漏"、"翻译遗漏文档"
+
+**步骤 0-5**：只翻译遗漏的文档
+
+### 0. 检查遗漏文档
+
+```bash
+# 脚本会自动将 scan_result.json 保存到实例目录（与 sidebars.json 同级）
+python3 .claude/skills/trans-batch/scripts/check_missing_translations.py \
+  <英文实例目录>
+
+# 例如：
+python3 .claude/skills/trans-batch/scripts/check_missing_translations.py \
+  core_products/real-time-voice-video/en/android-java
+```
+
+**说明**：
+- 脚本会自动将 `scan_result.json` 保存到实例目录（传入的英文实例目录）
+- 输出文件：`<英文实例目录>/scan_result.json`
+
+### 1. 准备目标目录
+
+```bash
+# 英文实例已存在，跳过此步骤
+```
+
+### 2. 预处理全复用文档（必选）
+
+```bash
+# 脚本会自动从 scan_result.json 读取目标目录并保存到同一位置
+python3 .claude/skills/trans-batch/scripts/preprocess_reuse_docs.py \
+  scan_result.json
+```
+
+**说明**：
+- 脚本会从 `scan_result.json` 读取 `target_directory` 字段，自动输出到同一目录
+- 例如：`<英文实例目录>/preprocess_result.json`
+- 兼容旧版本：添加 `--stdout` 参数可输出到 stdout（需要手动重定向）
+
+### 3. 创建进度报告
+
+```bash
+python3 .claude/skills/trans-batch/scripts/progress_manager.py create \
+  <英文实例目录> <中文源目录> scan_result.json preprocess_result.json
+```
+
+**说明**：
+- 所有文件都在英文实例目录下（与 sidebars.json 同级）
+- 例如：`core_products/real-time-voice-video/en/android-java/scan_result.json`
+
+### 4. 逐批次翻译
+
+（同模式 A 步骤 5）
+
+**关键差异**：
+- 模式 A：扫描中文源目录，翻译所有文档
+- 模式 B：扫描英文实例 sidebars.json，只翻译遗漏文档
 
 ## 文件分类
 
@@ -145,6 +258,7 @@ progress_manager.py fail-file <目标目录> <源路径> <错误信息> <批次�
 ## 资源文件
 
 ### scripts/
+- **check_missing_translations.py**：查漏补缺，扫描英文实例找出所有未翻译文档，默认输出 scan_result.json 格式
 - **scan_batch_translation.py**：扫描和分类文档，生成翻译计划
 - **preprocess_reuse_docs.py**：预处理全复用文档，替换引用路径
 - **progress_manager.py**：管理翻译进度，记录文件状态和批次进度
@@ -155,6 +269,25 @@ progress_manager.py fail-file <目标目录> <源路径> <错误信息> <批次�
 - **products/**：产品特定术语表
 
 ## 重要说明
+
+### 📁 文件组织（支持并发）
+
+所有中间文件（scan_result.json、preprocess_result.json、scan_result_clean.json）现在都**自动保存到实例目录**（与 sidebars.json 同级），而不是 workspace 根目录。
+
+**优点**：
+- ✅ 支持并发执行多个翻译任务（每个实例的文件互不冲突）
+- ✅ 文件与对应实例关联，易于管理
+- ✅ 自动计算目标目录，减少手动指定路径
+
+**示例文件结构**：
+```
+core_products/real-time-voice-video/en/flutter/
+  ├── sidebars.json
+  ├── scan_result.json          # 自动保存到实例目录
+  ├── preprocess_result.json    # 自动保存到实例目录
+  ├── .translation-progress.json
+  └── ...
+```
 
 ### ⚠️ 禁止事项
 

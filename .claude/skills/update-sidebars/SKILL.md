@@ -11,6 +11,37 @@ description: 自动更新 DOCUO 侧边栏标签,从 MDX 文件中提取 H1 标�
 
 **优势**: 消除手动更新、自动处理 DOCUO 规则、支持批量更新、详细反馈。
 
+## ⚠️ 重要要求
+
+**所有脚本必须在 workspace 根目录下运行**,以确保正确解析文件路径。
+
+Workspace 根目录通过以下标记文件识别:
+- `docuo.config.json` 或 `docuo.config.en.json` (DOCUO 项目)
+- `.git` (Git 仓库)
+- `package.json` (Node.js 项目)
+
+**正确运行方式**:
+```bash
+# 确保在 workspace 根目录
+cd /path/to/workspace
+pwd  # 应该显示 workspace 根目录
+
+# 然后运行脚本
+python3 .claude/skills/update-sidebars/scripts/update_sidebar_labels.py <path>
+```
+
+**错误示例**:
+```bash
+# ❌ 错误:在子目录中运行
+cd core_products/real-time-voice-video/en/android-java
+python3 ../../../.claude/skills/update-sidebars/scripts/update_sidebar_labels.py sidebars.json
+
+# ✅ 正确:在 workspace 根目录运行
+cd /path/to/workspace
+python3 .claude/skills/update-sidebars/scripts/update_sidebar_labels.py \
+  core_products/real-time-voice-video/en/android-java/sidebars.json
+```
+
 ## 快速开始
 
 ### 1. 更新文档和内部链接标签

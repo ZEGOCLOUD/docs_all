@@ -12,8 +12,9 @@
 import sys
 import json
 import re
+import argparse
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from collections import defaultdict
 
 
@@ -228,6 +229,28 @@ def calculate_target_path(source_path: str, base_dir: Path) -> str:
     return str(Path(*new_parts))
 
 
+def calculate_target_directory(source_directory: str) -> str:
+    """
+    计算目标目录路径（将 /zh/ 替换为 /en/）
+
+    Args:
+        source_directory: 源目录路径
+
+    Returns:
+        str: 目标目录路径
+    """
+    path_obj = Path(source_directory)
+    parts = list(path_obj.parts)
+
+    # 找到 /zh/ 的位置并替换为 /en/
+    for i, part in enumerate(parts):
+        if part == 'zh':
+            parts[i] = 'en'
+            break
+
+    return str(Path(*parts))
+
+
 def create_batches(categorized: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     创建翻译批次
@@ -410,15 +433,39 @@ def print_batch_plan(batches: List[Dict[str, Any]]):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: scan_batch_translation.py <directory>", file=sys.stderr)
-        print("Example: scan_batch_translation.py core_products/real-time-voice-video/zh/flutter", file=sys.stderr)
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description='扫描待翻译的中文目录，智能分类文档并生成翻译计划',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+示例：
+  %(prog)s core_products/real-time-voice-video/zh/flutter
+  %(prog)s core_products/real-time-voice-video/zh/flutter --output-dir core_products/real-time-voice-video/en/flutter
+  %(prog)s zh/source --output-file custom/path/scan.json
+        '''
+    )
 
-    directory = sys.argv[1]
+    parser.add_argument('directory', help='要扫描的源目录路径（中文目录）')
+    parser.add_argument('--output-dir', help='输出目录路径（默认自动计算：将源目录的 /zh/ 替换为 /en/）')
+    parser.add_argument('--output-file', default='scan_result.json', help='输出文件名（默认：scan_result.json）')
+    parser.add_argument('--stdout', action='store_true', help='输出到 stdout 而不是文件（兼容旧版本）')
+
+    args = parser.parse_args()
+
+    directory = args.directory
     base_dir = Path(directory)
 
+    # 计算输出目录
+    if args.output_dir:
+        output_dir = Path(args.output_dir)
+    else:
+        # 自动计算目标目录（替换 /zh/ 为 /en/）
+        output_dir = Path(calculate_target_directory(directory))
+
+    # 确保输出目录存在
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     print(f"🔍 扫描目录：{directory}")
+    print(f"📁 输出目录：{output_dir}")
 
     # 扫描文件
     files = scan_directory(directory)
@@ -468,13 +515,10 @@ def main():
     print(f"   需翻译总行数：{total_lines}")
     print(f"   翻译批次数：{len(batches)}")
 
-    # 输出 JSON 格式供后续处理
-    print("\n" + "="*70)
-    print("📄 JSON 输出")
-    print("="*70)
-
+    # 构建结果
     result = {
         'directory': directory,
+        'target_directory': str(output_dir),
         'summary': {
             'total_files': total_files,
             'total_lines': total_lines,
@@ -490,7 +534,22 @@ def main():
         'batches': batches
     }
 
-    print(json.dumps(result, indent=2, ensure_ascii=False))
+    # 输出结果
+    if args.stdout:
+        # 兼容旧版本：输出到 stdout
+        print("\n" + "="*70)
+        print("📄 JSON 输出")
+        print("="*70)
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        # 新版本：保存到文件
+        output_file = output_dir / args.output_file
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+
+        print("\n" + "="*70)
+        print(f"✅ 扫描结果已保存：{output_file}")
+        print("="*70)
 
 
 if __name__ == '__main__':

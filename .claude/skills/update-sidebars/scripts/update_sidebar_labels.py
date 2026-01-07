@@ -12,6 +12,8 @@ Document ID resolution follows DOCUO rules:
 - Uses / as path separator
 - Lowercase with hyphens
 - Number prefixes (01-, 02-) are removed
+
+IMPORTANT: This script must be run from the workspace root directory.
 """
 
 import argparse
@@ -20,6 +22,45 @@ import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+
+def get_workspace_root() -> Path:
+    """
+    Find the workspace root directory by looking for marker files.
+
+    Marker files (in order of priority):
+    - docuo.config.json or docuo.config.en.json (DOCUO project)
+    - .git (Git repository)
+    - package.json (Node.js project)
+
+    Returns:
+        Path: workspace root directory
+
+    Note:
+        Falls back to current directory if no markers found.
+    """
+    current = Path.cwd().resolve()
+
+    # Search up to 10 levels up
+    for _ in range(10):
+        markers = [
+            'docuo.config.json',
+            'docuo.config.en.json',
+            '.git',
+            'package.json'
+        ]
+
+        for marker in markers:
+            if (current / marker).exists():
+                return current
+
+        parent = current.parent
+        if parent == current:  # Reached root
+            break
+        current = parent
+
+    # Fallback to current directory if no markers found
+    return Path.cwd()
 
 
 def normalize_document_id(doc_id: str) -> str:
@@ -113,13 +154,14 @@ def is_suitable_label(h1_text: str) -> bool:
     return True
 
 
-def extract_import_source(content: str, mdx_file: Path) -> Optional[Path]:
+def extract_import_source(content: str, mdx_file: Path, workspace_root: Path = None) -> Optional[Path]:
     """
     Extract the source file path from import statements.
 
     Args:
         content: File content
         mdx_file: Path to the current MDX file (for resolving relative paths)
+        workspace_root: Path to the workspace root (for resolving absolute paths)
 
     Returns:
         Path to the imported source file, or None if not found
@@ -145,7 +187,23 @@ def extract_import_source(content: str, mdx_file: Path) -> Optional[Path]:
             if import_path.startswith('/'):
                 # Remove leading slash and make relative to workspace root
                 import_path = import_path.lstrip('/')
-                return Path.cwd() / import_path
+                if workspace_root:
+                    return workspace_root / import_path
+                else:
+                    # Fallback: try to find workspace root by going up from mdx_file
+                    # Look for common markers like docuo.config.json, package.json, etc.
+                    current = mdx_file.resolve()
+                    for _ in range(10):  # Go up at most 10 levels
+                        if (current / 'docuo.config.json').exists() or \
+                           (current / 'docuo.config.en.json').exists() or \
+                           (current / 'package.json').exists():
+                            return current / import_path
+                        parent = current.parent
+                        if parent == current:  # Reached root
+                            break
+                        current = parent
+                    # Last resort: use Path.cwd()
+                    return Path.cwd() / import_path
 
             # Handle relative paths
             else:
@@ -160,7 +218,7 @@ def extract_import_source(content: str, mdx_file: Path) -> Optional[Path]:
     return None
 
 
-def extract_first_h1(mdx_file: Path, follow_imports: bool = True, visited: set = None) -> Optional[str]:
+def extract_first_h1(mdx_file: Path, follow_imports: bool = True, visited: set = None, workspace_root: Path = None) -> Optional[str]:
     """
     Extract the first H1 heading from an MDX file.
 
@@ -168,6 +226,7 @@ def extract_first_h1(mdx_file: Path, follow_imports: bool = True, visited: set =
         mdx_file: Path to the MDX file
         follow_imports: Whether to follow import statements to source files
         visited: Set of already visited files (to prevent circular imports)
+        workspace_root: Path to the workspace root (for resolving absolute import paths)
 
     Returns:
         The H1 text without the # prefix, or None if not found or not suitable
@@ -210,10 +269,10 @@ def extract_first_h1(mdx_file: Path, follow_imports: bool = True, visited: set =
 
         # No suitable H1 found in current file, check if this file imports content from another file
         if follow_imports:
-            import_source = extract_import_source(content, mdx_file)
+            import_source = extract_import_source(content, mdx_file, workspace_root)
             if import_source:
                 # Recursively extract H1 from the imported source file
-                return extract_first_h1(import_source, follow_imports=True, visited=visited)
+                return extract_first_h1(import_source, follow_imports=True, visited=visited, workspace_root=workspace_root)
 
         return None
     except Exception as e:
@@ -228,7 +287,8 @@ def process_sidebar_item(
     external_links: Dict[str, List[Dict]] = None,
     tag_labels: Dict[str, List[Dict]] = None,
     category_labels: Dict[str, List[Dict]] = None,
-    current_path: List[str] = None
+    current_path: List[str] = None,
+    workspace_root: Path = None
 ) -> tuple[Dict[str, Any], bool, Dict[str, List[Dict]], Dict[str, List[Dict]], Dict[str, List[Dict]]]:
     """
     Process a single sidebar item, updating labels for doc and link items.
@@ -241,6 +301,7 @@ def process_sidebar_item(
         tag_labels: Dictionary to collect tag labels that need translation
         category_labels: Dictionary to collect category labels that need translation
         current_path: Current path in the sidebar structure (for tracking)
+        workspace_root: Path to the workspace root (for resolving absolute import paths)
 
     Returns:
         Tuple of (updated item, modified, external_links, tag_labels, category_labels)
@@ -266,7 +327,7 @@ def process_sidebar_item(
 
         if mdx_file:
             # Extract H1
-            h1_text = extract_first_h1(mdx_file)
+            h1_text = extract_first_h1(mdx_file, workspace_root=workspace_root)
 
             if h1_text:
                 if h1_text != current_label:
@@ -287,9 +348,12 @@ def process_sidebar_item(
                         content = f.read()
 
                     # Check if this is an import file
-                    import_source = extract_import_source(content, mdx_file)
+                    import_source = extract_import_source(content, mdx_file, workspace_root=workspace_root)
                     if import_source:
-                        print(f"Skip (import source has no suitable H1): {doc_id} -> {import_source.relative_to(Path.cwd())}")
+                        try:
+                            print(f"Skip (import source has no suitable H1): {doc_id} -> {import_source.relative_to(get_workspace_root())}")
+                        except ValueError:
+                            print(f"Skip (import source has no suitable H1): {doc_id} -> {import_source}")
                     else:
                         # Check if file has any H1 after frontmatter
                         # Handle multiple --- separators (some files have frontmatter with ---)
@@ -375,13 +439,16 @@ def process_sidebar_item(
             mdx_file = resolve_internal_link(href, locale)
 
             if mdx_file and mdx_file.exists():
-                h1_text = extract_first_h1(mdx_file)
+                h1_text = extract_first_h1(mdx_file, workspace_root=workspace_root)
 
                 if h1_text and h1_text != current_label:
                     print(f"{'[DRY RUN] ' if dry_run else ''}Update link: {current_label}")
                     print(f"  Old label: {current_label}")
                     print(f"  New label: {h1_text}")
-                    print(f"  Source: {href} -> {mdx_file.relative_to(Path.cwd())}")
+                    try:
+                        print(f"  Source: {href} -> {mdx_file.relative_to(get_workspace_root())}")
+                    except ValueError:
+                        print(f"  Source: {href} -> {mdx_file}")
                     print(f"  Config: docuo.config.{locale}.json")
                     print()
 
@@ -441,7 +508,7 @@ def process_sidebar_item(
 
         for i, sub_item in enumerate(item['items']):
             item['items'][i], sub_modified, sub_links, sub_tags, sub_cats = process_sidebar_item(
-                sub_item, instance_dir, dry_run, external_links, tag_labels, category_labels, new_path
+                sub_item, instance_dir, dry_run, external_links, tag_labels, category_labels, new_path, workspace_root
             )
             if sub_modified:
                 modified = True
@@ -472,6 +539,20 @@ def update_sidebar_labels(
     if instance_dir is None:
         instance_dir = sidebars_path.parent
 
+    # Determine workspace root by looking for docuo config files
+    workspace_root = None
+    current = sidebars_path.resolve()
+    for _ in range(10):  # Go up at most 10 levels
+        if (current / 'docuo.config.json').exists() or \
+           (current / 'docuo.config.en.json').exists() or \
+           (current / 'package.json').exists():
+            workspace_root = current
+            break
+        parent = current.parent
+        if parent == current:  # Reached root
+            break
+        current = parent
+
     # Read sidebars.json
     try:
         with open(sidebars_path, 'r', encoding='utf-8') as f:
@@ -480,12 +561,13 @@ def update_sidebar_labels(
         print(f"Error reading {sidebars_path}: {e}", file=sys.stderr)
         return False
 
+    workspace_root = get_workspace_root()
     try:
-        rel_path = sidebars_path.relative_to(Path.cwd())
+        rel_path = sidebars_path.relative_to(workspace_root)
     except ValueError:
         rel_path = sidebars_path
     try:
-        rel_instance = instance_dir.relative_to(Path.cwd())
+        rel_instance = instance_dir.relative_to(workspace_root)
     except ValueError:
         rel_instance = instance_dir
 
@@ -503,7 +585,7 @@ def update_sidebar_labels(
         if isinstance(items, list):
             for i, item in enumerate(items):
                 updated_item, item_modified, external_links, tag_labels, category_labels = process_sidebar_item(
-                    item, instance_dir, dry_run
+                    item, instance_dir, dry_run, workspace_root=workspace_root
                 )
                 if item_modified:
                     modified = True
@@ -595,7 +677,7 @@ def find_docuo_config(locale: str = 'zh') -> Optional[Path]:
     Returns:
         Path to the config file, or None if not found
     """
-    workspace_root = Path.cwd()
+    workspace_root = get_workspace_root()
 
     # Try locale-specific config first
     locale_config = workspace_root / f'docuo.config.{locale}.json'
@@ -670,7 +752,7 @@ def resolve_internal_link(href: str, locale: str = 'zh') -> Optional[Path]:
         return None
 
     # Get instance directory
-    instance_dir = Path.cwd() / instance['path']
+    instance_dir = get_workspace_root() / instance['path']
 
     # Convert path to document ID
     # Remove .mdx or .html extension if present

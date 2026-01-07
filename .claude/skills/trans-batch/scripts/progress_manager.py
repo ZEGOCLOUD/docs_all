@@ -21,6 +21,127 @@ from typing import List, Dict, Any, Optional
 PROGRESS_FILE_NAME = '.translation-progress.json'
 
 
+def create_batches_from_files(files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    从文件列表自动创建批次
+
+    批次策略（与 scan_batch_translation.py 保持一致）：
+    - 小文件（< 50 行）：每批 10-20 个文件，总行数控制在 1000 行以内
+    - 中等文件（50-300 行）：每批 2-5 个文件，总行数控制在 1500 行以内
+    - 大文件（> 300 行）：单独成批
+
+    Args:
+        files: 文件信息列表，每个文件包含 line_count 等字段
+
+    Returns:
+        list: 批次列表
+    """
+    # 按文件大小分类
+    small_files = [f for f in files if f.get('line_count', 0) < 50]
+    medium_files = [f for f in files if 50 <= f.get('line_count', 0) <= 300]
+    large_files = [f for f in files if f.get('line_count', 0) > 300]
+
+    batches = []
+    batch_number = 1
+
+    # 处理小文件
+    if small_files:
+        current_batch = {
+            'batch_number': batch_number,
+            'files': [],
+            'total_lines': 0,
+            'file_count': 0
+        }
+
+        for file_info in small_files:
+            # 为每个文件添加必需的字段
+            file_entry = {
+                'path': file_info.get('source', file_info.get('target', '')),
+                'target_path': file_info.get('target', ''),
+                'relative_path': file_info.get('relative_path', ''),
+                'line_count': file_info.get('line_count', 0)
+            }
+
+            if current_batch['file_count'] >= 20 or current_batch['total_lines'] + file_info.get('line_count', 0) > 1000:
+                batches.append(current_batch)
+                batch_number += 1
+                current_batch = {
+                    'batch_number': batch_number,
+                    'files': [],
+                    'total_lines': 0,
+                    'file_count': 0
+                }
+
+            current_batch['files'].append(file_entry)
+            current_batch['total_lines'] += file_info.get('line_count', 0)
+            current_batch['file_count'] += 1
+
+        if current_batch['files']:
+            batches.append(current_batch)
+            batch_number += 1
+
+    # 处理中等文件
+    if medium_files:
+        i = 0
+        while i < len(medium_files):
+            file_info = medium_files[i]
+            file_entry = {
+                'path': file_info.get('source', file_info.get('target', '')),
+                'target_path': file_info.get('target', ''),
+                'relative_path': file_info.get('relative_path', ''),
+                'line_count': file_info.get('line_count', 0)
+            }
+
+            batch = {
+                'batch_number': batch_number,
+                'files': [file_entry],
+                'total_lines': file_info.get('line_count', 0),
+                'file_count': 1
+            }
+
+            # 尝试添加更多文件
+            i += 1
+            while i < len(medium_files):
+                other_file = medium_files[i]
+                if batch['file_count'] >= 5 or batch['total_lines'] + other_file.get('line_count', 0) > 1500:
+                    break
+
+                other_entry = {
+                    'path': other_file.get('source', other_file.get('target', '')),
+                    'target_path': other_file.get('target', ''),
+                    'relative_path': other_file.get('relative_path', ''),
+                    'line_count': other_file.get('line_count', 0)
+                }
+
+                batch['files'].append(other_entry)
+                batch['total_lines'] += other_file.get('line_count', 0)
+                batch['file_count'] += 1
+                i += 1
+
+            batches.append(batch)
+            batch_number += 1
+
+    # 处理大文件
+    for file_info in large_files:
+        file_entry = {
+            'path': file_info.get('source', file_info.get('target', '')),
+            'target_path': file_info.get('target', ''),
+            'relative_path': file_info.get('relative_path', ''),
+            'line_count': file_info.get('line_count', 0)
+        }
+
+        batches.append({
+            'batch_number': batch_number,
+            'files': [file_entry],
+            'total_lines': file_info.get('line_count', 0),
+            'file_count': 1,
+            'needs_segmentation': file_info.get('line_count', 0) > 2000
+        })
+        batch_number += 1
+
+    return batches
+
+
 def create_progress(
     target_directory: str,
     source_directory: str,
@@ -41,8 +162,13 @@ def create_progress(
     """
     now = datetime.utcnow().isoformat() + 'Z'
 
-    # 提取批次信息
+    # 提取批次信息，如果不存在则自动生成
     batches = scan_result.get('batches', [])
+    if not batches and 'files' in scan_result:
+        # 如果 scan_result 中没有 batches，自动从 files 生成
+        print("⚠️  scan_result.json 中没有批次信息，正在自动生成批次...")
+        batches = create_batches_from_files(scan_result['files'])
+        print(f"✅ 已生成 {len(batches)} 个批次")
 
     # 构建跳过的文件列表
     skipped_files = []
@@ -113,6 +239,11 @@ def create_progress(
 
         batch_details.append(batch_info)
 
+    # 计算总行数（如果 summary 中没有 total_lines）
+    total_lines = scan_result['summary'].get('total_lines')
+    if total_lines is None:
+        total_lines = sum(f.get('line_count', 0) for f in scan_result.get('files', []))
+
     # 构建完整进度报告
     progress = {
         'directory': source_directory,
@@ -123,7 +254,7 @@ def create_progress(
         'completed_batches': 0,
         'total_files': scan_result['summary']['total_files'],
         'translated_files': 0,
-        'total_lines': scan_result['summary']['total_lines'],
+        'total_lines': total_lines,
         'translated_lines': 0,
         'current_batch': 1,
         'status': 'in_progress',

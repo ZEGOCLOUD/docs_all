@@ -13,13 +13,55 @@
 3. 检查对应的英文文档是否存在
 4. 如果存在：替换路径并保存，标记为"已解决"
 5. 如果不存在：标记为"需要翻译"
+
+IMPORTANT: 此脚本必须在 workspace 根目录下运行。
 """
 
 import sys
 import json
 import re
+import argparse
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+
+
+def get_workspace_root() -> Path:
+    """
+    Find the workspace root directory by looking for marker files.
+
+    Marker files (in order of priority):
+    - docuo.config.json or docuo.config.en.json (DOCUO project)
+    - .git (Git repository)
+    - package.json (Node.js project)
+
+    Returns:
+        Path: workspace root directory
+
+    Note:
+        Falls back to current directory if no markers found.
+    """
+    current = Path.cwd().resolve()
+
+    # Search up to 10 levels up
+    for _ in range(10):
+        markers = [
+            'docuo.config.json',
+            'docuo.config.en.json',
+            '.git',
+            'package.json'
+        ]
+
+        for marker in markers:
+            if (current / marker).exists():
+                return current
+
+        parent = current.parent
+        if parent == current:  # Reached root
+            break
+        current = parent
+
+    # Fallback to current directory if no markers found
+    return Path.cwd()
 
 
 def extract_import_path(content: str) -> str:
@@ -88,7 +130,7 @@ def process_reuse_doc(file_path: Path, target_path: Path) -> Dict[str, Any]:
         # import 路径是绝对路径（以 / 开头），需要相对于项目根目录解析
         if import_path.startswith('/'):
             # 绝对路径：相对于工作目录（项目根目录）
-            project_root = Path.cwd()
+            project_root = get_workspace_root()
             new_import_path_abs = project_root / new_import_path.lstrip('/')
         else:
             # 相对路径：相对于文件所在目录
@@ -160,12 +202,25 @@ def preprocess_reuse_docs(reuse_docs: List[Dict[str, Any]]) -> List[Dict[str, An
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: preprocess_reuse_docs.py <scan_result.json>", file=sys.stderr)
-        print("Example: preprocess_reuse_docs.py scan_result.json", file=sys.stderr)
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description='预处理全复用文档，尝试替换引用路径',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+示例：
+  %(prog)s scan_result.json
+  %(prog)s scan_result.json --output-dir core_products/real-time-voice-video/en/flutter
+  %(prog)s scan_result.json --output-file custom/path/preprocess.json
+        '''
+    )
 
-    scan_result_file = sys.argv[1]
+    parser.add_argument('scan_result', help='扫描结果文件路径（scan_result.json）')
+    parser.add_argument('--output-dir', help='输出目录路径（默认从 scan_result.json 的 target_directory 字段读取）')
+    parser.add_argument('--output-file', default='preprocess_result.json', help='输出文件名（默认：preprocess_result.json）')
+    parser.add_argument('--stdout', action='store_true', help='输出到 stdout 而不是文件（兼容旧版本）')
+
+    args = parser.parse_args()
+
+    scan_result_file = args.scan_result
 
     # 读取扫描结果
     try:
@@ -175,18 +230,57 @@ def main():
         print(f"Error: Failed to read scan result file: {e}", file=sys.stderr)
         sys.exit(1)
 
+    # 计算输出目录
+    if args.output_dir:
+        output_dir = Path(args.output_dir)
+    else:
+        # 从 scan_result.json 中读取 target_directory
+        target_directory = scan_result.get('target_directory')
+        if target_directory:
+            output_dir = Path(target_directory)
+        else:
+            # 兼容旧版本：如果没有 target_directory 字段，使用 scan_result 文件所在目录
+            output_dir = Path(scan_result_file).parent
+
+    # 确保输出目录存在
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"📂 输入文件：{scan_result_file}")
+    print(f"📁 输出目录：{output_dir}")
+
     # 提取全复用文档
     reuse_docs = [f for f in scan_result.get('files', []) if f.get('is_reuse_doc', False)]
 
     if not reuse_docs:
-        print(json.dumps([], ensure_ascii=False))
-        sys.exit(0)
+        print("\n⚠️  未找到全复用文档")
+        results = []
+    else:
+        print(f"🔄 找到 {len(reuse_docs)} 个全复用文档，开始预处理...")
 
-    # 预处理全复用文档
-    results = preprocess_reuse_docs(reuse_docs)
+        # 预处理全复用文档
+        results = preprocess_reuse_docs(reuse_docs)
 
-    # 输出结果（纯 JSON）
-    print(json.dumps(results, indent=2, ensure_ascii=False))
+        # 统计结果
+        resolved_count = sum(1 for r in results if r['status'] == 'resolved')
+        need_translate_count = sum(1 for r in results if r['status'] == 'need_translate')
+        failed_count = sum(1 for r in results if r['status'] == 'failed')
+
+        print(f"\n📊 预处理结果：")
+        print(f"   ✅ 已解决：{resolved_count} 个")
+        print(f"   🔀 需翻译：{need_translate_count} 个")
+        print(f"   ❌ 失败：{failed_count} 个")
+
+    # 输出结果
+    if args.stdout:
+        # 兼容旧版本：输出到 stdout
+        print(json.dumps(results, indent=2, ensure_ascii=False))
+    else:
+        # 新版本：保存到文件
+        output_file = output_dir / args.output_file
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
+
+        print(f"\n✅ 预处理结果已保存：{output_file}")
 
 
 if __name__ == '__main__':
