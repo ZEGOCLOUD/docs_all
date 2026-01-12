@@ -17,10 +17,12 @@ function updateTime(filePaths) {
   const now = new Date();
   const updatedDate = now.getFullYear() + '-' + (now.getMonth() + 1).toString().padStart(2, '0') + '-' + now.getDate().toString().padStart(2, '0');
   console.log(`更新日期为 ${updatedDate}`);
+
   for (const filePath of filePaths) {
     if(!filePath.endsWith('.mdx')) {
       continue;
     }
+
     let content = '';
     try{
       content = fs.readFileSync(filePath, 'utf-8');
@@ -28,25 +30,46 @@ function updateTime(filePaths) {
       console.error(`读取 ${filePath} 失败: ${error.message}`);
       continue;
     }
-    // 使用正则获取 frontmatter，以 --- 开头，第2个 --- 前的内容，用yaml解析
-    const frontmatter = content.match(/---[\s\S]*?---/)?.[0];
-    const otherContent = content.replace(frontmatter, '');
+
+    // 只匹配文件开头的 frontmatter（必须以 --- 开头）
+    // ^--- 确保从文件开头匹配，[\s\S]*? 匹配任意内容（非贪婪），\n--- 匹配结束标记
+    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
 
     let frontmatterObj = {};
-    if(!frontmatter) {
-      console.warn(`${filePath} 没有 frontmatter`);
-      frontmatterObj = {date:updatedDate};
-    }else{
-      frontmatterObj = {
-        ...yaml.load(frontmatter.replace(/---/g, '')),
-        date:updatedDate,
+    let otherContent = '';
+
+    if(!frontmatterMatch) {
+      console.warn(`${filePath} 没有有效的 frontmatter（必须以 --- 开头）`);
+      frontmatterObj = {date: updatedDate};
+      otherContent = content;
+    } else {
+      const frontmatterContent = frontmatterMatch[1];
+      // 获取 frontmatter 之后的内容
+      otherContent = content.slice(frontmatterMatch[0].length);
+
+      try {
+        // 解析 YAML frontmatter
+        const parsedFrontmatter = yaml.load(frontmatterContent);
+        frontmatterObj = {
+          ...(parsedFrontmatter || {}),
+          date: updatedDate,
+        };
+      } catch(error) {
+        console.error(`${filePath} 的 frontmatter YAML 解析失败: ${error.message}`);
+        continue;
       }
     }
-    const newContent = `---\n${yaml.dump(frontmatterObj)}---${otherContent}`;
-    fs.writeFileSync(filePath, newContent);
-    console.log(`${filePath} 的更新日期为 ${updatedDate}`);
-  }
 
+    // 生成新内容
+    const newContent = `---\n${yaml.dump(frontmatterObj)}---${otherContent}`;
+
+    try {
+      fs.writeFileSync(filePath, newContent);
+      console.log(`${filePath} 的更新日期为 ${updatedDate}`);
+    } catch(error) {
+      console.error(`写入 ${filePath} 失败: ${error.message}`);
+    }
+  }
 }
 
 // updateTime(['test/test.mdx','test/work.mdx','test/index.md',"core_products/zim/zh/docs_zim_android_zh/Send and receive messages.mdx"]);
