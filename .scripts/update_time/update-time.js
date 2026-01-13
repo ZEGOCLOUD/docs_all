@@ -16,7 +16,7 @@ function updateTime(filePaths) {
   }
   const now = new Date();
   const updatedDate = now.getFullYear() + '-' + (now.getMonth() + 1).toString().padStart(2, '0') + '-' + now.getDate().toString().padStart(2, '0');
-  console.log(`更新日期为 ${updatedDate}`);
+  // console.log(`更新日期为 ${updatedDate}`);
 
   for (const filePath of filePaths) {
     if(!filePath.endsWith('.mdx')) {
