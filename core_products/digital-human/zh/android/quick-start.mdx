@@ -29,7 +29,7 @@
 
 - **数字人实时流式输出**：指通过服务端创建数字人流任务，并驱动数字人生成实时音视频流，客户端通过 RTC 协议拉取并渲染的过程。
 - **自定义视频渲染**：ZEGO Express SDK 提供的进阶功能。在数字人场景下，客户端开启此功能以获取原始视频帧数据，透传给数字人 SDK 进行二次处理和渲染。
-- **Base64Config**：启动数字人 SDK 所需的核心配置字符串。由业务后台在调用[创建数字人流任务](/aigc-digital-human-server/server-apis/digital-human-streaming/create-digital-human-stream-task) API 时获得。
+- **Base64Config**：启动数字人 SDK 所需的核心配置字符串。由业务后台在调用[创建数字人流任务](/aigc-digital-human-server/streaming-apis/digital-human-streaming/create-digital-human-stream-task) API 时获得。
 - **SEI**：视频补充增强信息。数字人 SDK 依赖视频流中携带的 SEI 数据来实现数字人动作、口型与音频的精准同步。
 
 ## 示例代码
@@ -61,12 +61,21 @@
 
 实现数字人实时流式输出，需要完成以下步骤：
 
+:::if{props.platform="undefined|iOS"}
 1. **初始化 SDK**：需要分别初始化 ZEGO Express SDK 和数字人 SDK。
 2. **创建流任务**：需要向业务后台发起请求，由后台调用数字人 PaaS API 创建任务并获取 `Base64Config`。
 3. **登录房间并拉流**：需要开启**自定义视频渲染**模式，登录 RTC 房间并拉取数字人视频流。
 4. **启动数字人**：需要调用数字人 SDK 的 `start` 方法，传入 `Base64Config` 启动渲染引擎。
 5. **驱动数字人播报**：需要通过业务后台发送文本或音频指令驱动数字人讲话。
 6. **停止任务**：通话结束后，需要停止拉流、登出房间并销毁相关 SDK 实例。
+:::
+:::if{props.platform="Web"}
+1. **初始化 SDK**：需要初始化 ZEGO Express SDK。
+2. **创建流任务**：需要向业务后台发起请求，由后台调用数字人 PaaS API 创建任务并获取相关信息。
+3. **登录房间并拉流**：登录 RTC 房间并拉取数字人视频流。
+4. **驱动数字人播报**：需要通过业务后台发送文本或音频指令驱动数字人讲话。
+5. **停止任务**：通话结束后，需要停止拉流、登出房间并销毁相关 SDK 实例。
+:::
 
 ## 实现流程
 
@@ -76,44 +85,52 @@
 ```mermaid
 sequenceDiagram
     participant Client as 业务客户端
-    participant Server as 业务服务端
-    participant PaaS as 数字人 PaaS / RTC
+    participant Express as Express SDK
     participant DH_SDK as 数字人 SDK
+    participant Server as 业务服务端
+    participant PaaS as 数字人服务端 / RTC
 
     Note over Client, DH_SDK: 1. 初始化 SDK
-    Client->>Client: ZegoExpressEngine.createEngine(profile)
+    Client->>Express: ZegoExpressEngine.createEngine(profile)
     Client->>DH_SDK: ZegoDigitalHuman.create(context)
 
-    Note over Client, DH_SDK: 2. 创建流任务
+    Note over Client, DH_SDK: 2. 预加载资源 (可选)
+    Client->>Server: 获取数字人信息 (DigitalHumanID)
+    Server-->>Client: 返回 AppID, Token
+    Client->>DH_SDK: ZegoDigitalHumanResource.preload(auth, id, callback)
+
+    Note over Client, PaaS: 3. 创建流任务
     Client->>Server: 请求启动数字人 (RoomID, StreamID)
     Server->>PaaS: CreateDigitalHumanStreamTask (OutputMode=2)
     PaaS-->>Server: 返回 Base64Config, TaskID
     Server-->>Client: 返回 Base64Config
 
-    Note over Client, DH_SDK: 3. 登录房间并拉流
-    Client->>Client: enableCustomVideoRender(true, config)
-    Client->>PaaS: loginRoom(RoomID, Token)
-    Client->>PaaS: startPlayingStream(StreamID)
-    PaaS-->>Client: 视频帧 / SEI 回调
+    Note over Client, PaaS: 4. 登录房间并拉流
+    Client->>Express: ZegoExpressEngine.enableCustomVideoRender(true, config)
+    Client->>Express: ZegoExpressEngine.loginRoom(RoomID, Token)
+    Client->>Express: ZegoExpressEngine.startPlayingStream(StreamID)
+    PaaS-->>Express: 视频帧 / SEI 回调
+    Express-->>Client: 视频帧 / SEI 回调
 
-    Note over Client, DH_SDK: 4. 启动数字人
+    Note over Client, DH_SDK: 5. 启动数字人
     Client->>DH_SDK: digitalMobile.attach(digitalView)
     Client->>DH_SDK: digitalMobile.start(Base64Config, listener)
     loop 持续渲染
-        Client->>DH_SDK: onRemoteVideoFrameRawData(data, dataLength, param, streamID)
-        Client->>DH_SDK: onPlayerSyncRecvSEI(streamID, data)
+        Client->>DH_SDK: digitalMobile.onRemoteVideoFrameRawData(data, dataLength, param, streamID)
+        Client->>DH_SDK: digitalMobile.onPlayerSyncRecvSEI(streamID, data)
     end
 
-    Note over Client, DH_SDK: 5. 驱动数字人播报
-    Client->>Server: 发起播报指令 (Text / Audio)
-    Server->>PaaS: DriveDigitalHuman (TaskID, Text / AudioUrl)
+    Note over Client, PaaS: 6. 驱动数字人播报
+    Client->>Server: 发起播报指令 (Text / Audio / WS)
+    Server->>PaaS: DriveDigitalHuman (TaskID, Text / AudioUrl / WS Stream)
     PaaS-->>DH_SDK: (通过流内信令驱动口型与动作)
     PaaS-->>Client: (通过音视频流输出画面与声音)
 
-    Note over Client, DH_SDK: 6. 停止任务
+    Note over Client, PaaS: 7. 停止任务
     Client->>Server: 停止任务
     Server->>PaaS: StopDigitalHumanStreamTask (TaskID)
-    Client->>Client: logoutRoom() / digitalMobile.stop()
+    Client->>Express: logoutRoom()
+    Client->>DH_SDK: digitalMobile.stop()
 ```
 :::
 
@@ -121,44 +138,52 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant Client as 业务客户端
-    participant Server as 业务服务端
-    participant PaaS as 数字人 PaaS / RTC
+    participant Express as Express SDK
     participant DH_SDK as 数字人 SDK
+    participant Server as 业务服务端
+    participant PaaS as 数字人服务端 / RTC
 
     Note over Client, DH_SDK: 1. 初始化 SDK
-    Client->>Client: createEngineWithProfile(profile)
+    Client->>Express: createEngineWithProfile(profile)
     Client->>DH_SDK: [ZegoDigitalHuman create]
 
-    Note over Client, DH_SDK: 2. 创建流任务
+    Note over Client, DH_SDK: 2. 预加载资源 (可选)
+    Client->>Server: 获取数字人信息 (DigitalHumanID)
+    Server-->>Client: 返回 AppID, Token
+    Client->>DH_SDK: [[ZegoDigitalHumanResource sharedInstance] preloadWithAuth:...]
+
+    Note over Client, PaaS: 3. 创建流任务
     Client->>Server: 请求启动数字人 (RoomID, StreamID)
     Server->>PaaS: CreateDigitalHumanStreamTask (OutputMode=2)
     PaaS-->>Server: 返回 Base64Config, TaskID
     Server-->>Client: 返回 Base64Config
 
-    Note over Client, DH_SDK: 3. 登录房间并拉流
-    Client->>Client: enableCustomVideoRender:YES config:renderConfig
-    Client->>PaaS: loginRoom:RoomID config:roomConfig
-    Client->>PaaS: startPlayingStream:StreamID
-    PaaS-->>Client: 视频帧 / SEI 回调
+    Note over Client, PaaS: 4. 登录房间并拉流
+    Client->>Express: enableCustomVideoRender:YES config:renderConfig
+    Client->>Express: loginRoom:RoomID config:roomConfig
+    Client->>Express: startPlayingStream:StreamID
+    PaaS-->>Express: 视频帧 / SEI 回调
+    Express-->>Client: 视频帧 / SEI 回调
 
-    Note over Client, DH_SDK: 4. 启动数字人
+    Note over Client, DH_SDK: 5. 启动数字人
     Client->>DH_SDK: [digitalMobile attach:digitalView]
     Client->>DH_SDK: [digitalMobile start:Base64Config delegate:self]
     loop 持续渲染
-        Client->>DH_SDK: onRemoteVideoFrameRawData:data dataLength:dataLength param:param streamID:streamID
+        Client->>DH_SDK: [digitalMobile onRemoteVideoFrameRawData:data dataLength:dataLength param:param streamID:streamID]
         Client->>DH_SDK: [digitalMobile onPlayerSyncRecvSEI:streamID data:data]
     end
 
-    Note over Client, DH_SDK: 5. 驱动数字人播报
-    Client->>Server: 发起播报指令 (Text / Audio)
-    Server->>PaaS: DriveDigitalHuman (TaskID, Text / AudioUrl)
+    Note over Client, PaaS: 6. 驱动数字人播报
+    Client->>Server: 发起播报指令 (Text / Audio / WS)
+    Server->>PaaS: DriveDigitalHuman (TaskID, Text / AudioUrl / WS Stream)
     PaaS-->>DH_SDK: (通过流内信令驱动口型与动作)
     PaaS-->>Client: (通过音视频流输出画面与声音)
 
-    Note over Client, DH_SDK: 6. 停止任务
+    Note over Client, PaaS: 7. 停止任务
     Client->>Server: 停止任务
     Server->>PaaS: StopDigitalHumanStreamTask (TaskID)
-    Client->>Client: logoutRoom / [digitalMobile stop]
+    Client->>Express: logoutRoom
+    Client->>DH_SDK: [digitalMobile stop]
 ```
 :::
 
@@ -166,14 +191,14 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant Client as 业务客户端
-    participant Server as 业务服务端
-    participant PaaS as 数字人 PaaS / RTC
     participant Express as Express SDK
+    participant Server as 业务服务端
+    participant PaaS as 数字人服务端 / RTC
 
     Note over Client, Express: 1. 初始化 SDK
     Client->>Express: new ZegoExpressEngine(appID, server)
 
-    Note over Client, Express: 2. 创建流任务
+    Note over Client, PaaS: 2. 创建流任务
     Client->>Server: 请求启动数字人 (RoomID, StreamID)
     Server->>PaaS: CreateDigitalHumanStreamTask (OutputMode=0)
     PaaS-->>Server: 返回 TaskID, RoomID, StreamID, Token
@@ -185,15 +210,16 @@ sequenceDiagram
     PaaS-->>Express: 音视频流输出
     Express->>Client: 渲染到 DOM 元素
 
-    Note over Client, Express: 4. 驱动数字人播报
-    Client->>Server: 发起播报指令 (Text / Audio)
-    Server->>PaaS: DriveDigitalHuman (TaskID, Text / AudioUrl)
+    Note over Client, PaaS: 4. 驱动数字人播报
+    Client->>Server: 发起播报指令 (Text / Audio / WS)
+    Server->>PaaS: DriveDigitalHuman (TaskID, Text / AudioUrl / WS Stream)
     PaaS-->>Express: (音视频流内容更新)
 
-    Note over Client, Express: 5. 停止任务
+    Note over Client, PaaS: 5. 停止任务
     Client->>Server: 停止任务
     Server->>PaaS: StopDigitalHumanStreamTask (TaskID)
-    Client->>Express: stopPlayingStream() / logoutRoom()
+    Client->>Express: stopPlayingStream()
+    Client->>Express: logoutRoom()
 ```
 :::
 
@@ -234,9 +260,55 @@ const zg = new ZegoExpressEngine(appID, server);
 ```
 :::
 
-### 2 创建数字人流任务
+:::if{props.platform="undefined|iOS"}
+### 2 预加载资源 (可选)
 
-业务客户端需要向业务服务端发起请求，由业务服务端调用数字人 PaaS API [创建数字人流任务](/aigc-digital-human-server/server-apis/digital-human-streaming/create-digital-human-stream-task)。在该步骤中，**业务服务端**会获得包含 `RoomID`、`Token`、`StreamID` 以及 `Base64Config` 在内的关键信息。
+为了提升数字人启动速度，减少拉流后的等待时间，建议在创建任务前，先预加载数字人资源。
+
+:::if{props.platform=undefined}
+```java
+// 预加载数字人资源
+ZegoDigitalMobileAuth auth = new ZegoDigitalMobileAuth(appId, userId, token);
+ZegoDigitalHumanResource.INSTANCE.preload(context, auth, digitalHumanId, new ZegoDigitalHumanResource.PreloadCallback() {
+    @Override
+    public void onSuccess() {
+        // 预加载成功
+    }
+
+    @Override
+    public void onProgress(int progress) {
+        // 预加载进度
+    }
+
+    @Override
+    public void onError(int code, String msg) {
+        // 预加载失败
+    }
+});
+```
+:::
+
+:::if{props.platform="iOS"}
+```oc
+// 预加载数字人资源
+ZegoDigitalHumanAuth *auth = [[ZegoDigitalHumanAuth alloc] initWithAppID:(unsigned int)appId 
+                                                                  userID:userId 
+                                                                   token:token];
+[[ZegoDigitalHumanResource sharedInstance] preloadWithAuth:auth
+                                           digitalHumanId:digitalHumanId
+                                                 delegate:self];
+```
+:::
+:::
+
+:::if{props.platform="undefined|iOS"}
+### 3 创建数字人流任务
+:::
+:::if{props.platform="Web"}
+### 2 创建数字人流任务
+:::
+
+业务客户端需要向业务服务端发起请求，由业务服务端调用数字人 PaaS API [创建数字人流任务](/aigc-digital-human-server/streaming-apis/digital-human-streaming/create-digital-human-stream-task)。在该步骤中，**业务服务端**会获得包含 `RoomID`、`Token`、`StreamID` 以及 `Base64Config` 在内的关键信息。
 
 
 #### 返回字段用途说明
@@ -255,7 +327,12 @@ const zg = new ZegoExpressEngine(appID, server);
 :::
 
 
+:::if{props.platform="undefined|iOS"}
+### 4 登录房间并拉流渲染
+:::
+:::if{props.platform="Web"}
 ### 3 登录房间并拉流渲染
+:::
 
 获取任务信息后，客户端需要登录 RTC 房间并拉取数字人视频流。
 
@@ -362,7 +439,8 @@ remoteView.play("remote-video-container-id");
 ```
 :::
 
-### 4 启动数字人
+:::if{props.platform="undefined|iOS"}
+### 5 启动数字人
 
 客户端需要绑定渲染视图，并启动数字人以处理 SEI 数据确保音画同步。
 
@@ -392,28 +470,41 @@ digitalMobile.start(base64Config, listener);
 }
 ```
 :::
-
-
-:::if{props.platform="Web"}
-Web 端由 Express SDK 内部自动处理流数据，无需手动透传 SEI。
 :::
 
-### 5 驱动数字人
+:::if{props.platform="undefined|iOS"}
+### 6 驱动数字人
+:::
+:::if{props.platform="Web"}
+### 4 驱动数字人
+:::
 
-任务启动后，需要通过业务服务端调用 PaaS API 驱动数字人播报。支持文本驱动、音频驱动等方式。
+任务启动后，需要通过业务服务端调用 PaaS API 驱动数字人播报。支持以下驱动方式：
+
+- **文本驱动**：通过 [文本驱动数字人](/aigc-digital-human-server/streaming-apis/digital-human-streaming/drive-by-text) 接口发送文本内容。
+- **音频驱动**：通过 [音频驱动数字人](/aigc-digital-human-server/streaming-apis/digital-human-streaming/drive-by-audio) 接口发送音频文件 URL。
+- **WebSocket 驱动**：通过 [WebSocket 音频流驱动数字人](/aigc-digital-human-server/streaming-apis/digital-human-streaming/drive-by-ws-stream) 接口实时传输音频数据。
 
 :::if{props.platform=undefined}
 ```java
-// 文本驱动
-apiService.driveByText(taskId, "播报文本内容", new DriveCallback() {
+// 1. 文本驱动
+apiService.driveByText(taskId, new DriveCallback() {
     @Override
     public void onSuccess() {
         // 驱动成功
     }
 });
 
-// 音频文件驱动
-apiService.driveByAudio(taskId, "audio_url", new DriveCallback() {
+// 2. 音频文件驱动
+apiService.driveByAudio(taskId, new DriveCallback() {
+    @Override
+    public void onSuccess() {
+        // 驱动成功
+    }
+});
+
+// 3. WebSocket 驱动
+apiService.driveByWsStreamWithTTS(taskId, new DriveCallback() {
     @Override
     public void onSuccess() {
         // 驱动成功
@@ -424,13 +515,18 @@ apiService.driveByAudio(taskId, "audio_url", new DriveCallback() {
 
 :::if{props.platform="iOS"}
 ```oc
-// 文本驱动
-[[ZegoAPIService sharedService] driveByText:taskId text:@"播报文本内容" success:^(NSDictionary *data) {
+// 1. 文本驱动
+[[ZegoAPIService sharedService] driveByText:taskId success:^(NSDictionary *data) {
     // 驱动成功
 } failure:nil];
 
-// 音频文件驱动
-[[ZegoAPIService sharedService] driveByAudio:taskId audioUrl:@"audio_url" success:^(NSDictionary *data) {
+// 2. 音频文件驱动
+[[ZegoAPIService sharedService] driveByAudio:taskId success:^(NSDictionary *data) {
+    // 驱动成功
+} failure:nil];
+
+// 3. WebSocket 驱动
+[[ZegoAPIService sharedService] driveByWsStreamWithTTS:taskId success:^(NSDictionary *data) {
     // 驱动成功
 } failure:nil];
 ```
@@ -438,15 +534,23 @@ apiService.driveByAudio(taskId, "audio_url", new DriveCallback() {
 
 :::if{props.platform="Web"}
 ```javascript
-// 文本驱动
-await driveAPI.driveByText(taskId, "播报文本内容");
+// 1. 文本驱动
+await driveAPI.driveByText(taskId);
 
-// 音频文件驱动
-await driveAPI.driveByAudio(taskId, "audio_url");
+// 2. 音频文件驱动
+await driveAPI.driveByAudio(taskId);
+
+// 3. WebSocket 驱动
+await driveAPI.driveByWsStreamWithTTS(taskId);
 ```
 :::
 
-### 6 停止任务
+:::if{props.platform="undefined|iOS"}
+### 7 停止任务
+:::
+:::if{props.platform="Web"}
+### 5 停止任务
+:::
 
 :::if{props.platform=undefined}
 ```java
@@ -484,5 +588,5 @@ zg.logoutRoom();
 :::if{props.platform="Web"}
 - [集成 SDK](/real-time-voice-web/quick-start/integrating-sdk)
 :::
-- [服务端 API - 创建数字人流任务](/aigc-digital-human-server/server-apis/digital-human-streaming/create-digital-human-stream-task)
+- [服务端 API - 创建数字人流任务](/aigc-digital-human-server/streaming-apis/digital-human-streaming/create-digital-human-stream-task)
 - [错误码查询](/aigc-digital-human-android/client-sdk/error-code)
