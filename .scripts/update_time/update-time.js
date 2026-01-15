@@ -41,7 +41,7 @@ function updateTime(filePaths) {
     if(!frontmatterMatch) {
       console.warn(`${filePath} 没有有效的 frontmatter（必须以 --- 开头）`);
       frontmatterObj = {date: updatedDate};
-      otherContent = content;
+      otherContent = '\n'+content;// 添加换行符避免 frontmatter 和内容之间没有换行符
     } else {
       const frontmatterContent = frontmatterMatch[1];
       // 获取 frontmatter 之后的内容
