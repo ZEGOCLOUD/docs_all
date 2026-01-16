@@ -1,1 +1,125 @@
 # 配置翻译
+
+---
+
+## 功能介绍
+
+在实时语音转写（ASR）过程中，您可以开启翻译功能，将识别到的音频内容实时翻译成目标语言。该功能支持以下两种主要的配置模式：
+- **房间维度翻译**：房间内所有流共用一套翻译配置。
+- **流维度翻译**：为房间内不同的流设置个性化的翻译配置（如不同的目标语言）。
+
+## 使用方式
+
+您可以通过创建实时语音识别任务（[StartRealtimeASRTask](./api-reference/start.mdx)）时配置翻译参数。根据业务需求，您可以选择在房间级别或流级别启用翻译。
+
+<Tabs titleSize="h3">
+<Tab title="房间维度翻译（统一配置）">
+
+适用于希望对房间内所有发言进行统一语言翻译的场景。在该场景下，房间内所有的识别流将共用一套翻译配置。
+
+#### 核心参数配置
+
+| 参数 | 说明 |
+| :--- | :--- |
+| `RecognitionRange` | 设置为 `0`。表示识别范围为房间维度。 |
+| `EnableTranslation` | 设置为 `true`。开启翻译功能。 |
+| `Translation` | 在请求体外层配置，该配置将应用于房间内所有流。 |
+| `SubtitleType` | 建议设置为 `3`。表示同时下发识别结果和翻译结果。 |
+
+#### 请求示例
+
+```json
+{
+    "RoomId": "room_01",
+    "RecognitionRange": 0,
+    "EnableTranslation": true,
+    "SubtitleType": 3,
+    "Translation": {
+        "Vendor": "DoubaoSeedTranslation",
+        "SourceLanguage": "zh",
+        "TargetLanguage": "en",
+        "LLM": {
+            "Url": "https://ark.cn-beijing.volces.com/api/v3/responses",
+            "ApiKey": "",
+            "Model": "doubao-seed-translation-250915",
+            "Params": {}
+        }
+    },
+    "ASR": {
+        "Vendor": "Tencent",
+        "Params": {
+            "EngineModelType": "16k_zh"
+        }
+    }
+}
+```
+
+
+</Tab>
+<Tab title="流维度翻译（个性化配置）">
+
+适用于多语种混合会议，或者不同参与者需要翻译成不同目标语言的场景。您可以为特定的流 ID 独立配置翻译。
+
+#### 核心参数配置
+
+| 参数 | 说明 |
+| :--- | :--- |
+| `RecognitionRange` | 设置为 `1`。表示识别范围为流维度。 |
+| `SubtitleType` | 建议设置为 `3`。同时下发识别结果和翻译结果。 |
+| `StreamList` | 在数组对应的 `StreamInfo` 对象中进行独立配置。 |
+
+`StreamList` 内的 `Translation` 配置如下：
+- `StreamId`: 需要识别的流 ID。
+- `EnableTranslation`: 在流级别设置为 `true`。
+- `Translation`: 在流级别进行个性化配置（包括 Vendor, SourceLanguage, TargetLanguage 等）。
+
+#### 请求示例
+
+```json
+{
+    "RoomId": "room_02",
+    "RecognitionRange": 1,
+    "SubtitleType": 3,
+    "StreamList": [
+        {
+            "StreamId": "stream_zh_01",
+            "EnableTranslation": true,
+            "Translation": {
+                "Vendor": "DoubaoSeedTranslation",
+                "SourceLanguage": "zh",
+                "TargetLanguage": "en",
+                "LLM": {
+                    "Url": "https://ark.cn-beijing.volces.com/api/v3/responses",
+                    "ApiKey": "",
+                    "Model": "doubao-seed-translation-250915",
+                    "Params": {}
+                }
+            }
+        },
+        {
+            "StreamId": "stream_en_01",
+            "EnableTranslation": true,
+            "Translation": {
+                "Vendor": "QwenMT",
+                "SourceLanguage": "Chinese",
+                "TargetLanguage": "English",
+                "LLM": {
+                    "Url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+                    "ApiKey": "",
+                    "Model": "qwen-mt-flash",
+                    "Params": {}
+                }
+            }
+        }
+    ],
+    "ASR": {
+        "Vendor": "Tencent"
+    }
+}
+```
+
+> [!TIP]
+> 当 `RecognitionRange` 为 `1` 时，系统将优先读取 `StreamList` 中的流级配置，流级配置没有的话，会找外层的 `EnableTranslation` 和 `Translation` 配置。
+
+</Tab>
+</Tabs>
