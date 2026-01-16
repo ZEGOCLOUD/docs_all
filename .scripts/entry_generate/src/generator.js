@@ -14,6 +14,39 @@ const {
 } = require('./utils');
 
 /**
+ * 生成entry文档的头部按钮
+ */
+function generateButtons(productConfig, sidebarData, routeBasePath) {
+  const buttons = [];
+  const hasClientApi = sidebarData.clientApi && Array.isArray(sidebarData.clientApi) && sidebarData.clientApi.length > 0;
+
+  // 获取 mySidebar 中的所有 category 标签
+  const categoryLabels = (sidebarData.mySidebar || [])
+    .filter(item => item.type === 'category')
+    .map(item => item.label);
+
+  // 下载 SDK - 检查是否有"客户端 SDK" category
+  if (categoryLabels.includes('客户端 SDK')) {
+    buttons.push(`<Button primary-color="NavyBlue" target="_blank" href="./../client-sdk/download-sdk.mdx">下载 SDK</Button>`);
+  }
+
+  // 快速开始 - 检查是否有"快速开始" category
+  if (categoryLabels.includes('快速开始')) {
+    buttons.push(`<Button primary-color="NavyBlue" target="_blank" href="./../quick-start/${productConfig.quickStartPath}.mdx">快速开始</Button>`);
+  }
+
+  // 客户端 API - 检查是否有 clientApi 字段
+  if (hasClientApi) {
+    buttons.push(`<Button primary-color="NavyBlue" target="_blank" href="/${routeBasePath}${productConfig.apiPaths.client}">客户端 API</Button>`);
+  }
+
+  // 服务端 API - 始终显示（所有产品都有服务端 API）
+  buttons.push(`<Button primary-color="NavyBlue" target="_blank" href="${productConfig.apiPaths.server}">服务端 API</Button>`);
+
+  return buttons.join('\n');
+}
+
+/**
  * 生成entry文档的头部内容
  */
 function generateHeader(productType, platform, locale = 'zh', routeBasePath) {
@@ -21,9 +54,12 @@ function generateHeader(productType, platform, locale = 'zh', routeBasePath) {
   if (!productConfig) {
     throw new Error(`Unknown product type: ${productType}`);
   }
-  
+
   const instanceConfig = getInstanceConfig(productType, platform, locale);
-  
+  const sidebarData = loadSidebars(productType, platform, locale);
+
+  const buttons = generateButtons(productConfig, sidebarData, routeBasePath);
+
   return `---
 show_toc: false
 ---
@@ -33,10 +69,7 @@ import FeatureList from "${getFeatureListImportPath(productType)}";
 
 ${productConfig.description}
 
-<Button primary-color="NavyBlue" target="_blank" href="./../client-sdk/download-sdk.mdx">下载 SDK</Button>
-<Button primary-color="NavyBlue" target="_blank" href="./../quick-start/${productConfig.quickStartPath}.mdx">快速开始</Button>
-<Button primary-color="NavyBlue" target="_blank" href="/${routeBasePath + productConfig.apiPaths.client}">客户端 API</Button>
-<Button primary-color="NavyBlue" target="_blank" href="${productConfig.apiPaths.server}">服务端 API</Button>
+${buttons}
 
 ---
 
@@ -65,7 +98,7 @@ function generateStep(stepName, sidebarData, instanceConfig, productConfig) {
 
   // 处理特殊的参考文档Step - 始终生成，不依赖sidebar
   if (stepName === "参考文档") {
-    stepContent += generateReferenceStep(productConfig, instanceConfig);
+    stepContent += generateReferenceStep(productConfig, instanceConfig, sidebarData);
   } else {
     // 查找对应的sidebar category
     const sidebarCategory = findSidebarCategory(stepName, sidebarData);
@@ -158,22 +191,61 @@ function generateFeatureListsForGroups(featureGroups, routeBasePath) {
 /**
  * 生成参考文档Step的特殊内容
  */
-function generateReferenceStep(productConfig, instanceConfig) {
-  // 根据routeBasePath生成正确的错误码链接
+function generateReferenceStep(productConfig, instanceConfig, sidebarData) {
   const routeBasePath = instanceConfig.routeBasePath;
-  const errorCodeLink = `/${routeBasePath}/client-sdk/error-code`;
+  const features = [];
 
-  const features = [
-    { title: "客户端 API", link: "/"+routeBasePath+"/"+productConfig.apiPaths.client },
-    { title: "服务端 API", link: productConfig.apiPaths.server },
-    { title: "常见错误码", link: errorCodeLink },
-    { title: "常见问题", link: "/"+routeBasePath+"/faq" }
-  ];
+  // 客户端 API - 检查是否有 clientApi 字段
+  const hasClientApi = sidebarData.clientApi && Array.isArray(sidebarData.clientApi) && sidebarData.clientApi.length > 0;
+  if (hasClientApi) {
+    features.push({ title: "客户端 API", link: "/" + routeBasePath + "/" + productConfig.apiPaths.client });
+  }
+
+  // 服务端 API - 始终显示
+  features.push({ title: "服务端 API", link: productConfig.apiPaths.server });
+
+  // 常见错误码 - 检查 mySidebar 中是否有错误码文档
+  const hasErrorCode = hasDocInSidebar(sidebarData, 'client-sdk/error-code') ||
+                      hasDocInSidebar(sidebarData, 'error-code');
+  if (hasErrorCode) {
+    features.push({ title: "常见错误码", link: `/${routeBasePath}/client-sdk/error-code` });
+  }
+
+  // 常见问题 - 检查 mySidebar 中是否有 FAQ
+  const hasFaq = hasDocInSidebar(sidebarData, 'faq');
+  if (hasFaq) {
+    features.push({ title: "常见问题", link: `/${routeBasePath}/faq` });
+  }
 
   return `
     <FeatureList
       features={${JSON.stringify(features, null, 6).replace(/^/gm, '      ')}}
     />`;
+}
+
+/**
+ * 检查sidebar中是否存在指定文档
+ */
+function hasDocInSidebar(sidebarData, docId) {
+  if (!sidebarData.mySidebar) return false;
+
+  function checkItems(items) {
+    if (!items || !Array.isArray(items)) return false;
+
+    for (const item of items) {
+      if (item.type === 'doc' && item.id === docId) {
+        return true;
+      }
+      if (item.type === 'category' && item.items) {
+        if (checkItems(item.items)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  return checkItems(sidebarData.mySidebar);
 }
 
 /**
