@@ -2,24 +2,24 @@
 
 ---
 
-本文介绍如何展示用户在通过智能体进行语音翻译过程中的字幕。如下：
+本文介绍如何展示翻译的字幕内容，字幕内容包括：
 
-- 用户说话内容：流式展示用户正在说的话（语音识别（ASR）的实时结果）
-- 智能体翻译内容：流式展示智能体输出的内容（大语言模型（LLM）实时翻译的输出结果）
+- 用户说话内容：流式展示用户正在说的话
+- 翻译内容：流式展示翻译输出的内容
 // TODO: 这里图片要更换
 <Frame width="auto" height="512" caption="">
   <img src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/a78bc0cbf0.png" alt="subtitle.png"/>
 </Frame>
-
 ## 前提条件
 
-已按照 [快速开始](./../quick-start.mdx) 文档集成 ZEGO Express SDK 和 Cloud ASR 并实现基本的语音通话功能。
+- 已按照 [快速开始](./../quick-start.mdx) 文档集成 ZEGO Express SDK 和 Cloud ASR 并实现基本的语音通话功能。
+- 已按照 [配置翻译](./enable-translation.mdx) 文档开启翻译功能
 
 <Warning title="注意">
 必须使用[下载 SDK 及 Demo](./../introduction/download.mdx)页面针对 Cloud ASR 优化的 ZEGO Express SDK 版本，否则无法正常显示字幕。
 </Warning>
 
-### 使用字幕组件
+## 使用字幕组件
 <Tabs>
 <Tab title="iOS">
 //TODO: 这里项目地址要换
@@ -27,18 +27,7 @@
 
 <Accordion title="字幕组件使用示例" defaultOpen="true">
 <CodeGroup>
-```objectivec YourView.h
-#import <UIKit/UIKit.h>
-#import "ZegoAIAgentSubtitlesEventHandler.h"
-
-NS_ASSUME_NONNULL_BEGIN
-
-@interface YourView : UIView <ZegoAIAgentSubtitlesEventHandler>
-
-@end
-```
-
-```objectivec YourView.m {5-6,10-11,20-23,25-26,34-35,56-57,61-62,67-69,73-75,77-79}
+```oc YourView.m {5-6,10-11,20-23,25-26,34-35,56-57,61-62,67-69,73-75,77-79}
 #import "YourView.h"
 
 #import <Masonry/Masonry.h>
@@ -121,6 +110,16 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 ```
+```objectivec YourView.h
+#import <UIKit/UIKit.h>
+#import "ZegoAIAgentSubtitlesEventHandler.h"
+
+NS_ASSUME_NONNULL_BEGIN
+
+@interface YourView : UIView <ZegoAIAgentSubtitlesEventHandler>
+
+@end
+```
 </CodeGroup>
 </Accordion>
 </Tab>
@@ -135,7 +134,7 @@ ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
     @Override
     public void onRecvExperimentalAPI(String content) {
         super.onRecvExperimentalAPI(content);
-      
+
         // AudioChatTextMessage 会解析 JSON 字符串
         audioChatMessageParser.onRecvExperimentalAPI(content);
     }
@@ -179,7 +178,9 @@ onBeforeUnmount(() => {
 </Tab>
 </Tabs>
 
-## 字幕展示时如何筛选
+## 自定义实现字幕展示
+
+客户端可通过监听 `onRecvExperimentalAPI` 回调获取 `method` 为 `liveroom.room.on_recive_room_channel_message` 的房间自定义消息。
 
 ### 理解房间自定义消息协议
 
@@ -196,21 +197,21 @@ onBeforeUnmount(() => {
 Cmd 不同对应的 Data 也不同，具体如下：
 
 <Tabs>
-<Tab title="Cmd 为 201">
+<Tab title="Cmd 为 201，ASR 文本">
 
 | 字段 | 类型 | 描述 |
 | --- | --- | --- |
-| UserId | string | 用户 id |
+| UserId | string | 说话人的用户 id |
 | Text | string | 用户语音识别（ASR）的文本<br/>每次下发的是全量文本，支持文本修正 |
 | MessageId | string | 消息 id，每轮 ASR 文本消息 id 唯一 |
 | EndFlag | bool | 结束标识，true 表示本轮 ASR 文本已处理完成 |
 
 </Tab>
-<Tab title="Cmd 为 202">
+<Tab title="Cmd 为 202，LLM 翻译文本">
 
 | 字段 | 类型 | 描述 |
 | --- | --- | --- |
-| UserId | string | 用户 id |
+| UserId | string | 说话人的用户 id |
 | Text | string | LLM 翻译文本<br/>每次下发增量文本 |
 | MessageId | string | 消息 id，每轮 LLM 翻译文本消息 id 唯一 |
 | EndFlag | bool | 结束标识，true 表示本轮 LLM 翻译文本已处理完成 |
@@ -219,15 +220,33 @@ Cmd 不同对应的 Data 也不同，具体如下：
 </Tabs>
 
 
-### 处理流程
+### 字幕显示流程
 
 根据 Cmd 字段判断消息类型，并根据 Data 字段获取消息内容。
 <Tabs>
 <Tab title="Cmd 为 201，ASR 文本">
 对应消息处理流程如下图所示：
-<Frame width="512" height="auto" caption="">
-  <img src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/3ed1100592.png" alt="cmd3.png"/>
-</Frame>
+```mermaid
+flowchart TD
+    Start([开始])
+    Parse[解析 Data 字段]
+    CheckExists{新消息MessageId是否已存在<br/>UI消息列表?}
+    CheckSeqId{新消息SeqId比较大?}
+    Replace[替换UI消息列表中对应消息的内容]
+    Ignore[忽略]
+    Add[将新消息添加到UI消息列表]
+    End([结束])
+
+    Start --> Parse
+    Parse --> CheckExists
+    CheckExists -->|是| CheckSeqId
+    CheckExists -->|否| Add
+    CheckSeqId -->|是| Replace
+    CheckSeqId -->|否| Ignore
+    Replace --> End
+    Ignore --> End
+    Add --> End
+```
 
 </Tab>
 
@@ -235,19 +254,49 @@ Cmd 不同对应的 Data 也不同，具体如下：
 对应消息处理流程如下图所示。其中：
 - AI 消息缓存：一个 HashMap，key 为 MessageId，value 为新消息。
 - UI 消息列表：包含用户消息和 AI 消息的数组，存储所有在 UI 上展示的消息。
-<Frame width="512" height="auto" caption="">
-  <img src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/6720b5a0af.png" alt="cmd4.png"/>
-</Frame>
+
+```mermaid
+flowchart TD
+    Start([开始])
+    Parse[解析 Data 字段]
+    AddCache[将新消息放入AI消息缓存]
+    CheckExists{新消息MessageId是否已存在<br/>UI消息列表?}
+    RemoveCache[从AI消息缓存中取出有片段]
+    MergeSeqId[按SeqId排序并合并消息内容]
+    UpdateUI[更新UI消息列表中对应消息的内容]
+    AddToUI[将新消息添加到UI消息列表]
+    UpdateDisplay[更新UI界面显示]
+    End([结束])
+
+    Start --> Parse
+    Parse --> AddCache
+    AddCache --> CheckExists
+    CheckExists -->|是| RemoveCache
+    CheckExists -->|否| AddToUI
+    RemoveCache --> MergeSeqId
+    MergeSeqId --> UpdateUI
+    UpdateUI --> UpdateDisplay
+    AddToUI --> UpdateDisplay
+    UpdateDisplay --> End
+```
 </Tab>
 </Tabs>
 
-### 筛选逻辑
+#### 注意事项
 
-如果想在通话时仅显示对方的识别和翻译字幕，那么可以按以下方案进行修改。
+- 消息排序处理：通过房间自定义消息收到的数据可能会乱序，需要根据 SeqId 字段进行排序。
+- 流式文本处理：
+> - ASR 文本每次下发的是全量文本，同一个 MessageId 的消息需要完全替换之前的内容。
+> - LLM 文本每次下发的是增量文本，同一个 MessageId 的消息需要在排序后累加显示。
+- 内存管理：请及时清理已完成的消息缓存，特别是当用户进行长时间对话时。
+
+### 仅显示其他人翻译后的字幕
+
+如果想在通话时仅显示其他人翻译后的字幕，那么可以按以下方案进行实现：
 
 <Tabs>
 <Tab title="iOS">
-```objectivec ZegoCloudAsrSubtitlesMessageDispatcher.m {7-11,15-19}
+```oc ZegoCloudAsrSubtitlesMessageDispatcher.m {7-11,15-19}
 - (void)handleMessageContent:(NSString *)msgContent userID:(NSString *)userID userName:(NSString *)userName {
   ......
 
@@ -292,7 +341,7 @@ function handleMessage() {
 audioChatMessageParser.setAudioChatMessageListListener(new AudioChatMessageListListener() {
     @Override
     public void onMessageListUpdated(List<AudioChatMessage> messagesList) {
-      String localUserId = xxxx ; // 
+      String localUserId = xxxx ; //
       for (AudioChatMessage message : messagesList) {
           // 将自定义消息中的 UserId 字段与自己的 UserId 做比较
           if (!message.data.userId.equals(localUserId)) {

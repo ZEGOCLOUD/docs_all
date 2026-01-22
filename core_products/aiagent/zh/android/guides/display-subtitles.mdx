@@ -31,23 +31,8 @@ ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
     @Override
     public void onRecvExperimentalAPI(String content) {
         super.onRecvExperimentalAPI(content);
-        try {
-            // 第一步：将 content 解析为 JSONObject
-            JSONObject json = new JSONObject(content);
-
-            // 第二步：检查 method 字段的值
-            if (json.has("method") && json.getString("method")
-                .equals("liveroom.room.on_recive_room_channel_message")) {
-                // 第三步：获取 params 并解析
-                JSONObject paramsObject = json.getJSONObject("params");
-                String msgContent = paramsObject.getString("msg_content");
-
-                // AudioChatTextMessage 会解析 JSON 字符串
-                audioChatMessageParser.parseAudioChatMessage(msgContent);
-            }
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
+        // !mark
+        audioChatMessageParser.onRecvExperimentalAPI(content);
     }
 });
 
@@ -647,9 +632,27 @@ Cmd 不同对应的 Data 也不同，具体如下：
 :::
 
 对应消息处理流程如下图所示：
-<Frame width="512" height="auto" caption="">
-  <img src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/3ed1100592.png" alt="cmd3.png"/>
-</Frame>
+```mermaid
+flowchart TD
+    Start([开始])
+    Parse[解析 Data 字段]
+    CheckExists{新消息MessageId是否已存在<br/>UI消息列表?}
+    CheckSeqId{新消息SeqId比较大?}
+    Replace[替换UI消息列表中对应消息的内容]
+    Ignore[忽略]
+    Add[将新消息添加到UI消息列表]
+    End([结束])
+
+    Start --> Parse
+    Parse --> CheckExists
+    CheckExists -->|是| CheckSeqId
+    CheckExists -->|否| Add
+    CheckSeqId -->|是| Replace
+    CheckSeqId -->|否| Ignore
+    Replace --> End
+    Ignore --> End
+    Add --> End
+```
 
 </Tab>
 <Tab title="Cmd 为 4，LLM 文本">
@@ -669,7 +672,7 @@ function handleAgentMessage(data, seqId, round) {
 ```
 :::
 :::if{props.platform="iOS"}
-```objectivec
+```oc
 - (void)handleLlmText:(NSDictionary *)data seqId:(int64_t)seqId round:(int64_t)round timestamp:(int64_t)timestamp {
     NSString *content = data[@"Text"];
     NSString *messageId = data[@"MessageId"];
@@ -718,9 +721,30 @@ function handleAgentMessage(data, seqId, round) {
 对应消息处理流程如下图所示。其中：
 - AI 消息缓存：一个HashMap，key 为 MessageId，value 为新消息。
 - UI 消息列表：包含用户消息和 AI 消息的数组，存储所有在 UI 上展示的消息。
-<Frame width="512" height="auto" caption="">
-  <img src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/6720b5a0af.png" alt="cmd4.png"/>
-</Frame>
+```mermaid
+flowchart TD
+    Start([开始])
+    Parse[解析 Data 字段]
+    AddCache[将新消息放入AI消息缓存]
+    CheckExists{新消息MessageId是否已存在<br/>UI消息列表?}
+    RemoveCache[从AI消息缓存中取出有片段]
+    MergeSeqId[按SeqId排序并合并消息内容]
+    UpdateUI[更新UI消息列表中对应消息的内容]
+    AddToUI[将新消息添加到UI消息列表]
+    UpdateDisplay[更新UI界面显示]
+    End([结束])
+
+    Start --> Parse
+    Parse --> AddCache
+    AddCache --> CheckExists
+    CheckExists -->|是| RemoveCache
+    CheckExists -->|否| AddToUI
+    RemoveCache --> MergeSeqId
+    MergeSeqId --> UpdateUI
+    UpdateUI --> UpdateDisplay
+    AddToUI --> UpdateDisplay
+    UpdateDisplay --> End
+```
 </Tab>
 </Tabs>
 
