@@ -15,8 +15,8 @@ function getAllProductPlatforms() {
   
   // 从docuo.config.json的instances中提取产品和平台信息
   docuoConfig.instances.forEach(instance => {
-    // 跳过API实例
-    if (instance.id.includes('api') || instance.id.includes('server')) {
+    // 跳过API实例、linux-java实例
+    if (instance.id.includes('api') || instance.id.includes('server') || instance.id.includes('linux-java')) {
       return;
     }
     
