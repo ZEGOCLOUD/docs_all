@@ -6,23 +6,27 @@
 - 已联系 ZEGO 技术支持开通云端语音识别服务。
 
 ## 使用步骤
-
+### 时序图
 ```mermaid
 sequenceDiagram
-    participant Client as 客户端
+    participant Client as 客户端(ZEGO Express SDK)
+    participant RTCServer as ZEGO 实时音视频(RTC) 后台
     participant Server as 业务后台
-    participant ASRServer as 云端实时语音识别后台
+    participant ASRServer as ZEGO 云端实时语音识别后台
 
-    Client->>Client: 客户端通过 ZEGO Express SDK 登录房间及推流
-    Client->>Server: 持续推音频流
-    rect rgb(174, 229, 248)
-        Server->>ASRServer: 开启云端实时语音识别
-        ASRServer->>ASRServer: 识别房间内所有音频流
-        ASRServer-->>Server: 识别结果回调
-        Note right of Server: 通过提前配置好的回调地址
+    Client->>RTCServer: 登录房间并推音频流
+    rect rgb(125, 168, 237)
+        Server->>ASRServer: 开启识别 (StartRealtimeASRTask)
+        ASRServer-->>Server: 返回 TaskId
+        ASRServer->>RTCServer: 从 RTC 房间拉取音视频流
+        RTCServer-->>ASRServer: 音视频流数据
+        ASRServer-->>Server: 识别结果回调 (Event: ASRResult)
+        ASRServer->>ASRServer: 根据音视频流数据进行识别/翻译
+        Note right of Server: 通过 TaskId 关联任务
+        ASRServer-->>Client: 实时识别结果 (onRecvExperimentalAPI)
+        Note right of Client: 业务后台开启识别时需设置 SubtitleType 为 2 或 3
+    Server->>ASRServer: 停止识别 (StopRealtimeASRTask, TaskId)
     end
-        ASRServer-->>Client: 客户端通过 onRecvExperimentalAPI 获取识别结果或翻译结果
-        Server->>ASRServer: 停止云端实时语音识别
 ```
 
 使用实时语音识别服务的核心步骤如图蓝色块标注步骤所示。在您的业务后台调用[开启云端实时语音识别](./api-reference/start.mdx)接口后，云端实时语音识别后台会识别房间内所有或指定的音频流，通过提前配置好的[回调](./callbacks/receiving-callback.mdx)地址将识别结果回调给您的业务后台。
@@ -33,10 +37,11 @@ sequenceDiagram
 请联系 ZEGO 技术支持配置接收识别结果的回调地址。
 </Warning>
 <Warning title="注意">
-如果 RTC 房间 120 秒后没有真实用户存在，则云端实时语音识别服务会自动停止，并触发 Event 为 Exception 的回调，Data.Code 为 1202。
+如果 RTC 房间 120 秒（默认值，可配置）后没有真实用户存在，则云端实时语音识别服务会自动停止，并触发 Event 为 Exception 的回调，Data.Code 为 1202。详情请参考 [返回码](./api-reference/return-codes.mdx)。
 </Warning>
 
-### 客户端集成 SDK 并推流
+<Steps titleSize="h3">
+<Step title="集成 ZEGO Express SDK">
 
 请参考客户端集成 SDK 并实现视频通话或者语音通话的快速开始文档，完成客户端集成 SDK 并推流。
 
@@ -53,6 +58,7 @@ sequenceDiagram
 
 </Step>
 </Steps>
+
 
 #### 客户端最佳配置实践
 
@@ -166,10 +172,12 @@ async function checkSystemRequirements() {
 
 <Note title="说明">其他端的的配置请联系 ZEGO 技术支持了解详情。</Note>
 
-### 业务后台开启云端语音识别并接收识别及翻译结果
+</Step>
+<Step title="业务后台开启云端语音识别">
 
 以下是业务后台开启云端语音识别并接收识别及翻译结果的示例代码（Node.js 为例）：
 <CodeGroup>
+
 ```javascript 开启云端实时语音识别 {4-13}
 const https = require('https');
 const querystring = require('querystring');
@@ -177,12 +185,12 @@ const querystring = require('querystring');
 const data = JSON.stringify({
   "RoomId": "room_1",
   "ASR": {
-    "HotWord": "三支一扶|10",
     "Params": {
       "engine_model_type": "16k_zh"
     },
     "VADSilenceSegmentation": 500
-  }
+  },
+  "SubtitleType": 1 // 字幕下发类型。0: 不下发, 1: 仅下发识别结果, 2: 下发翻译结果，3: 下发识别结果和翻译结果
 });
 
 const params = {
@@ -233,11 +241,9 @@ const querystring = require('querystring');
 const data = JSON.stringify({
   "RoomId": "room_1",
   "ASR": {
-    "HotWord": "三支一扶|10",
     "Params": {
       "engine_model_type": "16k_zh"
-    },
-    "VADSilenceSegmentation": 500
+    }
   },
   "EnableTranslation": true,
   "Translation": {
@@ -245,11 +251,13 @@ const data = JSON.stringify({
     "SourceLanguage": "zh",
     "TargetLanguage": "en",
     "LLM": {
+      "//": "请自行开通并获取doubao模型的APIKey",
       "URL": "https://ark.cn-beijing.volces.com/api/v3/responses",
       "APIKey": "",
       "Model": "doubao-seed-translation-250915"
-    }},
-  "SubtitleType": 3
+    }
+  },
+  "SubtitleType": 3 // 下发识别结果和翻译结果
 });
 
 const params = {
@@ -293,6 +301,62 @@ req.end();
 
 ```
 
+</CodeGroup>
+</Step>
+<Step title="获取识别或翻译结果">
+
+#### 通过服务端回调获取识别或翻译结果（非流式）
+
+
+<CodeGroup>
+
+```javascript 回调接口使用示例
+// 业务后台ASR回调
+function asrCallBack(req, res) {
+    const { AppId, RoomId, Event, Data } = req.body;
+  // 验证签名参数callbacksecret在控制台获取
+  // 验证签名文档：https://doc-zh.zego.im/cloud-realtime-asr/callbacks/receiving-callback#验证签名
+  const calcSign = genCallbackSignature(Nonce, callbacksecret, Timestamp);
+  // 签名错误
+  if (calcSign !== Signature) {
+    res.json({
+      Code: -1,
+      Message: "Signature error",
+    });
+    return;
+  }
+    // 返回响应
+  res.json({
+    Code: 0,
+    Message: "ok",
+  });
+   switch (Event) {
+    // 异常事件
+    case "ASRResult":
+      // 按实际业务需求处理识别结果
+      handleData(Data);
+      break;
+    case "TranslationResult":
+      // 按实际业务需求处理翻译结果
+      handleData(Data);
+      break;
+    default:
+      break;
+  }
+}
+
+```
+
+</CodeGroup>
+
+
+#### 通过RTC房间信令获取并展示识别或翻译结果（流式）
+
+如果您需要在客户端展示识别结果或者翻译结果，请参考[显示字幕](./guides/display-subtitles.mdx)文档，使用字幕组件或自定义实现字幕展示识别结果。
+
+</Step>
+<Step title="停止云端语音识别">
+<CodeGroup>
 
 ```javascript 停止云端实时语音识别
 const https = require('https');
@@ -343,44 +407,8 @@ req.end();
 
 ```
 
-```javascript 回调接口
-// 业务后台ASR回调
-function asrCallBack(req, res) {
-    const { AppId, RoomId, Event, Data } = req.body;
-  // 验证签名参数callbacksecret在控制台获取
-  // 验证签名文档：https://doc-zh.zego.im/cloud-realtime-asr/callbacks/receiving-callback#验证签名
-  const calcSign = genCallbackSignature(Nonce, callbacksecret, Timestamp);
-  // 签名错误
-  if (calcSign !== Signature) {
-    res.json({
-      Code: -1,
-      Message: "Signature error",
-    });
-    return;
-  }
-    // 返回响应
-  res.json({
-    Code: 0,
-    Message: "ok",
-  });
-   switch (Event) {
-    // 异常事件
-    case "ASRResult":
-      // 按实际业务需求处理识别结果
-      handleData(Data);
-      break;
-    case "TranslationResult":
-      // 按实际业务需求处理翻译结果
-      handleData(Data);
-      break;
-    default:
-      break;
-  }
-}
-
-```
 </CodeGroup>
 
-### 客户端展示识别及翻译结果
+</Step>
+</Steps>
 
-如果您需要在客户端展示识别结果或者翻译结果，请参考[显示字幕](./guides/display-subtitles.mdx)文档，使用字幕组件或自定义实现字幕展示识别结果。
