@@ -31,23 +31,8 @@ ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
     @Override
     public void onRecvExperimentalAPI(String content) {
         super.onRecvExperimentalAPI(content);
-        try {
-            // Step 1: Parse content into a JSONObject
-            JSONObject json = new JSONObject(content);
-
-            // Step 2: Check the value of the method field
-            if (json.has("method") && json.getString("method")
-                .equals("liveroom.room.on_recive_room_channel_message")) {
-                // Step 3: Get params and parse them
-                JSONObject paramsObject = json.getJSONObject("params");
-                String msgContent = paramsObject.getString("msg_content");
-
-                // AudioChatTextMessage will parse the JSON string
-                audioChatMessageParser.parseAudioChatMessage(msgContent);
-            }
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
+        // !mark
+        audioChatMessageParser.onRecvExperimentalAPI(content);
     }
 });
 
@@ -638,9 +623,27 @@ Determine the message type based on the Cmd field, and obtain the message conten
 
 The corresponding message processing flow is shown in the figure below:
 
-<Frame width="auto" height="auto" >
-  <img src="https://media-resource.spreading.io/docuo/workspace740/af061ebc6eaf0f12ae9e7f72235bd04e/5b7718691f.png" alt="image.png"/>
-</Frame>
+```mermaid
+flowchart TD
+    Start([Start])
+    Parse[Parse Data field]
+    CheckExists{New message MessageId exists in<br/>UI message list?}
+    CheckSeqId{New message SeqId is larger?}
+    Replace[Replace the content of the corresponding message in the UI message list]
+    Ignore[Ignore]
+    Add[Add new message to UI message list]
+    End([End])
+
+    Start --> Parse
+    Parse --> CheckExists
+    CheckExists -->|Yes| CheckSeqId
+    CheckExists -->|No| Add
+    CheckSeqId -->|Yes| Replace
+    CheckSeqId -->|No| Ignore
+    Replace --> End
+    Ignore --> End
+    Add --> End
+```
 
 </Tab>
 <Tab title="Cmd is 4, LLM Text">
@@ -710,9 +713,30 @@ The corresponding message processing flow is shown in the figure below. Among th
 - AI message cache: A HashMap, with key as MessageId and value as the new message.
 - UI message list: An array containing user messages and AI messages, storing all messages displayed on the UI.
 
-<Frame width="auto" height="auto" >
-  <img src="https://media-resource.spreading.io/docuo/workspace740/af061ebc6eaf0f12ae9e7f72235bd04e/e2b7eb3ce5.png" alt="image copy.png"/>
-</Frame>
+```mermaid
+flowchart TD
+    Start([Start])
+    Parse[Parse Data field]
+    AddCache[Add new message to AI message cache]
+    CheckExists{New message MessageId exists in<br/>UI message list?}
+    RemoveCache[Remove message from AI message cache]
+    MergeSeqId[Sort and merge message content by SeqId]
+    UpdateUI[Update the content of the corresponding message in the UI message list]
+    AddToUI[Add new message to UI message list]
+    UpdateDisplay[Update UI display]
+    End([End])
+
+    Start --> Parse
+    Parse --> AddCache
+    AddCache --> CheckExists
+    CheckExists -->|Yes| RemoveCache
+    CheckExists -->|No| AddToUI
+    RemoveCache --> MergeSeqId
+    MergeSeqId --> UpdateUI
+    UpdateUI --> UpdateDisplay
+    AddToUI --> UpdateDisplay
+    UpdateDisplay --> End
+```
 
 </Tab>
 </Tabs>
