@@ -1,28 +1,70 @@
----
-date: '2026-01-23'
----
 # 展示字幕
 
 ---
+## 功能介绍
 
-本文介绍如何展示翻译的字幕内容，字幕内容包括：
+本文介绍如何基于ZEGO的客户端的字幕组件，实现在语音通话、视频通话中，流式（打字机式）展示对应用户/音频流的字幕。
 
-- 用户说话内容：流式展示用户正在说的话
-- 翻译内容：流式展示翻译输出的内容
+- 字幕组件可以展示的类型：
+    - 用户说话字幕：流式展示用户说话文字内容，并支持前向纠错。
+    - 翻译字幕：展示翻译文字结果。
+- 字幕组件展示的范围：
+    - 房间级别所有用户/音频流的字幕
+    - 用户/流级别的字幕
 
 <Frame width="auto" height="512" caption="">
-  <img src="https://doc-media.zego.im/extended_services/cloud-realtime-asr/zh/server/guides/asr_translation2.png" alt="subtitle.png"/>
+  <img src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/a78bc0cbf0.png" alt="subtitle.png"/>
 </Frame>
-## 前提条件
 
-- 已按照 [快速开始](./../quick-start.mdx) 文档集成 ZEGO Express SDK 和 Cloud ASR 并实现基本的语音通话功能。
-- 已按照 [配置翻译](./enable-translation.mdx) 文档开启翻译功能
+## 核心说明
 
+字幕组件中，涉及的核心字段说明如下：
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| Timestamp | Number | 时间戳，秒级别 |
+| SeqId | Number | 包序列号，可能乱序，请根据序列号对消息进行排序。极端情况下 Id 可能不连续。 |
+| Round | Number | 对话轮次，每次用户主动说话轮次增加 |
+| Cmd | Number | 201: 语音识别（ASR）的文本<br/>202: 翻译的文本 |
+| Data | Object | 具体内容，各 Cmd 对应不同 Data |
+
+Cmd 不同对应的 Data 也不同，具体如下：
+
+<Tabs>
+<Tab title="Cmd 为 201，ASR 文本">
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| UserId | string | 说话人的用户 id |
+| Text | string | 用户语音识别（ASR）的文本<br/>每次下发的是全量文本，支持文本修正 |
+| MessageId | string | 消息 id，每轮 ASR 文本消息 id 唯一 |
+| EndFlag | bool | 结束标识，true 表示本轮 ASR 文本已处理完成 |
+
+</Tab>
+<Tab title="Cmd 为 202，翻译文本">
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| UserId | string | 说话人的用户 id |
+| Text | string | LLM 翻译文本<br/>每次下发增量文本 |
+| MessageId | string | 消息 id，每轮 LLM 翻译文本消息 id 唯一 |
+| EndFlag | bool | 结束标识，true 表示本轮 LLM 翻译文本已处理完成 |
+
+</Tab>
+</Tabs>
+
+## 字幕组件使用说明
+
+### 前提条件
+
+- 已按照 [快速开始](./../quick-start.mdx) 文档实现基础功能：
+    - 集成 ZEGO Express SDK 实现基本的语音通话功能。
+    - 基于云端实时语音识别，开启云端实时语音识别，并配置 `SubtyitlType` 为 `1`， `2` 或 `3`，从而将字幕通过房间信令下发。
 <Warning title="注意">
 必须使用[下载 SDK 及 Demo](./../introduction/download.mdx)页面针对 Cloud ASR 优化的 ZEGO Express SDK 版本，否则无法正常显示字幕。
 </Warning>
 
-## 使用字幕组件
+### 使用字幕组件
 <Tabs>
 <Tab title="iOS">
 //TODO: 这里项目地址要换
@@ -181,49 +223,77 @@ onBeforeUnmount(() => {
 </Tab>
 </Tabs>
 
-## 自定义实现字幕展示
-
-客户端可通过监听 `onRecvExperimentalAPI` 回调获取 `method` 为 `liveroom.room.on_recive_room_channel_message` 的房间自定义消息。
-
-### 理解房间自定义消息协议
-
-房间自定义消息的各字段说明如下：
-
-| 字段 | 类型 | 描述 |
-| --- | --- | --- |
-| Timestamp | Number | 时间戳，秒级别 |
-| SeqId | Number | 包序列号，可能乱序，请根据序列号对消息进行排序。极端情况下 Id 可能不连续。 |
-| Round | Number | 对话轮次，每次用户主动说话轮次增加 |
-| Cmd | Number | 201: 语音识别（ASR）的文本<br/>202: LLM 翻译的文本 |
-| Data | Object | 具体内容，各 Cmd 对应不同 Data |
-
-Cmd 不同对应的 Data 也不同，具体如下：
+### （可选）仅展示部分字幕
+可以通过筛选UserId等，实现仅展示某些用户或某些流的字幕。
+以仅显示其他人翻译后的字幕为例。
 
 <Tabs>
-<Tab title="Cmd 为 201，ASR 文本">
+<Tab title="iOS">
+```oc ZegoCloudAsrSubtitlesMessageDispatcher.m {7-11,15-19}
+- (void)handleMessageContent:(NSString *)msgContent userID:(NSString *)userID userName:(NSString *)userName {
+  ......
 
-| 字段 | 类型 | 描述 |
-| --- | --- | --- |
-| UserId | string | 说话人的用户 id |
-| Text | string | 用户语音识别（ASR）的文本<br/>每次下发的是全量文本，支持文本修正 |
-| MessageId | string | 消息 id，每轮 ASR 文本消息 id 唯一 |
-| EndFlag | bool | 结束标识，true 表示本轮 ASR 文本已处理完成 |
+  if (cmd == ZegoCloudAsrMessageCmdAsrText && messageProtocol.asrTextData) {
+    ......
 
+    // 将自定义消息中的 UserId 字段与自己的 UserId 做比较
+    if (NO == [userId isEqualToString:[[ZegoCloudAsrServiceAPI sharedInstance] getUserId]]) {
+      [ZegoCloudAsrLogUtil write:[NSString stringWithFormat:@"dispatchAsrChatMsg, seqId=%llu, round=%llu, message_id=%@", seqId, round, message_id]];
+      [self dispatchAsrChatMsg:cmdMsg];
+    }
+  } else if (cmd == ZegoCloudAsrMessageCmdLlmText && messageProtocol.llmTextData) {
+    ......
+
+    // 将自定义消息中的 UserId 字段与自己的 UserId 做比较
+    if (NO == [userId isEqualToString:[[ZegoCloudAsrServiceAPI sharedInstance] getUserId]]) {
+        [ZegoCloudAsrLogUtil write:[NSString stringWithFormat:@"dispatchLLMChatMsg, seqId=%llu, round=%llu, message_id=%@", seqId, round, message_id]];
+        [self dispatchLLMChatMsg:cmdMsg];
+    }
+  }
+}
+```
 </Tab>
-<Tab title="Cmd 为 202，LLM 翻译文本">
 
-| 字段 | 类型 | 描述 |
-| --- | --- | --- |
-| UserId | string | 说话人的用户 id |
-| Text | string | LLM 翻译文本<br/>每次下发增量文本 |
-| MessageId | string | 消息 id，每轮 LLM 翻译文本消息 id 唯一 |
-| EndFlag | bool | 结束标识，true 表示本轮 LLM 翻译文本已处理完成 |
+<Tab title="Web">
+```javascript
+// 在示例代码 hooks/useChat.ts 文件里的 handleMessage 方法中添加过滤条件
+function handleMessage() {
+  // 获取到你存储的本端登录的userId
+  const userId = sessionStorage.getItem('userId');
+  // 当收到的消息中的 UserId 和 userId 一致，则不处理这条消息
+  if (data.UserId === userId) return;
+  // ...其余代码保持不变
+}
+```
+</Tab>
 
+<Tab title="Android">
+在 `AudioChatMessageParser` 类的 `onMessageListUpdated` 方法中，将消息中的 UserId 字段与自己的 UserId 做比较。
+
+```java
+audioChatMessageParser.setAudioChatMessageListListener(new AudioChatMessageListListener() {
+    @Override
+    public void onMessageListUpdated(List<AudioChatMessage> messagesList) {
+      String localUserId = xxxx ; //
+      for (AudioChatMessage message : messagesList) {
+          // 将自定义消息中的 UserId 字段与自己的 UserId 做比较
+          if (!message.data.userId.equals(localUserId)) {
+              otherUserMessages.add(message);
+          }
+      }
+      // 更新 UI 列表
+      binding.messageList.onMessageListUpdated(otherUserMessages);
+    }
+});
+```
 </Tab>
 </Tabs>
 
+## （不推荐）自定义实现字幕
 
-### 字幕显示流程
+<Warning title="Warning">建议默认使用字幕组件实现。</Warning>
+
+客户端可通过监听 `onRecvExperimentalAPI` 回调获取 `method` 为 `liveroom.room.on_recive_room_channel_message` 的房间自定义消息。
 
 根据 Cmd 字段判断消息类型，并根据 Data 字段获取消息内容。
 <Tabs>
@@ -289,72 +359,6 @@ flowchart TD
 
 - 消息排序处理：通过房间自定义消息收到的数据可能会乱序，需要根据 SeqId 字段进行排序。
 - 流式文本处理：
-> - ASR 文本每次下发的是全量文本，同一个 MessageId 的消息需要完全替换之前的内容。
-> - LLM 文本每次下发的是增量文本，同一个 MessageId 的消息需要在排序后累加显示。
+ - ASR 文本每次下发的是全量文本，同一个 MessageId 的消息需要完全替换之前的内容。
+ - LLM 文本每次下发的是增量文本，同一个 MessageId 的消息需要在排序后累加显示。
 - 内存管理：请及时清理已完成的消息缓存，特别是当用户进行长时间对话时。
-
-### 仅显示其他人翻译后的字幕
-
-如果想在通话时仅显示其他人翻译后的字幕，那么可以按以下方案进行实现：
-
-<Tabs>
-<Tab title="iOS">
-```oc ZegoCloudAsrSubtitlesMessageDispatcher.m {7-11,15-19}
-- (void)handleMessageContent:(NSString *)msgContent userID:(NSString *)userID userName:(NSString *)userName {
-  ......
-
-  if (cmd == ZegoCloudAsrMessageCmdAsrText && messageProtocol.asrTextData) {
-    ......
-
-    // 将自定义消息中的 UserId 字段与自己的 UserId 做比较
-    if (NO == [userId isEqualToString:[[ZegoCloudAsrServiceAPI sharedInstance] getUserId]]) {
-      [ZegoCloudAsrLogUtil write:[NSString stringWithFormat:@"dispatchAsrChatMsg, seqId=%llu, round=%llu, message_id=%@", seqId, round, message_id]];
-      [self dispatchAsrChatMsg:cmdMsg];
-    }
-  } else if (cmd == ZegoCloudAsrMessageCmdLlmText && messageProtocol.llmTextData) {
-    ......
-
-    // 将自定义消息中的 UserId 字段与自己的 UserId 做比较
-    if (NO == [userId isEqualToString:[[ZegoCloudAsrServiceAPI sharedInstance] getUserId]]) {
-        [ZegoCloudAsrLogUtil write:[NSString stringWithFormat:@"dispatchLLMChatMsg, seqId=%llu, round=%llu, message_id=%@", seqId, round, message_id]];
-        [self dispatchLLMChatMsg:cmdMsg];
-    }
-  }
-}
-```
-</Tab>
-
-<Tab title="Web">
-```javascript
-// 在示例代码 hooks/useChat.ts 文件里的 handleMessage 方法中添加过滤条件
-function handleMessage() {
-  // 获取到你存储的本端登录的userId
-  const userId = sessionStorage.getItem('userId');
-  // 当收到的消息中的 UserId 和 userId 一致，则不处理这条消息
-  if (data.UserId === userId) return;
-  // ...其余代码保持不变
-}
-```
-</Tab>
-
-<Tab title="Android">
-在 `AudioChatMessageParser` 类的 `onMessageListUpdated` 方法中，将消息中的 UserId 字段与自己的 UserId 做比较。
-
-```java
-audioChatMessageParser.setAudioChatMessageListListener(new AudioChatMessageListListener() {
-    @Override
-    public void onMessageListUpdated(List<AudioChatMessage> messagesList) {
-      String localUserId = xxxx ; //
-      for (AudioChatMessage message : messagesList) {
-          // 将自定义消息中的 UserId 字段与自己的 UserId 做比较
-          if (!message.data.userId.equals(localUserId)) {
-              otherUserMessages.add(message);
-          }
-      }
-      // 更新 UI 列表
-      binding.messageList.onMessageListUpdated(otherUserMessages);
-    }
-});
-```
-</Tab>
-</Tabs>
