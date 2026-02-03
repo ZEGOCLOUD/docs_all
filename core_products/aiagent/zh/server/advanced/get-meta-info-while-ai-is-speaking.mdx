@@ -1,0 +1,114 @@
+# AI 播报时获取 MetaInfo
+
+## 功能简介
+
+使用 MetaInfo 可以实现 AI 播报到关键词或关键节点时通知业务服务的能力。基于本能力，可以实现用户真正听到某些节点或关键信息时，处理特殊的业务逻辑，例如AI数字人智能伴学场景中，数字人老师分身回应学生：“你说的对，老师给你点赞。”当AI开始播报“点赞”时，数字人做对应的点赞动作。
+
+<Warning title="注意">
+由于需要保证语音播报和指令下发时机的对齐，所以对 TTS 厂商是有一定要求的。目前只支持以下 TTS 厂商：
+
+- MiniMax: MiniMax TTS
+- ByteDance: 火山引擎单向流式 TTS。
+
+可参考 [配置 TTS](/aiagent-server/guides/configuring-tts) 文档了解如何设置 TTS 厂商。
+</Warning>
+
+<Frame width="auto" height="auto" caption="">
+  <img src="https://doc-media.zego.im/core_products/aiagent/zh/server/advanced/whiteboard_exported_image.png" />
+</Frame>
+
+{/*
+在英文文档中使用该图片
+<Frame width="auto" height="auto" caption="">
+  <img src="https://doc-media.zego.im/core_products/aiagent/zh/server/advanced/whiteboard_exported_image_en.png" />
+</Frame>
+*/}
+
+## 实现当 AI 说话到固定节点时外抛 MetaInfo
+
+### 前提条件
+
+- 开通 AI Agent 服务，并按[快速开始](/aiagent-server/quick-start)完成基本流程。
+- 根据功能简介要求，配置 TTS 厂商为 MiniMax 或 ByteDance。
+
+<Steps titleSize="h4">
+<Step title="配置包裹符号以及 MetaInfo 格式">
+通过配置[创建智能体实例](/aiagent-server/api-reference/agent-instance-management/create-agent-instance)接口的 AdvancedConfig.LLMMetaInfo 参数，指定 MetaInfo 的包裹符号以及格式。
+
+
+| 参数名             | 类型     | 描述                                                                                                                       | 示例                      |
+|------------------|--------|--------------------------------------------------------------------------------------------------------------------------|-------------------------|
+| BeginCharacters  | string | 标记元数据在文本中的起始符号。即该符号开始往后，直到遇到 EndCharacters 符号为止，中间的内容为元数据。不可为空或纯空格，注意不要使用常见字符及分句符号。 | `[[`                    |
+| EndCharacters    | string | 标记元数据在文本中的结束符号。即该符号开始往前，直到遇到 BeginCharacters 符号为止，中间的内容为元数据。不可为空或纯空格，注意不要使用常见字符及分句符号。 | `]]`                    |
+| SendMetaKeys     | string array  | 指定 MetaInfo 中发送 key 的范围，比如：["emotion", "action"]。<Warning title="重要说明">只有此范围的 key 和 value，才会通过房间信令或者回调给业务方发送消息。<br/>消息类别：<br/>- 房间消息 Cmd = 102<br/>- 服务端回调 "AgentInstanceMetaInfo" </Warning>| `["emotion", "action"]` |
+
+我们以指定 LLM 文本中“[[”和“]]”包裹的文本为元数据作为例子说明，配置示例如下：
+```json 示例
+"LLMMetaInfo" : {
+    "BeginCharacters": "[[",
+    "EndCharacters": "]]",
+    "SendMetaKeys":["action"]
+}
+```
+配置完成后，当 AI 说包含“[[”和“]]”包裹的文本时，AI Agent 服务会将其中 key 为“action”的元数据通过房间信令或者回调给业务方。
+
+</Step>
+<Step title="让 AI 说包含 MetaInfo 的文本">
+有两种方式可以让 AI 说包含 MetaInfo 的文本：
+
+
+<Tabs>
+<Tab title="方式一：让 LLM 按照指定的格式输出内容。">
+在[创建智能体实例](/aiagent-server/api-reference/agent-instance-management/create-agent-instance)接口的 LLM.SystemPrompt 参数中，要求 LLM 按照指定的格式输出内容；或者通过[主动调用 LLM](/aiagent-server/api-reference/agent-instance-control/send-agent-instance-llm)接口，让 LLM 按照指定的格式输出内容。
+
+<Warning title="注意">LLM 回复的 MetaInfo 必须放在分句句首。</Warning>
+
+```text 示例
+//LLM 回复一段内容示例：
+//分句1
+[[{"action":"动作1"}]]今天真是美好的一天。
+//分句2，
+[[{"action":"动作2"}]]虽然昨天还有些遗憾，但也很开心。
+```
+</Tab>
+<Tab title="方式二：直接发送包含 MetaInfo 的文本给 TTS 合成语音">
+通过[主动调用 TTS](/aiagent-server/api-reference/agent-instance-control/send-agent-instance-tts)接口，在句首或者句尾增加 MetaInfo 。
+
+```text 示例
+[[{"action":"动作1"}]]今天真是美好的一天。虽然昨天还有些遗憾。[[{"action":"动作2"}]]
+```
+</Tab>
+</Tabs>
+
+</Step>
+<Step title="获取 MetaInfo">
+获取 MetaInfo 有两种方式：
+- 客户端通过实时音视频（RTC）房间信令获取 MetaInfo。
+- 服务端通过回调获取 MetaInfo。
+
+<Tabs>
+<Tab title="客户端通过实时音视频（RTC）房间信令获取 MetaInfo">
+请参考各端 [智能体实例 SDK 回调](/aiagent-android/client-sdk/ai-related-callback)文档，了解如何获取 MetaInfo。获取 Cmd 为 102 的房间信令，Data 中包含 MetaInfo。
+
+```json Data示例
+{
+    "action": "动作"
+}
+```
+</Tab>
+<Tab title="服务端通过回调获取 MetaInfo">
+请参考 [接收回调](/aiagent-server/callbacks/receiving-callback)文档，了解如何获取 MetaInfo。获取 Event 为 AgentInstanceMetaInfo 的回调，Data 中包含 MetaInfo。
+
+```json Data示例
+{
+    "Round": 123456,
+    "MetaInfo": {
+        "action": "动作"
+    }
+}
+```
+</Tab>
+</Tabs>
+</Step>
+</Steps>
+
