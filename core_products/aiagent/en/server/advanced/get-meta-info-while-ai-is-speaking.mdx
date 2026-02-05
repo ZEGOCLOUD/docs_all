@@ -1,0 +1,109 @@
+# Getting MetaInfo During AI Broadcast
+
+## Feature Overview
+
+MetaInfo enables the AI Agent to notify the business service when it broadcasts keywords or reaches key nodes. Based on this capability, special business logic can be triggered when users actually hear certain nodes or key information, for example:
+- In AI digital human intelligent tutoring scenarios, when the digital human teacher responds to a student: "You're right, teacher gives you a thumbs up." When the AI starts broadcasting "thumbs up", the digital human is triggered to perform the corresponding thumbs-up action.
+- In AI e-commerce live streaming, when the anchor says "link is up", the business side receives a callback notification and triggers the display of the shopping link or a popup.
+
+<Warning title="Warning">
+Since the timing of voice broadcast and command delivery needs to be aligned, there are certain requirements for TTS vendors. Currently, only the following TTS vendors are supported:
+
+- MiniMax: MiniMax TTS
+- ByteDance: Volcano Engine unidirectional streaming TTS.
+
+Refer to [Configure TTS](/aiagent-server/guides/configuring-tts) documentation to learn how to set up TTS vendors.
+</Warning>
+
+<Frame width="auto" height="auto" caption="">
+  <img src="https://doc-media.zego.im/core_products/aiagent/zh/server/advanced/whiteboard_exported_image_en.png" />
+</Frame>
+
+## Implement Exposing MetaInfo When AI Speaks at Fixed Nodes
+
+### Prerequisites
+
+- Enable AI Agent service and complete the basic process according to [Quick Start](/aiagent-server/quick-start).
+- Configure TTS vendor to MiniMax or ByteDance according to the feature requirements.
+
+<Steps titleSize="h4">
+<Step title="Configure wrapper characters and MetaInfo format">
+By configuring the AdvancedConfig.LLMMetaInfo parameter of the [Create Agent Instance](/aiagent-server/api-reference/agent-instance-management/create-agent-instance) API, specify the wrapper characters and format of MetaInfo.
+
+|Parameter Name | Type-100px | Description | Example|
+|------------------|-------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------|
+| BeginCharacters  | string      | The starting symbol that marks metadata in text. Content from this symbol until the EndCharacters symbol is metadata. Cannot be empty or pure spaces. Do not use common characters or sentence separators. | `[[`                    |
+| EndCharacters    | string      | The ending symbol that marks metadata in text. Content from this symbol back until the BeginCharacters symbol is metadata. Cannot be empty or pure spaces. Do not use common characters or sentence separators. | `]]`                    |
+| SendMetaKeys     | string array | Specifies the range of keys to send in MetaInfo, e.g., ["emotion", "action"].<Warning title="Important Note">Only keys and values within this range will be sent to the business side via room signaling or callback.<br/>Message types:<br/>- Room message Cmd = 102<br/>- Server callback "AgentInstanceMetaInfo" </Warning>| `["emotion", "action"]` |
+
+Let's take the example of specifying text wrapped in "[[" and "]]" in LLM text as metadata. The configuration example is as follows:
+```json Example
+"LLMMetaInfo" : {
+    "BeginCharacters": "[[",
+    "EndCharacters": "]]",
+    "SendMetaKeys":["action"]
+}
+```
+After configuration, when AI speaks text wrapped with "[[" and "]]", the AI Agent service will send the metadata with key "action" to the business side via room signaling or callback.
+
+</Step>
+<Step title="Let AI speak text containing MetaInfo">
+
+<Warning title="Warning">MetaInfo must be a string in JSON object format.</Warning>
+
+There are two ways to make AI speak text containing MetaInfo:
+
+<Tabs>
+<Tab title="Method 1: Let LLM output content in the specified format">
+In the LLM.SystemPrompt parameter of the [Create Agent Instance](/aiagent-server/api-reference/agent-instance-management/create-agent-instance) API, require LLM to output content in the specified format; or use the [Proactively Invoke LLM](/aiagent-server/api-reference/agent-instance-control/send-agent-instance-llm) API to let LLM output content in the specified format.
+
+<Warning title="Warning">LLM response MetaInfo must be placed at the beginning of a sentence.</Warning>
+
+```text Example
+//LLM response content example:
+//Sentence 1
+[[{"action":"action1"}]]Today is a beautiful day.
+//Sentence 2,
+[[{"action":"action2"}]]Although there were some regrets yesterday, it was also very happy.
+```
+</Tab>
+<Tab title="Method 2: Directly send text containing MetaInfo to TTS for voice synthesis">
+Use the [Proactively Invoke TTS](/aiagent-server/api-reference/agent-instance-control/send-agent-instance-tts) API to add MetaInfo at the beginning or end of a sentence.
+
+```text Example
+[[{"action":"action1"}]]Today is a beautiful day. Although there were some regrets yesterday. [[{"action":"action2"}]]
+```
+</Tab>
+</Tabs>
+
+</Step>
+<Step title="Get MetaInfo">
+There are two ways to get MetaInfo:
+- Client gets MetaInfo through real-time audio and video (RTC) room signaling.
+- Server gets MetaInfo through callbacks.
+
+<Tabs>
+<Tab title="Client gets MetaInfo through RTC room signaling">
+Refer to the [Agent Instance SDK Callbacks](/aiagent-android/client-sdk/ai-related-callback) documentation for each platform to learn how to get MetaInfo. Get the room signaling with Cmd 102, which contains MetaInfo in Data.
+
+```json Data example
+{
+    "action": "action"
+}
+```
+</Tab>
+<Tab title="Server gets MetaInfo through callbacks">
+Refer to the [Receive Callbacks](/aiagent-server/callbacks/receiving-callback) documentation to learn how to get MetaInfo. Get the callback with Event AgentInstanceMetaInfo, which contains MetaInfo in Data.
+
+```json Data example
+{
+    "Round": 123456,
+    "MetaInfo": {
+        "action": "action"
+    }
+}
+```
+</Tab>
+</Tabs>
+</Step>
+</Steps>
