@@ -1,0 +1,119 @@
+为了进一步提高安全性，权限认证 Token，开放房间 ID 和推流 ID 这两个权限位，可以验证登录房间的 ID 和推流 ID，此时 “payload” 字段需要按照规则生成，权限位校验规则如下：
+
+| payload 参数字段       | 类型                | 必填 | 说明                                                                                  |
+|----------------------|---------------------|------|--------------------------------------------------------------------------------------|
+| room_id              | string              | 是   | 房间 id，用于强验证接口所涉及的房间 id                                                |
+| privilege            | object              | 是   | 权限位开关列表，键为权限类型（1-登录权限，2-推流权限），值为是否有权限（1-有，0-无）    |
+| stream_id_list       | string[] \| null    | 否   | 流 id 列表，用于强验证可推流的流 id，若为 null 则不进行流 id 校验                     |
+
+**privilege 字段示例：**
+
+| 生成 token 的权限场景                     | privilege 取值           |
+|------------------------------|--------------------------|
+| 该 token 仅允许登录房间，不可推流      | \{"1": 1, "2": 0\}         |
+| 该 token 同时允许登录房间和推流        | \{"1": 1, "2": 1\}         |
+| 该 token 不允许登录房间和推流          | \{"1": 0, "2": 0\}         |
+
+<CodeGroup>
+```typescript title="权限认证 Token 的 payload 参数类型定义"
+type RtcRoomPayload = {
+    /**
+     * 房间 id（必填）；用于对房间 id 进行强验证
+     */
+    room_id: string;
+    /**
+     * 权限位开关列表；用于对接口的操作权限进行强验证
+     * privilege 字段的键取值：
+     *   1 - 登录权限(loginRoom)
+     *   2 - 推流权限(publishStream)
+     * privilege 字段的值：
+     *   1 - 有权限
+     *   0 - 无权限
+     */
+    privilege: {
+        1?: 0 | 1;
+        2?: 0 | 1;
+        [key: number]: 0 | 1;
+    };
+    /**
+     * 流列表；用于对接口的流 id 进行强验证；允许为 null 或 string[]
+     * 如果为 null，则不对流 id 验证
+     * 如果为 string[]，则对流 id 进行强验证。恶意用户拿到可推流的 token 但是推流 id 不匹配，则无法推流。
+     */
+    stream_id_list: string[] | null;
+};
+```
+```json title="权限认证 Token 的 payload 参数示例"
+{
+    "room_id": "your_room_id", // 对该房间 ID 进行更细权限验证
+    "privilege": {
+        "1": 1, // 允许使用该 Token 登录房间
+        "2": 1 // 允许使用该 Token 推流
+    },
+    "stream_id_list": ["your_stream_id"] // 该 token 只能推名为 your_stream_id 的流
+}
+```
+```go title="权限认证 Token 的生成示例代码"
+package main
+import (
+    "encoding/json"
+    "fmt"
+    "github.com/zegoim/zego_server_assistant/token/go/src/token04"
+)
+/*
+权限认证token生成示例代码
+*/
+//token业务扩展：权限认证属性
+type RtcRoomPayLoad struct {
+    RoomId       string      `json:"room_id"`        //房间 id（必填）；用于对接口的房间 id 进行强验证
+    Privilege    map[int]int `json:"privilege"`      //权限位开关列表；用于对接口的操作权限进行强验证
+    StreamIdList []string    `json:"stream_id_list"` //流列表；用于对接口的流 id 进行强验证；允许为空，如果为空，则不对流 id 验证
+}
+func main() {
+    var appId uint32 = 1                               // Zego派发的数字ID, 各个开发者的唯一标识
+    roomId := "demo"                                   // 房间 ID
+    userId := "demo"                                   // 用户 ID
+    serverSecret := "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" // 在获取 token 时进行 AES 加密的密钥
+    var effectiveTimeInSeconds int64 = 3600            // token 的有效时长，单位：秒
+
+    //请参考 github.com/zegoim/zego_server_assistant/token/go/src/token04/token04.go 定义
+    ////权限位定义
+    //const (
+    //	PrivilegeKeyLogin   = 1 // 登录权限位认证
+    //	PrivilegeKeyPublish = 2 // 推流权限位认证
+    //)
+    ////权限开关定义
+    //const (
+    //	PrivilegeEnable     = 1 // 有权限
+    //	PrivilegeDisable    = 0 // 无权限
+    //)
+    //业务权限认证配置，可以配置多个权限位
+    privilege := make(map[int]int)
+    privilege[token04.PrivilegeKeyLogin] = token04.PrivilegeEnable    // 有房间登录权限
+    privilege[token04.PrivilegeKeyPublish] = token04.PrivilegeDisable // 无推流权限
+    //token业务扩展配置
+    payloadData := &RtcRoomPayLoad{
+	RoomId:       roomId,
+	Privilege:    privilege,
+	StreamIdList: nil,
+	}
+    payload, err := json.Marshal(payloadData)
+    if err != nil {
+	fmt.Println(err)
+	return
+    }
+    //生成token
+    token, err := token04.GenerateToken04(appId, userId, serverSecret, effectiveTimeInSeconds, string(payload))
+    if err != nil {
+	fmt.Println(err)
+	return
+}
+    fmt.Println(token)
+}
+```
+</CodeGroup>
+
+<Warning title="注意">
+生成权限认证 Token 时必须传入 “RoomId”。
+</Warning>
+
