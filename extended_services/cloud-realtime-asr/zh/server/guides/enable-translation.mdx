@@ -1,5 +1,5 @@
 ---
-date: '2026-01-23'
+date: '2026-02-06'
 ---
 # 配置翻译
 
@@ -7,38 +7,79 @@ date: '2026-01-23'
 
 ## 功能介绍
 
-在实时语音识别（ASR）过程中，您可以开启翻译功能，将识别到的音频内容实时翻译成目标语言。该功能支持以下两种主要的配置模式：
-- **房间维度翻译**：房间内所有流共用一套翻译配置。
-- **流维度翻译**：为房间内不同的流设置个性化的翻译配置（如不同的目标语言）。
+在实时语音识别（ASR）过程中，您可以开启翻译功能，将识别到的音频内容实时翻译成目标语言。
+- 该功能支持以下两种主要的配置模式：
+    - **房间维度翻译**：房间内所有流共用一套翻译配置。
+    - **流维度翻译**：为房间内不同的流设置个性化的翻译配置（如不同的目标语言）。
+- 目前支持的翻译模型包括：doubao-seed-translation、Qwen-MT 等。对应不同模型支持的翻译语种，请分别参考对应的模型的官方文档。
+- 支持获取翻译结果的方式：
+    - 服务端回调获取翻译结果。
+    - 实时音视频房间信令（ZEGO Express SDK）回调。
 
-启用翻译后显示翻译字幕请参考[展示字幕](/cloud-realtime-asr/guides/display-subtitles)文档。
+## 核心参数配置
+创建实时语音识别任务（[StartRealtimeASRTask](/cloud-realtime-asr/api-reference/start)）时配置参数。
 
-## 使用方式
+| 参数 | 类型 | 是否必选 | 描述 |
+| :--- | :--- | :--- | :--- |
+| `RoomId` | String | 是 | RTC 房间 Id |
+| `RecognitionRange` | Int | 否 | 识别返回。0: 整个房间，1: 指定 StreamList |
+| `StreamList` | array of object | 否 | 需要识别的流列表，RecognitionRange 为 1 时生效。 |
+| `EnableTranslation` | Bool | 否 | 是否开启翻译 |
+| `Translation` | Object | 否 | 翻译 LLM 配置项 |
+| `SubtitleType` | Int | 否 | 字幕通过房间信令下发类型：<ul><li>0: 不下发</li><li>1: 仅下发识别结果</li><li>2: 下发翻译结果</li><li>3: 下发识别结果和翻译结果</li></ul> 若需要客户端UI展示字幕，则建议配置为 <code>2</code> 或 <code>3</code> |
 
-您可以通过创建实时语音识别任务（[StartRealtimeASRTask](/cloud-realtime-asr/api-reference/start)）时配置翻译参数。根据业务需求，您可以选择在房间级别或流级别启用翻译。
+<Tabs>
+<Tab title="StreamList">
 
-<Tabs titleSize="h3">
+| 参数 | 类型 | 是否必选 | 描述 |
+| :--- | :--- | :--- | :--- |
+| `StreamId` | String | 是 | 需要识别的流 ID |
+| `ASR` | Object | 否 | 参考 [ASR 参数](/cloud-realtime-asr/configuring-asr#asr-params) |
+| `EnableTranslation` | Bool | 否 | 是否开启翻译 |
+| `Translation` | Object | 否 | 翻译 LLM 配置项 |
+
+</Tab>
+<Tab title="Translation">
+| 参数 | 类型 | 是否必选 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `Vendor` | String | 是 | 调用 LLM 供应商：DoubaoSeedTranslation、QwenMT |
+| `SourceLanguage` | String | 是 | 源语言 |
+| `TargetLanguage` | String | 是 | 目标语言 |
+| `LLM` | Object | 是 | LLM 参数 |
+</Tab>
+<Tab title="LLM">
+|参数-100px | 类型-100px | 是否必选-100px | 说明|
+| :--- | :--- | :--- | :--- |
+| `Url` | String | 是 | 供应商：DoubaoSeedTranslation、QwenMT 等模型的调用地址 |
+| `ApiKey` | String | 否 | LLM 校验 API key。默认为空，生产环境中务必启用 API key。 |
+| `Model` | String | 是 | 调用的模型。不同的 LLM 供应商支持的配置不同，请参考对应文档填入。 |
+| `Params` | Object | 否 | LLM 或应用平台的请求参数，具体支持的参数请参考对应模型的能力。 |
+
+</Tab>
+
+</Tabs>
+
+
+
+
+
+## 使用示例
+
+#### 前提条件
+
+1. 使用 ZEGO 云端实时语音识别支持的翻译模型
+2. 已经自行开通翻译服务，并获取了模型的 API Key。
+
+#### 开启带翻译的识别任务，并在客户端展示翻译结果
+<Tabs titleSize="h5">
 <Tab title="房间维度翻译（统一配置）">
-
-适用于希望对房间内所有发言进行统一语言翻译的场景。在该场景下，房间内所有的识别流将共用一套翻译配置。
-
-#### 核心参数配置
-
-| 参数 | 说明 |
-| :--- | :--- |
-| `RecognitionRange` | 设置为 `0`。表示识别范围为房间维度。 |
-| `EnableTranslation` | `true` 表示开启翻译功能，否则不开启。 |
-| `Translation` | 在请求体外层配置，该配置将应用于房间内所有流。 |
-| `SubtitleType` | 字幕下发类型：<ul><li>0: 不下发</li><li>1: 仅下发识别结果</li><li>2: 下发翻译结果</li><li>3: 下发识别结果和翻译结果</li></ul>建议设置为 <code>3</code>。 |
-
-#### 请求示例
 
 ```json
 {
     "RoomId": "room_01",
     "RecognitionRange": 0,
     "EnableTranslation": true,
-    "SubtitleType": 3,
+    "SubtitleType": 3,//若需要客户端展示翻译结果时开启，需要配置为2或3
     "Translation": {
         "Vendor": "DoubaoSeedTranslation",
         "SourceLanguage": "zh",
@@ -46,8 +87,7 @@ date: '2026-01-23'
         "LLM": {
             "Url": "https://ark.cn-beijing.volces.com/api/v3/responses",
             "ApiKey": "",
-            "Model": "doubao-seed-translation-250915",
-            "Params": {}
+            "Model": "doubao-seed-translation-250915"
         }
     },
     "ASR": {
@@ -63,28 +103,12 @@ date: '2026-01-23'
 </Tab>
 <Tab title="流维度翻译（个性化配置）">
 
-适用于多语种混合会议，或者不同参与者需要翻译成不同目标语言的场景。您可以为特定的流 ID 独立配置翻译。
-
-#### 核心参数配置
-
-| 参数 | 说明 |
-| :--- | :--- |
-| `RecognitionRange` | 设置为 `1`。表示识别范围为流维度。 |
-| `SubtitleType` | 字幕下发类型：<ul><li>0: 不下发</li><li>1: 仅下发识别结果</li><li>2: 下发翻译结果</li><li>3: 下发识别结果和翻译结果</li></ul>建议设置为 <code>3</code>。 |
-| `StreamList` | 在数组对应的 `StreamInfo` 对象中进行独立配置。 |
-
-`StreamList` 内的 `Translation` 配置如下：
-- `StreamId`: 需要识别的流 ID。
-- `EnableTranslation`: `true` 表示要翻译该流，否则不翻译。
-- `Translation`: 在流级别进行个性化配置（包括 Vendor, SourceLanguage, TargetLanguage 等）。
-
-#### 请求示例
 
 ```json
 {
     "RoomId": "room_02",
     "RecognitionRange": 1,
-    "SubtitleType": 3,
+    "SubtitleType": 3, //若需要客户端展示翻译结果时开启，需要配置为2或3
     "StreamList": [
         {
             "StreamId": "stream_zh_01",
@@ -96,9 +120,7 @@ date: '2026-01-23'
                 "LLM": {
                     "Url": "https://ark.cn-beijing.volces.com/api/v3/responses",
                     "ApiKey": "",
-                    "Model": "doubao-seed-translation-250915",
-                    "Params": {}
-                }
+                    "Model": "doubao-seed-translation-250915"                }
             }
         },
         {
@@ -111,9 +133,7 @@ date: '2026-01-23'
                 "LLM": {
                     "Url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
                     "ApiKey": "",
-                    "Model": "qwen-mt-flash",
-                    "Params": {}
-                }
+                    "Model": "qwen-mt-flash"                }
             }
         }
     ],
@@ -123,7 +143,14 @@ date: '2026-01-23'
 }
 ```
 
-<Note title="说明">当 `RecognitionRange` 为 `1` 时，系统将优先读取 `StreamList` 中的流级配置，流级配置没有的话，会找外层的 `EnableTranslation` 和 `Translation` 配置。</Note>
+<Note title="说明">当 `RecognitionRange` 为 `1` 时，系统将优先读取 `StreamList` 中的流级配置，流级配置没有的话，会使用外层的 `EnableTranslation` 和 `Translation` 配置作为兜底配置。</Note>
 
 </Tab>
 </Tabs>
+
+#### 获取翻译结果
+##### 通过服务端获取翻译结果（非流式）
+参考[接受回调](/cloud-realtime-asr/callbacks/)文档，获取 `Event` 为 `TranslationResult` 的 `Data` 结果.
+
+##### （可选）客户端展示字幕
+显示翻译字幕，请参考[展示字幕](/cloud-realtime-asr/guides/display-subtitles)文档。
