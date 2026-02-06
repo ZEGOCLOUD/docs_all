@@ -1,0 +1,403 @@
+# 自定义视频采集
+- - -
+
+## 功能简介
+
+以下场景中，建议使用自定义视频采集功能：
+
+- 开发者需要从现有视频流、视频文件、或者定制的采集系统中获得采集后输入，交给 SDK 传输。
+- 开发者有自己对视频帧做特殊处理的需求（如滤镜、美颜、水印等），在处理后将结果输入给 SDK 传输。
+- 开发者需要在推流前对视频进行预处理，例如添加自定义特效、贴纸等。
+
+
+## 前提条件
+
+在实现自定义视频采集之前，请确保：
+
+- 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目信息](/console/project-info)。
+- 已在项目中集成 ZEGO Express SDK，并实现了基本的音视频推拉流功能，详情请参考 [快速开始 - 集成](/real-time-video-harmonyos-arkts/quick-start/integrating-sdk) 和 [快速开始 - 实现流程](/real-time-video-harmonyos-arkts/quick-start/implementing-video-call)。
+
+## 使用步骤
+
+<Note title="说明">
+
+- SDK 在 ets 层提供开启自定义视频采集的接口 [enableCustomVideoCapture](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#enablecustomvideocapture)。
+- SDK 在 native 层提供发送视频数据的接口 `zego_express_send_custom_video_capture_raw_data` 和数据结构，详情查阅 har 包 include 目录下的 zego-experss-custom-video-io.h 文件。
+</Note>
+
+### 1 初始化 SDK
+
+请参考 [快速开始 - 实现流程](/real-time-video-harmonyos-arkts/quick-start/implementing-video-call) 的 "创建引擎"。
+
+### 2 开启自定义视频采集
+
+<Warning title="注意">
+
+
+[enableCustomVideoCapture](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#enablecustomvideocapture) 需要在 [startPublishingStream](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#startpublishingstream)、[startPreview](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#startpreview) 之前调用才有效。
+
+</Warning>
+
+
+
+可调用 [ZegoCustomVideoCaptureConfig](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressdefines_.zegocustomvideocaptureconfig.html) 设置 `bufferType`，再调用 [enableCustomVideoCapture](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#enablecustomvideocapture) 接口开启自定义视频采集功能。
+
+```ts
+// 配置自定义视频采集参数
+let capConfig: ZegoCustomVideoCaptureConfig = new ZegoCustomVideoCaptureConfig();
+// 设置为原始数据类型
+capConfig.bufferType = ZegoVideoBufferType.RawData;
+// 为指定推流通道开启自定义视频采集
+ZegoExpressEngine.enableCustomVideoCapture(true, capConfig, ZegoPublishChannel.Main);
+```
+
+### 3 在 native 层实现自定义采集数据发送功能
+
+<Steps titleSize="p">
+<Step title="在 native 层引入 ZegoExpressEngine.so 库">
+
+通过修改 native 层的 CMakeLists.txt 文件引入包含在 ZegoExpressEngine.har 包里的 ZegoExpressEngine.so 库，便于 native 层代码调用相关接口。
+
+```cmake
+
+# 定义平台宏，native 接口会通过这个宏判断平台
+add_definitions(-D_OS_OHOS_)
+
+# 设置依赖的libZegoExpressEngine.so路径
+set(DEPENDENCY_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../../oh_modules)
+add_library(ZegoExpressEngine SHARED IMPORTED)
+set_target_properties(ZegoExpressEngine
+    PROPERTIES
+    IMPORTED_LOCATION ${DEPENDENCY_PATH}/@zego/zego-express-engine/libs/${OHOS_ARCH}/libZegoExpressEngine.so)
+
+# 包含头文件 ${DEPENDENCY_PATH}/ZegoExpressEngine/include
+include_directories(${NATIVERENDER_ROOT_PATH}
+                    ${NATIVERENDER_ROOT_PATH}/include
+                    ${CMAKE_CURRENT_SOURCE_DIR}/CustomVideoCapture
+                    ${DEPENDENCY_PATH}/ZegoExpressEngine/include)
+
+set(SRC_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/napi_init.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CustomIOPlugin.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CustomVideoCapture/CustomVideoCapture.cpp)
+
+add_library(entry SHARED ${SRC_FILES})
+
+# 指定链接的库 ZegoExpressEngine
+target_link_libraries(entry PUBLIC libace_napi.z.so hilog_ndk.z.so ZegoExpressEngine)
+```
+
+</Step>
+<Step title="创建视频帧数据结构">
+
+首先定义视频帧数据结构，用于存储要发送的视频帧信息：
+
+```cpp
+#include "zego-express-defines.h"
+#include "zego-express-custom-video-io.h"
+#include <memory>
+
+struct ZegoCustomVideoFrame
+{
+    std::unique_ptr<unsigned char[]> data;        // 视频帧数据
+    unsigned int dataLength = 0;                   // 数据长度
+    struct zego_video_frame_param param;           // 视频帧参数
+    unsigned long long referenceTimeMillsecond = 0; // 时间戳
+};
+```
+
+</Step>
+<Step title="实现自定义视频采集类">
+
+创建自定义视频采集类，实现采集开始和停止的回调处理：
+
+```cpp
+#include <thread>
+#include <atomic>
+#include <mutex>
+
+class CustomVideoCapture
+{
+public:
+    CustomVideoCapture();
+
+    // 初始化，注册回调
+    void init();
+
+public:
+    // 采集开始的回调（SDK 调用）
+    void onStart(enum zego_publish_channel channel);
+
+    // 采集停止的回调（SDK 调用）
+    void onStop(enum zego_publish_channel channel);
+
+private:
+    // 发送视频帧的线程函数
+    void sendVideoFrame(enum zego_publish_channel channel);
+
+    // 获取视频帧（开发者实现具体采集逻辑）
+    void getVideoFrame(std::shared_ptr<ZegoCustomVideoFrame>& videoFrame);
+
+private:
+    std::mutex img_buf_mutex_;
+    std::vector<uint8_t> img_buf_;
+
+    // 视频参数
+    int img_width_ = 480;
+    int img_height_ = 640;
+
+    // 采集状态控制
+    std::atomic<bool> mVideoCaptureRunning = {false};
+    std::thread mVideoCaptureThread;
+};
+```
+
+</Step>
+<Step title="实现采集逻辑">
+
+
+在 `init()` 方法中注册 SDK 回调函数：
+
+```cpp
+void zego_custom_video_capture_start_func(enum zego_publish_channel channel, void* user_context)
+{
+    CustomVideoCapture *self = (CustomVideoCapture*)user_context;
+    self->onStart(channel);
+}
+
+void zego_custom_video_capture_stop_func(enum zego_publish_channel channel, void* user_context)
+{
+    CustomVideoCapture *self = (CustomVideoCapture*)user_context;
+    self->onStop(channel);
+}
+
+void CustomVideoCapture::init()
+{
+    zego_register_custom_video_capture_start_callback(
+        zego_custom_video_capture_start_func, this);
+    zego_register_custom_video_capture_stop_callback(
+        zego_custom_video_capture_stop_func, this);
+}
+```
+
+在 `onStart()` 中启动采集线程：
+
+```cpp
+void CustomVideoCapture::onStart(enum zego_publish_channel channel)
+{
+    if (!mVideoCaptureRunning)
+    {
+        mVideoCaptureRunning = true;
+        mVideoCaptureThread = std::thread(
+            std::bind(&CustomVideoCapture::sendVideoFrame, this, channel));
+    }
+}
+```
+
+在 `onStop()` 中停止采集线程：
+
+```cpp
+void CustomVideoCapture::onStop(enum zego_publish_channel channel)
+{
+    if (mVideoCaptureRunning)
+    {
+        mVideoCaptureRunning = false;
+        mVideoCaptureThread.join();
+    }
+}
+```
+
+实现视频帧获取和发送逻辑：
+
+```cpp
+void CustomVideoCapture::sendVideoFrame(enum zego_publish_channel channel)
+{
+    while(true) {
+        if(!mVideoCaptureRunning) {
+            break;
+        }
+
+        std::shared_ptr<ZegoCustomVideoFrame> videoFrame;
+        this->getVideoFrame(videoFrame);
+
+        if (videoFrame)
+        {
+            // 发送视频帧到 SDK
+            zego_express_send_custom_video_capture_raw_data(
+                videoFrame->data.get(),
+                videoFrame->dataLength,
+                videoFrame->param,
+                videoFrame->referenceTimeMillsecond,
+                1000,  // FPS
+                channel
+            );
+        }
+
+        // 控制帧率
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+}
+
+void CustomVideoCapture::getVideoFrame(std::shared_ptr<ZegoCustomVideoFrame>& videoFrame)
+{
+    // 获取或生成视频帧
+    // 示例：生成一个纯色视频帧
+    videoFrame = std::make_shared<ZegoCustomVideoFrame>();
+    videoFrame->dataLength = img_width_ * img_height_ * 4; // BGRA32
+    videoFrame->data = std::unique_ptr<unsigned char[]>(
+        new unsigned char[videoFrame->dataLength]);
+
+    // 填充视频帧数据（此处省略具体实现）
+    // ...
+
+    // 设置视频帧参数
+    videoFrame->param.format = zego_video_frame_format_bgra32;
+    videoFrame->param.width = img_width_;
+    videoFrame->param.height = img_height_;
+    videoFrame->param.strides[0] = img_width_;
+    videoFrame->param.rotation = 0;
+
+    // 设置时间戳
+    videoFrame->referenceTimeMillsecond = getTimestampInMS();
+}
+```
+
+</Step>
+</Steps>
+
+
+
+<a id="initcustomvideocapture" />
+### 4 注册原生采集插件
+
+通过 NAPI 接口将 C++ 实现暴露给 ArkTS 层调用：
+
+<Steps titleSize="p">
+<Step title="实现 NAPI 接口">
+```cpp
+#include "napi/native_api.h"
+#include "CustomIOPlugin.h"
+
+static napi_value InitCustomVideoCapture(napi_env env, napi_callback_info info)
+{
+    ZegoCustomIOPlugin::getInstance().initCustomVideoCapture();
+    napi_value result;
+    napi_create_int32(env, 0, &result);
+    return result;
+}
+
+static napi_value Init(napi_env env, napi_value exports)
+{
+    napi_property_descriptor desc[] = {
+        {"InitCustomVideoCapture", 0, InitCustomVideoCapture, 0, 0, 0, napi_default, 0}
+    };
+    napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);
+    return exports;
+}
+```
+
+</Step>
+<Step title="在 ArkTS 中导入并初始化">
+
+```ts
+import {InitCustomVideoCapture} from 'libentry.so';
+
+// 在登录房间后初始化自定义采集
+initCustomIO(): void {
+    // 开启自定义视频采集
+    let capConfig: ZegoCustomVideoCaptureConfig = new ZegoCustomVideoCaptureConfig();
+    capConfig.bufferType = ZegoVideoBufferType.RawData;
+    ZegoExpressEngine.enableCustomVideoCapture(true, capConfig, ZegoPublishChannel.Main);
+
+    // 初始化原生采集插件
+    InitCustomVideoCapture();
+}
+```
+
+</Step>
+</Steps>
+### 5 登录房间后推流
+
+请参考 [快速开始 - 实现流程](/real-time-video-harmonyos-arkts/quick-start/implementing-video-call) 的 "登录房间" 和 "推流"。
+
+```ts
+// 登录房间
+loginRoom(): void {
+    if (ZegoExpressEngine != null) {
+        let userInfo: ZegoUser = new ZegoUser();
+        userInfo.userID = this.userID;
+        userInfo.userName = this.userID;
+        ZegoExpressEngine.loginRoom(this.roomID, userInfo);
+
+        // 初始化自定义采集
+        this.initCustomIO();
+    }
+}
+
+// 开始推流
+startPublish(): void {
+    if (ZegoExpressEngine != null) {
+        // 开启预览
+        let view:ZegoView = new ZegoView();
+        view.view = this.previewID;
+        ZegoExpressEngine.startPreview(view, ZegoPublishChannel.Main);
+
+        // 开始推流
+        let publisherConfig:ZegoPublisherConfig = new ZegoPublisherConfig();
+        publisherConfig.roomID = this.roomID;
+        ZegoExpressEngine.startPublishingStream(this.streamID, publisherConfig, ZegoPublishChannel.Main);
+    }
+}
+```
+
+### 6 发送视频帧
+
+SDK 在收到 [startPublishingStream](https://doc-zh.zego.im/native-api/express-video-sdk/harmony_os/Classes.html#/c:objc%7C%7CZegoExpressEngine%7C%7CstartPublishingStream:) 或 [startPreview](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#startpreview) 调用后，会触发自定义视频采集的 `onStart` 回调。此时开发者需要在独立的线程中持续调用 [zego_express_send_custom_video_capture_raw_data](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/cpp/classes/classzego__express__engine.html#a47d2aef57c9a86a85d9355038c887058) 接口发送视频帧数据。
+
+<Note title="提示">
+
+- 发送视频帧的线程必须与 SDK 内部线程分离，避免阻塞 SDK 的正常工作。
+- 视频帧的格式（BGRA32、I420 等）需要与配置的 `bufferType` 一致。
+- 建议根据实际采集设备的帧率控制发送频率，避免发送过快或过慢。
+- 时间戳 `referenceTimeMillsecond` 应使用单调递增的时间戳，避免视频帧乱序。
+
+</Note>
+
+### 7 停止采集
+
+当调用 [stopPublishingStream](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#stoppublishingstream) 或 [stopPreview](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#stoppreview) 后，SDK 会触发 `onStop` 回调。开发者应在此回调中停止发送视频帧，并释放相关资源。
+
+```cpp
+void CustomVideoCapture::onStop(enum zego_publish_channel channel)
+{
+    if (mVideoCaptureRunning)
+    {
+        mVideoCaptureRunning = false;
+        if (mVideoCaptureThread.joinable()) {
+            mVideoCaptureThread.join();
+        }
+    }
+}
+```
+
+## 视频帧参数说明
+
+发送视频帧时需要正确设置 `zego_video_frame_param` 参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| format | zego_video_frame_format | 视频帧格式，支持 `zego_video_frame_format_bgra32`、`zego_video_frame_format_i420` 等 |
+| width | uint32_t | 视频帧宽度（像素） |
+| height | uint32_t | 视频帧高度（像素） |
+| strides[0] | uint32_t | Y 平面或 RGB 数据的 stride（字节数） |
+| strides[1] | uint32_t | U 平面的 stride（仅 I420 格式需要） |
+| strides[2] | uint32_t | V 平面的 stride（仅 I420 格式需要） |
+| rotation | int32_t | 视频帧旋转角度（0、90、180、270） |
+
+## 常见问题
+
+1. **调用自定义视频采集相关接口的时机？**
+
+    - [enableCustomVideoCapture](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#enablecustomvideocapture)：必须在开始预览或推流之前调用。
+    - [InitCustomVideoCapture](#initcustomvideocapture)（NAPI 接口）：建议在登录房间后、开始推流前调用。
+    - 视频帧发送：在 `onStart` 回调触发后开始发送，在 `onStop` 回调触发后停止发送。

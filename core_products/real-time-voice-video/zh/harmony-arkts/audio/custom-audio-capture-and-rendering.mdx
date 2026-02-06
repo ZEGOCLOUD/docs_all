@@ -19,14 +19,20 @@ date: "2024-02-27"
 
 - 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目信息](/console/project-info)。
 - 已在项目中集成 ZEGO Express SDK，并实现了基本的音视频推拉流功能，详情请参考 [快速开始 - 集成](/real-time-video-harmonyos-arkts/quick-start/integrating-sdk) 和 [快速开始 - 实现流程](/real-time-video-harmonyos-arkts/quick-start/implementing-video-call)。
-
+- 已在 CMakeLists.txt 中正确配置 ZegoExpressEngine 的头文件路径和链接库。
 
 
 ## 使用步骤
 
+<Note title="说明">
+
+- SDK 在 ets 层提供开启自定义音频采集的接口 [enableCustomAudioIO](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#enablecustomaudioio)。
+- SDK 在 native 层提供发送音频数据的接口 `zego_express_send_custom_audio_capture_pcm_data` 和数据结构，详情查阅 har 包 include 目录下的 zego-experss-custom-audio-io.h 文件。
+</Note>
+
 ### 1 初始化 SDK
 
-请参考 [快速开始 - 实现流程](/real-time-video-harmonyos-arkts/quick-start/implementing-video-call) 的 “创建引擎”。
+请参考 [快速开始 - 实现流程](/real-time-video-harmonyos-arkts/quick-start/implementing-video-call) 的 "创建引擎"。
 
 ### 2 开启自定义音频采集
 
@@ -43,44 +49,206 @@ date: "2024-02-27"
 
 ```ts
 // 设置音频源为自定义采集
-let config=new ZegoCustomAudioConfig();
-config.sourceType= ZegoAudioSourceType.Custom;
-engine.enableCustomAudioIO(true,config);
+let config: ZegoCustomAudioConfig = new ZegoCustomAudioConfig();
+config.sourceType = ZegoAudioSourceType.Custom;
+ZegoExpressEngine.enableCustomAudioIO(true, config);
 ```
 
 ### 3 登录房间后推/拉流
 
-请参考 [快速开始 - 实现流程](/real-time-video-harmonyos-arkts/quick-start/implementing-video-call) 的 “登录房间”、“推流”和“拉流”。
+请参考 [快速开始 - 实现流程](/real-time-video-harmonyos-arkts/quick-start/implementing-video-call) 的 "登录房间"、"推流" 和 "拉流"。
 
-### 4 采集音频数据
+### 4 在 native 层实现自定义采集音频数据发送功能
 
-鸿蒙平台通过原生插件的形式实现自定义音频采集功能。用户通过 [registerCustomAudioCapturePlugin\_blank](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#registercustomaudiocaptureplugin) 接口注册插件对象，通过 [unregisterCustomAudioCapturePlugin\_blank](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#unregistercustomaudiocaptureplugin) 接口反注册插件对象。当用户调用 [enableCustomAudioIO](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#enablecustomaudioio) 接口开启自定义音频 IO 功能后，并注册插件。
+<Steps titleSize="p">
+<Step title="在 native 层引入 ZegoExpressEngine.so 库">
 
-```ts
-let plugin: number = GetCustomAudioCapturePlugin();
-engine.registerCustomAudioCapturePlugin(plugin);
+通过修改 native 层的 CMakeLists.txt 文件引入包含在 ZegoExpressEngine.har 包里的 ZegoExpressEngine.so 库，便于 native 层代码调用相关接口。
+
+```cmake
+
+# 定义平台宏，native 接口会通过这个宏判断平台
+add_definitions(-D_OS_OHOS_)
+
+# 设置依赖的libZegoExpressEngine.so路径
+set(DEPENDENCY_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../../oh_modules)
+add_library(ZegoExpressEngine SHARED IMPORTED)
+set_target_properties(ZegoExpressEngine
+    PROPERTIES
+    IMPORTED_LOCATION ${DEPENDENCY_PATH}/@zego/zego-express-engine/libs/${OHOS_ARCH}/libZegoExpressEngine.so)
+
+# 包含头文件 ${DEPENDENCY_PATH}/ZegoExpressEngine/include
+include_directories(${NATIVERENDER_ROOT_PATH}
+                    ${NATIVERENDER_ROOT_PATH}/include
+                    ${CMAKE_CURRENT_SOURCE_DIR}/CustomVideoCapture
+                    ${DEPENDENCY_PATH}/ZegoExpressEngine/include)
+
+set(SRC_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/napi_init.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CustomIOPlugin.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CustomVideoCapture/CustomVideoCapture.cpp)
+
+add_library(entry SHARED ${SRC_FILES})
+
+# 指定链接的库 ZegoExpressEngine
+target_link_libraries(entry PUBLIC libace_napi.z.so hilog_ndk.z.so ZegoExpressEngine)
 ```
-SDK 内部会启动一个定时线程，通过原生插件提供的 `onRequestAudioFrame` 接口发送音频数据，并通过原生插件提供的 `onReleaseAudioFrame` 回调安全释放数据。
+
+</Step>
+<Step title="创建自定义音频处理类">
+
+创建一个继承自 SDK 回调接口的类：
 
 ```cpp
-class ZegoExpressOHOSCustomAudioCapturePluginBase
+#include "zego-express-defines.h"
+#include "zego-express-custom-audio-io.h"
+#include <hilog/log.h>
+
+class CustomAudioCapture
 {
 public:
-    // 返回音频帧。如果用户没有音频帧要发送，返回空指针。
-    virtual ZegoCustomAudioFrame* onRequestAudioFrame() = 0;
+    CustomAudioCapture();
 
-    // 在 SDK 发送音频帧后，SDK 会请求释放音频帧。
-    virtual void onReleaseAudioFrame(ZegoCustomAudioFrame* audioFrame) = 0;
+public:
+    void Start();
+    void Stop();
+    void SendCustomAudioPcmData();
 };
 ```
+
+</Step>
+<Step title="实现音频采集发送逻辑">
+
+开发者可以在各个回调中对音频数据进行处理：
+
+```cpp
+void CustomAudioCapture::Start( )
+{
+    // 调用开始推流后，就通知这里开始发送音频数据
+}
+
+void CustomAudioCapture::Stop()
+{
+    // 调用停止推流后，就通知这里停止发送音频数据
+}
+
+void CustomAudioCapture::SendCustomAudioPcmData(
+    const unsigned char *data,
+    unsigned int dataLength,
+    struct zego_audio_frame_param param,
+    enum zego_publish_channel channel)
+{
+    // 调用接口发送数据
+    zego_express_send_custom_audio_capture_pcm_data(data, data_length, param, channel);
+}
+
+```
+
+</Step>
+</Steps>
+
+<a id="initcustomaudiocapture"/>
+### 5 注册原生音频处理插件
+
+通过 NAPI 接口将 C++ 实现暴露给 ArkTS 层调用。
+
+
+<Steps titleSize="p">
+<Step title="实现 NAPI 接口">
+
+
+```cpp
+#include "napi/native_api.h"
+#include "CustomIOPlugin.h"
+
+static napi_value InitCustomAudioCapture(napi_env env, napi_callback_info info)
+{
+    ZegoCustomIOPlugin::getInstance().initCustomAudioCapture();
+    napi_value result;
+    napi_create_int32(env, 0, &result);
+    return result;
+}
+
+static napi_value StartCustomAudioCapture(napi_env env, napi_callback_info info)
+{
+    ZegoCustomIOPlugin::getInstance().StartCustomAudioCapture();
+    napi_value result;
+    napi_create_int32(env, 0, &result);
+    return result;
+}
+
+static napi_value StopCustomAudioCapture(napi_env env, napi_callback_info info)
+{
+    ZegoCustomIOPlugin::getInstance().StopCustomAudioCapture();
+    napi_value result;
+    napi_create_int32(env, 0, &result);
+    return result;
+}
+
+static napi_value Init(napi_env env, napi_value exports)
+{
+    napi_property_descriptor desc[] = {
+        {"InitCustomAudioCapture", 0, InitCustomAudioCapture, 0, 0, 0, napi_default, 0},
+        {"StartCustomAudioCapture", 0, StartCustomAudioCapture, 0, 0, 0, napi_default, 0},
+        {"StopCustomAudioCapture", 0, StopCustomAudioCapture, 0, 0, 0, napi_default, 0},
+    };
+    napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);
+    return exports;
+}
+
+
+```
+
+</Step>
+<Step title="在 ArkTS 中导入并初始化">
+
+```ts
+import {InitCustomAudioProcess} from 'libentry.so';
+
+    // 在登录房间后初始化自定义音频处理
+    initCustomIO(): void {
+    // 配置音频处理参数
+    let audioCapConfig: ZegoCustomAudioConfig = new ZegoCustomAudioConfig();
+    audioCapConfig.sourceType = ZegoAudioSourceType.Custom;
+
+    // 开启自定义音频采集处理
+    ZegoExpressEngine.enableCustomAudioIO(true, audioCapConfig);
+
+    // 初始化原生音频处理插件
+    InitCustomAudioCapture();
+
+    // 调用开始推流后
+    StartCustomAudioCapture();
+
+    // 调用停止推流后
+    StopCustomAudioCapture();
+}
+```
+
+</Step>
+</Steps>
+
+## 音频参数说明
+
+`zego_audio_frame_param` 结构体包含了音频帧的关键参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| sample_rate | uint32_t | 采样率，支持 16000、32000、44100、48000 等 |
+| channel_count | uint32_t | 声道数，1 表示单声道，2 表示双声道 |
+| frame_length | uint32_t | 音频帧的采样点数量（每声道） |
+
+<Note title="说明">
+
+- 音频帧大小计算公式：`frameSize = sampleRate / 1000 * frameDurationMs * channelCount * sizeof(int16_t)`
+- 例如：44100Hz、单声道、20ms 帧长的音频大小为 44100 / 1000 * 20 * 1 * 2 = 1764 字节
+
+</Note>
 
 ## 常见问题
 
 1. **调用自定义音频采集相关接口的时机？**
 
-    - [enableCustomAudioIO](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#enablecustomaudioio)：应该在引擎启动前开始调用，即开始预览、推拉流之前。
-    - [registerCustomAudioCapturePlugin](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#registercustomaudiocaptureplugin)：应该在开始预览和推流后调用。如果在开始预览、推流前调用，SDK 内部会直接丢弃收到的数据。
+    - [enableCustomAudioIO](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#enablecustomaudioio)：应该在引擎启动后、开始预览和推拉流之前调用。
+    - [InitCustomAudioCapture](#initcustomaudiocapture)（NAPI 接口）：建议在登录房间后、开始推流前调用。
 
-2. **OHOS（OpenHarmony Operating System）设备外接麦克风，使用自定义音频采集，若中途用户戴上了蓝牙耳机，如何使用 Express SDK 采集音频？**
-
-    由于 Express SDK 内部不会自动切换到内部采集，需要开发者做业务逻辑处理，即停止外部采集。移动端 SDK 会根据系统当前的 route（音频路由）选择设备，如果系统的 route 是蓝牙，就会使用蓝牙进行采集。
