@@ -1,0 +1,419 @@
+# 自定义视频渲染
+- - -
+
+## 功能简介
+
+自定义视频渲染指的是 SDK 向外部提供本地预览及远端拉流的视频帧数据，供用户自行渲染。
+
+以下场景中，建议使用自定义视频渲染功能：
+
+- 开发者需要自己渲染视频画面，而不使用 SDK 提供的默认渲染视图。
+- 开发者需要对视频帧进行后处理后再显示，例如添加水印、特效、贴纸等。
+- 开发者需要在多个位置同时显示同一视频流，或对视频画面进行特殊布局。
+- 开发者需要对本地预览和远程播放的视频流进行自定义渲染控制。
+
+
+
+## 示例源码下载
+
+请参考 [下载示例源码](/real-time-video-android-java/quick-start/run-example-code) 获取源码。
+
+相关源码请查看 “/ZegoExpressExample/AdvancedVideoProcessing/src/main/java/im/zego/advancedvideoprocessing/customrender” 目录下的文件。
+
+
+## 前提条件
+
+在实现自定义视频渲染之前，请确保：
+
+- 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目信息](/console/project-info)。
+- 已在项目中集成 ZEGO Express SDK，并实现了基本的音视频推拉流功能，详情请参考 [快速开始 - 集成](/real-time-video-harmonyos-arkts/quick-start/integrating-sdk) 和 [快速开始 - 实现流程](/real-time-video-harmonyos-arkts/quick-start/implementing-video-call)。
+
+
+## 使用步骤
+
+<Note title="说明">
+
+- SDK 在 ets 层提供开启自定义视频渲染的接口 [enableCustomVideoRender](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#enablecustomvideorender)、[enableCapturedVideoCustomVideoRender](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#enablecapturedvideocustomvideorender)、[enableRemoteVideoCustomVideoRender](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#enableremotevideocustomvideorender)。
+- SDK 在 native 层提供接收视频数据的回调接口和数据结构，详情查阅 har 包 include 目录下的 `zego-experss-custom-video-io.h`文件。
+</Note>
+
+### 1 初始化 SDK
+
+请参考 [快速开始 - 实现流程](/real-time-video-harmonyos-arkts/quick-start/implementing-video-call) 的 "创建引擎"。
+
+### 2 开启自定义视频渲染
+
+<Warning title="注意">
+
+
+[enableCustomVideoRender](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#enablecustomvideorender) 需要在 [startPublishingStream](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#startpublishingstream)、[startPreview](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#startpreview) 之前调用才有效。
+
+</Warning>
+
+
+
+可调用 [ZegoCustomVideoRenderConfig](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressdefines_.zegocustomvideorenderconfig.html) 设置渲染参数，再调用 [enableCustomVideoRender](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#enablecustomvideorender) 接口开启自定义视频渲染功能。
+
+```ts
+// 配置自定义视频渲染参数
+let rndConfig: ZegoCustomVideoRenderConfig = new ZegoCustomVideoRenderConfig();
+// 设置为原始数据类型
+rndConfig.bufferType = ZegoVideoBufferType.RawData;
+// 设置帧格式为 RGB（可选：RGB、BGRA32、I420 等）
+rndConfig.frameFormatSeries = ZegoVideoFrameFormatSeries.RGB;
+// 启用引擎渲染（如果设为 false，需要完全自行渲染）
+rndConfig.enableEngineRender = true;
+
+// 开启自定义视频渲染
+this.engine.enableCustomVideoRender(true, rndConfig);
+```
+
+### 3 选择渲染范围
+
+开发者可以选择对本地采集的视频流、远程播放的视频流，或两者同时进行自定义渲染。
+
+<Steps titleSize="p">
+<Step title="渲染本地采集的视频流">
+
+```ts
+// 禁用本地采集视频的引擎渲染，完全由开发者自行渲染
+this.engine.enableCapturedVideoCustomVideoRender(true, ZegoPublishChannel.Main);
+```
+
+</Step>
+<Step title="渲染远程播放的视频流">
+
+
+```ts
+// 禁用指定远程流的引擎渲染，完全由开发者自行渲染
+this.engine.enableRemoteVideoCustomVideoRender(true, this.streamID);
+```
+<Note title="说明">
+
+- 如果 `enableEngineRender` 设为 `true`，SDK 会先渲染视频帧，然后再调用自定义渲染回调。此时开发者可以在 SDK 渲染的基础上添加额外的渲染效果。
+- 如果 `enableEngineRender` 设为 `false`，SDK 不会渲染视频帧，开发者需要在回调中自行完成所有渲染工作。
+- 建议在熟悉视频渲染流程后再将 `enableEngineRender` 设为 `false`。
+
+</Note>
+
+</Step>
+
+</Steps>
+
+
+
+### 4 实现原生视频渲染类
+
+鸿蒙平台通过原生插件的形式实现自定义视频渲染功能。开发者需要创建一个 C++ 类来处理视频帧渲染回调。
+
+<Steps titleSize="p">
+<Step title="在 native 层引入 ZegoExpressEngine.so 库">
+
+通过修改 native 层的 CMakeLists.txt 文件引入包含在 ZegoExpressEngine.har 包里的 ZegoExpressEngine.so 库，便于 native 层代码调用相关接口。
+
+```cmake
+
+# 定义平台宏，native 接口会通过这个宏判断平台
+add_definitions(-D_OS_OHOS_)
+
+# 设置依赖的libZegoExpressEngine.so路径
+set(DEPENDENCY_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../../oh_modules)
+add_library(ZegoExpressEngine SHARED IMPORTED)
+set_target_properties(ZegoExpressEngine
+    PROPERTIES
+    IMPORTED_LOCATION ${DEPENDENCY_PATH}/@zego/zego-express-engine/libs/${OHOS_ARCH}/libZegoExpressEngine.so)
+
+# 包含头文件 ${DEPENDENCY_PATH}/ZegoExpressEngine/include
+include_directories(${NATIVERENDER_ROOT_PATH}
+                    ${NATIVERENDER_ROOT_PATH}/include
+                    ${CMAKE_CURRENT_SOURCE_DIR}/CustomVideoCapture
+                    ${DEPENDENCY_PATH}/ZegoExpressEngine/include)
+
+set(SRC_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/napi_init.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CustomIOPlugin.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CustomVideoCapture/CustomVideoCapture.cpp)
+
+add_library(entry SHARED ${SRC_FILES})
+
+# 指定链接的库 ZegoExpressEngine
+target_link_libraries(entry PUBLIC libace_napi.z.so hilog_ndk.z.so ZegoExpressEngine)
+```
+
+</Step>
+<Step title="创建自定义视频渲染类">
+
+创建一个 C++ 类来接收视频帧渲染回调：
+
+```cpp
+#include "zego-express-defines.h"
+#include "zego-express-custom-video-io.h"
+#include <string>
+
+class CustomVideoRender
+{
+public:
+    CustomVideoRender();
+
+    // 初始化，注册回调
+    void init();
+
+public:
+    // 渲染本地采集的视频帧（原始数据格式）
+    void onCapturedVideoFrameRawData(
+        unsigned char **data,
+        unsigned int *dataLength,
+        struct zego_video_frame_param param,
+        enum zego_video_flip_mode flipMode,
+        enum zego_publish_channel channel
+    );
+
+    // 渲染远程视频帧（原始数据格式）
+    void onRemoteVideoFrameRawData(
+        unsigned char **data,
+        unsigned int *dataLength,
+        struct zego_video_frame_param param,
+        const char *streamID
+    );
+};
+```
+</Step>
+<Step title="实现回调注册">
+
+
+在 `init` 方法中注册 SDK 渲染回调函数：
+
+```cpp
+#include "hilog/log.h"
+
+// SDK 回调函数包装 - 本地采集视频帧
+void zego_on_custom_video_render_captured_frame_data_func(
+    unsigned char **data,
+    unsigned int *data_length,
+    const struct zego_video_frame_param param,
+    enum zego_video_flip_mode flip_mode,
+    enum zego_publish_channel channel,
+    void *user_context)
+{
+    CustomVideoRender *self = (CustomVideoRender*)user_context;
+    self->onCapturedVideoFrameRawData(
+        data, data_length, param, flip_mode, channel);
+}
+
+// SDK 回调函数包装 - 远程视频帧
+void zego_on_custom_video_render_remote_frame_data_func(
+    const char *stream_id,
+    unsigned char **data,
+    unsigned int *data_length,
+    const struct zego_video_frame_param param,
+    void *user_context)
+{
+    CustomVideoRender *self = (CustomVideoRender*)user_context;
+    self->onRemoteVideoFrameRawData(
+        data, data_length, param, stream_id);
+}
+
+// 初始化方法
+void CustomVideoRender::init()
+{
+    // 注册本地采集视频帧渲染回调
+    zego_register_custom_video_render_captured_frame_data_callback(
+        zego_on_custom_video_render_captured_frame_data_func, this);
+
+    // 注册远程视频帧渲染回调
+    zego_register_custom_video_render_remote_frame_data_callback(
+        zego_on_custom_video_render_remote_frame_data_func, this);
+}
+```
+</Step>
+<Step title="实现视频渲染逻辑">
+
+开发者可以在回调中对视频帧进行渲染或后处理：
+
+```cpp
+void CustomVideoRender::onCapturedVideoFrameRawData(
+    unsigned char **data,
+    unsigned int *dataLength,
+    struct zego_video_frame_param param,
+    enum zego_video_flip_mode flipMode,
+    enum zego_publish_channel channel)
+{
+
+    // 开发者可以在这里进行自定义渲染逻辑
+    // 例如：
+    // 1. 使用 OpenGL ES / Vulkan 等渲染 API 将视频帧绘制到自定义视图
+    // 2. 添加水印、特效、贴纸等
+    // 3. 将视频帧保存为图片
+    // 4. 转发视频帧到其他模块
+
+    // 示例：在视频帧上添加简单的水印（假设为 BGRA32 格式）
+    if (param.format == zego_video_frame_format_bgra32)
+    {
+        // 简单的亮度调整示例
+        uint8_t *pixelData = *data;
+        int pixelCount = param.width * param.height;
+
+        for (int i = 0; i < pixelCount; i++)
+        {
+            int offset = i * 4;
+            // 调整亮度（每个通道 +10）
+            int b = pixelData[offset] + 10;
+            int g = pixelData[offset + 1] + 10;
+            int r = pixelData[offset + 2] + 10;
+            // 限制在 0-255 范围内
+            pixelData[offset] = (b > 255) ? 255 : b;
+            pixelData[offset + 1] = (g > 255) ? 255 : g;
+            pixelData[offset + 2] = (r > 255) ? 255 : r;
+            // Alpha 通道保持不变
+        }
+    }
+
+    // 注意：如果 enableEngineRender = false，开发者必须自行渲染视频帧
+    // 否则视频画面将不会显示
+}
+
+void CustomVideoRender::onRemoteVideoFrameRawData(
+    unsigned char **data,
+    unsigned int *dataLength,
+    struct zego_video_frame_param param,
+    const char *streamID)
+{
+
+    // 对远程视频流进行自定义渲染
+    // 逻辑与本地采集视频帧类似
+}
+```
+</Step>
+</Steps>
+
+
+### 5 注册原生视频渲染插件
+
+通过 NAPI 接口将 C++ 实现暴露给 ArkTS 层调用。
+
+
+<Steps titleSize="p">
+<Step title="实现 NAPI 接口">
+
+
+```cpp
+#include "napi/native_api.h"
+#include "CustomIOPlugin.h"
+
+static napi_value InitCustomVideoRender(napi_env env, napi_callback_info info)
+{
+    ZegoCustomIOPlugin::getInstance().initCustomVideoRender();
+    napi_value result;
+    napi_create_int32(env, 0, &result);
+    return result;
+}
+
+static napi_value Init(napi_env env, napi_value exports)
+{
+    napi_property_descriptor desc[] = {
+        {"InitCustomVideoRender", 0, InitCustomVideoRender, 0, 0, 0, napi_default, 0}
+    };
+    napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);
+    return exports;
+}
+```
+</Step>
+<Step title="在 ArkTS 中导入并初始化">
+
+
+```ts
+import {InitCustomVideoRender} from 'libentry.so';
+
+// 在登录房间后初始化自定义渲染
+function initCustomIO(): void {
+    // 配置自定义视频渲染参数
+    let rndConfig: ZegoCustomVideoRenderConfig = new ZegoCustomVideoRenderConfig();
+    rndConfig.bufferType = ZegoVideoBufferType.RawData;
+    rndConfig.frameFormatSeries = ZegoVideoFrameFormatSeries.RGB;
+    rndConfig.enableEngineRender = true;
+
+    // 开启自定义视频渲染
+    this.engine.enableCustomVideoRender(true, rndConfig);
+
+    // 禁用本地采集视频的引擎渲染（可选）
+    this.engine.enableCapturedVideoCustomVideoRender(
+        false, ZegoPublishChannel.Main);
+
+    // 禁用指定远程流的引擎渲染（可选）
+    this.engine.enableRemoteVideoCustomVideoRender(false, this.streamID);
+
+    // 初始化原生渲染插件
+    InitCustomVideoRender();
+}
+```
+</Step>
+</Steps>
+
+### 6 登录房间后推/拉流
+
+请参考 [快速开始 - 实现流程](/real-time-video-harmonyos-arkts/quick-start/implementing-video-call) 的 "登录房间"、"推流" 和 "拉流"。
+
+```ts
+// 登录房间
+function loginRoom(): void {
+    if (this.engine != null) {
+        let userInfo: ZegoUser = new ZegoUser();
+        userInfo.userID = this.userID;
+        userInfo.userName = this.userID;
+        this.engine.loginRoom(this.roomID, userInfo);
+
+        // 初始化自定义渲染
+        this.initCustomIO();
+    }
+}
+
+// 开始推流（本地预览）
+function startPublish(): void {
+    if (this.engine != null) {
+        // 开启预览
+        let view:ZegoView = new ZegoView();
+        view.view = this.previewID;
+        this.engine.startPreview(view, ZegoPublishChannel.Main);
+
+        // 开始推流
+        let publisherConfig:ZegoPublisherConfig = new ZegoPublisherConfig();
+        publisherConfig.roomID = this.roomID;
+        this.engine.startPublishingStream(
+            this.streamID, publisherConfig, ZegoPublishChannel.Main);
+    }
+}
+
+// 开始拉流（远程播放）
+function startPlay(): void {
+    if (this.engine != null) {
+        let view:ZegoView = new ZegoView();
+        view.view = this.playviewID;
+        this.engine.startPlayingStream(this.streamID, view);
+    }
+}
+```
+
+## 视频帧参数说明
+
+渲染回调中的 `zego_video_frame_param` 包含了视频帧的关键参数：
+
+| 参数-10% | 类型-25% | 说明 |
+|------|------|------|
+| format | zego_video_frame_format | 视频帧格式，支持 `zego_video_frame_format_bgra32`、`zego_video_frame_format_i420`、`zego_video_frame_format_rgb` 等 |
+| width | uint32_t | 视频帧宽度（像素） |
+| height | uint32_t | 视频帧高度（像素） |
+| strides[0] | uint32_t | Y 平面或 RGB 数据的 stride（字节数） |
+| strides[1] | uint32_t | U 平面的 stride（仅 I420 格式需要） |
+| strides[2] | uint32_t | V 平面的 stride（仅 I420 格式需要） |
+| rotation | int32_t | 视频帧旋转角度（0、90、180、270） |
+
+<Note title="说明">
+
+- 视频帧格式由 `ZegoCustomVideoRenderConfig.frameFormatSeries` 决定。
+- `strides` 表示每行的字节数，可能大于 `width * bytes_per_pixel`，用于内存对齐。
+- 对于 BGRA32 格式，每个像素占 4 字节；对于 I420 格式，Y 平面每个像素占 1 字节，U/V 平面每 2x2 像素块占 1 字节。
+
+</Note>
+
+
+

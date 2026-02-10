@@ -1,10 +1,5 @@
----
-articleID: 20936
-date: "2024-02-27"
----
 # 自定义音频处理
-
----
+- - -
 
 ## 功能简介
 
@@ -22,70 +17,455 @@ date: "2024-02-27"
 
 </Note>
 
-
-
 ## 前提条件
 
-在自定义音频处理之前，请确保：
+在实现自定义音频处理之前，请确保：
 
 - 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目信息](/console/project-info)。
 - 已在项目中集成 ZEGO Express SDK，并实现了基本的音视频推拉流功能，详情请参考 [快速开始 - 集成](/real-time-video-harmonyos-arkts/quick-start/integrating-sdk) 和 [快速开始 - 实现流程](/real-time-video-harmonyos-arkts/quick-start/implementing-video-call)。
 
 
-
 ## 使用步骤
 
-### 1 创建 SDK 引擎
+<Note title="说明">
 
-调用 [createEngine ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#createengine) 接口创建 SDK 引擎实例，详情可参考 [快速开始 - 实现流程](/real-time-video-harmonyos-arkts/quick-start/implementing-video-call) 的 “创建引擎”。
+- SDK 在 ets 层提供开启自定义音频处理的接口 [enableCustomAudioCaptureProcessing](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#enablecustomaudiocaptureprocessing) 等。
+- SDK 在 native 层提供多个音频数据的回调接口和数据结构，详情查阅 har 包 include 目录下的 `zego-experss-custom-audio-io.h` 文件。
+</Note>
+
+### 1 初始化 SDK
+
+请参考 [快速开始 - 实现流程](/real-time-video-harmonyos-arkts/quick-start/implementing-video-call) 的 "创建引擎"。
+
+### 2 开启自定义音频处理
+
+<Warning title="注意">
 
 
-### 2 设置音频自定义处理对象并实现回调方法
+自定义音频处理相关接口需要在开始推拉流之前调用才有效。
 
-调用 [registerAudioPlugin](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#registeraudioplugin) 接口设置音频自定义处理插件对象，并通过原生插件提供的回调方法：自定义音频处理本地采集 PCM 音频帧回调 `onProcessCapturedAudioData` 和自定义音频处理远端拉流 PCM 音频帧回调 `onProcessRemoteAudioData`。在回调方法中直接处理获取的 `data`，即可实现对推拉流音频数据的处理。
+</Warning>
 
+
+
+SDK 提供了多个音频处理回调点，开发者可以根据需求选择性地启用。以下按音频链路顺序介绍各个处理点。
+
+### 3 处理采集的音频数据
+
+处理麦克风采集的原始音频数据，适用于添加音效、降噪、变声等场景。
+
+<Steps titleSize="p">
+<Step title="配置音频处理参数">
 
 ```ts
-let plugin: number = GetNativeAudioProcessPlugin();
-ZegoExpressEngine.getInstance().registerAudioPlugin(2, plugin);
+// 配置音频处理参数
+let audioCapConfig: ZegoCustomAudioProcessConfig = new ZegoCustomAudioProcessConfig();
+// 设置采样率（支持 16K、32K、44.1K、48K 等）
+audioCapConfig.sampleRate = ZegoAudioSampleRate.SampleRate44K;
+// 设置声道数（1 表示单声道，2 表示双声道）
+audioCapConfig.channel = ZegoAudioChannel.Mono;
+// 设置每帧采样点数（0 表示使用 SDK 默认值）
+audioCapConfig.samples = 0;
+
+// 开启自定义音频采集处理
+this.engine.enableCustomAudioCaptureProcessing(true, audioCapConfig);
 ```
 
-这里需要通过原生插件的形式来处理音频数据，避免音频数据的多次拷贝。
+</Step>
+<Step title="在 native 层引入 ZegoExpressEngine.so 库">
+
+通过修改 native 层的 CMakeLists.txt 文件引入包含在 ZegoExpressEngine.har 包里的 ZegoExpressEngine.so 库，便于 native 层代码调用相关接口。
+
+```cmake
+
+# 定义平台宏，native 接口会通过这个宏判断平台
+add_definitions(-D_OS_OHOS_)
+
+# 设置依赖的libZegoExpressEngine.so路径
+set(DEPENDENCY_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../../oh_modules)
+add_library(ZegoExpressEngine SHARED IMPORTED)
+set_target_properties(ZegoExpressEngine
+    PROPERTIES
+    IMPORTED_LOCATION ${DEPENDENCY_PATH}/@zego/zego-express-engine/libs/${OHOS_ARCH}/libZegoExpressEngine.so)
+
+# 包含头文件 ${DEPENDENCY_PATH}/ZegoExpressEngine/include
+include_directories(${NATIVERENDER_ROOT_PATH}
+                    ${NATIVERENDER_ROOT_PATH}/include
+                    ${CMAKE_CURRENT_SOURCE_DIR}/CustomVideoCapture
+                    ${DEPENDENCY_PATH}/ZegoExpressEngine/include)
+
+set(SRC_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/napi_init.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CustomIOPlugin.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CustomVideoCapture/CustomVideoCapture.cpp)
+
+add_library(entry SHARED ${SRC_FILES})
+
+# 指定链接的库 ZegoExpressEngine
+target_link_libraries(entry PUBLIC libace_napi.z.so hilog_ndk.z.so ZegoExpressEngine)
+```
+
+</Step>
+<Step title="实现原生音频处理类">
 
 ```cpp
-class ZegoExpressAudioPlugin :
-    public ZegoExpressOHOSAudioDataProcessPluginBase
+#include "zego-express-defines.h"
+#include "zego-express-custom-audio-io.h"
+#include <hilog/log.h>
+
+class CustomAudioProcess
 {
 public:
-    virtual void onProcessCapturedAudioData(unsigned char * /*data*/, unsigned int /*dataLength*/,
-                                            ZegoAudioFrameParam * /*param*/, double /*timestamp*/) override;
+    CustomAudioProcess();
 
-    virtual void onProcessCapturedAudioDataAfterUsedHeadphoneMonitor(unsigned char * /*data*/,
-                                                                     unsigned int /*dataLength*/,
-                                                                     ZegoAudioFrameParam * /*param*/,
-                                                                     double /*timestamp*/) override;
+    // 初始化，注册回调
+    void init();
 
-    virtual void onProcessRemoteAudioData(unsigned char * /*data*/, unsigned int /*dataLength*/,
-                                          ZegoAudioFrameParam * /*param*/,
-                                          const std::string & /*streamID*/, double /*timestamp*/) override;
-
-    virtual void onProcessPlaybackAudioData(unsigned char * /*data*/, unsigned int /*dataLength*/,
-                                            ZegoAudioFrameParam * /*param*/, double /*timestamp*/) override;
-
+public:
+    // 处理采集的音频数据回调
+    void onProcessCapturedAudioData(
+        unsigned char *data,
+        unsigned int dataLength,
+        struct zego_audio_frame_param *param,
+        double timestamp
+    );
 };
 ```
 
-### 3 自定义音频处理
+</Step>
+<Step title="注册音频处理回调">
 
-- 在开始推流或启动本地预览前，调用 [enableCustomAudioCaptureProcessing ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#enablecustomaudiocaptureprocessing) 接口开启**本地采集**自定义音频处理。开启后，开发者可以通过原生插件提供的 `onProcessCapturedAudioData` 回调收到本地采集的音频帧，并可以对音频数据进行修改。
+```cpp
+void zego_on_process_captured_audio_data_func(
+    unsigned char *data,
+    unsigned int dataLength,
+    struct zego_audio_frame_param *param,
+    double timestamp,
+    void *user_context)
+{
+    CustomAudioProcess *self = (CustomAudioProcess*)user_context;
+    self->onProcessCapturedAudioData(data, dataLength, param, timestamp);
+}
 
-- 在开始拉流前，调用 [enableCustomAudioRemoteProcessing ](https://doc-zh.zego.im/unique-api/express-video-sdk/zh/ets_ohos/classes/_zegoexpressengine_.zegoexpressengine.html#enablecustomaudioremoteprocessing) 接口开启**远端拉流**自定义音频处理。开启后，开发者可以通过原生插件提供的 `onProcessRemoteAudioData` 收到远端拉流的音频帧，并且可以对音频数据进行修改。
+void CustomAudioProcess::init()
+{
+    // 注册数据回调接口
+    zego_register_process_captured_audio_data_callback(
+        zego_on_process_captured_audio_data_func, this);
+}
+```
+
+</Step>
+<Step title="实现音频处理逻辑">
+
+```cpp
+void CustomAudioProcess::onProcessCapturedAudioData(
+    unsigned char *data,
+    unsigned int dataLength,
+    struct zego_audio_frame_param *param,
+    double timestamp)
+{
+    // 在这里对采集的音频数据进行处理
+    // 例如：音量调节、降噪、变声等
+
+    // 示例：简单的音量调节
+    int16_t *audioData = (int16_t*)data;
+    int samples = dataLength / sizeof(int16_t);
+    float volume = 1.5f; // 提升 50% 音量
+
+    for (int i = 0; i < samples; i++)
+    {
+        int32_t sample = (int32_t)(audioData[i] * volume);
+        // 限幅，防止溢出
+        if (sample > 32767) sample = 32767;
+        if (sample < -32768) sample = -32768;
+        audioData[i] = (int16_t)sample;
+    }
+}
+```
+
+</Step>
+</Steps>
+
+### 4 其他类型的音频数据
+
+<Steps titleSize="p">
+<Step title="处理耳机监控后的采集音频数据">
+
+处理通过耳机监控后的音频数据，适用于添加耳返音效等场景。
 
 ```ts
-let config = new ZegoCustomAudioProcessConfig();
-config.channel = ZegoAudioChannel.Mono;
-config.sampleRate = ZegoAudioSampleRate.SampleRate16K;
-config.samples = 0;
-ZegoExpressEngine.getInstance().enableCustomAudioCaptureProcessing(true, config);
-ZegoExpressEngine.getInstance().enableCustomAudioRemoteProcessing(true, config);
+// 开启耳机监控后的音频处理
+this.engine.enableCustomAudioCaptureProcessingAfterHeadphoneMonitor(
+    true, audioCapConfig);
 ```
+
+```cpp
+
+// 注册数据回调接口
+void zego_on_process_captured_audio_data_after_used_headphone_monitor_func(
+        unsigned char *data, unsigned int dataLength, struct zego_audio_frame_param *param,
+        double timestamp, void *user_context)
+{
+    CustomAudioProcess *self = (CustomAudioProcess*)user_context;
+    self->onProcessCapturedAudioDataAfterUsedHeadphoneMonitor(data, dataLength, param, timestamp);
+}
+
+zego_register_process_captured_audio_data_after_used_headphone_monitor_callback(
+    zego_on_process_captured_audio_data_after_used_headphone_monitor_func, this);
+
+void CustomAudioProcess::onProcessCapturedAudioDataAfterUsedHeadphoneMonitor(
+    unsigned char *data,
+    unsigned int dataLength,
+    struct zego_audio_frame_param *param,
+    double timestamp)
+{
+    // 处理耳机监控后的音频数据
+    // 可以在此处添加耳返音效处理，如混响、均衡器等
+}
+```
+
+</Step>
+<Step title="处理指定流的音频数据">
+
+处理拉取的远程音频流数据，适用于分析远程音频质量、添加播放特效等场景。
+
+```ts
+// 配置远程音频处理参数
+let audioProcessConfig: ZegoCustomAudioProcessConfig = new ZegoCustomAudioProcessConfig();
+audioProcessConfig.sampleRate = ZegoAudioSampleRate.SampleRate48K;
+audioProcessConfig.channel = ZegoAudioChannel.Mono;
+audioProcessConfig.samples = 0;
+
+// 开启自定义远程音频处理
+this.engine.enableCustomAudioRemoteProcessing(true, audioProcessConfig);
+```
+
+```cpp
+
+// 注册数据回调接口
+void zego_on_process_remote_audio_data_func(unsigned char *data, unsigned int dataLength,
+                                          struct zego_audio_frame_param *param,
+                                          const char *streamID, double timestamp, void *user_context)
+{
+    CustomAudioProcess *self = (CustomAudioProcess*)user_context;
+    self->onProcessRemoteAudioData(data, dataLength, param, streamID, timestamp);
+}
+
+zego_register_process_remote_audio_data_callback(zego_on_process_remote_audio_data_func, this);
+
+
+void CustomAudioProcess::onProcessRemoteAudioData(
+    unsigned char *data,
+    unsigned int dataLength,
+    struct zego_audio_frame_param *param,
+    const char *streamID,
+    double timestamp)
+{
+
+    // 处理远程音频数据
+    // 可以在此处对拉取的音频流进行处理
+    // 例如：音频质量分析、语音识别、音效增强等
+}
+```
+
+</Step>
+<Step title="处理播放音频数据">
+
+处理最终播放前的音频数据，适用于添加播放音效（如均衡器、3D 音效等）的场景。
+
+```ts
+// 开启自定义播放音频处理
+this.engine.enableCustomAudioPlaybackProcessing(true, audioProcessConfig);
+```
+
+```cpp
+// 注册数据回调接口
+void zego_on_process_playback_audio_data_func(unsigned char *data, unsigned int dataLength,
+                                            struct zego_audio_frame_param *param, double timestamp, void *user_context)
+{
+    CustomAudioProcess *self = (CustomAudioProcess*)user_context;
+    self->onProcessPlaybackAudioData(data, dataLength, param, timestamp);
+}
+zego_register_process_playback_audio_data_callback(zego_on_process_playback_audio_data_func, this);
+
+void CustomAudioProcess::onProcessPlaybackAudioData(
+    unsigned char *data,
+    unsigned int dataLength,
+    struct zego_audio_frame_param *param,
+    double timestamp)
+{
+
+    // 处理播放音频数据
+    // 可以在此处添加播放音效，如均衡器、3D 音效、混响等
+}
+```
+
+</Step>
+<Step title="处理音频预处理前的数据">
+
+获取音频预处理前的原始数据，适用于音频监测、分析等场景。
+
+```ts
+// 配置音频帧参数
+let audioFrameParam: ZegoAudioFrameParam = new ZegoAudioFrameParam();
+audioFrameParam.sampleRate = ZegoAudioSampleRate.SampleRate44K;
+audioFrameParam.channel = ZegoAudioChannel.Mono;
+
+// 开启音频预处理前回调
+this.engine.enableBeforeAudioPrepAudioData(true, audioFrameParam);
+```
+
+```cpp
+// 注册数据回调接口
+void zego_on_before_audio_prep_audio_data_func(const unsigned char *data,
+                                            unsigned int dataLength,
+                                            struct zego_audio_frame_param param, void *user_context)
+{
+    CustomAudioProcess *self = (CustomAudioProcess*)user_context;
+    self->onBeforeAudioPrepAudioData(data, dataLength, param);
+}
+zego_register_before_audio_prep_audio_data_callback(zego_on_before_audio_prep_audio_data_func, this);
+
+void CustomAudioProcess::onBeforeAudioPrepAudioData(
+    const unsigned char *data,
+    unsigned int dataLength,
+    struct zego_audio_frame_param param)
+{
+
+    // 音频预处理前的回调
+    // 可用于获取音频数据进行监测
+    // 注意：此回调中的数据为 const，不能修改
+}
+```
+
+</Step>
+</Steps>
+
+<a id="initcustomaudioprocess"></a>
+### 5 注册原生音频处理插件
+
+通过 NAPI 接口将 C++ 实现暴露给 ArkTS 层调用。
+
+<Steps titleSize="p">
+<Step title="实现 NAPI 接口">
+
+```cpp
+#include "napi/native_api.h"
+#include "CustomIOPlugin.h"
+
+static napi_value InitCustomAudioProcess(napi_env env, napi_callback_info info)
+{
+    ZegoCustomIOPlugin::getInstance().initCustomAudioProcess();
+    napi_value result;
+    napi_create_int32(env, 0, &result);
+    return result;
+}
+
+static napi_value Init(napi_env env, napi_value exports)
+{
+    napi_property_descriptor desc[] = {
+        {"InitCustomAudioProcess", 0, InitCustomAudioProcess, 0, 0, 0, napi_default, 0}
+    };
+    napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);
+    return exports;
+}
+```
+
+</Step>
+<Step title="在 ArkTS 中导入并初始化">
+
+```ts
+import {InitCustomAudioProcess} from 'libentry.so';
+
+// 在登录房间后初始化自定义音频处理
+function initCustomIO(): void {
+    // 配置音频处理参数
+    let audioCapConfig: ZegoCustomAudioProcessConfig = new ZegoCustomAudioProcessConfig();
+    audioCapConfig.sampleRate = ZegoAudioSampleRate.SampleRate44K;
+    audioCapConfig.channel = ZegoAudioChannel.Mono;
+    audioCapConfig.samples = 0;
+
+    // 开启自定义音频采集处理
+    this.engine.enableCustomAudioCaptureProcessing(true, audioCapConfig);
+
+    // 初始化原生音频处理插件
+    InitCustomAudioProcess();
+}
+```
+
+</Step>
+</Steps>
+
+### 6 登录房间后推/拉流
+
+请参考 [快速开始 - 实现流程](/real-time-video-harmonyos-arkts/quick-start/implementing-video-call) 的 "登录房间"、"推流" 和 "拉流"。
+
+```ts
+// 登录房间
+function loginRoom(): void {
+    if (this.engine != null) {
+        let userInfo: ZegoUser = new ZegoUser();
+        userInfo.userID = this.userID;
+        userInfo.userName = this.userID;
+        this.engine.loginRoom(this.roomID, userInfo);
+
+        // 初始化自定义音频处理
+        this.initCustomIO();
+    }
+}
+```
+
+## 音频处理链路说明
+
+SDK 的音频处理链路如下所示：
+
+```
+采集 → 采集处理 → 耳机监控 → 耳机监控后处理 → 音频预处理 → 远程处理 → 播放处理 → 播放
+         ↑                                                              ↑
+   onProcessCapturedAudioData                                  onProcessPlaybackAudioData
+                                                                 (最终混音后的数据)
+
+                                                      (远程流)
+                                                      拉取到本地处理 → 播放处理
+                                                         ↑
+                                            onProcessRemoteAudioData
+```
+
+
+
+| 处理点 | 回调函数 | 用途 | 数据是否可修改 |
+|--------|----------|------|----------------|
+| 采集处理 | `onProcessCapturedAudioData` | 处理麦克风采集的原始音频 | 是 |
+| 耳机监控后处理 | `onProcessCapturedAudioDataAfterUsedHeadphoneMonitor` | 处理耳返音频 | 是 |
+| 音频预处理前 | `onBeforeAudioPrepAudioData` | 获取预处理前的数据 | 否（只读） |
+| 远程处理 | `onProcessRemoteAudioData` | 处理拉取的远程音频流 | 是 |
+| 播放处理 | `onProcessPlaybackAudioData` | 处理最终播放前的混音数据 | 是 |
+
+<Note title="提示">
+
+- 各个处理点是独立的，可以同时启用多个处理点。
+- 不同的处理点可能会收到不同采样率或格式的音频数据。
+- 播放处理回调中的数据是所有音频流（采集 + 远程）混音后的结果。
+- 音频预处理前回调是只读的，不能修改数据，仅用于监测。
+
+</Note>
+
+## 音频参数说明
+
+`zego_audio_frame_param` 结构体包含了音频帧的关键参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| sample_rate | uint32_t | 采样率，支持 16000、32000、44100、48000 等 |
+| channel_count | uint32_t | 声道数，1 表示单声道，2 表示双声道 |
+| frame_length | uint32_t | 音频帧的采样点数量（每声道） |
+
+<Note title="说明">
+
+- 音频数据格式为 PCM，具体参数由配置的 `ZegoCustomAudioProcessConfig` 决定。
+- 采样率和声道数需要与配置保持一致，否则可能导致音频失真或播放异常。
+- 音频帧大小计算公式：`frameSize = sampleRate / 1000 * frameDurationMs * channelCount * sizeof(int16_t)`
+- 例如：44100Hz、单声道、20ms 帧长的音频大小为 44100 / 1000 * 20 * 1 * 2 = 1764 字节
+
+</Note>
