@@ -1,0 +1,323 @@
+---
+articleID: 7637
+---
+# Implementing Audio Call
+
+---
+
+## Prerequisites
+
+Before implementing basic real-time voice functionality, please ensure:
+
+- The ZEGO Express SDK has been integrated in your project and basic real-time audio/video functionality has been implemented. For details, please refer to [Quick Start - Integration](/real-time-voice-windows/quick-start/integrating-sdk).
+- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com/) and a valid AppID and AppSign have been obtained. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+
+<Warning title="Note">
+
+
+The SDK also supports Token authentication. If you have higher security requirements for your project, it is recommended to upgrade the authentication method. For details, please refer to [How to Upgrade from AppSign Authentication to Token Authentication](https://www.zegocloud.com/docs/faq/token_upgrade?product=ExpressVideo).
+
+</Warning>
+
+
+
+## Usage Steps
+
+This section introduces how to use the ZEGO Express SDK to implement basic real-time voice functionality. The API call sequence is shown in the following diagram:
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml_audio.png" /></Frame>
+
+<a id="CreateEngine"> </a>
+
+### Create Engine
+
+**1. Create User Interface (Optional)**
+
+<Accordion title="Add UI Elements" defaultOpen="false">
+
+Before starting, it is recommended for developers to add the following UI elements to facilitate the implementation of basic real-time voice functionality:
+
+- Audio window
+- End call button
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/UI_Audio_PC.jpg" /></Frame>
+
+</Accordion>
+
+**2. Import Header Files**
+
+Import the ZegoExpressEngine header file into your project.
+
+```cpp
+#include "ZegoExpressSDK.h"
+using namespace ZEGO::EXPRESS;
+```
+
+**3. Create Engine**
+
+Call the [createEngine](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~CPP_windows~class~zego-express-i-zego-express-sdk#create-engine) interface, passing the obtained AppID and AppSign into the "appID" and "appSign" parameters.
+
+Select an appropriate scenario based on your application's actual audio/video business needs. For more information, please refer to [Scenario-Based Audio/Video Configuration](/real-time-voice-windows/quick-start/scenario-based-audio-video-configuration) documentation, and pass the selected scenario enumeration into the "scenario" parameter.
+
+<Warning title="Note">
+
+
+The SDK also supports Token authentication. If you need to upgrade the authentication method, please refer to [How to Upgrade from AppSign Authentication to Token Authentication](https://www.zegocloud.com/docs/faq/token_upgrade?product=ExpressVideo).
+
+</Warning>
+
+
+
+```cpp
+ZegoEngineProfile profile;
+// AppID and AppSign are distributed by ZEGO to each App. For security reasons, it is recommended to store the AppSign in the App's business backend and retrieve it when needed.
+profile.appID = appID;
+profile.appSign = appSign;
+profile.scenario = ZegoScenario::ZEGO_SCENARIO_BROADCAST;
+// Create engine instance
+auto engine = ZegoExpressSDK::createEngine(profile, nullptr);
+
+```
+
+**4. Set Up Callbacks**
+
+You can implement the required callback methods by implementing a class that inherits from the [IZegoEventHandler](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~CPP_windows~class~zego-express-i-zego-event-handler) interface, to listen for and handle the event callbacks you care about. Then, pass the instantiated object as the `eventHandler` parameter to the [createEngine](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~CPP_windows~class~zego-express-i-zego-express-sdk#includes) method or pass it to the [setEventHandler](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~CPP_windows~class~zego-express-i-zego-audio-effect-player#set-event-handler) method to register the callback.
+
+<Warning title="Note">
+
+
+It is recommended to register callbacks immediately when creating the engine or after creating the engine, to avoid missing event notifications due to delayed registration.
+
+</Warning>
+
+
+
+<a id="loginroom"></a>
+
+### Log in to Room
+
+**1. Log In**
+
+After creating a ZegoUser user object by passing in the user ID parameter "userID" and the user name parameter "userName", call the [loginRoom](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~CPP_windows~class~zego-express-i-zego-express-engine#login-room) interface, passing in the room ID parameter "roomID" and the user parameter "user" to log in to the room. If the room does not exist, calling this interface will create and log in to this room.
+
+- Within the same AppID, the "roomID" must be globally unique.
+- Within the same AppID, the "userID" must be globally unique. It is recommended for developers to set it to a meaningful value, which can be associated with their own business account system.
+- The "userID" cannot be empty, otherwise logging in to the room will fail.
+
+```cpp
+// Create user object
+ZegoUser user("user1", "user1");
+// Only by passing a ZegoRoomConfig with "isUserStatusNotify" parameter set to "true" can you receive the onRoomUserUpdate callback.
+ZegoRoomConfig roomConfig;
+// If you are using appsign authentication method, the token parameter does not need to be filled in; if you need to use a more secure authentication method: Token authentication, please refer to [How to Upgrade from AppSign Authentication to Token Authentication](https://www.zegocloud.com/docs/faq/token_upgrade?product=ExpressVideo&platform=all)
+// roomConfig.token = "xxxx";
+roomConfig.isUserStatusNotify = true;
+// Log in to room
+engine->loginRoom(roomID, user, roomConfig, [=](){
+    // Result of logging in to room, if you only care about the logging result, just focus on this callback
+});
+```
+
+**2. Listen for Event Callbacks After Logging in to Room**
+
+Based on actual needs, listen for the event notifications you care about after logging in to the room, such as room status updates, user status updates, stream status updates, etc.
+
+- [onRoomStateChanged](@onRoomStateChanged): Room status update callback. After logging in to the room, when the room connection status changes (such as room disconnection, login authentication failure, etc.), the SDK will notify through this callback.
+- [onRoomUserUpdate](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~CPP_windows~class~zego-express-i-zego-event-handler#on-room-user-update): User status update callback. After logging in to the room, when users are added to or removed from the room, the SDK will notify through this callback.
+
+- Only when calling the [loginRoom](@loginRoom) interface to log in to the room with a [ZegoRoomConfig](@-ZegoRoomConfig) configuration, and the "isUserStatusNotify" parameter is set to "true", can users receive the [onRoomUserUpdate](@onRoomUserUpdate) callback.
+
+- [onRoomStreamUpdate](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~CPP_windows~class~zego-express-i-zego-event-handler#on-room-stream-update): Stream status update callback. After logging in to the room, when users in the room add or remove audio/video streams, the SDK will notify through this callback.
+
+<Warning title="Note">
+
+
+- Only when calling the [loginRoom](@loginRoom) interface to log in to the room with a [ZegoRoomConfig](@-ZegoRoomConfig) configuration, and the "isUserStatusNotify" parameter is set to "true", can users receive the [onRoomUserUpdate](@onRoomUserUpdate) callback.
+- In normal cases, if a user wants to play the audio/video pushed by other users, they can call the [startPlayingStream](@startPlayingStream) interface in the stream status update (add) callback to play the remote audio/video stream.
+
+</Warning>
+
+
+
+```cpp
+// Room status update callback
+void onRoomStateChanged(const std::string &roomID, ZegoRoomStateChangedReason reason, int errorCode, const std::string &extendedData) {
+    if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_LOGINING)
+    {
+        // Logging in
+    }
+    else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_LOGINED)
+    {
+        // Login successful
+        // Only when the room status is login successful or reconnection successful, can publishing (startPublishingStream) and playing (startPlayingStream) normally send/receive audio and video
+        // Send your own audio/video stream to the ZEGO audio/video cloud
+    }
+    else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_LOGIN_FAILED)
+    {
+        // Login failed
+    }
+    else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_RECONNECTING)
+    {
+        // Reconnecting
+    }
+    else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_RECONNECTED)
+    {
+        // Reconnection successful
+    }
+    else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_RECONNECT_FAILED)
+    {
+        // Reconnection failed
+    }
+    else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_KICK_OUT)
+    {
+        // Kicked out of the room
+    }
+    else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_LOGOUT)
+    {
+        // Logout successful
+    }
+    else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_LOGOUT_FAILED)
+    {
+        // Logout failed
+    }
+}
+
+// User status update callback
+void onRoomUserUpdate(const std::string& roomID, ZegoUpdateType updateType, const std::vector<ZegoUser>& userList) override {
+    // Implement event callback as needed
+}
+
+// Stream status update callback
+void onRoomStreamUpdate(const std::string& roomID, ZegoUpdateType updateType, const std::vector<ZegoStream>& streamList, const std::string& extendedData) override {
+    // Implement event callback as needed
+}
+```
+
+<a id="publishingstream"></a>
+
+### Publish Stream
+
+**1. Start Publishing**
+
+Call the [startPublishingStream](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~CPP_windows~class~zego-express-i-zego-express-engine#start-publishing-stream) interface, passing in the stream ID parameter "streamID" to send your local audio stream to remote users.
+
+<Warning title="Note">
+
+
+Within the same AppID, the "streamID" must be globally unique. If within the same AppID, different users each publish a stream with the same "streamID", the later publishing user's publishing will fail.
+
+</Warning>
+
+
+
+```cpp
+// Start publishing stream
+engine->startPublishingStream("streamID");
+```
+
+**2. Listen for Event Callbacks After Publishing**
+
+Based on actual application needs, listen for the event notifications you care about after publishing, such as publishing status updates, etc.
+
+- [onPublisherStateUpdate](@onPublisherStateUpdate): Publishing status update callback. After successfully calling the publishing interface, when the publishing status changes (such as publishing anomalies caused by network interruption, etc.), the SDK will notify through this callback while retrying to publish.
+
+```cpp
+// Publishing status update callback
+virtual void onPublisherStateUpdate(const std::string& streamID, ZegoPublisherState state, int errorCode, const std::string& extendedData) {
+    // Implement event callback as needed
+
+}
+```
+
+<Note title="Description">
+
+
+If you need to learn about Express-related microphone/audio/speaker interfaces, please refer to [FAQ - How to Implement Switching Camera/Video Footage/Microphone/Audio/Speaker?](https://www.zegocloud.com/docs/faq/How_to_switch_devices).
+
+</Note>
+
+
+
+<a id="playingstream"></a>
+
+### Play Stream
+
+**1. Start Playing**
+
+Call the [startPlayingStream](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~CPP_windows~class~zego-express-i-zego-express-engine#start-playing-stream) interface, passing in the stream ID parameter "streamID" to play the remote audio stream pushed by the remote user.
+
+The remote user's "streamID" can be obtained from the [onRoomStreamUpdate](@onRoomStreamUpdate) callback in the [IZegoEventHandler](@-IZegoEventHandler).
+
+```cpp
+// Start playing stream
+engine->startPlayingStream("streamID");
+```
+
+**2. Listen for Event Callbacks After Playing**
+
+Based on actual application needs, listen for the event notifications you care about after playing, such as playing status updates, etc.
+
+- [onPlayerStateUpdate](@onPlayerStateUpdate): Playing status update callback. After successfully calling the playing interface, when the playing status changes (such as playing anomalies caused by network interruption, etc.), the SDK will notify through this callback while retrying to play.
+
+```cpp
+// Playing status change callback
+virtual void onPlayerStateUpdate(const std::string& streamID, ZegoPlayerState state, int errorCode, const std::string& extendedData) {
+    // Implement event callback as needed
+}
+```
+
+### Experience Real-Time Audio/Video Functionality
+
+Run the project on a real device. After successful execution, you can see the local audio/video footage.
+
+To facilitate testing, ZEGO provides a [Web Debug Example](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html). On this page, enter the same AppID and RoomID, enter different UserIDs and the corresponding [Tokens](/console/development-assistance/temporary-token), and you can join the same room to communicate with the real device. When the audio/video call starts successfully, you can hear the remote audio and see the remote video footage.
+
+### Stop Publishing/Playing
+
+**1. Stop Publishing**
+
+Call the [stopPublishingStream](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~CPP_windows~class~zego-express-i-zego-express-engine#stop-publishing-stream) interface to stop sending your local audio stream to remote users.
+
+```cpp
+// Stop publishing stream
+engine->stopPublishingStream();
+```
+
+**2. Stop Playing**
+
+Call the [stopPlayingStream](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~CPP_windows~class~zego-express-i-zego-express-engine#stop-playing-stream) interface to stop pulling the remote audio stream pushed by the remote user.
+
+<Warning title="Note">
+
+
+If you receive a notification of audio/video stream "decrease" through the [onRoomStreamUpdate](@onRoomStreamUpdate) callback, please call the [stopPlayingStream](@stopPlayingStream) interface in time to stop playing, to avoid pulling empty streams and generating additional costs. Alternatively, developers can choose the appropriate timing based on their business needs to actively call the [stopPlayingStream](@stopPlayingStream) interface to stop playing.
+
+</Warning>
+
+
+
+```cpp
+// Stop playing stream
+engine->stopPlayingStream("streamID");
+```
+
+### Log Out of Room
+
+Call the [logoutRoom](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~CPP_windows~class~zego-express-i-zego-express-engine#logout-room) interface to log out of the room.
+
+```cpp
+// Log out of room
+engine->logoutRoom("roomID");
+```
+
+### Destroy Engine
+
+Call the [destroyEngine](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~CPP_windows~class~zego-express-i-zego-express-sdk#destroy-engine) interface to destroy the engine and release the resources used by the SDK.
+
+- If you need to listen for callbacks to ensure that device hardware resources are released, you can pass in "callback" when destroying the engine. This callback is only used for sending notifications; developers cannot release engine-related resources in the callback.
+- If you do not need to listen for callbacks, you can pass in "nullptr".
+
+```cpp
+// Destroy engine instance
+ZegoExpressSDK::destroyEngine(engine, nullptr);
+```

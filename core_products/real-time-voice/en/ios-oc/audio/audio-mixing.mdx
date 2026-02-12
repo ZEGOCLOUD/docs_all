@@ -1,0 +1,173 @@
+---
+articleID: 5086
+---
+# Audio mixing
+
+- - -
+
+## Feature overview
+
+Audio mixing refers to the SDK obtaining a path of audio data from the App and integrating the audio data provided by the App with the audio data captured by the SDK into one path of audio data. This is used to implement the requirement of playing custom sounds or music files during a call or live streaming and letting others in the room hear them.
+
+Applicable scenarios: Sound effects such as applause and whistles are needed during live streaming, or background music needs to be played.
+
+## Example source code download
+
+Please refer to [Download example source code](/real-time-video-ios-oc/quick-start/run-example-code) to get the source code.
+
+For relevant source code, please view the files in the "/ZegoExpressExample/Topics/AudioMixing" directory.
+
+## Prerequisites
+
+Before using the audio mixing feature, ensure that:
+
+- ZEGO Express SDK has been integrated into the project and basic Audio Call functions have been implemented. For details, please refer to [Quick Start - Integration](/real-time-voice-ios/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-voice-ios/quick-start/implementing-voice-call).
+- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com) and a valid AppID and AppSign have been applied. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+
+## Usage steps
+
+### Enable/Disable audio mixing
+
+The SDK disables the audio mixing feature by default. Developers need to actively call relevant interfaces to enable this feature.
+
+- Interface prototype
+
+    ```objc
+    /// Enable/Disable audio mixing feature
+    ///
+    /// Enable audio mixing, combined with setAudioMixingHandler, to provide audio data for audio mixing for the SDK
+    ///
+    /// @param enable Whether to enable the audio mixing feature; YES indicates enable; NO indicates disable
+    - (void)enableAudioMixing:(BOOL)enable;
+    ```
+
+- Usage example
+
+    ```objc
+    [[ZegoExpressEngine sharedEngine] enableAudioMixing:YES];
+    ```
+
+### Pass audio mixing data to the SDK
+
+After enabling the audio mixing feature, the SDK will trigger a callback when audio mixing data is needed. Developers need to pass the audio mixing data to the SDK in this callback.
+
+- Interface prototype
+
+    ```objc
+    /// Set audio mixing related callbacks
+    ///
+    /// @param handler Audio mixing callback
+    - (void)setAudioMixingHandler:(nullable id<ZegoAudioMixingHandler>)handler;
+    ```
+
+- Usage example
+
+    ```objc
+    // Set self as audio mixing handler
+    [[ZegoExpressEngine sharedEngine] setAudioMixingHandler:self];
+    ```
+
+    ```objc
+    // Audio origin data
+    @property (nonatomic, strong) NSData *audioData;
+    // Audio origin data position
+    @property (nonatomic, assign) void *audioDataPosition;
+    // Audio mixing data
+    @property (nonatomic, strong) ZegoAudioMixingData *audioMixingData;
+    ```
+
+    ```objc
+    // Here's an example of how to loop mixing a local wav file
+    - (ZegoAudioMixingData *)onAudioMixingCopyData:(unsigned int)expectedDataLength {
+
+        // Initialize audio pcm data
+        if (!self.audioData) {
+            NSURL *auxURL = [[NSBundle mainBundle] URLForResource:@"test.wav" withExtension:nil];
+            self.audioData = [NSData dataWithContentsOfURL:auxURL options:0 error:nil];
+            self.audioDataPosition = (void *)[self.audioData bytes];
+        }
+
+        // Initialize ZegoAudioMixingData
+        if (!self.audioMixingData) {
+            self.audioMixingData = [[ZegoAudioMixingData alloc] init];
+            self.audioMixingData.param = [[ZegoAudioFrameParam alloc] init];
+            self.audioMixingData.param.channel = ZegoAudioChannelMono;
+            self.audioMixingData.param.sampleRate = ZegoAudioSampleRate16K;
+        }
+
+        // Calculate remaining data length
+        unsigned int remainingDataLength = (unsigned int)([self.audioData bytes] + (int)[self.audioData length] - self.audioDataPosition);
+
+        if (remainingDataLength >= expectedDataLength) {
+            // When the remaining data length is greater than the expected data length for this callback, construct the expected length of data and move the position backward
+
+            NSData *expectedData = [NSData dataWithBytes:self.audioDataPosition length:expectedDataLength];
+
+            self.audioMixingData.audioData = expectedData;
+            self.audioDataPosition = self.audioDataPosition + expectedDataLength;
+
+        } else {
+            // When the remaining data length is less than the expected length for this callback, move the position back to the starting point.
+            self.audioMixingData.audioData = nil;
+            self.audioDataPosition = (void *)[self.audioData bytes];
+        }
+
+        return self.audioMixingData;
+    }
+    ```
+
+<Note title="Note">
+
+"expectedDataLength" is the length of data expected by this callback. After receiving the callback, a [ZegoAudioMixingData](@-ZegoAudioMixingData) object should be constructed. Set its "param" parameter to the actual sample rate and number of channels of the audio data to be mixed, and set its "audioData" parameter to the audio data to be mixed of the expected length. If the filled data is less than the length value provided by the SDK, the "audioData" parameter can be set to null (discard tail data); or when the final tail sound is less than the length value provided by the SDK, mute data can be used to fill the length.
+
+</Note>
+
+
+
+### Set audio mixing volume
+
+After enabling the audio mixing feature, developers can call [setAudioMixingVolume](@setAudioMixingVolume) to adjust the volume of the mixed audio as needed; or call [muteLocalAudioMixing](@muteLocalAudioMixing) to set the audio mixing to mute. After muting, the host end will not hear the audio mixing sound, but the audience end can still hear the audio mixing sound.
+
+- Interface prototype
+
+    ```cpp
+    /// Prohibit or restore local playback of audio mixing sound
+    ///
+    /// When muting the playback of audio mixing, the audio mixing end (publishing end) will not hear the playback sound of the audio mixing, but the remote end (playing end) can still hear the audio mixing
+    ///
+    /// @param mute Whether to mute local audio mixing; YES indicates prohibit playback; NO indicates enable
+    - (void)muteLocalAudioMixing:(BOOL)mute;
+
+    /// Set audio mixing volume
+    ///
+    /// This API will simultaneously modify the volume of audio mixing data for local playback and mixed into the published stream
+    ///
+    /// @param volume Audio mixing volume, value range is 0 ~ 200, default is 100
+    - (void)setAudioMixingVolume:(int)volume;
+
+    /// Set audio mixing volume
+    ///
+    /// This API can separately set the local playback audio mixing volume or the audio mixing volume mixed into the published stream
+    ///
+    /// @param volume Audio mixing volume, value range is 0 ~ 200, default is 100
+    /// @param type Audio mixing local playback volume/audio mixing volume in the published stream
+    - (void)setAudioMixingVolume:(int)volume type:(ZegoVolumeType)type;
+    ```
+
+- Usage example
+
+    ```objc
+    [[ZegoExpressEngine sharedEngine] setAudioMixingVolume:80 type:ZegoVolumeTypeLocal];
+    [[ZegoExpressEngine sharedEngine] setAudioMixingVolume:20 type:ZegoVolumeTypeRemote];
+
+    [[ZegoExpressEngine sharedEngine] muteLocalAudioMixing:YES];
+    ```
+
+## API reference list
+
+| Method | Description |
+|-------|--------|
+| [enableAudioMixing ](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~ObjectiveC~class~zego-express-engine#enable-audio-mixing) | Enable/Disable audio mixing |
+| [setAudioMixingHandler ](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~ObjectiveC~class~zego-express-engine#set-audio-mixing-handler) | Set audio mixing callback |
+| [setAudioMixingVolume ](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~ObjectiveC~class~zego-express-engine#set-audio-mixing-volume) | Set audio mixing volume |
+| [muteLocalAudioMixing ](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~ObjectiveC~class~zego-express-engine#mute-local-audio-mixing) | Mute audio mixing local playback |

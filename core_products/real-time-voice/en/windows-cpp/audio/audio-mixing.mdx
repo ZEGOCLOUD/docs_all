@@ -1,0 +1,139 @@
+---
+articleID: 5088
+---
+# Audio Mixing
+
+- - -
+
+## Introduction
+
+Audio mixing refers to the SDK obtaining a stream of audio data from the App, and integrating the audio data provided by the App with the audio data collected by the SDK into a single stream of audio data. This is to meet the needs of playing custom sounds or music files during calls or live streaming and allowing others in the room to hear them.
+
+Audio mixing functionality is commonly used in the following scenarios:
+
+- During live streaming, sound effects such as applause and whistles are needed, or background music needs to be played.
+
+## Example Source Code Download
+
+Please refer to [Download Example Source Code](/real-time-video-windows-cpp/quick-start/run-example-code).
+
+For related source code, please check files in the `/ZegoExpressExample/src/AudioMixing` directory.
+
+## Usage Steps
+
+### Enable/Disable Audio Mixing
+
+The SDK has the audio mixing function disabled by default. Users need to actively call the relevant interface to enable this function.
+
+- Interface prototype:
+
+```cpp
+/**
+ * Enable/disable audio mixing function
+ *
+ * Enable audio mixing, combined with setAudioMixingHandler, to provide audio data for mixing to the SDK
+ *
+ * @param enable Whether to enable audio mixing function; true indicates enable; false indicates disable
+ */
+virtual void enableAudioMixing(bool enable) = 0;
+```
+
+- Usage example:
+
+```cpp
+engine->enableAudioMixing(true);
+```
+
+### Pass Audio Mixing Data to SDK
+
+After enabling the audio mixing function, the SDK will trigger a callback when audio mixing data is needed. Users need to pass the audio mixing data to the SDK in this callback.
+
+```cpp
+/**
+ * Set audio mixing related callback
+ *
+ * @param handler Audio mixing callback
+ */
+virtual void setAudioMixingHandler(std::shared_ptr<IZegoAudioMixingHandler> handler) = 0;
+```
+
+- Usage example:
+
+```cpp
+class MyAudioMixingHandler: public IZegoAudioMixingHandler{
+    /**
+     * Copy audio mixing PCM data to the SDK, for mixing the audio data provided by developers into the published audio data. Used in combination with [enableAudioMixing]
+     *
+     * Supports PCM audio data with sample rates of 16k, 32k, 44.1k, 48k, single or dual channels, and 16-bit depth
+     * This callback is a high-frequency callback. To ensure audio mixing quality, please do not process time-consuming operations in this callback
+     *
+     * @param data Audio mixing data
+     */
+    void onAudioMixingCopyData(ZegoAudioMixingData* data) override{
+
+        // Note: Please fill in according to the actual loaded PCM format here
+        data->param.sampleRate = ZEGO_AUDIO_SAMPLE_RATE_44K;
+        data->param.channel = ZEGO_AUDIO_CHANNEL_STEREO;
+
+        // When the actual PCM length to be written to SDK meets SDK requirements
+        if(pcmData->size() >= data->audioDataLength)
+        {
+            memcpy(data->audioData, pcmData, data->audioDataLength);
+        }
+        // When the actual PCM length to be written to SDK does not meet SDK requirements
+        else
+        {
+            memcpy(data->audioData, pcmData, pcmData->size());
+            data->audioDataLength = 0;
+        }
+    }
+};
+
+engine->setAudioMixingHandler(std::make_shared<MyAudioMixingHandler>());
+```
+
+> The audioDataLength in ZegoAudioMixingData is both an input parameter and an output parameter. As an input parameter, the SDK will provide a good length value, and users just need to write data according to this length. When data is sufficient, there is no need to change the value of audioDataLength. As an output parameter, if the filled data is less than the length value provided by the SDK, you can set audioDataLength = 0, or when the tail audio is insufficient to meet the length value provided by the SDK, you can pad with silent data.
+
+### Set Audio Mixing Volume
+
+After enabling the audio mixing function, developers can call setAudioMixingVolume to adjust the volume of the audio mixing audio as needed; or call muteLocalAudioMixing to mute the audio mixing. After muting, the host side will not hear the audio mixing sound, but the audience side can still hear the audio mixing sound.
+
+- Interface prototype:
+
+```cpp
+/**
+ * Set audio mixing volume
+ *
+ * This API can separately set the local playback volume of audio mixing or the volume of audio mixing mixed into the published stream
+ *
+ * @param volume Audio mixing volume, value range is 0 ~ 200, default is 100
+ * @param type Audio mixing local playback volume / audio mixing volume in published stream
+ */
+virtual void setAudioMixingVolume(int volume, ZegoVolumeType type) = 0;
+
+/**
+ * Disable or restore local audio mixing playback sound
+ *
+ * When audio mixing playback is muted, the audio mixing side (publishing side) will not hear the audio mixing playback sound, but the remote side (playing side) can still hear the audio mixing
+ *
+ * @param mute Whether to mute local audio mixing; true indicates disable playback; false indicates enable
+ */
+virtual void muteLocalAudioMixing(bool mute) = 0;
+```
+
+- Usage example:
+
+```cpp
+engine->setAudioMixingVolume(80, ZEGO_VOLUME_TYPE_LOCAL);
+engine->setAudioMixingVolume(20, ZEGO_VOLUME_TYPE_REMOTE);
+engine->muteLocalAudioMixing(true);
+```
+
+## API Reference List
+
+| Method | Description |
+|-------|--------|
+| [enableAudioMixing ](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~CPP~class~zego-express-i-zego-express-engine#enable-audio-mixing) | Enable/disable audio mixing |
+| [setAudioMixingHandler ](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~CPP~class~zego-express-i-zego-express-engine#set-audio-mixing-handler) | Set audio mixing callback |
+| [setAudioMixingVolume ](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~CPP~class~zego-express-i-zego-express-engine#set-audio-mixing-volume) | Set audio mixing volume |
+| [muteLocalAudioMixing ](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~CPP~class~zego-express-i-zego-express-engine#mute-local-audio-mixing) | Mute audio mixing local playback |

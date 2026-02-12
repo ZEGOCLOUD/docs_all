@@ -1,0 +1,360 @@
+---
+articleID: 13243
+---
+# Implementing Audio Call
+
+---
+
+
+## Function Overview
+
+This document introduces how to quickly implement a simple real-time audio call.
+
+Related concept explanations:
+
+- ZEGO Express SDK: A real-time audio and video SDK provided by ZEGOCLOUD, capable of providing developers with convenient access, high definition and fluency, multi-platform interoperability, low latency, and high concurrency audio and video services.
+- Stream: Refers to a group of audio and video data continuously being sent, encapsulated in a specified encoding format. A user can publish multiple streams (e.g., one for camera data, one for screen sharing data) and play multiple streams at the same time. Each stream is identified by a stream ID (streamID).
+- Publish stream: The process of pushing encapsulated audio and video data streams to the ZEGOCLOUD.
+- Play stream: The process of pulling and playing existing audio and video data streams from the ZEGOCLOUD.
+- Room: An audio and video space service provided by ZEGOCLOUD, used to organize user groups. Users in the same room can send and receive real-time audio and video and messages.
+    1. Users need to log in to a room before performing stream publishing and playing operations.
+    2. Users can only receive relevant messages in their own room (user entry/exit, audio and video stream changes, etc.).
+    3. Each room is identified by a unique roomID within an AppID. All users who log in to the room using the same roomID belong to the same room.
+
+
+
+For more related concepts, please refer to [Term Explanation](/glossary/term-explanation).
+
+## Prerequisites
+
+Before implementing basic audio call, please ensure:
+
+- The ZEGO Express SDK has been integrated into the project and basic real-time audio and video functions have been implemented. For details, please refer to [Quick Start - Integration](/real-time-voice-u3d/quick-start/integrating-sdk).
+- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com), and a valid AppID and AppSign have been applied for. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+
+<Warning title="Note">
+
+
+The SDK also supports Token authentication. If you have higher requirements for project security, it is recommended to upgrade the authentication method. For details, please refer to [How to upgrade from AppSign authentication to Token authentication](https://www.zegocloud.com/docs/faq/token_upgrade?product=ExpressVideo).
+
+</Warning>
+
+
+
+
+
+## Usage Steps
+
+Taking User A playing User B's stream as an example, the process is shown in the following figure:
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/common_usage_new.png" /></Frame>
+
+The API call sequence of the entire stream publishing and playing process is shown in the following figure:
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml_audio_u3d.png" /></Frame>
+
+<a id="CreateEngine"></a>
+
+### Creating Engine
+
+**1. Create engine and listen to callbacks**
+
+Call the [CreateEngine](@CreateEngine) interface, pass the applied AppID and AppSign to the parameters "appId" and "appSign", and create a singleton engine object.
+
+Developers can choose to use anonymous functions to implement callback functions as needed, and assign them to the corresponding callback delegates of the engine instance to register callbacks.
+
+<Warning title="Note">
+
+
+To avoid missing any notifications, it is recommended to listen to callbacks immediately after creating the engine.
+
+</Warning>
+
+
+
+```cs
+// Define SDK engine object
+ZegoExpressEngine engine;
+
+ZegoEngineProfile profile = new ZegoEngineProfile();
+profile.appID = appID; // Please obtain through official website registration, the format is 123456789
+profile.appSign = appSign; // Please obtain through official website registration, the format is "0123456789012345678901234567890123456789012345678901234567890123", 64 characters
+profile.scenario = ZegoScenario.HighQualityVideoCall; // High quality audio and video call scenario access (please select the appropriate scenario according to the actual situation)
+// Initialize SDK
+engine = ZegoExpressEngine.CreateEngine(profile);
+
+// Set SDK callback delegates
+engine.OnRoomStateUpdate = (roomID, state, errorCode, extendedData) => {
+
+};
+```
+
+**2. Turn off camera**
+
+<Warning title="Note">
+
+
+The Express Unity SDK does not provide a pure audio package with the video module removed. Therefore, the Unity "Voice Call" SDK is actually the "Video Call" SDK.
+
+
+</Warning>
+
+
+
+To implement a pure audio scenario, please call [EnableCamera](@EnableCamera) after creating the engine to turn off the camera, to avoid starting the video module of the engine. After the camera is turned off, camera permissions will no longer be required, and no video stream will be published.
+
+```cs
+engine.EnableCamera(false); // Turn off camera
+```
+
+For more information, please refer to the document [Differences between Video Call SDK and Voice Call SDK](/real-time-voice-u3d/introduction/difference-between-audio-and-video-sdk).
+
+If you have high requirements for the Express Unity SDK package size, you can contact technical support for customized package cutting. For SDK package size data, please refer to the [Overview](/real-time-voice-u3d/introduction/overview) document.
+
+
+
+
+
+<a id="LoginRoom"></a>
+### Logging In to Room
+
+**1. Log in**
+
+Create a ZegoUser user object, set the user information "userID" and "userName", then call [LoginRoom](@LoginRoom), pass in the room ID parameter "roomId" and user parameter "user", and log in to the room. If the room does not exist, calling this interface will create and log in to this room.
+
+- Within the same AppID, ensure that "roomId" is globally unique.
+- Within the same AppID, ensure that "userId" is globally unique. It is recommended that developers set it to a meaningful value and associate "userId" with their own business account system.
+- "userId" cannot be empty, otherwise it will cause login to the room to fail.
+
+```cs
+// Create user
+ZegoUser user = new ZegoUser();
+user.userId="xxx";
+user.userName="xxxx";
+// Only when the "isUserStatusNotify" parameter value is "true" in the passed ZegoRoomConfig can the onRoomUserUpdate callback be received.
+ZegoRoomConfig roomConfig = new ZegoRoomConfig();
+// If you use appsign for authentication, the token parameter does not need to be filled; if you need to use a more secure authentication method: Token authentication, please refer to [How to upgrade from AppSign authentication to Token authentication](https://www.zegocloud.com/docs/faq/token_upgrade?product=ExpressVideo&platform=all)
+// roomConfig.token = "xxxx";
+roomConfig.isUserStatusNotify = true;
+// Log in to room
+engine.LoginRoom("123666", user, roomConfig);
+```
+
+**2. Listen to event callbacks after logging in to room
+
+
+According to actual needs, listen to the event notifications you care about after logging in to the room, such as room state updates, user state updates, stream state updates, etc.
+
+- [OnRoomStateUpdate](@OnRoomStateUpdate): Room state update callback. After logging in to the room, when the room connection state changes (such as room disconnection, login authentication failure, etc.), the SDK will notify through this callback.
+- [OnRoomUserUpdate](@OnRoomUserUpdate): User state update callback. After logging in to the room, when users are added or deleted in the room, the SDK will notify through this callback.
+
+    Users can receive the [onRoomUserUpdate](@onRoomUserUpdate) callback only when logging in to the room by calling the [LoginRoom](@LoginRoom) interface and passing the [ZegoRoomConfig](@-ZegoRoomConfig) configuration with the "isUserStatusNotify" parameter value set to "true".
+
+- [OnRoomStreamUpdate](@OnRoomStreamUpdate): Stream state update callback. After logging in to the room, when users add or delete audio and video streams in the room, the SDK will notify through this callback.
+
+Event callbacks are delegates of [ZegoExpressEngine](@-ZegoExpressEngine). Developers can directly assign their implemented callback handling functions to the corresponding delegates of [ZegoExpressEngine](@-ZegoExpressEngine) to receive callbacks and handle them.
+
+<Warning title="Note">
+
+
+- Users can receive the [OnRoomUserUpdate](@OnRoomUserUpdate) callback only when logging in to the room by calling the [LoginRoom](@LoginRoom) interface and passing the [ZegoRoomConfig](@-ZegoRoomConfig) configuration with the "isUserStatusNotify" parameter value set to "true".
+
+- Normally, if a user wants to play videos published by other users, they can call the [StartPlayingStream](@StartPlayingStream) interface in the callback for stream state update (addition) to play the remote audio and video stream.
+
+
+</Warning>
+
+
+
+```cs
+// Room state update callback
+public void OnRoomStateUpdate(string roomId, ZegoRoomState state, int errorCode, string extendedData) {
+    // Implement event callback as needed
+}
+
+// User state update callback
+private void OnRoomUserUpdate(string roomId, ZegoUpdateType updateType, List<ZegoUser> userList, uint userCount) {
+    // Implement event callback as needed
+}
+
+// Stream state update callback
+private void OnRoomStreamUpdate(string roomId, ZegoUpdateType updateType, List<ZegoStream> streamInfoList, uint streamInfoCount) {
+    // Implement event callback as needed
+}
+
+// Assign to ZegoExpressEngine corresponding event delegates
+engine.onRoomStateUpdate = OnRoomStateUpdate;
+engine.onRoomUserUpdate = OnRoomUserUpdate;
+engine.onRoomStreamUpdate = OnRoomStreamUpdate;
+```
+
+<a id="publishingStream"></a>
+
+### Publishing Stream
+
+**1. Start publishing stream**
+
+Call the [StartPublishingStream](@StartPublishingStream) interface, pass in the stream ID parameter "streamId", and send the local audio and video stream to remote users.
+
+<Warning title="Note">
+
+
+Within the same AppID, ensure that "streamId" is globally unique. If multiple users in the same AppID publish streams with the same "streamId", the user who publishes the stream later will fail to publish.
+
+
+</Warning>
+
+
+
+```cs
+// Start publishing stream
+engine.StartPublishingStream("stream1");
+```
+
+**3. Listen to event callbacks after publishing stream**
+
+According to actual application needs, listen to the event notifications you care about after publishing stream, such as publishing state updates, publishing quality, etc.
+
+- [OnPublisherStateUpdate](@OnPublisherStateUpdate): Publishing state update callback. After the publishing interface is called successfully, when the publishing state changes (such as network interruption causing publishing abnormalities, etc.), the SDK will notify through this callback while retrying publishing.
+- [OnPublisherQualityUpdate](@OnPublisherQualityUpdate): Publishing quality callback. After the publishing interface is called successfully, the audio and video stream quality data (such as resolution, frame rate, bitrate, etc.) is called back periodically.
+
+Event callbacks are delegates of [ZegoExpressEngine](@-ZegoExpressEngine). Developers can directly assign their implemented callback handling functions to the corresponding delegates of [ZegoExpressEngine](@-ZegoExpressEngine) to receive callbacks and handle them.
+
+```cs
+// Publishing state update callback
+public void OnPublisherStateUpdate(string streamId, ZegoPublisherState state, int errorCode, string extendedData)
+{
+    // Implement event callback as needed
+}
+
+// Publishing quality callback
+private void OnPublisherQualityUpdate(string streamId, ZegoPublishStreamQuality quality)
+{
+    // Implement event callback as needed
+}
+
+
+// Assign to ZegoExpressEngine corresponding event delegates
+engine.onPublisherStateUpdate = OnPublisherStateUpdate;
+engine.onPublisherQualityUpdate = OnPublisherQualityUpdate;
+engine.StartPublishingStream("stream1");
+```
+
+<Note title="Note">
+If you need to know about Express microphone/audio/speaker related interfaces, please refer to [FAQ - How to implement camera/video screen/microphone/audio/speaker on/off?](https://www.zegocloud.com/docs/faq/How_to_switch_devices).
+</Note>
+
+### Playing Stream
+
+**1. Start playing stream**
+
+Call the [StartPlayingStream](@StartPlayingStream) interface to play the remote audio and video stream based on the passed stream ID parameter "streamID".
+
+<Note title="Note">
+
+
+The "streamID" published by the remote user can be obtained from the [OnRoomStreamUpdate](@OnRoomStreamUpdate) callback in the [ZegoExpressEngine](@-ZegoExpressEngine) delegate.
+
+</Note>
+
+
+
+```cs
+// Call playing stream interface
+engine.StartPlayingStream("123");
+```
+
+
+**2. Listen to event callbacks after playing stream**
+
+According to actual application needs, listen to the event notifications you care about after playing stream, such as playing state updates, playing quality, media events, etc.
+
+- [OnPlayerStateUpdate](@OnPlayerStateUpdate): Playing state update callback. After the playing interface is called successfully, when the playing state changes (such as network interruption causing publishing abnormalities, etc.), the SDK will notify through this callback while retrying playing.
+- [OnPlayerQualityUpdate](@OnPlayerQualityUpdate): Playing quality callback. After playing successfully, this callback will be received every 3 seconds. Through this callback, you can obtain quality data such as frame rate, bitrate, RTT, packet loss rate of the played audio and video stream, and monitor the health of the played stream in real time.
+- [OnPlayerMediaEvent](@OnPlayerMediaEvent): Media event callback. This callback is triggered when audio and video stutter and recovery events occur during playing.
+
+Event callbacks are delegates of [ZegoExpressEngine](@-ZegoExpressEngine). Developers can directly assign their implemented callback handling functions to the corresponding delegates of [ZegoExpressEngine](@-ZegoExpressEngine) to receive callbacks and handle them.
+
+```cs
+// Playing state update callback
+public void OnPlayerStateUpdate(string streamId, ZegoPlayerState state, int errorCode, string extendedData)
+{
+    // Implement event callback as needed
+}
+
+// Playing quality callback
+private void OnPlayerQualityUpdate(string streamId, ZegoPlayStreamQuality quality)
+{
+    // Implement event callback as needed
+}
+
+// Media event callback
+private void OnPlayerMediaEvent(string streamId, ZegoPlayerMediaEvent mediaEvent)
+{
+    // Implement event callback as needed
+}
+
+
+// Assign to ZegoExpressEngine corresponding event delegates
+engine.onPlayerStateUpdate = OnPlayerStateUpdate;
+engine.onPlayerMediaEvent = OnPlayerMediaEvent;
+engine.onPlayerQualityUpdate = OnPlayerQualityUpdate;
+engine.StartPlayingStream("123");
+```
+
+### Experience Real-time Audio and Video Functions
+
+Run the project on a real device. After running successfully, you can see the local video screen.
+
+For convenience, ZEGO provides a [Web Debug Demo](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html). On this page, enter the same AppID and RoomID, enter different UserID and corresponding [Token](/console/development-assistance/temporary-token), then you can join the same room and communicate with the real device. When the audio and video call starts successfully, you can hear the remote audio and see the remote video screen.
+
+
+<a id="StopPublishingStream"></a>
+
+### Stopping Publishing and Playing Streams
+
+**1. Stop publishing stream**
+
+Call the [StopPublishingStream](@StopPublishingStream) interface to stop sending the local audio and video stream to remote users.
+
+```cs
+// Stop publishing stream
+engine.StopPublishingStream();
+```
+
+**2. Stop playing stream**
+
+Call the [StopPlayingStream](@StopPlayingStream) interface to stop playing the remote audio and video stream.
+
+<Warning title="Note">
+
+
+If the developer receives a notification of "decrease" in audio and video streams through the [OnRoomStreamUpdate](@OnRoomStreamUpdate) callback, please call the [StopPlayingStream](@StopPlayingStream) interface in time to stop playing the stream, to avoid playing empty streams and generating additional costs; or, the developer can choose the appropriate timing according to their own business needs and actively call the [StopPlayingStream](@StopPlayingStream) interface to stop playing the stream.
+
+
+</Warning>
+
+
+
+```Cs
+// Stop playing stream
+engine.StopPlayingStream("123");
+```
+
+### Logging Out of Room
+
+Call the [LogoutRoom](@LogoutRoom) interface to log out of the room.
+
+```cs
+// Log out of room
+engine.LogoutRoom("123666");
+```
+
+### Destroying Engine
+
+Call the [DestroyEngine](@DestroyEngine) interface to destroy the engine and release resources used by the SDK.
+
+```cs
+// Destroy engine instance
+ZegoExpressEngine.DestroyEngine();
+```

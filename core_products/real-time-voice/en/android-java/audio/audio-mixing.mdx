@@ -1,0 +1,173 @@
+---
+articleID: 5087
+date: "2024-01-02"
+---
+# Audio Mixing
+
+- - -
+
+## Feature Introduction
+
+Audio mixing refers to the SDK obtaining an audio data stream from the App, and integrating the audio data provided by the App with the audio data captured by the SDK into one audio data stream. To implement the requirement of playing custom sounds or music files during a call or live streaming and allowing others in the room to hear them.
+
+Applicable scenarios: Sound effects such as applause and whistles are needed during the live streaming process, or background music needs to be played.
+
+## Prerequisites
+
+Before using the audio mixing feature, please ensure:
+
+- ZEGO Express SDK has been integrated in the project to implement basic Audio Call functions. For details, please refer to [Quick Start - Integration](/real-time-voice-android/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-voice-android/quick-start/implementing-voice-call).
+- A project has been created on [ZEGOCLOUD Console](https://console.zegocloud.com), and a valid AppID and AppSign have been applied for. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+
+
+
+## Usage Steps
+
+### Enable/Disable Audio Mixing
+
+The SDK disables audio mixing by default, and developers need to actively call related interfaces to enable this feature.
+
+- API Prototype
+
+    ```java
+    /**
+     * Enable/Disable audio mixing feature
+     *
+     * Enable audio mixing, combined with setAudioMixingHandler, to provide audio data for audio mixing for the SDK
+     *
+     * @param enable Whether to enable audio mixing feature; true means enable; false means disable
+     */
+    public void enableAudioMixing(boolean enable);
+    ```
+
+- Usage Example
+
+    ```java
+    engine.enableAudioMixing(true);
+    ```
+
+### Pass Audio Mixing Data to SDK
+
+After enabling the audio mixing feature, the SDK will trigger a callback when audio mixing data is needed. Developers need to pass the audio mixing data to the SDK in this callback.
+
+- API Prototype
+
+    ```java
+    /**
+     * Set audio mixing related callbacks
+     *
+     * @param handler Audio mixing callback
+     */
+    public void setAudioMixingHandler(IZegoAudioMixingHandler handler);
+    ```
+
+- Usage Example
+
+    ```java
+    ZegoExpressEngine.getEngine().setAudioMixingHandler(new IZegoAudioMixingHandler() {
+	    /**
+    	 * Copy audio mixing PCM data into the SDK, used to mix the audio data provided by the developer into the published stream audio data. Used in combination with [enableAudioMixing]
+         *
+         * Supports 16k 32k 44.1k 48k sample rates, mono or dual-channel, 16-bit depth PCM audio data
+         * This is a high-frequency callback. To ensure audio mixing quality, please do not handle time-consuming operations in this callback
+         *
+         * @param data Audio mixing data
+         */
+        @Override
+        public ZegoAudioMixingData onAudioMixingCopyData(int expectedDataLength) {
+		    if (dataBuf.length < exceptDataLength) {
+            	dataBuf = new byte[exceptDataLength];
+        	}
+        	if (mPcmBuffer.capacity() < exceptDataLength) {
+            	    mPcmBuffer = ByteBuffer.allocateDirect(exceptDataLength);
+        	}
+        	mPcmBuffer.clear();
+
+        	ZegoAudioMixingData auxDataEx = getZegoAudioAux();
+        	try {
+            	if (mBackgroundMusic == null) {
+                    if (!pcmFilePath.equals("")) {
+                        mBackgroundMusic = new FileInputStream(pcmFilePath);
+                    }
+                }
+
+                int len = mBackgroundMusic.read(dataBuf);
+		        // When the actual PCM length to be written to the SDK meets the SDK requirements
+                if (len > 0) {
+                    mPcmBuffer.put(dataBuf, 0, exceptDataLength);
+                    auxDataEx.audioData = mPcmBuffer;
+                    auxDataEx.audioDataLength = len;
+                } else {
+                    // When the actual PCM length to be written to the SDK does not meet the SDK requirements
+                    // Song playback finished
+                    mBackgroundMusic.close();
+                    mBackgroundMusic = null;
+                    auxDataEx.audioData = mPcmBuffer;
+                    auxDataEx.audioDataLength = 0;
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            param.channel = mChannels;
+            param.sampleRate = mSampleRate;
+            auxDataEx.param = param;
+            return auxDataEx;
+	    }
+    });
+
+    ```
+
+<Note title="Note">
+
+
+[audioDataLength](@audioDataLength) in [ZegoAudioMixingData](@-ZegoAudioMixingData) is both an input parameter and an output parameter. As an input parameter, the SDK will provide a length value, and developers can write data according to this length value. When the data is sufficient, there is no need to change the value of [audioDataLength](@audioDataLength); As an output parameter, if the written data is less than the length value provided by the SDK, you can set [audioDataLength](@audioDataLength) to "0", or when the final tail sound is less than the length value provided by the SDK, you can fill it with mute data.
+
+</Note>
+
+
+
+### Set Audio Mixing Volume
+
+After enabling the audio mixing feature, developers can call [setAudioMixingVolume](@setAudioMixingVolume) to adjust the volume of the mixed audio as needed; or call [muteLocalAudioMixing](@muteLocalAudioMixing) to mute the audio mixing. After muting, the host end will not hear the audio mixing sound, but the audience end can still hear the audio mixing sound.
+
+- API Prototype
+
+    ```java
+    /**
+     * Set audio mixing volume
+     *
+     * This API can separately set the local playback volume of audio mixing or the volume of audio mixing in the published stream
+     *
+     * @param volume Audio mixing volume, value range is 0 ~ 200, default is 100
+     * @param type Audio mixing local playback volume/audio mixing volume in published stream
+     */
+    public void setAudioMixingVolume (int volume, ZegoVolumeType type);
+
+    /**
+     * Mute or restore local playback of audio mixing sound
+     *
+     * When the audio mixing playback is muted, the audio mixing end (publishing end) will not hear the audio mixing playback sound, but the remote end (playing end) can still hear the audio mixing
+     *
+     * @param mute Whether to mute local audio mixing; true means prohibit playback; false means enable
+     */
+    public void muteLocalAudioMixing(boolean mute);
+    ```
+
+- Usage Example:
+
+    ```java
+    engine.setAudioMixingVolume(80, ZegoVolumeType.LOCAL);
+    engine.setAudioMixingVolume(20, ZegoVolumeType.REMOTE);
+
+    engine->muteLocalAudioMixing(true);
+    ```
+
+## API Reference List
+
+| Method | Description |
+|-------|--------|
+| [enableAudioMixing ](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#enable-audio-mixing) | Enable/Disable audio mixing |
+| [setAudioMixingHandler ](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#set-audio-mixing-handler) | Set audio mixing callback |
+| [setAudioMixingVolume ](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#set-audio-mixing-volume) | Set audio mixing volume |
+| [muteLocalAudioMixing ](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#mute-local-audio-mixing) | Mute audio mixing local playback |

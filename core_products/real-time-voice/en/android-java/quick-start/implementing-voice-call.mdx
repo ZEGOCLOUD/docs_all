@@ -1,0 +1,350 @@
+---
+articleID: 7636
+---
+# Implement Audio Call
+
+---
+
+## Prerequisites
+
+- You have integrated ZEGO Express SDK into your project and implemented basic real-time audio and video functions. For details, please refer to [Quick Start - Integration](/real-time-voice-android/quick-start/integrating-sdk).
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+
+<Warning title="Note">
+
+The SDK also supports Token authentication. If you have higher requirements for project security, it is recommended to upgrade the authentication method. For details, please refer to [How to Upgrade from AppSign Authentication to Token Authentication](https://www.zegocloud.com/docs/faq/token_upgrade?product=ExpressVideo).
+
+</Warning>
+
+
+
+
+
+## Usage Steps
+This section introduces how to use ZEGO Express SDK to implement basic real-time voice functions. The API call sequence is as follows:
+
+<h1 id="CreateEngine"> </h1>
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml_audio.png" /></Frame>
+
+### Create Engine
+
+**1. (Optional) Create Interface**
+
+<Accordion title="Add Interface Elements" defaultOpen="false">
+Before starting, it is recommended that developers add the following interface elements to facilitate the implementation of basic real-time voice functions.
+
+- Audio window
+- End button
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/UI_Audio.jpg" /></Frame>
+</Accordion>
+
+**2. Create Engine**
+
+Define the SDK engine object and call the [createEngine](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#create-engine) interface, passing the obtained AppID and AppSign to the parameters "appID" and "appSign".
+
+
+Select an appropriate scenario according to the actual audio and video business of the App. Please refer to the [Scenario-based Audio and Video Configuration](/real-time-voice-android/quick-start/scenario-based-audio-video-configuration) document and pass the selected scenario enumeration to the parameter "scenario".
+
+<Warning title="Note">
+
+
+The SDK also supports Token authentication. If you need to upgrade the authentication method, please refer to [How to Upgrade from AppSign Authentication to Token Authentication](https://www.zegocloud.com/docs/faq/token_upgrade?product=ExpressVideo).
+
+</Warning>
+
+
+
+
+```java
+/** Define SDK engine object */
+ZegoExpressEngine engine;
+
+ZegoEngineProfile profile = new ZegoEngineProfile();
+/** Please obtain through official website registration, format is 123456789L */
+profile.appID = appID;
+/** Please obtain through official website registration, format is: @"0123456789012345678901234567890123456789012345678901234567890123" (total 64 characters)*/
+profile.appSign = appSign;
+/** Specify using live scenario (please fill in the scenario suitable for your business according to the actual situation) */
+profile.scenario = ZegoScenario.BROADCAST;
+/** Set app's application object */
+profile.application = getApplication();
+/** Create engine */
+engine = ZegoExpressEngine.createEngine(profile, null);
+```
+
+**3. Set Callback**
+
+You can listen to and handle event callbacks of interest by implementing specific methods in the [IZegoEventHandler](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-event-handler) interface (or through anonymous inner classes). Then pass the object of the interface implementation class (or anonymous inner class) as the `eventHandler` parameter to the [createEngine](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#create-engine) method or pass it to [setEventHandler](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#set-event-handler) to register the callback.
+
+<Warning title="Note">
+
+
+It is recommended to register callbacks when creating the engine or immediately after creating the engine to avoid delayed registration and missing event notifications.
+
+</Warning>
+
+
+
+
+<a id="createroom"></a>
+
+### Login Room
+
+**1. Login**
+
+Create a ZegoUser user object by passing the user ID parameter "userID", then call the [loginRoom](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#login-room) interface, passing the Room ID parameter "roomID" and user parameter "user" to log in to the room. If the room does not exist, calling this interface will create and log in to this room.
+
+- Within the same AppID, ensure that "roomID" is globally unique.
+- Within the same AppID, ensure that "userID" is globally unique. It is recommended that developers set it to a meaningful value and associate "userID" with their business account system.
+- The constructor method of ZegoUser `public ZegoUser(String userID)` will set "userName" to be the same as the parameter "userID" passed in. "userID" cannot be "null", otherwise the login to the room will fail.
+
+
+```java
+// The constructor method of ZegoUser public ZegoUser(String userID) will set "userName" to be the same as the parameter "userID" passed in. "userID" cannot be "null", otherwise the login to the room will fail.
+ZegoUser user = new ZegoUser("user1");
+// Only by passing in ZegoRoomConfig with the value of "isUserStatusNotify" parameter as "true" can you receive the onRoomUserUpdate callback.
+ZegoRoomConfig roomConfig = new ZegoRoomConfig();
+// If you use appsign for authentication, you do not need to fill in the token parameter; if you need to use a more secure authentication method: token authentication, please refer to [How to Upgrade from AppSign Authentication to Token Authentication](https://www.zegocloud.com/docs/faq/token_upgrade?product=ExpressVideo&platform=all)
+// roomConfig.token = "xxxx";
+roomConfig.isUserStatusNotify = true;
+// Login to room
+engine.loginRoom("room1", user, roomConfig, (int error, JSONObject extendedData)->{
+    // Login room result, if you only care about the login result, just focus on this callback
+});
+```
+
+**2. Listen for Event Callbacks After Logging in to the Room**
+
+According to actual application needs, listen for event notifications of interest after logging in to the room, such as room status updates, user status updates, stream status updates, etc.
+
+- [onRoomStateChanged](@onRoomStateChanged): Room status update callback. After logging in to the room, when the room connection status changes (such as room disconnection, login authentication failure, etc.), the SDK will notify through this callback.
+- [onRoomUserUpdate](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-event-handler#on-room-user-update): User status update callback. After logging in to the room, when users are added or deleted in the room, the SDK will notify through this callback.
+
+    Only when calling the [loginRoom](@loginRoom) interface to log in to the room and passing [ZegoRoomConfig](@-ZegoRoomConfig) configuration with the value of "isUserStatusNotify" parameter as "true", users can receive the [onRoomUserUpdate](@onRoomUserUpdate) callback.
+
+- [onRoomStreamUpdate](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-event-handler#on-room-stream-update): Stream status update callback. After logging in to the room, when users in the room add or delete audio streams, the SDK will notify through this callback.
+
+<Warning title="Note">
+
+
+- Only when calling the [loginRoom](@loginRoom) interface to log in to the room and passing [ZegoRoomConfig](@-ZegoRoomConfig) configuration with the value of "isUserStatusNotify" parameter as "true", users can receive the [onRoomUserUpdate](@onRoomUserUpdate) callback.
+- Normally, if a user wants to play videos published by other users, they can call the [startPlayingStream](@startPlayingStream) interface to pull the remote published audio and video streams in the callback of stream status update (addition).
+
+</Warning>
+
+
+
+
+```java
+engine.setEventHandler(new IZegoEventHandler() {
+
+    /** The following are common room-related callbacks */
+
+    /** Room status update callback */
+    @Override
+    public void onRoomStateChanged(String roomID, ZegoRoomStateChangedReason reason, int errorCode, JSONObject extendedData) {
+        if(reason == ZegoRoomStateChangedReason.LOGINING)
+        {
+            // Logging in
+        }
+        else if(reason == ZegoRoomStateChangedReason.LOGINED)
+        {
+            // Login successful
+            //Only when the room status is login successful or reconnection successful can publishing (startPublishingStream) and playing (startPlayingStream) normally send and receive audio and video
+            //Publish your audio and video stream to ZEGO audio and video cloud
+        }
+        else if(reason == ZegoRoomStateChangedReason.LOGIN_FAILED)
+        {
+            // Login failed
+        }
+        else if(reason == ZegoRoomStateChangedReason.RECONNECTING)
+        {
+            // Reconnecting
+        }
+        else if(reason == ZegoRoomStateChangedReason.RECONNECTED)
+        {
+            // Reconnection successful
+        }
+        else if(reason == ZegoRoomStateChangedReason.RECONNECT_FAILED)
+        {
+            // Reconnection failed
+        }
+        else if(reason == ZegoRoomStateChangedReason.KICK_OUT)
+        {
+            // Kicked out of the room
+        }
+        else if(reason == ZegoRoomStateChangedReason.LOGOUT)
+        {
+            // Logout successful
+        }
+        else if(reason == ZegoRoomStateChangedReason.LOGOUT_FAILED)
+        {
+            // Logout failed
+        }
+    }
+
+    /** User status update */
+    @Override
+    public void onRoomUserUpdate(String roomID, ZegoUpdateType updateType, ArrayList<ZegoUser> userList) {
+        /** Implement event callback as needed */
+    }
+
+    /** Stream status update */
+    @Override
+    public void onRoomStreamUpdate(String roomID, ZegoUpdateType updateType, ArrayList<ZegoStream> streamList, JSONObject extendedData){
+        /** Implement event callback as needed */
+     }
+
+});
+
+```
+
+<a id="publishingStream"></a>
+
+
+### Publishing Stream
+
+**1. Start Publishing Stream**
+
+Call the [startPublishingStream](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#start-publishing-stream) interface, passing the stream ID parameter "streamID", to send the local audio stream to remote users.
+
+<Warning title="Note">
+
+
+Within the same AppID, ensure that "streamID" is globally unique. If within the same AppID, different users each publish a stream with the same "streamID", the user who publishes later will fail to publish.
+
+</Warning>
+
+
+
+```java
+/** Start publishing stream */
+engine.startPublishingStream("stream1");
+```
+
+**2. Listen for Event Callbacks After Publishing Stream**
+
+According to actual application needs, listen for event notifications of interest after publishing stream, such as publishing stream status updates, etc.
+
+[onPublisherStateUpdate](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-event-handler#on-publisher-state-update): Publishing stream status update callback. After successfully calling the publishing stream interface, when the publishing stream status changes (such as network interruption causing publishing stream abnormalities, etc.), the SDK will notify through this callback while retrying to publish.
+
+```java
+engine.setEventHandler(new IZegoEventHandler() {
+    /** Common publishing stream related callbacks */
+
+    /** Publishing stream status update callback */
+    @Override
+    public void onPublisherStateUpdate(String streamID, ZegoPublisherState state, int errorCode, JSONObject extendedData){
+        /** Implement event callback as needed */
+    }
+});
+```
+
+<Note title="Note">
+
+
+If you need to know about Express microphone/audio/speaker related interfaces, please refer to [FAQ - How to Switch Camera/Video/Audio/Microphone/Audio/Speaker?](https://www.zegocloud.com/docs/faq/How_to_switch_devices).
+
+
+</Note>
+
+
+
+<a id="PlayingStream"></a>
+
+### Playing Stream
+
+**1. Start Playing Stream**
+
+Call the [startPlayingStream](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#start-playing-stream) interface, according to the passed stream ID parameter "streamID", to pull the remote published audio stream.
+
+The "streamID" published by the remote user can be obtained from the [onRoomStreamUpdate](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-event-handler#on-room-stream-update) callback in [IZegoEventHandler](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-event-handler).
+
+```java
+/**
+ *  Start playing stream
+ */
+engine.startPlayingStream("stream1");
+```
+
+**2. Listen for Event Callbacks After Playing Stream**
+
+According to actual application needs, listen for event notifications of interest after playing stream, such as playing stream status updates, etc.
+
+[onPlayerStateUpdate](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-event-handler#on-player-state-update): Playing stream status update callback. After successfully calling the playing stream interface, when the playing stream status changes (such as network interruption causing publishing stream abnormalities, etc.), the SDK will notify through this callback while retrying to play.
+
+```java
+engine.setEventHandler(new IZegoEventHandler() {
+    /** Common playing stream related callbacks */
+
+    /** Playing stream status related callback */
+    @Override
+    public void onPlayerStateUpdate(String streamID, ZegoPlayerState state, int errorCode, JSONObject extendedData){
+        /** Implement event callback as needed */
+    }
+});
+```
+
+### Experience Real-time Audio and Video Functions
+
+Run the project on a real device. After successful running, you can see the local video screen.
+
+To facilitate the experience, ZEGO provides a [Web Debugging Example](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html). On this page, enter the same AppID and RoomID, enter different UserIDs and corresponding [Token](/console/development-assistance/temporary-token), and you can join the same room and communicate with the real device. When the audio and video call starts successfully, you can hear the remote audio and see the remote video screen.
+
+
+### Stop Publishing and Playing Streams
+
+**1. Stop Publishing Stream**
+
+Call the [stopPublishingStream](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#stop-publishing-stream) interface to stop sending the local audio stream to remote users.
+
+```java
+/** Stop publishing stream */
+engine.stopPublishingStream();
+```
+
+**2. Stop Playing Stream**
+
+Call the [stopPlayingStream](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#stop-playing-stream) interface to stop pulling the remote published audio stream.
+
+<Warning title="Note">
+
+
+If the developer receives the notification of "decrease" in audio and video streams through the [onRoomStreamUpdate](@onRoomStreamUpdate) callback, please call the [stopPlayingStream](@stopPlayingStream) interface to stop playing in time to avoid playing empty streams and generating additional costs; or, the developer can choose the appropriate time according to their own business needs and actively call the [stopPlayingStream](@stopPlayingStream) interface to stop playing.
+
+</Warning>
+
+
+
+```java
+/** Stop playing stream */
+engine.stopPlayingStream(streamID);
+```
+
+### Logout Room
+
+Call the [logoutRoom](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#logout-room) interface to log out of the room.
+
+```java
+/** Logout room */
+engine.logoutRoom("room1");
+```
+
+### Destroy Engine
+Call the [destroyEngine](https://www.zegocloud.com/docs/api?doc=Express_Audio_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#destroy-engine) interface to destroy the engine, used to release resources used by the SDK.
+
+
+- If you need to listen to the callback to ensure that device hardware resources are released, you can pass "callback" when destroying the engine. This callback is only used for sending notifications, and developers cannot release engine-related resources in the callback.
+
+- If you do not need to listen to the callback, you can pass "null".
+
+
+```java
+/** Destroy SDK */
+ZegoExpressEngine.destroyEngine(null);
+```
+## Related Documents
+
+- [How to Keep ZEGO SDK Audio and Video Functions Running Normally When the App Goes to the Background?](/faq/audio-video-background-keep-alive)

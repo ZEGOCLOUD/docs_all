@@ -1,0 +1,317 @@
+---
+articleID: 13197
+---
+# Implementing Voice Call
+
+---
+
+
+## Introduction
+
+This document introduces how to quickly implement a simple real-time audio and video call.
+
+Explanation of related concepts:
+
+- ZEGO Express SDK: A real-time audio and video SDK provided by ZEGO, offering developers convenient access, high definition and fluency, multi-platform interoperability, low latency, and high concurrency audio and video services.
+- Stream: A set of audio and video data packets encapsulated in a specified encoding format and continuously being sent. A user can publish multiple streams simultaneously (for example, one for camera data and one for screen sharing data) and can also play multiple streams simultaneously. Each stream is identified by a stream ID (streamID).
+- Publish stream: The process of pushing packaged audio and video data streams to the ZEGO real-time audio and video cloud.
+- Play stream: The process of pulling and playing existing audio and video data streams from the ZEGO real-time audio and video cloud.
+- Room: An audio and video space service provided by ZEGO, used to organize user groups. Users in the same room can send and receive real-time audio, video, and messages to each other.
+    1. Users need to log in to a room first before they can publish or play streams.
+    2. Users can only receive related messages in the room they are in (user entry/exit, audio and video stream changes, etc.).
+    3. Each room is identified by a unique roomID within an AppID. All users who log in to the room using the same roomID belong to the same room.
+
+
+
+For more related concepts, please refer to [Glossary](/glossary/term-explanation).
+
+## Prerequisites
+
+Before implementing basic audio call, please ensure:
+
+- The ZEGO Express SDK has been integrated in your project to implement basic real-time audio and video functions. For details, please refer to [Quick Start - Integrate](/real-time-voice-flutter/quick-start/integrating-sdk).
+- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com), and a valid AppID and AppSign have been obtained. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+
+<Warning title="Note">
+
+
+The SDK also supports Token authentication. If you have higher security requirements for your project, it is recommended to upgrade the authentication method. For details, please refer to [How to upgrade from AppSign authentication to Token authentication](https://www.zegocloud.com/docs/faq/token_upgrade?product=ExpressVideo).
+
+</Warning>
+
+
+
+
+## Usage Steps
+
+Taking User A playing User B's stream as an example, the process is as follows:
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/common_usage_new.png" /></Frame>
+
+The API call sequence of the entire stream publishing and playing process is as follows:
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml_audio_flutter.png" /></Frame>
+
+<a id="CreateEngine"> </a>
+
+### Create Engine
+
+**1. Import SDK**
+
+Import the SDK in your project.
+
+```dart
+import 'package:zego_express_engine/zego_express_engine.dart';
+```
+
+**2. Create Engine**
+
+Call the [createEngineWithProfile](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/createEngineWithProfile.html) interface and pass the obtained AppID and AppSign to the parameters "appID" and "appSign". The Web platform does not need to use "appsign". To avoid exposure, do not pass "appsign" on the Web platform.
+
+<Warning title="Note">
+
+
+The SDK also supports Token authentication. If you need to upgrade the authentication method, please refer to [How to upgrade from AppSign authentication to Token authentication](https://www.zegocloud.com/docs/faq/token_upgrade?product=ExpressVideo).
+
+</Warning>
+
+
+
+
+```dart
+ZegoEngineProfile profile = ZegoEngineProfile(
+    appID, // Please obtain through official website registration, format: 1234567890
+    ZegoScenario.General, // General scenario access
+    appSign: appSign, // Please obtain through official website registration, format: '0123456789012345678901234567890123456789012345678901234567890123' (64 characters in total), not required for Web platform
+    );
+// Create engine
+ZegoExpressEngine.createEngineWithProfile(profile);
+```
+
+**3. Disable Camera**
+
+<Warning title="Note">
+
+
+The Express Flutter SDK does not provide an audio-only package with the video module removed. Therefore, the Flutter "Real-time Voice" SDK is actually the "Real-time Audio and Video" SDK.
+
+</Warning>
+
+
+
+To implement an audio-only scenario, please call [enableCamera](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineDevice/enableCamera.html) after creating the engine to disable the camera, to avoid starting the engine's video module. After the camera is disabled, camera permissions will no longer be required, and video streams will not be published.
+
+```dart
+ZegoExpressEngine.instance.enableCamera(false); // Disable camera
+```
+
+For more information, please refer to the document [Differences between Real-time Audio and Video SDK and Real-time Voice SDK](/real-time-voice-flutter/introduction/difference-between-audio-and-video-sdk).
+
+If you have high requirements for the Express Flutter SDK package size, you can contact Technical Support for custom package reduction. For SDK package size data, please refer to the [Overview](/real-time-voice-flutter/introduction/overview) document.
+
+
+
+**4. Set Callbacks**
+
+After creating the engine, developers can choose to use anonymous functions to implement callback functions as needed, and assign them to the corresponding callback function properties of the engine instance to register callbacks.
+
+<Warning title="Note">
+
+
+To avoid missing event notifications, it is recommended to register callbacks immediately after creating the engine.
+
+</Warning>
+
+
+
+
+
+### Log In to Room
+
+**1. Log In**
+
+Create a ZegoUser user object by passing in the user ID parameter "userID", then call the [loginRoom](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) interface, pass in the room ID parameter "roomID" and user parameter "user", to log in to the room. If the room does not exist, calling this interface will create and log in to this room.
+
+- Within the same AppID, ensure that the "roomID" information is globally unique.
+- Within the same AppID, ensure that "userID" is globally unique. It is recommended that developers set it to a meaningful value and associate "userID" with their own business account system.
+- The constructor method of "ZegoUser" [ZegoUser.id](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoUser/ZegoUser.id.html) will set "userName" to be the same as the passed parameter "userID". "userID" cannot be "null", otherwise logging in to the room will fail.
+
+
+```dart
+// Create user object
+ZegoUser user = ZegoUser.id('user1');
+// Only by passing in a ZegoRoomConfig with the "isUserStatusNotify" parameter set to "true" can you receive the onRoomUserUpdate callback.
+ZegoRoomConfig config = ZegoRoomConfig.defaultConfig();
+config.isUserStatusNotify = true;
+// If you use appsign for authentication, the token parameter does not need to be filled; if you need to use a more secure authentication method: token authentication, the Web platform only supports token authentication, please refer to [How to upgrade from AppSign authentication to Token authentication](https://www.zegocloud.com/docs/faq/token_upgrade?product=ExpressVideo&platform=all)
+// config.token = "xxxx";
+// Start logging in to the room
+ZegoExpressEngine.instance.loginRoom('room1', user, config: config);
+```
+
+**2. Listen for event callbacks after logging in to the room
+
+
+According to actual application needs, listen for event notifications you care about after logging in to the room, such as room status updates, user status updates, stream status updates, etc.
+
+- [onRoomStateUpdate](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomStateUpdate.html): Room status update callback. After logging in to the room, when the room connection status changes (such as room disconnection, authentication failure, etc.), the SDK will notify through this callback.
+- [onRoomUserUpdate](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomUserUpdate.html): User status update callback. After logging in to the room, when users are added to or removed from the room, the SDK will notify through this callback.
+
+    Users can receive the [onRoomUserUpdate](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomUserUpdate.html) callback only when calling the [loginRoom](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) interface to log in to the room with the [ZegoRoomConfig](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoRoomConfig-class.html) configuration, and the "isUserStatusNotify" parameter is set to "true".
+
+- [onRoomStreamUpdate](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomStreamUpdate.html): Stream status update callback. After logging in to the room, when users in the room newly publish or remove audio streams, the SDK will notify through this callback.
+
+<Warning title="Note">
+
+
+- Users can receive the [onRoomUserUpdate](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomUserUpdate.html) callback only when calling the [loginRoom](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) interface to log in to the room with the [ZegoRoomConfig](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoRoomConfig-class.html) configuration, and the "isUserStatusNotify" parameter is set to "true".
+- Normally, if a user wants to play audio published by other users, they can call the [startPlayingStream](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/startPlayingStream.html) interface in the stream status update (addition) callback to pull the remote published audio stream.
+
+</Warning>
+
+
+
+
+```dart
+
+// The following are common room-related callbacks
+// Room status update callback
+ZegoExpressEngine.onRoomStateUpdate = (String roomID, ZegoRoomState state, int errorCode, Map<String, dynamic> extendedData) {
+    // Implement event callback as needed
+};
+
+// User status update
+ZegoExpressEngine.onRoomUserUpdate = (String roomID, ZegoUpdateType updateType, List<ZegoUser> userList) {
+    // Implement event callback as needed
+};
+
+// Stream status update
+ZegoExpressEngine.onRoomStreamUpdate = (String roomID, ZegoUpdateType updateType, List<ZegoStream> streamList) {
+    // Implement event callback as needed
+};
+
+```
+
+<a id="publishingStream"></a>
+
+
+### Publish Stream
+
+**1. Start Publishing Stream**
+
+Call the [startPublishingStream](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPublishingStream.html) interface, pass in the stream ID parameter "streamID", to send the local audio stream to remote users.
+
+<Warning title="Note">
+
+
+Within the same AppID, ensure that "streamID" is globally unique. If within the same AppID, different users each publish a stream with the same "streamID", it will cause the user who publishes later to fail to publish the stream.
+
+</Warning>
+
+
+
+```dart
+// Start publishing stream
+ZegoExpressEngine.instance.startPublishingStream("streamID");
+```
+
+
+**3. Listen for event callbacks after publishing stream
+
+
+According to actual application needs, listen for event notifications you care about after publishing stream, such as publishing status updates, etc.
+
+[onPublisherStateUpdate](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPublisherStateUpdate.html): Publishing status update callback. After the publishing interface is called successfully, when the publishing status changes (such as network interruption causing publishing exceptions, etc.), the SDK will notify through this callback while retrying to publish.
+
+```dart
+// Common publishing-related callbacks
+// Publishing status update callback
+ZegoExpressEngine.onPublisherStateUpdate = (String streamID, ZegoPublisherState state, int errorCode, Map<String, dynamic> extendedData) {
+    // Implement event callback as needed
+};
+```
+
+<Note title="Note">
+
+If you need to know about Express microphone/audio/speaker related interfaces, please refer to [FAQ - How to implement switching camera/video screen/microphone/audio/speaker?](https://www.zegocloud.com/docs/faq/How_to_switch_devices).
+
+</Note>
+
+
+
+### Play Stream
+
+Call the [startPlayingStream](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/startPlayingStream.html) interface, based on the passed stream ID parameter "streamID", to pull the remote published audio stream.
+
+```dart
+ZegoExpressEngine.instance.startPlayingStream(streamID);
+```
+
+
+**2. Listen for event callbacks after playing stream
+
+According to actual application needs, listen for event notifications you care about after playing stream, such as playing status updates, etc.
+
+[onPlayerStateUpdate](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPlayerStateUpdate.html): Playing status update callback. After the playing interface is called successfully, when the playing status changes (such as network interruption causing publishing exceptions, etc.), the SDK will notify through this callback while retrying to play.
+
+```dart
+// Common playing-related callbacks
+// Playing status related callback
+ZegoExpressEngine.onPlayerStateUpdate = (String streamID, ZegoPlayerState state, int errorCode, Map<String, dynamic> extendedData) {
+    // Implement event callback as needed
+};
+```
+
+### Experience Real-time Audio and Video Functions
+
+Run the project on a real device. After successful operation, you can see the local video screen.
+
+For convenience, ZEGO provides a [Web Debugging Example](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html). On this page, enter the same AppID and RoomID, enter different UserIDs and the corresponding [Token](/console/development-assistance/temporary-token), and you can join the same room to communicate with real devices. When the audio and video call starts successfully, you can hear remote audio and see the remote video screen.
+
+
+### Stop Publishing and Playing Streams
+
+**1. Stop Publishing Stream**
+
+Call the [stopPublishingStream](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/stopPublishingStream.html) interface to stop sending the local audio stream to remote users.
+
+```dart
+// Stop publishing stream
+ZegoExpressEngine.instance.stopPublishingStream();
+```
+
+**2. Stop Playing Stream**
+
+Call the [stopPlayingStream](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/stopPlayingStream.html) interface to stop pulling the remote published audio stream.
+
+<Warning title="Note">
+
+
+If the developer receives a "decrease" notification for audio and video streams through the [onRoomStreamUpdate](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomStreamUpdate.html) callback, please call the [stopPlayingStream](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/stopPlayingStream.html) interface in time to stop playing streams, to avoid pulling empty streams and generating additional costs; or, developers can choose the appropriate timing according to their business needs and proactively call the [stopPlayingStream](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/stopPlayingStream.html) interface to stop playing streams.
+
+</Warning>
+
+
+
+```dart
+// Stop playing stream
+ZegoExpressEngine.instance.stopPlayingStream(streamID);
+```
+
+### Log Out of Room
+
+Call the [logoutRoom](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/logoutRoom.html) interface to log out of the room.
+
+```dart
+// Log out of room
+ZegoExpressEngine.instance.logoutRoom('room1');
+```
+
+### Destroy Engine
+
+Call the [destroyEngine](https://www.zegocloud.com/docs/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/destroyEngine.html) interface to destroy the engine, used to release resources used by the SDK.
+
+```dart
+// Destroy engine
+ZegoExpressEngine.destroyEngine();
+```

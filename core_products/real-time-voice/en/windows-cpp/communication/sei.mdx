@@ -1,0 +1,196 @@
+---
+articleID: 6073
+---
+# Supplemental Enhancement Information (SEI)
+
+- - -
+
+## Introduction
+
+In audio/video streaming media applications, in addition to pushing and playing audio/video content through streaming channels, you can also use SEI (Supplemental Enhancement Information) through streaming channels to package text information together with audio/video content, push it from the host side (publishing side), and receive it from the audience side (playing side), to achieve the purpose of precise synchronization between text data and audio/video content.
+
+It is commonly used for application scenarios such as precise video layout, remote lyric synchronization, live quizzes, etc.
+
+<Note title="Note">
+
+
+For SEI-related concepts and principles, please refer to [How to Understand and Use Supplemental Enhancement Information](https://www.zegocloud.com/docs/article/8668) in "FAQ - Message Issues".
+
+
+## Prerequisites
+
+Before implementing SEI functionality, please ensure:
+
+- The ZEGO Express SDK has been integrated in your project and basic real-time voice functionality has been implemented. For details, please refer to [Quick Start - Integration](/real-time-voice-windows/quick-start/integrating-sdk) and [Quick Start - Implementing Flow](/real-time-voice-windows/quick-start/implementing-voice-call).
+- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com/) and a valid AppID and AppSign have been obtained. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+
+
+## Usage Steps
+
+The function of sending and receiving SEI information requires the publishing and playing sides to work together to display the effect, that is, the publishing side needs to send SEI information, and the playing side receives SEI information. The following content will introduce how to use the sending and receiving SEI information functionality on each side.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/send_and_recv_sei.png" /></Frame>
+
+### Publishing Side Sending SEI Message Call Flow
+
+1. Call the [loginRoom](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~CPP~class~zego-express-i-zego-express-engine#login-room) interface to log into the room.
+2. Call the [startPublishingStream](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~CPP~class~zego-express-i-zego-express-engine#start-publishing-stream) interface to publish the stream.
+3. After successful publishing, call the [sendSEI](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~CPP~class~zego-express-i-zego-express-engine#send-sei) interface to send SEI information.
+
+### Playing Side Receiving SEI Message Call Flow
+
+1. Create an [IZegoEventHandler](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~CPP~class~zego-express-i-zego-event-handler) object and rewrite the [onPlayerRecvSEI](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~CPP~class~zego-express-i-zego-event-handler##on-player-recv-sei) method to receive SEI information.
+2. Call the [loginRoom](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~CPP~class~zego-express-i-zego-express-engine#login-room) interface to log into the room.
+3. Call the [startPlayingStream](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~CPP~class~zego-express-i-zego-express-engine#start-playing-stream) interface to play the stream.
+4. After successful playing, the [onPlayerRecvSEI](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~CPP~class~zego-express-i-zego-event-handler#on-player-recv-sei) callback will be triggered when receiving the SEI information sent from the publishing side.
+
+### (Optional) Set SEI Type
+
+<Accordion title="Set SEI Type" defaultOpen="false">
+
+Since the SDK uses ZEGO's self-defined SEI (nalu type = 6, payload type = 243) type for packaging by default, and this type is not specified in the SEI standard, it does not conflict with SEI in video encoders or video files. However, when developers need to use third-party decoders for decoding (such as FFmpeg), it will result in the inability to extract the correct SEI. In this case, before publishing the stream [startPublishingStream](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~CPP~class~zego-express-i-zego-express-engine#start-publishing-stream), you need to call the [setSEIConfig](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~CPP_windows~class~zego-express-i-zego-express-engine#set-sei-config) interface to change the SDK's sent SEI type to use UserUnregister SEI (nalu type = 6, payload type = 5) type packaging.
+
+When the App sends this type of SEI, it can fill in a business-specific uuid (length is 16 bytes). When the receiving side uses the SDK to parse SEI with payload type 5, it will filter out SEI with matching uuid based on the set filter string and throw it to the business. If no filter string is set, the SDK will throw all received SEI to the developer.
+
+<Note title="Note">
+
+
+This step only needs to be performed when developers use third-party decoders to decode SEI.
+
+</Accordion>
+
+
+### Publishing Side
+
+The interface for sending SEI information needs to be called after successful publishing.
+
+- Interface prototype:
+
+```cpp
+    /**
+     * Set media enhancement supplement information (SEI) type
+     *
+     * Must be set before publishing.
+     *
+     * @param config SEI configuration property. Defaults to using ZEGO's self-defined SEI type.
+     */
+    virtual void setSEIConfig(ZegoSEIConfig config) = 0;
+    ```
+
+- Usage example:
+
+```cpp
+    ZegoSEIConfig seiConfig;
+    // Use H.264 SEI (nalu type = 6, payload type = 5) type packaging, because the video encoder itself generates SEI with payload type 5, or when using video file to publish stream, such SEI may also exist in the video file, so when using this type, users need to use uuid + content as the buffer to pass to the SEI sending interface; at this time, to distinguish SEI generated by the video encoder itself, when the App sends this type of SEI, it can fill in a business-specific uuid (uuid length is 16 bytes); when the receiving side uses the SDK to parse SEI with payload type 5, it will filter out SEI with matching uuid based on the set filter string and throw it to the business. If no filter string is set, the SDK will throw all received SEI to the developer.
+    seiConfig.type = ZEGO_SEI_TYPE_USER_UNREGISTER;
+    engine->setSEIConfig(seiConfig);
+
+    // Through advancedConfig set the uuid filter field. After setting, the SDK will only throw out the first 12 bytes as the uuid set by the developer for SEI.
+    ZegoEngineConfig engineConfig;
+    // The first 12 bytes received by other users through [onPlayerRecvSEI] must be "zegozegozego", others will be filtered
+    engineConfig.advancedConfig.put("unregister_sei_filter", "zegozegozego");
+    engineConfig.advancedConfig = {"unregister_sei_filter", "zegozegozego"};
+    ZegoExpressSDK::setEngineConfig(engineConfig);
+
+    // Start publishing stream
+    engine->startPublishingStream("STREAM_ID");
+    ```
+`
+
+### Playing Side
+
+The interface for receiving SEI information needs to be triggered after successful playing.
+
+- Interface prototype:
+
+```cpp
+    /**
+     * Send media enhancement supplement information
+     *
+     * This interface can send media enhancement supplement information while transmitting audio/video stream data.
+     *
+     * Generally, for scenarios such as synchronizing music lyrics or precise video layout, you can choose to use sending SEI.
+     *
+     * When the publishing side sends SEI, the playing side can obtain SEI content by listening to the [onPlayerRecvSEI] callback.
+     *
+     * Since SEI information follows video frames or audio frames, frame loss may occur due to network issues, so SEI information may also be lost. To solve this situation, you should send multiple times within the frequency limit.
+     * Frequency limit: Do not exceed 30 times per second.
+     * SEI data length limit is 4096 bytes.
+     *
+     * @param data SEI content
+     * @param dataLength SEI content length
+     */
+    virtual void sendSEI(const unsigned char* data, unsigned int dataLength) = 0;
+    ```
+
+- Usage example:
+
+```cpp
+    ZegoEngineProfile profile;
+    // AppID and AppSign are distributed by ZEGO to each App; for security considerations, it is recommended to store the AppSign in the App's business backend and obtain it from the backend when needed.
+    profile.appID = appID;
+    profile.appSign = appSign;
+    profile.scenario = ZegoScenario::ZEGO_SCENARIO_GENERAL;
+
+    // Create engine instance
+    auto engine = ZegoExpressSDK::createEngine(profile, nullptr);
+
+    // Log in to the room
+    engine->loginRoom(roomID, user);
+
+    // Publish stream
+    engine->startPublishingStream(streamID);
+
+    // Other business logic of the publisher
+    ...
+
+    // Send SEI information when needed in business scenarios
+    engine->sendSEI(test2, seiLength);
+    ```
+`
+
+### Playing Side
+
+The interface for receiving SEI information needs to be triggered after successful playing.
+
+- Interface prototype:
+
+```cpp
+    /**
+     * Received SEI content from the remote stream
+     *
+     * After the playing stream successfully calls sendSEI, the local side will receive this callback.
+     *
+     * If only playing pure audio stream, it will not be possible to receive the SEI information sent from the publishing side.
+     *
+     * @param streamID The stream ID of the playing stream
+     * @param data SEI content
+     * @param dataLength SEI content length
+     */
+    virtual void onPlayerRecvSEI(const std::string& /*streamID*/, const unsigned char* /*data*/, unsigned int /*dataLength*/);
+    ```
+
+- Usage example:
+
+```cpp
+    // Create IZegoEventHandler object and rewrite the onPlayerRecvSEI method
+    class MyEventHandler : public IZegoEventHandler
+    {
+        public:
+            // Listen for receiving SEI information callback. This callback is triggered when the sending side calls the sendSEI interface to send SEI information.
+            virtual void onPlayerRecvSEI(const std::string& /*streamID*/, const unsigned char* /*data*/, unsigned int /*dataLength*/) {
+                // Implement business scenario-related logic here, such as displaying related UI, etc.
+            }
+            // Rewrite other callbacks
+            ...
+    };
+    auto handler = std::make_shared<MyEventHandler>();
+```
+
+## API Reference List
+
+| Method | Description |
+|-------|--------|
+| [sendSEI](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~CPP~class~zego-express-i-zego-express-engine#send-sei) | Send SEI information |
+| [onPlayerRecvSEI](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~CPP~class~zego-express-i-zego-event-handler#on-player-recv-sei) | Receive SEI information |
+| [setSEIConfig](https://www.zegocloud.com/docs/api?doc=Express_Video_SDK_API~CPP_windows~class~zego-express-i-zego-express-engine#set-sei-config) | Set SEI type |

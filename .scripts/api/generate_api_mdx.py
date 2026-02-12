@@ -19,6 +19,110 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 
+# ============================================================================
+# 国际化配置（i18n Configuration）
+# ============================================================================
+
+I18N_CONFIG = {
+    "zh": {
+        "detail_map_keys": {
+            "support_version": "支持版本",
+            "detail_description": "详情描述",
+            "usage_limitation": "使用限制",
+            "precautions": "注意事项"
+        },
+        "section_titles": {
+            "detail": "详情",
+            "params": "参数",
+            "return": "返回值"
+        },
+        "table_headers": {
+            "name": "名称",
+            "type": "类型",
+            "desc": "描述"
+        },
+        "component_titles": {
+            "deprecated": "已废弃"
+        },
+        "structure_titles": {
+            "properties": "属性",
+            "methods": "方法"
+        },
+        "warning_keys": [
+            "支持版本",
+            "使用限制",
+            "注意事项"
+        ]
+    },
+    "en": {
+        "detail_map_keys": {
+            "support_version": "Available since",
+            "detail_description": "Description",
+            "usage_limitation": "Restrictions",
+            "precautions": "Warning"
+        },
+        "section_titles": {
+            "detail": "Details",
+            "params": "Parameters",
+            "return": "Return"
+        },
+        "table_headers": {
+            "name": "Name",
+            "type": "Type",
+            "desc": "Description"
+        },
+        "component_titles": {
+            "deprecated": "Deprecated"
+        },
+        "structure_titles": {
+            "properties": "Properties",
+            "methods": "Methods"
+        },
+        "warning_keys": [
+            "Available since",
+            "Restrictions",
+            "Warning"
+        ]
+    }
+}
+
+
+def detect_language_from_path(path: Path) -> str:
+    """根据路径检测语言。
+
+    Args:
+        path: 源目录路径
+
+    Returns:
+        语言代码: "zh" 或 "en"
+    """
+    path_str = str(path)
+    if "/en/" in path_str or path_str.startswith("en/") or path_str.endswith("/en"):
+        return "en"
+    elif "/zh/" in path_str or path_str.startswith("zh/") or path_str.endswith("/zh"):
+        return "zh"
+    else:
+        # 默认返回中文
+        return "zh"
+
+
+def get_lang_config(path: Path) -> Dict[str, Any]:
+    """获取指定路径的语言配置。
+
+    Args:
+        path: 源目录路径
+
+    Returns:
+        语言配置字典
+    """
+    lang = detect_language_from_path(path)
+    return I18N_CONFIG[lang], lang
+
+
+# ============================================================================
+# 文件读取
+# ============================================================================
+
 def read_json_files(src_dir: Path) -> List[Dict[str, Any]]:
     files = sorted([p for p in src_dir.iterdir() if p.suffix == ".json" and p.is_file()])
     result = []
@@ -140,7 +244,7 @@ def escape_jsx_in_text(s: str) -> str:
 
 
 # 顶层 object_detail：复用与字段/方法相同的 detail 规则（详情 + Note + Warning），但不包裹 ParamField。
-def render_detail_section(details: List[Dict[str, Any]], support: Optional[Dict[str, Any]]) -> str:
+def render_detail_section(details: List[Dict[str, Any]], support: Optional[Dict[str, Any]], lang_config: Dict[str, Any]) -> str:
     if not details and not (support and not support.get("hidden") and support.get("info")):
         return ""
 
@@ -153,29 +257,35 @@ def render_detail_section(details: List[Dict[str, Any]], support: Optional[Dict[
 
     # support 覆盖 / 注入 支持版本
     if support and not support.get("hidden") and support.get("info"):
-        detail_map["支持版本"] = support.get("info") or ""
+        detail_map[lang_config["detail_map_keys"]["support_version"]] = support.get("info") or ""
 
     parts: List[str] = []
 
     # 详情描述：object_detail 一律带 "**详情**" 标题
-    detail_desc = (detail_map.pop("详情描述", "") or "").strip()
+    detail_desc_key = lang_config["detail_map_keys"]["detail_description"]
+    detail_desc = (detail_map.pop(detail_desc_key, "") or "").strip()
+
     if detail_desc:
         # 不在这里转义，调用方会用 escape_jsx_in_text 处理
-        parts.append(f"**详情**\n\n{detail_desc}")
+        detail_title = lang_config["section_titles"]["detail"]
+        parts.append(f"**{detail_title}**\n\n{detail_desc}")
 
     # 仅 支持版本 / 使用限制 / 注意事项 放 Warning，其余（除详情外）出 Note
-    warning_keys = ["支持版本", "使用限制", "注意事项"]
+    warning_keys = lang_config["warning_keys"]
     warning_bullets: List[str] = []
+
+    # 根据语言选择冒号
+    colon = "：" if warning_keys[0] == "支持版本" else ": "
 
     for key in warning_keys:
         if key in detail_map and detail_map[key]:
             # 不在这里转义，调用方会用 escape_jsx_in_text 处理
             label = str(key)
             value = str(detail_map[key])
-            warning_bullets.append(f"- **{label}**：{value}")
+            warning_bullets.append(f"- **{label}**{colon}{value}")
             detail_map.pop(key, None)
 
-    # 剩余 key -> 合并为一个 Note 组件
+    # 剩余 key -> 合并为一个 Note 组件（如果有剩余内容）
     note_bullets: List[str] = []
     for key, value in detail_map.items():
         if not value:
@@ -183,7 +293,9 @@ def render_detail_section(details: List[Dict[str, Any]], support: Optional[Dict[
         # 不在这里转义，调用方会用 escape_jsx_in_text 处理
         label = str(key)
         body = str(value)
-        note_bullets.append(f"- **{label}**：{body}")
+        # 根据语言选择冒号：中文用中文冒号，英文用英文冒号
+        colon = "：" if lang_config["warning_keys"][0] == "支持版本" else ": "
+        note_bullets.append(f"- **{label}**{colon}{body}")
 
     if note_bullets:
         note_body = "\n".join(note_bullets)
@@ -196,17 +308,19 @@ def render_detail_section(details: List[Dict[str, Any]], support: Optional[Dict[
     return "\n\n".join(parts)
 
 
-def render_params(params: List[Dict[str, Any]], with_heading: bool = True) -> str:
+def render_params(params: List[Dict[str, Any]], lang_config: Dict[str, Any], with_heading: bool = True) -> str:
     if not params:
         return ""
 
     lines: List[str] = []
     if with_heading:
-        # 带标题的“参数”章节
-        lines.append("**参数**")
+        # 带标题的"参数"章节
+        params_title = lang_config["section_titles"]["params"]
+        lines.append(f"**{params_title}**")
         lines.append("")
 
-    lines.append("| 名称 | 类型 | 描述 |")
+    headers = lang_config["table_headers"]
+    lines.append(f"| {headers['name']} | {headers['type']} | {headers['desc']} |")
     lines.append("| --- | --- | --- |")
     for p in params:
         # 表格单元格中不需要转义 { 和 }，只需要转义管道符
@@ -217,11 +331,12 @@ def render_params(params: List[Dict[str, Any]], with_heading: bool = True) -> st
     return "\n".join(lines)
 
 
-def render_return(ret: Optional[Dict[str, Any]], has_params: bool = False) -> str:
+def render_return(ret: Optional[Dict[str, Any]], lang_config: Dict[str, Any], has_params: bool = False) -> str:
     """渲染返回值章节。
 
     Args:
         ret: return 节点数据
+        lang_config: 语言配置
         has_params: 是否有参数章节（用于决定是否需要添加 **返回值** 标题）
 
     Returns:
@@ -236,28 +351,33 @@ def render_return(ret: Optional[Dict[str, Any]], has_params: bool = False) -> st
     # 不在这里转义，最后统一用 escape_jsx_in_text 处理
     # 如果有参数章节，需要添加 **返回值** 标题；否则直接输出内容
     if has_params:
-        return f"**返回值**\n\n{info}"
+        return_title = lang_config["section_titles"]["return"]
+        return f"**{return_title}**\n\n{info}"
     else:
         return info
 
 
-def render_deprecated_warning(deprecated: Optional[Dict[str, Any]]) -> str:
+def render_deprecated_warning(deprecated: Optional[Dict[str, Any]], lang_config: Dict[str, Any]) -> str:
     if not deprecated:
         return ""
     info = (deprecated.get("info") or "").strip()
     if not info:
         return ""
     # 不在这里转义，最后统一用 escape_jsx_in_text 处理
-    return f"<Warning title=\"已废弃\">{info}</Warning>"
+    deprecated_title = lang_config["component_titles"]["deprecated"]
+    return f"<Warning title=\"{deprecated_title}\">{info}</Warning>"
 
 
-def render_param_like(node: Dict[str, Any], obj_meta: Optional[Dict[str, str]] = None) -> str:
-    """统一渲染“字段/方法”为 ParamField，封装公共逻辑。
+def render_param_like(node: Dict[str, Any], lang_config: Dict[str, Any], obj_meta: Optional[Dict[str, str]] = None) -> str:
+    """统一渲染"字段/方法"为 ParamField，封装公共逻辑。
 
-    obj_meta: 顶层对象的元信息，用于透传到 ParamField：
-      - parent_file
-      - parent_name
-      - parent_type
+    Args:
+        node: 节点数据
+        lang_config: 语言配置
+        obj_meta: 顶层对象的元信息，用于透传到 ParamField：
+          - parent_file
+          - parent_name
+          - parent_type
     """
     # 属性值：不使用 escape_mdx_text，因为 quote_attr_value 会处理转义
     # 只有在 children 内容中才需要 escape_mdx_text
@@ -297,7 +417,7 @@ def render_param_like(node: Dict[str, Any], obj_meta: Optional[Dict[str, str]] =
 
     # 1) 参数：根据是否还有详情决定是否要加 "**参数**" 标题
     with_detail = bool(details)
-    params_section = render_params(params, with_heading=with_detail)
+    params_section = render_params(params, lang_config, with_heading=with_detail)
     if params_section:
         parts.append(params_section)
 
@@ -310,19 +430,23 @@ def render_param_like(node: Dict[str, Any], obj_meta: Optional[Dict[str, str]] =
             detail_map[key] = value
 
     if support and not support.get("hidden") and support.get("info"):
-        detail_map["支持版本"] = support.get("info") or ""
+        detail_map[lang_config["detail_map_keys"]["support_version"]] = support.get("info") or ""
 
-    detail_desc = (detail_map.pop("详情描述", "") or "").strip()
+    detail_desc_key = lang_config["detail_map_keys"]["detail_description"]
+    detail_desc = (detail_map.pop(detail_desc_key, "") or "").strip()
 
-    warning_keys = ["支持版本", "使用限制", "注意事项"]
+    warning_keys = lang_config["warning_keys"]
     warning_bullets: List[str] = []
+
+    # 根据语言选择冒号
+    colon = "：" if warning_keys[0] == "支持版本" else ": "
 
     for key in warning_keys:
         if key in detail_map and detail_map[key]:
             # 不在这里转义，最后统一用 escape_jsx_in_text 处理
             label = str(key)
             value = str(detail_map[key])
-            warning_bullets.append(f"- **{label}**：{value}")
+            warning_bullets.append(f"- **{label}**{colon}{value}")
             detail_map.pop(key, None)
 
     note_bullets: List[str] = []
@@ -332,13 +456,14 @@ def render_param_like(node: Dict[str, Any], obj_meta: Optional[Dict[str, str]] =
         # 不在这里转义，最后统一用 escape_jsx_in_text 处理
         label = str(key)
         body = str(value)
-        note_bullets.append(f"- **{label}**：{body}")
+        note_bullets.append(f"- **{label}**{colon}{body}")
 
     # 详情：仅当既有 params 又有详情时才输出 **详情** 标题；否则只输出内容本身
     if detail_desc:
         # 不在这里转义，最后统一用 escape_jsx_in_text 处理
         if params:
-            parts.append(f"**详情**\n\n{detail_desc}")
+            detail_title = lang_config["section_titles"]["detail"]
+            parts.append(f"**{detail_title}**\n\n{detail_desc}")
         else:
             parts.append(detail_desc)
 
@@ -351,12 +476,12 @@ def render_param_like(node: Dict[str, Any], obj_meta: Optional[Dict[str, str]] =
         parts.append(f"<Warning title=\"\">\n{warning_body}\n</Warning>")
 
     # 3) deprecated warning（已废弃）
-    deprecated_section = render_deprecated_warning(deprecated)
+    deprecated_section = render_deprecated_warning(deprecated, lang_config)
     if deprecated_section:
         parts.append(deprecated_section)
 
     # 4) return 信息：放在 children 最后
-    ret_section = render_return(node.get("return"), has_params=bool(params))
+    ret_section = render_return(node.get("return"), lang_config, has_params=bool(params))
     if ret_section:
         parts.append(ret_section)
 
@@ -525,12 +650,13 @@ def rewrite_links_for_split(text: str, platform: str, kind: str, relative_path: 
     return pattern.sub(_repl, text)
 
 
-def generate_split_mdx_for_object(obj: Dict[str, Any], kind: str, output_base_dir: Path,
+def generate_split_mdx_for_object(obj: Dict[str, Any], lang_config: Dict[str, Any], kind: str, output_base_dir: Path,
                                    platform: str = "", relative_path: Optional[str] = None) -> None:
     """为单个对象生成独立的 MDX 文件（split 模式）。
 
     Args:
         obj: JSON 对象数据
+        lang_config: 语言配置
         kind: 类型名称（class、enum、protocol 等）
         output_base_dir: 输出基础目录（会在其下创建 kind 子目录）
         platform: 平台名称（用于链接重写）
@@ -542,7 +668,7 @@ def generate_split_mdx_for_object(obj: Dict[str, Any], kind: str, output_base_di
         return
 
     # 生成该对象的内容
-    content = render_api_field(obj)
+    content = render_api_field(obj, lang_config)
 
     # 如果有 platform，重写链接
     if platform:
@@ -571,8 +697,13 @@ def generate_split_mdx_for_object(obj: Dict[str, Any], kind: str, output_base_di
     print(f"[OK] 生成独立 MDX: {out_mdx}")
 
 
-def render_api_field(obj: Dict[str, Any]) -> str:
-    """将单个 JSON 对象渲染为 MDX 片段（不再使用 APIField）。"""
+def render_api_field(obj: Dict[str, Any], lang_config: Dict[str, Any]) -> str:
+    """将单个 JSON 对象渲染为 MDX 片段（不再使用 APIField）。
+
+    Args:
+        obj: JSON 对象数据
+        lang_config: 语言配置
+    """
     name = escape_mdx_text(str(obj.get("object_name", "")))
     desc = escape_mdx_text(str(obj.get("object_desc", "")))
     # object_belong_file 中的反引号不需要转义,只转义 { 和 }
@@ -590,7 +721,7 @@ def render_api_field(obj: Dict[str, Any]) -> str:
         lines.append(desc)
 
     # object_detail：复用与字段/方法相同的 detail 规则（详情 + Note + Warning），但不包裹 ParamField
-    detail_block = render_detail_section(obj.get("object_detail") or [], obj.get("support"))
+    detail_block = render_detail_section(obj.get("object_detail") or [], obj.get("support"), lang_config)
     if detail_block:
         lines.append("")
         # 对 detail_block 做 JSX 转义（保留 MDX 组件标签）
@@ -605,27 +736,29 @@ def render_api_field(obj: Dict[str, Any]) -> str:
     attrs = obj.get("object_attrs") or []
     if attrs:
         lines.append("")
-        lines.append("### 属性")
+        props_title = lang_config["structure_titles"]["properties"]
+        lines.append(f"### {props_title}")
         obj_meta = {
             # 属性下的 ParamField 不需要 parent_file，只透出父对象名称和类型
             "parent_name": obj.get("object_name", ""),
             "parent_type": obj.get("object_type", ""),
         }
         for a in attrs:
-            lines.append(render_param_like(a, obj_meta=obj_meta))
+            lines.append(render_param_like(a, lang_config, obj_meta=obj_meta))
 
     # 方法
     methods = obj.get("object_methods") or []
     if methods:
         lines.append("")
-        lines.append("### 方法")
+        methods_title = lang_config["structure_titles"]["methods"]
+        lines.append(f"### {methods_title}")
         obj_meta = {
             "parent_file": obj.get("object_belong_file", ""),
             "parent_name": obj.get("object_name", ""),
             "parent_type": obj.get("object_type", ""),
         }
         for m in methods:
-            lines.append(render_param_like(m, obj_meta=obj_meta))
+            lines.append(render_param_like(m, lang_config, obj_meta=obj_meta))
 
     return "\n".join(lines)
 
@@ -648,10 +781,14 @@ def generate_for(root: Path, kind: str, output_dir: Optional[Path] = None) -> No
         print(f"[WARN] 目录下未找到 JSON 文件: {src_dir}")
         return
 
+    # 根据路径自动检测语言
+    lang_config, lang_code = get_lang_config(root)
+    print(f"[INFO] 检测到语言: {lang_code}")
+
     blocks: List[str] = []
 
     for obj in objs:
-        blocks.append(render_api_field(obj))
+        blocks.append(render_api_field(obj, lang_config))
 
     # 总文件第一行：与 kind 同名的一级标题（首字母大写，例如 "# Class"）
     heading = f"# {kind.capitalize()}"
@@ -1121,6 +1258,10 @@ def config_based_main(config_path: Optional[Path] = None) -> None:
 
                 print(f"[INFO]   -> split 类型: {', '.join(types_to_split)}")
 
+                # 根据源目录检测语言配置
+                lang_config, lang_code = get_lang_config(source_dir)
+                print(f"[INFO]   -> 检测到语言: {lang_code}")
+
                 # 为指定的每个类型生成独立的 MDX 文件
                 for kind in types_to_split:
                     if kind not in kinds:
@@ -1137,7 +1278,7 @@ def config_based_main(config_path: Optional[Path] = None) -> None:
                     print(f"[INFO]   -> 为 {kind} 类型的 {len(objs)} 个对象生成独立 MDX")
 
                     for obj in objs:
-                        generate_split_mdx_for_object(obj, kind, target_dir,
+                        generate_split_mdx_for_object(obj, lang_config, kind, target_dir,
                                                        platform=platform,
                                                        relative_path=relative_path)
 

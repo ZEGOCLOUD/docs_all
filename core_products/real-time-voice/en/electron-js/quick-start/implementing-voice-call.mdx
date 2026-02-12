@@ -1,0 +1,316 @@
+---
+articleID: 13205
+---
+# Implementing Audio Call
+
+---
+
+
+## Introduction
+
+This document introduces how to quickly implement a simple real-time audio and video call.
+
+Explanation of related concepts:
+
+- ZEGO Express SDK: A real-time audio and video SDK provided by ZEGOCLOUD, offering developers convenient access, high definition and fluency, multi-platform interoperability, low latency, and high concurrency audio and video services.
+- Stream: A set of audio and video data packets encapsulated in a specified encoding format and continuously being sent. A user can publish multiple streams simultaneously (for example, one for camera data and one for screen sharing data) and can also play multiple streams simultaneously. Each stream is identified by a stream ID (streamID).
+- Publish stream: The process of pushing packaged audio and video data streams to the ZEGO real-time audio and video cloud.
+- Play stream: The process of pulling and playing existing audio and video data streams from the ZEGO real-time audio and video cloud.
+- Room: An audio and video space service provided by ZEGO, used to organize user groups. Users in the same room can send and receive real-time audio, video, and messages to each other.
+    1. Users need to log in to a room first before they can publish or play streams.
+    2. Users can only receive related messages in the room they are in (user entry/exit, audio and video stream changes, etc.).
+    3. Each room is identified by a unique roomID within an AppID. All users who log in to the room using the same roomID belong to the same room.
+
+
+
+For more related concepts, please refer to [Glossary](/glossary/term-explanation).
+
+## Prerequisites
+
+Before implementing basic audio call functionality, please ensure:
+
+- The ZEGO Express SDK has been integrated in your project to implement basic real-time audio and video functions. For details, please refer to [Quick Start - Integrate](/real-time-voice-electron/quick-start/integrating-sdk).
+- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com), and a valid AppID and AppSign have been obtained. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+
+<Warning title="Note">
+
+
+The SDK also supports Token authentication. If you have higher security requirements for your project, it is recommended to upgrade the authentication method. For details, please refer to [How to upgrade from AppSign authentication to Token authentication](https://www.zegocloud.com/docs/faq/token_upgrade?product=ExpressVideo).
+
+</Warning>
+
+
+
+
+
+## Usage Steps
+
+Taking User A playing User B's stream as an example, the process is as follows:
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/common_usage_new.png" /></Frame>
+
+The API call sequence of the entire stream publishing and playing process is as follows:
+
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml_audio_new.png" /></Frame>
+
+
+<a id="createEngine"></a>
+### Create Engine
+
+**1. Initialize Engine**
+
+Call the [createEngine](@createEngine) interface and pass the obtained AppID and AppSign to the parameters "appID" and "appSign".
+
+<Warning title="Note">
+
+
+The SDK also supports Token authentication. If you need to upgrade the authentication method, please refer to [How to upgrade from AppSign authentication to Token authentication](http://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo).
+
+</Warning>
+
+
+
+```js
+// Introduce ZegoExpressEngine
+const zgEngine = window.require('zego-express-engine-electron/ZegoExpressEngine');
+const zgDefines = window.require('zego-express-engine-electron/ZegoExpressDefines');
+
+// Use general scenario
+const profile = {
+appID : xxx,
+appSign : "xxx",
+scenario : zgDefines.ZegoScenario.Default
+};
+
+zgEngine.createEngine(profile)
+.then(() => {
+    console.log("success")
+}).catch((e) => {
+    console.log("failed", e)
+});
+```
+
+**2. Disable Camera**
+
+<Warning title="Note">
+
+
+Express Electron SDK does not provide an audio-only package with the video module removed. Therefore, Electron "Real-time Voice" SDK is actually the "Real-time Audio and Video" SDK.
+
+
+</Warning>
+
+
+
+To implement an audio-only scenario, please call [enableCamera](@enableCamera) after creating the engine to disable the camera, to avoid starting the engine's video module. After the camera is disabled, camera permissions will no longer be required, and video streams will not be published.
+
+```js
+zgEngine.enableCamera(false); // Disable camera
+```
+
+For more information, please refer to the document [Differences between Real-time Audio and Video SDK and Real-time Voice SDK](/real-time-voice-electron/introduction/difference-between-audio-and-video-sdk).
+
+If you have high requirements for the Express Electron SDK package size, you can contact Technical Support for custom package reduction. For SDK package size data, please refer to the [Overview](/real-time-voice-electron/introduction/overview) document.
+
+
+**3. Set Callbacks**
+
+
+For callback registration and cancellation, please refer to [Setting Callbacks](/real-time-voice-electron/quick-start/setting-callback)
+
+<Warning title="Note">
+
+
+To avoid missing event notifications, it is recommended to register callbacks immediately after creating the engine.
+
+</Warning>
+
+
+
+<a id="loginRoom"></a>
+### Log In to Room
+
+**1. Log In**
+
+Call the [loginRoom ](@loginRoom) interface, pass in the room ID parameter "roomID" and user parameter "user", to log in to the room. If the room does not exist, calling this interface will create and log in to this room.
+
+- Within the same AppID, ensure that "roomID" information is globally unique.
+- Within the same AppID, ensure that "userID" is globally unique. It is recommended that developers set it to a meaningful value and can associate "userID" with their own business account system.
+- "userID" cannot be "null", otherwise it will cause room login failure.
+
+```js
+zgEngine.loginRoom("TheRoomID",  { userID: "TheUserID", userName: "TheUserName"});
+```
+
+**2. Listen for event callbacks after logging in to room**
+
+According to actual application needs, listen for event notifications you care about after logging in to the room, such as room status updates, user status updates, stream status updates, etc.
+
+- [onRoomStateUpdate](/real-time-voice-electron/quick-start/setting-callback): Room status update callback. After logging in to the room, when the room connection status changes (such as room disconnection, authentication failure, etc.), the SDK will notify through this callback.
+- [onRoomUserUpdate](/real-time-voice-electron/quick-start/setting-callback): User status update callback. After logging in to the room, when users are added to or removed from the room, the SDK will notify through this callback.
+
+    Only when calling the [loginRoom](@loginRoom) interface to log in to the room with the [ZegoRoomConfig](@-ZegoRoomConfig) configuration, and the "isUserStatusNotify" parameter value is "true", can users receive the [onRoomUserUpdate](/real-time-voice-electron/quick-start/setting-callback) callback.
+
+- [onRoomStreamUpdate](/real-time-voice-electron/quick-start/setting-callback): Stream status update callback. After logging in to the room, when users in the room newly publish or remove audio and video streams, the SDK will notify through this callback.
+
+<Warning title="Note">
+
+
+- Only when calling the [loginRoom](@loginRoom) interface to log in to the room with the [ZegoRoomConfig](@-ZegoRoomConfig) configuration, and the "isUserStatusNotify" parameter value is "true", can users receive the [onRoomUserUpdate](/real-time-voice-electron/quick-start/setting-callback) callback.
+
+- Normally, if a user wants to play audio published by other users, they can call the [startPlayingStream](https://doc-zh.zego.im/article/api?doc=express-video-sdk_API~javascript_electron~class~ZegoExpressEngine#start-playing-stream) interface in the stream status update (addition) callback to pull the remote published audio and video streams.
+
+
+</Warning>
+
+
+
+```js
+// The following are common room-related callbacks
+// Room status update callback
+zgEngine.on("onRoomStateUpdate", (roomID,state,errorCode,extendedData)=>{
+    // Implement event callback according to needs
+});
+
+// User status update callback
+zgEngine.on("onRoomUserUpdate", (roomID,updateType,userList)=>{
+    // Implement event callback according to needs
+});
+
+// Stream status update callback
+zgEngine.on("onRoomStreamUpdate", (roomID,updateType,streamList,extendedData)=>{
+    // Implement event callback according to needs
+});
+```
+
+<a id="startPublishingStream"></a>
+### Publish Stream
+
+**1. Start Publishing Stream**
+
+Call the [startPublishingStream](@startPublishingStream) interface, pass in the stream ID parameter "streamID", to send the local audio and video stream to remote users.
+
+<Warning title="Note">
+
+
+Within the same AppID, ensure that "streamID" is globally unique. If within the same AppID, different users each publish a stream with the same "streamID", it will cause the user who publishes later to fail to publish the stream.
+</Warning>
+
+
+
+```js
+// Start publishing stream
+zgEngine.startPublishingStream("streamID");
+```
+
+**2. Listen for event callbacks after publishing stream**
+
+According to actual application needs, listen for event notifications you care about after publishing the stream, such as publishing status updates, etc.
+
+[onPublisherStateUpdate](/real-time-voice-electron/quick-start/setting-callback): Publishing status update callback. After the publishing interface is called successfully, when the publishing status changes (such as network interruption causing publishing exceptions, etc.), the SDK will notify through this callback while retrying to publish.
+
+```js
+// Common publishing-related callbacks
+// Publishing status update callback
+zgEngine.on("onPublisherStateUpdate", (streamID,state,errorCode,extendedData)=>{
+    // Implement event callback according to needs
+});
+```
+
+<Note title="Note">
+If you need to understand Express's microphone/audio/speaker related interfaces, please refer to [FAQ - How to implement switching camera/video screen/microphone/audio/speaker?](http://doc-zh.zego.im/faq/How_to_switch_devices).
+</Note>
+
+### Play Stream
+
+**1. Start Playing Stream**
+
+Call the [startPlayingStream](https://doc-zh.zego.im/article/api?doc=express-video-sdk_API~javascript_electron~class~ZegoExpressEngine#start-playing-stream) interface, based on the passed stream ID parameter "streamID", to pull the remote published audio and video stream.
+
+```js
+// Start playing stream
+zgEngine.startPlayingStream("streamID", null);
+```
+
+**2. Listen for event callbacks after playing stream**
+
+
+According to actual application needs, listen for event notifications you care about after playing the stream, such as playing status updates, etc.
+
+[onPlayerStateUpdate](/real-time-voice-electron/quick-start/setting-callback): Playing status update callback. After the playing interface is called successfully, when the playing status changes (such as network interruption causing publishing exceptions, etc.), the SDK will notify through this callback while retrying to play.
+
+```js
+// Common playing-related callbacks
+// Playing status related callback
+zgEngine.on("onPlayerStateUpdate", (streamID,state,errorCode,extendedData)=>{
+    // Implement event callback according to needs
+});
+```
+
+### Experience Real-time Audio and Video Functions
+
+Run the project on a real device. After successful operation, you can see the local video screen.
+
+For convenience, ZEGO provides a [Web Debugging Example ](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html). On this page, enter the same AppID and RoomID, enter different UserIDs, and the corresponding [Token](/console/development-assistance/temporary-token), and you can join the same room to communicate with real devices. When the audio and video call starts successfully, you can hear the remote audio and see the remote video screen.
+
+
+<a id="stopPublishingStream"></a>
+### Stop Publishing and Playing Streams
+
+**1. Stop Publishing Stream**
+
+Call the [stopPublishingStream](@stopPublishingStream) interface to stop sending the local audio and video stream to remote users.
+
+```js
+// Stop publishing stream
+zgEngine.stopPublishingStream();
+```
+
+**2. Stop Playing Stream**
+
+Call the [stopPlayingStream](@stopPlayingStream) interface to stop pulling the remote published audio and video stream.
+
+<Warning title="Note">
+
+
+If the developer receives a "decrease" notification for audio and video streams through the [onRoomStreamUpdate](@onRoomStreamUpdate) callback, please call the [stopPlayingStream ](@stopPlayingStream) interface in time to stop playing streams, to avoid pulling empty streams and generating additional costs; or, developers can choose the appropriate timing according to their business needs and proactively call the [stopPlayingStream ](@stopPlayingStream) interface to stop playing streams.
+
+</Warning>
+
+
+
+```js
+// Stop playing stream
+zgEngine.stopPlayingStream("streamID");
+```
+
+### Log Out of Room
+
+Call the [logoutRoom](@logoutRoom) interface to log out of the room.
+
+```js
+// Log out of room
+zgEngine.logoutRoom("TheRoomID");
+```
+
+### Destroy Engine
+
+Call the [destroyEngine](@destroyEngine) interface to destroy the engine, used to release resources used by the SDK.
+
+```js
+// Destroy engine
+zgEngine.destroyEngine();
+```
+
+## FAQ
+
+**1. When integrating the SDK and using Electron9-13 series versions to package the app, using DevTools' reload causes the interface to crash, or the problem of not receiving SDK callbacks, how to solve?**
+
+  Since higher versions of Electron (Electron 9 or above), allow pages to load Node modules multiple times, which may cause the underlying context of Node Addon module to be applied multiple times and produce unpredictable problems. Therefore, in versions between Electron9 ~ Electron14, you can handle it as follows:
+
+  In the main process js, set the following page attribute: `app.allowRendererProcessReuse = false`. (Note: This attribute is deprecated in Electron 14 or above versions, so Electron 14 or above versions still have this problem, which cannot be solved temporarily.)
+
+**2. macOS Monterey(12.2.1) and above versions running electron app causing camera, microphone and other devices to be unusable or crash?**
+
+For how to solve this problem, please refer to [FAQ](/faq/macOS_Monterey_v12.2.1_access_solution?product=ExpressVideo&platform=electron).

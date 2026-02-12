@@ -1,0 +1,67 @@
+# PR 合并到 main 分支时自动更新 mdx 文件 frontmatter 中的日期（PR 标题添加 --no update time 时不会触发此 workflow）
+
+name: 自动更新日期
+
+on:
+  # 在 pr 合并到 main 分支时触发
+  pull_request_target:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write  # 授予写入仓库内容的权限
+  pull-requests: read  # 授予读取 PR 信息的权限
+
+jobs:
+  update-time:
+    # 仅合并到 main 分支且 pr 标题不包含 --no update time 时执行，控制是否自动更新日期
+    if: github.event.pull_request.merged == true && !contains(github.event.pull_request.title, '--no update time')
+    runs-on: ubuntu-latest
+    steps:
+      - name: 使用 actions/checkout action
+        uses: actions/checkout@v4
+        with:
+          ref: main  # pull_request_target 需要明确指定检出 main 分支
+          fetch-depth: 0
+          token: ${{ secrets.PUSH_TOKEN }}  # 使用 GITHUB_TOKEN 进行认证
+
+      - name: 初始化 bun 环境
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: 安装依赖包
+        run: |
+          bun install js-yaml
+
+      - name: 设置环境变量
+        run: |
+          echo "BASE_COMMIT=${{ github.event.pull_request.base.sha }}" >> $GITHUB_ENV
+          echo "HEAD_COMMIT=${{ github.event.pull_request.head.sha }}" >> $GITHUB_ENV
+
+      - name: 获取所有改动的文件列表
+        id: changed-files
+        run: |
+          CHANGED_FILES=$(git diff --name-only $BASE_COMMIT $HEAD_COMMIT)
+          echo "CHANGED_FILES<<EOF" >> $GITHUB_ENV
+          echo "$CHANGED_FILES" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: 更新 mdx 文件 frontmatter 中的日期
+        run: |
+          bun run .scripts/update_time/update-time.js "$CHANGED_FILES"
+      
+      - name: 设置 git 用户信息
+        run: |
+            git config --global user.email shyshii@zego.im
+            git config --global user.name shyshi
+
+      - name: 提交 mdx 文件变更
+        run: |
+          git add '*.mdx'
+          if git diff --cached --quiet; then
+            echo "无 mdx 文档内容变更"
+          else
+            git commit -m "更新文档修改日期 ---pr/${{ github.event.pull_request.number }}"
+            git push https://${{ secrets.PUSH_TOKEN }}@github.com/ZEGOCLOUD/docs_all.git main
+          fi
