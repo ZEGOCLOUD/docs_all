@@ -1,343 +1,357 @@
 ---
 articleID: 8228
 ---
-# 实现音频通话
+# Implementing Audio Call
 
 ---
-## 功能简介
 
-本文将介绍如何快速实现一个简单的实时音视频通话。
+## Introduction
 
-相关概念解释:
+This document introduces how to quickly implement a simple real-time audio and video call.
 
-- ZEGO Express SDK：由 ZEGO 提供的实时音视频 SDK，能够为开发者提供便捷接入、高清流畅、多平台互通、低延迟、高并发的音视频服务。
-- 流：指一组按指定编码格式封装，不断发送中的音视频数据。一个用户可以同时推多条流（例如一条推摄像头数据，一条推屏幕共享数据）也可以同时拉多条流。每条流都由一个流 ID（streamID）标识。
-- 推流：把封包好的音视频数据流推送到 ZEGO 实时音视频云的过程。
-- 拉流：从 ZEGO 实时音视频云将已有音视频数据流拉取播放的过程。
-- 房间：是 ZEGO 提供的音视频空间服务，用于组织用户群，同一房间内的用户可以互相收发实时音视频及消息。
-    1. 用户需要先登录某个房间，才能进行推流、拉流操作。
-    2. 用户只能收到自己所在房间内的相关消息（用户进出、音视频流变化等）。
-    3. 每个房间由一个 ApplD 内唯一的 roomlD 标识。所有使用同一个 roomID 登录房间的用户即属于同房间。
+Explanation of related concepts:
 
-
-
-更多相关概念请参考 [术语说明](/glossary/term-explanation)。
-
-## 前提条件
-
-在实现基本的音频通话之前，请确保：
-
-- 已在项目中集成 ZEGO Express SDK，实现基本的实时音视频功能，详情请参考 [快速开始 - 集成](/real-time-voice-linux/quick-start/integrating-sdk)。
-- 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目管理](/console/project-info) 中的“项目信息”。
-
-<Warning title="注意">
+- ZEGO Express SDK: A real-time audio and video SDK provided by ZEGO, offering developers convenient access, high definition and fluency, multi-platform interoperability, low latency, and high concurrency audio and video services.
+- Stream: A set of audio and video data packets encapsulated in a specified encoding format and continuously being sent. A user can publish multiple streams simultaneously (for example, one for camera data and one for screen sharing data) and can also play multiple streams simultaneously. Each stream is identified by a stream ID (streamID).
+- Publish stream: The process of pushing packaged audio and video data streams to ZEGO real-time audio and video cloud.
+- Play stream: The process of pulling and playing existing audio and video data streams from ZEGO real-time audio and video cloud.
+- Room: An audio and video space service provided by ZEGO, used to organize user groups. Users in the same room can send and receive real-time audio, video, and messages to each other.
+    1. Users need to log in to a room first before they can publish or play streams.
+    2. Users can only receive related messages in the room they are in (user entry/exit, audio and video stream changes, etc.).
+    3. Each room is identified by a unique roomID within an AppID. All users who log in to the room using the same roomID belong to the same room.
 
 
-SDK 同时也支持 Token 鉴权，若您对项目安全性有更高要求，建议您升级鉴权方式，详情请参考 [如何从 AppSign 鉴权升级为 Token 鉴权](http://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo)。
+
+For more related concepts, please refer to [Glossary](/glossary/term-explanation).
+
+## Prerequisites
+
+Before implementing basic audio call functionality, please ensure:
+
+- The ZEGO Express SDK has been integrated in your project to implement basic real-time audio and video functions. For details, please refer to [Quick Start - Integrate](/real-time-voice-linux/quick-start/integrating-sdk).
+- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com), and a valid AppID and AppSign have been obtained. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+
+<Warning title="Note">
+
+
+The SDK also supports Token authentication. If you have higher security requirements for your project, it is recommended to upgrade the authentication method. For details, please refer to [How to upgrade from AppSign authentication to Token authentication](http://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo).
 
 </Warning>
 
 
 
 
-## 使用步骤
 
-以用户 A 拉取用户 B 的流为例，流程如下图：
+## Usage Steps
+
+Taking User A playing User B's stream as an example, the process is as follows:
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/common_usage_new.png" /></Frame>
 
+The API call sequence of the entire stream publishing and playing process is as follows:
 
-整个推拉流过程的 API 调用时序如下图：
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml_audio.png" /></Frame>
 
+
 <a id="CreateEngine"> </a>
 
-### 创建引擎
+### Create Engine
 
-**1. 引入头文件**
+**1. Import Header File**
 
-在项目中引入 ZegoExpressEngine 头文件。
+Introduce the ZegoExpressEngine header file in the project.
 
 ```cpp
 #include "ZegoExpressSDK.h"
 using namespace ZEGO::EXPRESS;
 ```
 
-**2. 创建引擎**
+**2. Create Engine**
 
-调用 [createEngine ](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-zego-express-sdk#create-engine) 接口，将申请到到 AppID 传入参数 “appID”。
+Call the [createEngine ](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-zego-express-sdk#create-engine) interface, and pass the obtained AppID to the parameter "appID".
 
-根据 App 实际的音视频业务选择一个合适的场景，请参考 [场景化音视频配置](/real-time-voice-linux/quick-start/scenario-based-audio-video-configuration) 文档，把选择好的场景枚举传入参数 "scenario"。
+Select an appropriate scenario based on your App's actual audio and video business. Please refer to the [Scenario-based Audio and Video Configuration](/real-time-voice-linux/quick-start/scenario-based-audio-video-configuration) document, and pass the selected scenario enumeration to the parameter "scenario".
 
 
 ```cpp
 ZegoEngineProfile profile;
-// 和 AppSign 由 ZEGO 分配给各 App；其中，为了安全考虑，建议将 AppSign 存储在 App 的业务后台，需要使用时从后台获取
-profile.appID = appID;
-profile.appSign = appSign;
+// AppID and AppSign are assigned by ZEGO to each App; for security reasons, it is recommended to store the AppSign in the App's business backend and obtain it from the backend when needed
+profile.appID = appID; // Please obtain it through official website registration, format is 123456789
+profile.appSign = appSign; // Please obtain it through official website registration, format is "0123456789012345678901234567890123", 64 characters
 profile.scenario = ZegoScenario::ZEGO_SCENARIO_BROADCAST;
-// 创建引擎实例
+// Create engine instance
 auto engine = ZegoExpressSDK::createEngine(profile, nullptr);
 ```
 
-**3. 关闭摄像头**
+**3. Disable Camera**
 
-<Warning title="注意">
+<Warning title="Note">
 
 
-Express Linux SDK 不提供裁剪了视频模块的纯音频包，因此 Linux “实时语音” SDK 实际上是 “实时音视频” SDK。
+Express Linux SDK does not provide an audio-only package with the video module removed. Therefore, the Linux "Real-time Voice" SDK is actually the "Real-time Audio and Video" SDK.
 
 
 </Warning>
 
 
 
-若要实现纯音频场景，请在创建引擎后调用 [enableCamera](@enableCamera) 关闭摄像头，以避免启动引擎的视频模块。摄像头关闭后，将不需要再申请摄像头权限，并且不会推视频流。
+To implement an audio-only scenario, please call [enableCamera](@enableCamera) after creating the engine to disable the camera, to avoid starting the engine's video module. After the camera is disabled, camera permissions will no longer be required, and video streams will not be published.
 
 ```cpp
-engine->enableCamera(false);
+engine->enableCamera(false); // Disable camera
 ```
 
-更多信息请参考文档 [实时音视频 SDK 与实时语音 SDK 的差异](/real-time-voice-linux/introduction/difference-between-audio-and-video-sdk)。
+For more information, please refer to the document [Differences between Real-time Audio and Video SDK and Real-time Voice SDK](/real-time-voice-linux/introduction/difference-between-audio-and-video-sdk).
 
-若您对 Express Linux SDK 包体大小有较高要求，可联系技术支持进行定制裁包，关于 SDK 包大小数据请参考 [概述](/real-time-voice-linux/introduction/overview) 文档。
-
-
-**4. 设置回调**
-
-您可以通过实例化实现 [IZegoEventHandler ](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler) 接口的类，并实现需要的回调方法，以监听并处理所关注的事件回调。然后将实例化对象作为`eventHandler`参数传递给 [createEngine ](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-zego-express-sdk#create-engine) 或者传递给 [setEventHandler ](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#set-event-handler) 注册回调。
-
-<Warning title="注意">
+If you have high requirements for the Express Linux SDK package size, you can contact Technical Support for custom package reduction. For SDK package size data, please refer to the [Overview](/real-time-voice-linux/introduction/overview) document.
 
 
-建议在创建引擎时或创建引擎后就立即注册回调，避免延后注册错过事件通知。
+**4. Set Event Handlers**
+
+You can instantiate a class that implements the [IZegoEventHandler](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler) interface, and implement the required callback methods to listen for and process the event callbacks you are concerned with. Then pass the instantiated object as the `eventHandler` parameter to the [createEngine ](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-zego-express-sdk#create-engine) method or pass it to the [setEventHandler](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#set-event-handler) method to register callbacks.
+
+<Warning title="Note">
+
+
+It is recommended to register callbacks immediately after creating the engine or immediately after creating the engine to avoid missing event notifications.
 
 </Warning>
 
 
 
 
-### 登录房间
 
-**1. 登录**
+<a id="loginRoom"></a>
+### Log In to Room
 
-传入用户 ID 参数 “userID” 和 “userName” 创建 ZegoUser 用户对象后，调用 [loginRoom](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#login-room)，传入房间 ID 参数 “roomID” 和用户参数 “user”，登录房间。如果房间不存在，调用该接口时会创建并登录此房间。
+**1. Log In**
 
-- 同一个 AppID 内，需保证 “roomID” 全局唯一。
-- 同一个 AppID 内，需保证 “userID” 全局唯一，建议开发者将其设置成一个有意义的值，可将 “userID” 与自己业务账号系统进行关联。
-- “userID” 不能为空，否则会导致登录房间失败。
+Create a ZegoUser user object by passing in the user ID parameter "userID" and "userName", then call the [loginRoom](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#login-room), and pass in the room ID parameter "roomID" and user parameter "user", to log in to the room. If the room does not exist, calling this interface will create and log in to this room.
 
+- Within the same AppID, ensure that the "roomID" information is globally unique.
+- Within the same AppID, ensure that the "userID" is globally unique. It is recommended that developers set it to a meaningful value and can associate the "userID" with their own business account system.
+- The "userID" cannot be empty, otherwise it will cause room login failure.
 
 ```cpp
-// 创建用户对象
+// Create user object
 ZegoUser user("user1", "user1");
-// 只有传入 “isUserStatusNotify” 参数取值为 “true” 的 ZegoRoomConfig，才能收到 onRoomUserUpdate 回调。
+// Only by passing in a ZegoRoomConfig with the "isUserStatusNotify" parameter value set to "true" can you receive the onRoomUserUpdate callback.
 ZegoRoomConfig roomConfig;
-// 如果您使用 appsign 的方式鉴权，token 参数不需填写；如果需要使用更加安全的 鉴权方式： token 鉴权，请参考[如何从 AppSign 鉴权升级为 Token 鉴权](https://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo&platform=all)
+// If you use the appsign method for authentication, the token parameter does not need to be filled; if you need to use a more secure authentication method: token authentication, please refer to [How to upgrade from AppSign authentication to Token authentication](https://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo&platform=all)
 // roomConfig.token = "xxxx";
 roomConfig.isUserStatusNotify = true;
-// 登录房间
+// Log in to room
 engine->loginRoom(roomID, user, roomConfig, [=](){
-    // (可选回调) 登录房间结果，如果仅关注登录结果，关注此回调即可
+    // (Optional callback) Log in to room result, if you only focus on the login result, pay attention to this callback
 });
 ```
 
-**2. 监听登录房间后的事件回调**
+**2. Listen for Event Callbacks After Logging In to Room**
 
-根据实际需要，在登录房间后监听想要关注的事件通知，比如房间状态更新、用户状态更新、流状态更新等。
-- [onRoomStateChanged](@onRoomStateChanged)：房间状态更新回调。登录房间后，当房间连接状态发生变更（如出现房间断开，登录认证失败等情况），SDK 会通过该回调通知。
-- [onRoomUserUpdate](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-room-user-update)：用户状态更新回调。登录房间后，当房间内有用户新增或删除时，SDK 会通过该回调通知。
+According to actual needs, listen for event notifications you care about after logging in to the room, such as room status updates, user status updates, stream status updates, etc.
 
-    只有调用 [loginRoom](@loginRoom) 接口登录房间时传入 [ZegoRoomConfig](@-ZegoRoomConfig) 配置，且 “isUserStatusNotify” 参数取值为 “true” 时，用户才能收到 [onRoomUserUpdate](@onRoomUserUpdate) 回调。
+- [onRoomStateChanged](@onRoomStateChanged): Room status update callback. After logging in to the room, when the room connection status changes (such as room disconnection, authentication failure, etc.), the SDK will notify through this callback.
+- [onRoomUserUpdate](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-room-user-update): User status update callback. After logging in to the room, when users are added to or removed from the room, the SDK will notify through this callback.
 
-- [onRoomStreamUpdate](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-room-stream-update)：流状态更新回调。登录房间后，当房间内有用户新推送或删除音视频流时，SDK 会通过该回调通知。
+    Only when calling the [loginRoom](@loginRoom) interface to log in to the room with the [ZegoRoomConfig](@-ZegoRoomConfig) configuration, and the "isUserStatusNotify" parameter value is "true", can users receive the [onRoomUserUpdate](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-room-user-update) callback.
 
-<Warning title="注意">
+- [onRoomStreamUpdate](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-room-stream-update): Stream status update callback. After logging in to the room, when users in the room newly publish or remove audio and video streams, the SDK will notify through this callback.
+
+<Warning title="Note">
 
 
-- 只有调用 [loginRoom](@loginRoom) 接口登录房间时传入 [ZegoRoomConfig](@-ZegoRoomConfig) 配置，且 “isUserStatusNotify” 参数取值为 “true” 时，用户才能收到 [onRoomUserUpdate](@onRoomUserUpdate) 回调。
-- 通常情况下，如果某个用户想要播放其他用户推送的视频，可以在收到流状态更新（新增）的回调中，调用 [startPlayingStream](@startPlayingStream) 接口拉取远端推送的音视频流。
-- 请注意，请勿在 SDK 回调线程中调用任何 SDK 接口，需要手动切换为其他线程，否则会产生死锁。
+- Only when calling the [loginRoom](@loginRoom) interface to log in to the room with the [ZegoRoomConfig](@-ZegoRoomConfig) configuration, and the "isUserStatusNotify" parameter value is "true", can users receive the [onRoomUserUpdate](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-room-user-update) callback.
+
+- Normally, if a user wants to play audio published by other users, they can call the [startPlayingStream](@startPlayingStream) interface in the stream status update (addition) callback to pull the remote published audio and video streams.
+
+- Please note, do not call any SDK interfaces in the SDK callback thread, you need to manually switch to another thread, otherwise a deadlock will occur.
+
 
 </Warning>
 
 
 
 ```cpp
-// 房间状态更新回调
+// Room status update callback
 void onRoomStateChanged(const std::string &roomID, ZegoRoomStateChangedReason reason, int errorCode, const std::string &extendedData) {
     if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_LOGINING)
     {
-        // 登录中
+        // Logging in
     }
     else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_LOGINED)
     {
-        // 登录成功
-        // 请注意，请勿在 SDK 回调线程中调用任何 SDK 接口，需要手动切换为其他线程，否则会产生死锁
-        // 只有当房间状态是登录成功或重连成功时，推流（startPublishingStream）、拉流（startPlayingStream）才能正常收发音视频
-        //将自己的音视频流推送到 ZEGO 音视频云
+        // Log in successful
+        // Please note, do not call any SDK interfaces in the SDK callback thread, you need to manually switch to another thread, otherwise a deadlock will occur.
+        // Only when the room status is login successful or reconnection successful can publishing (startPublishingStream) or playing (startPlayingStream) normally send and receive audio and video
+        // Publish the local audio and video stream to the ZEGO audio and video cloud
     }
     else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_LOGIN_FAILED)
     {
-        // 登录失败
+        // Log in failed
     }
     else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_RECONNECTING)
     {
-        // 重连中
+        // Reconnecting
     }
     else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_RECONNECTED)
     {
-        // 重连成功
+        // Reconnection successful
+        // Please note, do not call any SDK interfaces in the SDK callback thread, you need to manually switch to another thread, otherwise a deadlock will occur.
     }
     else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_RECONNECT_FAILED)
     {
-        // 重连失败
+        // Reconnection failed
     }
     else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_KICK_OUT)
     {
-        // 被踢出房间
+        // Kicked out of the room
     }
     else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_LOGOUT)
     {
-        // 登出成功
+        // Log out successful
     }
     else if(reason == ZEGO_ROOM_STATE_CHANGED_REASON_LOGOUT_FAILED)
     {
-        // 登出失败
+        // Log out failed
     }
-}
+};
 
-// 用户状态更新回调
+// User status update callback
 void onRoomUserUpdate(const std::string& roomID, ZegoUpdateType updateType, const std::vector<ZegoUser>& userList) override {
-    // 根据需要实现事件回调
-}
+    // Implement event callback according to needs
+};
 
-// 流状态更新回调
-void onRoomStreamUpdate(const std::string& roomID, ZegoUpdateType updateType, const std::vector<ZegoStream>& streamList, const std::string& extendedData) override {
-    // 根据需要实现事件回调
-}
+// Stream status update callback
+void onRoomStreamUpdate(const std::string& roomID, ZegoUpdateType updateType, const std::vector<ZegoStream>& streamInfoList, const std::string& extendedData) override {
+    // Implement event callback according to needs
+};
 ```
 
 <a id="publishingStream"></a>
+### Publish Stream
 
-### 推流
+**1. Start Publishing Stream**
 
-**1. 开始推流**
+Call the [startPublishingStream](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#start-publishing-stream) interface, and pass in the stream ID parameter "streamID", to send the local audio and video stream to remote users.
 
-调用 [startPublishingStream](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#start-publishing-stream)，传入流 ID 参数 “streamID”，向远端用户发送本端的音视频流。
-
-<Warning title="注意">
+<Warning title="Note">
 
 
-- 同一个 AppID 内，需保证 “streamID” 全局唯一。如果同一个 AppID 内，不同用户各推了一条 “streamID” 相同的流，会导致后推流的用户推流失败。
-- 开始推流前，建议开发者先对推流参数进行配置。如果没有配置，SDK 将采用默认配置。SDK 支持丰富的推流参数配置，主要包含：视频帧率、码率、分辨率、音频码率等。
-
+Within the same AppID, ensure that the "streamID" is globally unique. If within the same AppID, different users each publish a stream with the same "streamID", it will cause the user who publishes later to fail to publish the stream.
 </Warning>
 
-
+In addition, it is recommended for developers to configure publishing parameters before starting publishing. If not configured, the SDK will use the default configuration. The SDK supports rich publishing parameter configuration, mainly including: video frame rate, bitrate, resolution, audio bitrate, etc.
 
 ```cpp
-// 开始推流
-engine->startPublishingStream("streamID");
+// Start publishing stream
+engine->startPublishingStream("stream1");
 ```
 
-**2. 监听推流后的事件回调**
+**2. Listen for Event Callbacks After Publishing Stream**
 
-根据实际应用需要，在推流后监听想要关注的事件通知，比如推流状态更新等。
+According to actual application needs, listen for event notifications you care about after publishing the stream, such as publishing status updates, publishing quality, etc.
 
-[onPublisherStateUpdate](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-publisher-state-update)：推流状态更新回调。调用推流接口成功后，当推流状态发生变更（如出现网络中断导致推流异常等情况），SDK 在重试推流的同时，会通过该回调通知。
+- [onPublisherStateUpdate](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-publisher-state-update): Publishing status update callback. After the publishing interface is called successfully, when the publishing status changes (such as network interruption causing publishing exceptions, etc.), the SDK will notify through this callback while retrying to publish.
+- [onPublisherQualityUpdate](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-publisher-quality-update): Publishing quality callback. After the publishing interface is called successfully, it periodically calls back with audio and video stream quality data (such as resolution, frame rate, bitrate, etc.).
 
+Event callbacks are all [ZegoExpressEngine](@-ZegoExpressEngine) delegates. Developers can directly assign their implemented callback handling functions to the corresponding delegates of [ZegoExpressEngine](@-ZegoExpressEngine), and then receive callbacks and process them.
 
 ```cpp
-// 推流状态更新回调
-virtual void onPublisherStateUpdate(const std::string& streamID, ZegoPublisherState state, int errorCode, const std::string& extendedData) {
-    // 根据需要实现事件回调
+// Publishing status update callback
+void onPublisherStateUpdate(const std::string& streamID, ZegoPublisherState state, int errorCode, const std::string& extendedData) {
+    printf("onPublisherStateUpdate: streamID=%s", streamID.c_str());
+        // ...
 }
 ```
 
+<Note title="Note">
+If you need to understand Express's microphone/audio/speaker related interfaces, please refer to [FAQ - How to implement switching camera/video screen/microphone/audio/speaker?](http://doc-zh.zego.im/faq/How_to_switch_devices).
+</Note>
 
-### 拉流
+### Play Stream
 
-**1. 开始拉流**
+**1. Start Playing Stream**
 
-调用 [startPlayingStream](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#start-playing-stream) 接口，根据传入的流 ID 参数 “streamID”，拉取远端推送的音视频流。
+Call the [startPlayingStream](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#start-playing-stream) interface, based on the passed stream ID parameter "streamID", to pull the remote published audio and video stream.
 
-远端用户推送的 “streamID” 可以从 [ZegoEventHandler](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler) 中的 [onRoomStreamUpdate](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-room-stream-update) 回调中获得。
+The "streamID" published by remote users can be obtained from the [onRoomStreamUpdate](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-room-stream-update) callback of the [ZegoEventHandler](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler).
 
 ```cpp
-// 开始拉流
-engine->startPlayingStream("streamID", nullptr);
+// Start playing stream
+engine->startPlayingStream("123", nullptr);
 ```
 
-**2. 监听拉流后的事件回调**
+**2. Listen for Event Callbacks After Playing Stream**
 
-根据实际应用需要，在拉流后监听想要关注的事件通知，比如拉流状态更新等。
 
-[onPlayerStateUpdate](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-player-state-update)：拉流状态更新回调。调用拉流接口成功后，当拉流状态发生变更（如出现网络中断导致推流异常等情况），SDK 在重试拉流的同时，会通过该回调通知。
+According to actual application needs, listen for event notifications you care about after playing the stream, such as playing status updates, playing quality, etc.
+
+- [onPlayerStateUpdate](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-player-state-update): Playing status update callback. After the playing interface is called successfully, when the playing status changes (such as network interruption causing publishing exceptions, etc.), the SDK will notify through this callback while retrying to play.
+- [onPlayerQualityUpdate](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-player-quality-update): Playing quality callback. After playing is successful, it calls back every 3 seconds with the quality data of the pulled audio and video stream (such as resolution, frame rate, bitrate, RTT, packet loss rate, etc.), allowing real-time monitoring of the health status of the pulled stream.
+
+Event callbacks are all [ZegoExpressEngine](@-ZegoExpressEngine) delegates. Developers can directly assign their implemented callback handling functions to the corresponding delegates of [ZegoExpressEngine](@-ZegoExpressEngine), and then receive callbacks and process them.
 
 ```cpp
-// 拉流状态变更回调
+// Playing status update callback
 virtual void onPlayerStateUpdate(const std::string& streamID, ZegoPlayerState state, int errorCode, const std::string& extendedData) {
-    // 根据需要实现事件回调
+    printf("onPlayerStateUpdate: streamID=%s", streamID.c_str());
+        // ...
 }
 ```
 
-### 体验实时音视频功能
+### Experience Real-time Audio and Video Functions
 
-在真机中运行项目，运行成功后，可以看到本端视频画面。
+Run the project on a real device. After successful operation, you can see the local video screen.
 
-为方便体验，ZEGO 提供了一个 [Web 端调试示例 ](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html)，在该页面下，输入相同的 AppID、RoomID，输入不同的 UserID、以及对应的 [Token](/console/development-assistance/temporary-token)，即可加入同一房间与真机设备互通。当成功开始音视频通话时，可以听到远端的音频，看到远端的视频画面。
+For convenience, ZEGO provides a [Web Debugging Example ](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html). On this page, enter the same AppID and RoomID, enter different UserIDs, and the corresponding [Token](/console/development-assistance/temporary-token), and you can join the same room to communicate with real devices. When the audio and video call starts successfully, you can hear the remote audio and see the remote video screen.
 
 
-### 停止推拉流
+<a id="stopPublishingStream"></a>
+### Stop Publishing and Playing Streams
 
-**1. 停止推流**
+**1. Stop Publishing Stream**
 
-调用 [stopPublishingStream](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#stop-publishing-stream) 停止向远端用户发送本端的音视频流。
+Call the [stopPublishingStream](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#stop-publishing-stream) interface to stop sending the local audio and video stream to remote users.
 
 ```cpp
-// 停止推流
+// Stop publishing stream
 engine->stopPublishingStream();
 ```
 
-**2. 停止拉流**
+**2. Stop Playing Stream**
 
-调用 [stopPlayingStream](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#stop-playing-stream) 停止拉取远端推送的音视频流。
+Call the [stopPlayingStream](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#stop-playing-stream) interface to stop pulling the remote published audio and video stream.
 
-<Warning title="注意">
+<Warning title="Note">
 
 
-如果开发者通过 [onRoomStreamUpdate](@onRoomStreamUpdate) 回调收到了音视频流 “减少” 的通知，请及时调用 [stopPlayingStream ](@stopPlayingStream) 接口停止拉流，避免拉到空流、产生额外的成本；或者，开发者可以根据自己的业务需求，选择合适的时机，主动调用 [stopPlayingStream ](@stopPlayingStream) 接口停止拉流。
+If the developer receives a "decrease" notification for audio and video streams through the [onRoomStreamUpdate](@onRoomStreamUpdate) callback, please call the [stopPlayingStream ](@stopPlayingStream) interface in time to stop playing streams, to avoid pulling empty streams and generating additional costs; or, developers can choose the appropriate timing according to their business needs and proactively call the [stopPlayingStream ](@stopPlayingStream) interface to stop playing streams.
 
 </Warning>
 
 
 
 ```cpp
-// 停止拉流
-engine->stopPlayingStream("streamID");
+// Stop playing stream
+engine->stopPlayingStream("123");
 ```
 
+### Log Out of Room
 
-### 退出房间
-
-调用 [logoutRoom](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#logout-room) 接口退出房间。
+Call the [logoutRoom](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#logout-room) interface to log out of the room.
 
 ```cpp
-// 退出房间
-engine->logoutRoom("roomID");
+// Log out of room
+engine->logoutRoom("123666");
 ```
 
-### 销毁引擎
+### Destroy Engine
 
-调用 [destroyEngine](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-zego-express-sdk#destroy-engine) 接口销毁引擎，用于释放 SDK 使用的资源。
-
-- 如果需要监听回调，来确保设备硬件资源释放完成，可在销毁引擎时传入 “callback”。该回调只用于发送通知，开发者不可以在回调内释放与引擎相关的资源。
-
-- 如果不需要监听回调，可传入 “nullptr”。
+Call the [destroyEngine](https://doc-zh.zego.im/zh/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-zego-express-sdk#destroy-engine) interface to destroy the engine, used to release the resources used by the SDK.
 
 ```cpp
-// 销毁引擎实例
-ZegoExpressSDK::destroyEngine(engine, nullptr);
+// Destroy engine instance
+ZegoExpressSDK::destroyEngine(engine);
 ```
+
