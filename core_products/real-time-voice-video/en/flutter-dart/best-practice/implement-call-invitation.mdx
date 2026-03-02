@@ -1,0 +1,934 @@
+# Implement call invitation 
+
+
+This doc will introduce how to implement the call invitation feature in the calling scenario. 
+
+
+## Prerequisites
+
+Before you begin, make sure you complete the following:
+
+- Complete SDK integration and basic calling functions by referring to [Quick start](!Quick_start_Integrate_Implementation).
+- Download the [demo](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_flutter/tree/master/best_practices) that comes with this doc.
+- Activate the **In-app Chat** service.
+![https://doc-media.zego.im/sdk-doc/Pics/InappChat/ActivateZIMinConsole2.png](https://doc-media.zego.im/sdk-doc/Pics/InappChat/ActivateZIMinConsole2.png)
+
+## Preview the effect
+
+You can achieve the following effect with the [demo](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_flutter/tree/master/best_practices) provided in this doc: 
+
+|Home Page|Incoming Call Dialog|Waiting Page|Calling Page|
+|--- | --- | --- |--- |
+|<img src="https://doc-media.zego.im/sdk-doc/Pics/zegocloud/call/home_page.jpg" width="80%" />|<img src="https://doc-media.zego.im/sdk-doc/Pics/zegocloud/call/incoming_call.jpg" width="80%" />|<img src="https://doc-media.zego.im/sdk-doc/Pics/zegocloud/call/waiting_page.jpg" />|<img src="https://doc-media.zego.im/sdk-doc/Pics/zegocloud/call/calling_page.jpg" />|
+
+
+
+## Understand the tech
+
+Implementation of the call invitation is based on the [Call invitation (signaling)](!zim-Call_Invitation) feature provided by the `in-app chat (hereafter referred to as ZIM SDK)`, which provides the capability of call invitation, allowing you to send, cancel, accept, and reject a call invitation.
+
+The process of call invitation implemented based on this is as follows: (taking "Alice calls Bob, Bob accepts and connects the call" as an example)
+
+<img src="https://mermaid.ink/img/pako:eNp1ks1uwyAQhF9lxdk9xEcOkdI4qqr-RKrVS8SFwjZBscHF2FIV5d2LwbSNbPuEh9lvB9gLEUYioaTFrw61wELxo-U10-C_hlunhGq4drCplMCp3MrzCngLZfE0s4m2RztsH3YP--3z_r2AMmizoHwRdG8-mI5yyAFwt17H3kBB8Kp61L1yY76oR0voNmOJyUZKvkDJR4pvD4PF6G0ycaeMfkOBqkeZskXfhLoRAhs3of7PdmO5ybZaoKQTxvuYZov2v2yvxiGYARwqMp-VQuv8JQe60keSkRptzZX083AZqhhxJ6yREeqXktszI0xfvY93zpTfWhDqbIcZ6RrJXZodQj951f6qO6mcscmJ4e8lDl2YvYz4Jz4Yk-quP-XD1k4?type=png" />
+
+
+Here is a brief overview of the solution:
+
+1. The caller can send a call invitation to a specific user by calling the `callInvite` method and waiting for the callee's response.
+    - When the callee accepts the call invitation, the caller will receive a callback notification via `onCallUserStateChanged`, `ZIMCallUserInfo` status is `ZIMCallUserState.accepted`.
+    - When the callee rejects the call invitation, the caller will receive a callback notification via `onCallUserStateChanged`, `ZIMCallUserInfo` status is `ZIMCallUserState.rejected`.
+    - When the callee does not respond within the timeout period, the caller will receive a callback notification via `onCallUserStateChanged`, `ZIMCallUserInfo` status is `ZIMCallUserState.timeout`.
+    - The caller can call `callEnd` to end the call invitation during the waiting period, the callee will receive a callback notification via `onCallInvitationEnded`.
+
+2. When the callee receives a call invitation, the callee will receive a callback notification via the `onCallInvitationReceived` and can choose to accept, reject, or not respond to the call.
+    - If the callee wants to accept the call invitation, call the `callAccept` method.
+    - If the callee wants to reject the call invitation, call the `callReject` method.
+    - When the caller end the call invitation, the callee will receive a callback notification via `onCallInvitationEnded`.
+    - When the callee does not respond within the timeout period, the callee will receive a callback notification via `onCallInvitationTimeout`.
+3. If the callee accepts the invitation, the call will begin.
+
+Later in this document, the complete call process will be described in detail.
+
+<Accordion title="ZIM SDK call invitation interfaces" defaultOpen="false">
+
+
+[Method](https://docs.zegocloud.com/article/14573#call-invitation-functions)
+
+
+
+```dart
+abstract class ZIM {
+    Future<ZIMCallInvitationSentResult> callInvite(List<String> invitees, ZIMCallInviteConfig config);
+
+    Future<ZIMCallingInvitationSentResult> callingInvite(List<String>invitees, String callID, ZIMCallingInviteConfig config);
+
+    Future<ZIMCallCancelSentResult> callCancel(List<String> invitees, String callID, ZIMCallCancelConfig config);
+
+    Future<ZIMCallAcceptanceSentResult> callAccept(String callID, ZIMCallAcceptConfig config);
+
+    Future<ZIMCallRejectionSentResult> callReject(String callID, ZIMCallRejectConfig config);
+
+    Future<ZIMCallEndSentResult> callEnd(String callID, ZIMCallEndConfig config);
+
+    Future<ZIMCallQuitSentResult> callQuit(String callID, ZIMCallQuitConfig config);
+    
+}
+```
+
+[Callback](https://docs.zegocloud.com/article/14573#call-invitation-functions)
+
+```dart
+class ZIMEventHandler {
+    static void Function(ZIM zim, ZIMCallInvitationReceivedInfo info, String callID)? onCallInvitationReceived;
+
+    static void Function(ZIM zim, ZIMCallUserStateChangeInfo callUserStateChangeInfo, String callID)? onCallUserStateChanged;
+
+    static void Function(ZIM zim, String callID)? onCallInvitationTimeout;
+
+    static void Function(ZIM zim, ZIMCallInvitationEndedInfo callInvitationEndedInfo, String callID)? onCallInvitationEnded;
+
+}
+```
+
+</Accordion>
+
+## Implementation
+
+### Integrate and start to use the ZIM SDK
+
+If you have not used the ZIM SDK before, you can read the following section:
+
+<Accordion title="Add the ZIM SDK dependency" defaultOpen="false">
+
+
+Run the following command in your project root directory:
+
+```bash
+flutter pub add zego_zim
+flutter pub get
+```
+
+</Accordion>
+
+<Accordion title="Use the ZIM SDK" defaultOpen="false">
+
+
+After successful integration, you can use the Zim SDK like this: 
+
+```dart
+import 'package:zego_zim/zego_zim.dart';
+```
+
+Creating a ZIM instance is the very first step, an instance corresponds to a user logging in to the system as a client.
+```dart
+ZIM.create(
+  ZIMAppConfig()
+    ..appID = appID
+    ..appSign = appSign,
+);
+```
+
+</Accordion>
+
+
+Later on, we will provide you with detailed instructions on how to use the ZIM SDK to develop the call invitation feature. 
+
+
+### Manage multiple SDKs more easily
+
+In most cases, you need to use multiple SDKs together. For example, in the call invitation scenario described in this doc, you need to use the `zim sdk` to implement the call invitation feature, and then use the `zego_express_engine sdk` to implement the calling feature.
+
+If your app has direct calls to SDKs everywhere, it can make the code difficult to manage and troubleshoot. To make your app code more organized, we recommend the following way to manage these SDKs:
+
+
+1. Create a wrapper layer for each SDK so that you can reuse the code to the greatest extent possible.
+
+Create a `ZIMService` class for the `zim sdk`, which manages the interaction with the SDK and stores the necessary data. Please refer to the complete code in [zim_service.dart](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_flutter/tree/master/call/best_practices/call_with_invitation/lib/interal/zim/zim_service.dart).
+```dart
+class ZIMService {
+  // ...
+  Future<void> init({required int appID, String appSign = ''}) async {
+    initEventHandle();
+    ZIM.create(
+      ZIMAppConfig()
+        ..appID = appID
+        ..appSign = appSign,
+    );
+  }
+  // ...
+}
+```
+
+
+Similarly, create an `ExpressService` class for the `zego_express_engine sdk`, which manages the interaction with the SDK and stores the necessary data. Please refer to the complete code in [zego_express_service.dart](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_flutter/blob/master/best_practices/lib/internal/sdk/express/express_service.dart).
+
+```dart
+class ExpressService {
+
+  // ...  
+  Future<void> init({
+    required int appID,
+    String appSign = '',
+    ZegoScenario scenario = ZegoScenario.StandardVideoCall,
+  }) async {
+    initEventHandle();
+    final profile = ZegoEngineProfile(appID, scenario, appSign: appSign);
+    await ZegoExpressEngine.createEngineWithProfile(profile);
+  }
+  // ...  
+}
+```
+
+With the service, you can add methods to the service whenever you need to use any SDK interface.
+
+
+<Accordion title="Add connectUser method to ZIMService" defaultOpen="false">
+
+
+```dart
+class ZIMService {
+  // ...
+  Future<void> connectUser(String userID, String userName) async {
+    ZIMUserInfo userInfo = ZIMUserInfo();
+    userInfo.userID = userID;
+    userInfo.userName = userName;
+    zimUserInfo = userInfo;
+    ZIM.instance?.login(userInfo);
+  }
+  // ...
+}
+```
+
+</Accordion>
+
+2. After completing the service encapsulation, you can further simplify the code by creating a `ZEGOSDKManager` to manage these services, as shown below. Please refer to the complete code in [zego_sdk_manager.dart](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_flutter/blob/master/best_practices/lib/zego_sdk_manager.dart).
+
+```dart
+class ZEGOSDKManager {
+  ZEGOSDKManager._internal();
+  factory ZEGOSDKManager() => instance;
+  static final ZEGOSDKManager instance = ZEGOSDKManager._internal();
+
+  ExpressService expressService = ExpressService.instance;
+  ZIMService zimService = ZIMService.instance;
+
+  Future<void> init(int appID, String appSign) async {
+    await expressService.init(appID: appID, appSign: appSign);
+    await zimService.init(appID: appID, appSign: appSign);
+  }
+
+  Future<void> connectUser(String userID, String userName) async {
+    await expressService.connectUser(userID, userName);
+    await zimService.connectUser(userID, userName);
+  }
+  // ...
+}
+```
+
+
+In this way, you have implemented a singleton class that manages the SDK services you need. From now on, you can get an instance of this class anywhere in your project and use it to execute SDK-related logic, such as:
+
+
+
+- When the app starts up: call `ZEGOSDKManager.instance.init(appID,appSign);` 
+- When starting a call: call `ZEGOSDKManager.instance.expressService.loginRoom(roomID);`
+- When ending a call: call `ZEGOSDKManager.instance.expressService.logoutRoom(roomID);`
+
+Later, we will introduce how to add call invitation feature based on this. 
+
+
+### Send a call invitation
+
+1. Pass extension information
+
+When the caller initiates a call, not only specifying the callee, but also passing on information to the callee is allowed, such as whether to initiate a video call or an audio-only call.
+
+The `ZIMCallInviteConfig` parameter of the `callInvite` method allows for passing a string type of extended information `extendedData`. This extended information will be passed to the callee. You can use this method to allow the caller to pass any information to the callee. 
+
+In the example demo of this solution, you will use the `jsonEncode` method to define the `extendedData` of the call invitation, which will convert `Map` to a string in JSON format and pass it to the callee when initiating the call. (See [complete source code](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_flutter/tree/master/call/best_practices/call_with_invitation/lib/home_page.dart#L83)). The `extendedData` includes the call type and the name of the caller.
+
+```dart
+// 1v1 call
+Future<ZIMCallInvitationSentResult> sendVideoCallInvitation(String targetUserID) async {
+  const callType = ZegoCallType.video;
+  final extendedData = getCallExtendata(callType);
+  final result = await sendUserRequest([targetUserID], extendedData.toJsonString(), callType);
+  return result;
+}
+
+// group call
+Future<ZIMCallInvitationSentResult> sendGroupVideoCallInvitation(targetUserIDs) async {
+  const callType = ZegoCallType.video;
+  final extendedData = getCallExtendata(callType);
+  final result = await sendUserRequest(targetUserIDs, extendedData.toJsonString(), callType);
+  return result;
+}
+
+// sendUserRequest
+Future<ZIMCallInvitationSentResult> sendUserRequest(
+    List<String> userList, String extendedData, ZegoCallType type) async {
+  await ZEGOSDKManager().zimService.queryUsersInfo(userList);
+  currentCallData = ZegoCallData();
+  final config = ZIMCallInviteConfig()
+    ..mode = ZIMCallInvitationMode.advanced
+    ..extendedData = extendedData
+    ..timeout = 60;
+  final result = await ZEGOSDKManager().zimService.sendUserRequest(userList, config: config);
+  final errorUser = result.info.errorUserList.map((e) => e.userID).toList();
+  final sucessUsers = userList.where((element) => !errorUser.contains(element));
+  if (sucessUsers.isNotEmpty) {
+    currentCallData!
+      ..callID = result.callID
+      ..inviter = CallUserInfo(userID: localUser?.userID ?? '')
+      ..callType = type == ZegoCallType.video ? VIDEO_Call : VOICE_Call
+      ..callUserList = [];
+  } else {
+    clearCallData();
+  }
+  return result;
+}
+```
+
+> Note: The caller needs to check the `errorInfo` in `ZIMCallInvitationSentResult` to determine if the call is successful and handle exception cases such as call failure due to network disconnection on the caller's phone.
+
+
+2. Implement call waiting page
+
+In the 1v1 calling scenario, as a caller, after initiating the call, you will enter the call waiting page, where you can listen to the status changes of the call. See [complete source code](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_flutter/blob/master/best_practices/lib/pages/call/call_controller.dart) for details. The key code is as follows:
+
+```dart
+class ZegoCallController {
+  /// ...
+  bool dialogIsShowing = false;
+  bool waitingPageIsShowing = false;
+  bool callingPageIsShowing = false;
+  List<StreamSubscription> subscriptions = [];
+  @override
+  void initService() {
+    final callManager = ZegoCallManager();
+    subscriptions.addAll([
+      callManager.incomingCallInvitationReceivedStreamCtrl.stream.listen(onIncomingCallInvitationReceived),
+      callManager.incomingCallInvitationTimeoutStreamCtrl.stream.listen(onIncomingCallInvitationTimeout),
+      callManager.onCallStartStreamCtrl.stream.listen(onCallStart),
+      callManager.onCallEndStreamCtrl.stream.listen(onCallEnd),
+    ]);
+  }
+  // ...
+  void onIncomingCallInvitationTimeout(IncomingUserRequestTimeoutEvent event) {
+    hideIncomingCallDialog();
+    hidenWatingPage();
+  }
+
+  void hideIncomingCallDialog() {
+    if (dialogIsShowing) {
+      dialogIsShowing = false;
+      final context = navigatorKey.currentState!.overlay!.context;
+      Navigator.of(context).pop();
+    }
+  }
+
+  void hidenWatingPage() {
+    if (waitingPageIsShowing) {
+      waitingPageIsShowing = false;
+      final context = navigatorKey.currentState!.overlay!.context;
+      Navigator.of(context).pop();
+    }
+  }
+}
+```
+
+In the group call scenario, as a caller, after initiating the call, you will enter the calling page, where you can listen to the status changes of the call. See [complete source code](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_flutter/blob/master/best_practices/lib/pages/call/call_container.dart) for details. The key code is as follows:
+
+```dart
+class CallContainer extends StatefulWidget {
+  const CallContainer({super.key});
+  @override
+  State<CallContainer> createState() => CallContainerState();
+}
+
+class CallContainerState extends State<CallContainer> {
+
+  List<StreamSubscription> subscriptions = [];
+
+  @override
+  void dispose() {
+    super.dispose();
+    for (final element in subscriptions) {
+      element.cancel();
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final callManager = ZegoCallManager();
+    subscriptions.addAll([
+      callManager.onCallUserQuitStreamCtrl.stream.listen(onCallUserQuit),
+      callManager.outgoingCallInvitationTimeoutSreamCtrl.stream.listen(onOutgoingCallTimeOut),
+      callManager.onCallUserUpdateStreamCtrl.stream.listen(onCallUserUpdate)
+    ]);
+    //...
+  }
+
+  void onCallUserQuit(CallUserQuitEvent event) {
+    //...
+  }
+
+  void onOutgoingCallTimeOut(OutgoingCallTimeoutEvent event) {
+    //...
+  }
+
+  void onCallUserUpdate(OnCallUserUpdateEvent event) {
+    //...
+  }
+}
+
+```
+
+- When the callee accepts the call invitation, you will enter the calling page and the call starts.
+
+```dart
+class ZegoCallController {
+
+  /// ...
+  void onCallStart(dynamic event) {
+    hidenWatingPage();
+    pushToCallingPage();
+  }
+
+  void pushToCallingPage() {
+    ZEGOSDKManager.instance.expressService.stopPreview();
+    if (ZegoCallManager().callData != null) {
+      ZegoSDKUser otherUser;
+      if (callManager.callData?.inviter.userID != ZEGOSDKManager.instance.currentUser?.userID) {
+        otherUser = callManager.callData!.inviter;
+      } else {
+        otherUser = callManager.callData!.invitee;
+      }
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CallingPage(callData: callManager.callData!, otherUserInfo: otherUser),
+        ),
+      );
+    }
+  }
+  // ...
+}
+```
+
+
+- In the 1v1 calling scenario, when the callee rejects the call invitation, you will return to the previous page and the call ends. Similarly, when the callee doesn't respond within the timeout, the call ends and returns to the previous page. In the group call scenario, when there are waiting or accepted callees in the call invitation, the call is in progress, otherwise, you will return to the previous page and the call ends.
+
+```dart
+class ZegoCallController {
+
+  /// ...
+  void onCallEnd(dynamic event) {
+    hideIncomingCallDialog();
+    hidenWatingPage();
+    hidenCallingPage();
+  }
+  // ...
+}
+```
+
+
+- After initiating a call, the caller can end the call at any time by calling the `endCall` method. 
+> In the `endCall` method, you are required to pass a `requestID`. `requestID` is a unique identifier for a call invitation that can be obtained from the `ZIMCallInvitationSentCallback` parameter of the `callInvite` method.
+
+```dart
+//1v1 calling scenario end call
+class _CallWaitingPageState extends State<CallWaitingPage> {
+  /// ...
+  Widget endCallButton() {
+    return SizedBox(
+      width: 50,
+      height: 50,
+      child: ZegoCancelButton(
+        onPressed: endCall,
+      ),
+    );
+  }
+
+  Future<void> endCall() async {
+    ZegoCallManager().endCall(widget.callData.callID);
+    ZegoCallController().hidenWatingPage();
+  }
+  // ...
+}
+```
+
+```dart
+//group call scenario end call
+class _CallingPageState extends State<CallingPage> {
+
+  @override
+  void dispose() {
+    //...
+    ZegoCallManager().quitCall();
+    super.dispose();
+  }
+
+  /// ...
+  Widget endCallButton() {
+    return LayoutBuilder(builder: (context, constrains) {
+      return SizedBox(
+        width: 50,
+        height: 50,
+        child: ZegoCancelButton(
+          onPressed: () {
+            ZegoCallManager().quitCall();
+          },
+        ),
+      );
+    });
+  }
+  // ...
+}
+```
+
+
+<Accordion title="ZIM call invitation interfaces" defaultOpen="false">
+
+
+`callInvite`:
+
+```dart
+/// Detail description: When the caller initiates a call invitation, the called party can use [callAccept] to accept the call invitation or [callReject] to reject the invitation.
+///
+/// Business scenario: When you need to initiate a call invitation, you can create a unique callid through this interface to maintain this call invitation.
+///
+/// When to call: It can be called after creating a ZIM instance through [create].
+///
+/// Note: The call invitation has a timeout period, and the call invitation will end when the timeout period expires.
+///
+/// [invitees] list of invitees.
+/// [config] Call Invitation Related Configuration.
+Future<ZIMCallInvitationSentResult> callInvite(List<String> invitees, ZIMCallInviteConfig config);
+```
+
+`ZIMCallInviteConfig`:
+```dart
+/// The behavior property of the Send Call Invitation setting.
+class ZIMCallInviteConfig {
+  /// Description: The timeout setting of the call invitation, the unit is seconds. The default value is 90s.
+  int timeout = 0;
+
+  /// Description: Extended field, through which the inviter can carry information to the invitee.
+  String extendedData = "";
+
+  ZIMPushConfig? pushConfig;
+
+  ZIMCallInviteConfig();
+}
+```
+
+`ZIMCallInvitationSentResult`:
+```dart
+/// Detail description: Operation callback for sending a call invitation.
+///
+/// Business scenario: After the operation of sending a call invitation is performed, the success or failure can be known through this callback.
+///
+/// Notification timing: The result is returned after the operation of sending the call invitation is completed.
+///
+/// Related interface: [callInvite], send a call invitation.
+class ZIMCallInvitationSentResult {
+  String callID = "";
+  ZIMCallInvitationSentInfo info;
+  ZIMCallInvitationSentResult({required this.callID, required this.info});
+}
+```
+
+`ZIMCallInvitationSentInfo` inside the `ZIMCallInvitationSentResult`:
+
+```dart
+/// Call invitation sent message.
+class ZIMCallInvitationSentInfo {
+  /// Description: The timeout setting of the call invitation, the unit is seconds.
+  int timeout = 0;
+
+  /// Description: User id that has not received a call invitation.
+  List<ZIMCallUserInfo> errorInvitees = [];
+  ZIMCallInvitationSentInfo();
+}
+```
+</Accordion>
+
+### Invitation during calling
+
+When user is in a call, user can call the `inviteUserToJoinCall` add new callee to the current call.
+
+```dart
+void inviteUserToJoinCall() {
+  final editingController1 = TextEditingController();
+  final inviteUsers = <String>[];
+  showCupertinoDialog(
+    context: context,
+    barrierDismissible: true,
+    builder: (context) {
+      return CupertinoAlertDialog(
+        title: const Text('Input a user id'),
+        content: CupertinoTextField(controller: editingController1),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: Navigator.of(context).pop,
+            child: const Text('Cancel'),
+          ),
+          CupertinoDialogAction(
+            onPressed: () {
+              addInviteUser(inviteUsers, [
+                editingController1.text,
+              ]);
+              ZegoCallManager().inviteUserToJoinCall(inviteUsers);
+              Navigator.of(context).pop();
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      );
+    },
+  );
+}
+```
+
+
+### Respond to call invitation 
+
+When the callee receives a call invitation, they will receive the callback notification via `onCallInvitationReceived`. 
+
+1. To accept or reject the call invite, the callee can call the `callAccept` or `callReject` method.
+
+2. The callee can obtain the `extendedData` passed by the caller in `ZIMCallInvitationReceivedInfo`.
+
+3. When the callee accepts or rejects the call invitation, they can use the `config` parameter in the interface to pass additional information to the caller, such as the reason for rejection being due to user rejection or a busy signal.
+
+
+> The callee needs to check the `errorInfo` in `callback` to determine if the response is successful when calling the methods to accept or reject the call invite, and handle exception cases such as response failure due to network disconnection on the callee's phone.
+
+
+**Next, we will use the demo code to illustrate how to implement this part of the functionality.**
+
+1. When the callee receives a call invitation:
+
+- If the callee is not in the busy state: the `ZegoCallInvitationDialog` will be triggered to let the callee decide whether to accept or reject the call.
+- If the callee is in the busy state: the invitation will be automatically rejected, and the caller will be informed that the callee is in the busy state.
+
+For details, see [complete source code](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_flutter/blob/master/best_practices/lib/pages/call/call_controller.dart). The key code is as follows:
+
+```dart
+
+class ZegoCallController {
+  // If the callee is in the busy state: the invitation will be automatically rejected, and the caller will be informed that the callee is in the busy state.
+  void onIncomingCallInvitationReceived(IncomingCallInvitationReceivedEvent event) {
+    final extendedData = jsonDecode(event.info.extendedData);
+    if (extendedData is Map && extendedData.containsKey('type')) {
+      final callType = extendedData['type'];
+      if (ZegoCallManager().isCallBusiness(callType)) {
+        final inRoom = ZEGOSDKManager().expressService.currentRoomID.isNotEmpty;
+        if (inRoom || (ZegoCallManager().currentCallData?.callID != event.callID)) {
+          final rejectExtendedData = {'type': callType, 'reason': 'busy', 'callID': event.callID};
+          ZegoCallManager().rejectCallInvitationCauseBusy(event.callID, jsonEncode(rejectExtendedData), callType);
+          return;
+        }
+        //...
+      }
+    }
+  }
+}
+
+
+class ZegoCallController {
+  // If the callee is not in the busy state: the `ZegoIncomingCallDialog` will be triggered to let the callee decide whether to accept or reject the call.
+  void onIncomingCallInvitationReceived(IncomingCallInvitationReceivedEvent event) {
+    final extendedData = jsonDecode(event.info.extendedData);
+    if (extendedData is Map && extendedData.containsKey('type')) {
+      final callType = extendedData['type'];
+      if (ZegoCallManager().isCallBusiness(callType)) {
+        final type = callType == 0 ? ZegoCallType.voice : ZegoCallType.video;
+        final inRoom = ZEGOSDKManager().expressService.currentRoomID.isNotEmpty;
+        if (inRoom || (ZegoCallManager().callData?.callID != event.callID)) {
+          final rejectExtendedData = {'type': type.index, 'reason': 'busy', 'callID': event.callID};
+          ZegoCallManager().busyRejectCallRequest(event.callID, jsonEncode(rejectExtendedData), type);
+          return;
+        }
+        dialogIsShowing = true;
+        showTopModalSheet(
+          context,
+          GestureDetector(
+            onTap: onIncomingCallDialogClicked,
+            child: ZegoCallInvitationDialog(
+              invitationData: ZegoCallManager().callData!,
+              onAcceptCallback: acceptCall,
+              onRejectCallback: rejectCall,
+            ),
+          ),
+          barrierDismissible: false,
+        );
+      }
+    }
+  }
+  //...
+}
+```
+
+2. When the callee wants to accept the call invite: after the `ZegoCallInvitationDialog` pops up, when the **accept button** is clicked, `callAccept` method will be called and will enter the `CallingPage`.
+
+For details, see [complete source code](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_flutter/blob/master/best_practices/lib/pages/call/call_controller.dart). The key code is as follows:
+
+```dart
+class ZegoCallController {
+  // ...
+  Future<void> acceptCall() async {
+    hideIncomingCallDialog();
+    ZegoCallManager().acceptCallInvitation(ZegoCallManager().currentCallData!.callID);
+  }
+
+  void pushToCallingPage() {
+    if (ZegoCallManager().currentCallData != null) {
+      callingPageIsShowing = true;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (context) => CallingPage(callData: ZegoCallManager().currentCallData!),
+        ),
+      );
+    }
+  }
+
+  void onCallStart(dynamic event) {
+    hidenWatingPage();
+    pushToCallingPage();
+  }
+  // ...
+}
+```
+
+3. When the callee wants to reject the call invite: after the `ZegoCallInvitationDialog` pops up, when the **reject button** is clicked, `callReject` method will be called.
+
+For details, see [complete source code](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_flutter/blob/master/best_practices/lib/pages/call/call_controller.dart). The key code is as follows:
+
+
+```dart
+class ZegoCallService {
+  // ...
+  Future<void> rejectCall() async {
+    hideIncomingCallDialog();
+    ZegoCallManager().rejectCallInvitation(ZegoCallManager().currentCallData!.callID);
+  }
+  // ...
+}
+```
+
+4. When the callee doesn't respond: after the `ZegoCallInvitationDialog` pops up, if the call invitation times out due to the callee's lack of response, the `ZegoCallInvitationDialog` needs to disappear.
+
+For details, see [complete source code](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_flutter/tree/master/call/best_practices/call_with_invitation/lib/home_page.dart). The key code is as follows:
+
+
+```dart
+class _MyHomePageState extends State<MyHomePage> {
+  // ...
+  void onIncomingCallInvitationTimeout(IncomingUserRequestTimeoutEvent event) {
+    hideIncomingCallDialog();
+    //...
+  }
+  
+  void hideIncomingCallDialog() {
+    if (dialogIsShowing) {
+      dialogIsShowing = false;
+      final context = navigatorKey.currentState!.overlay!.context;
+      Navigator.of(context).pop();
+    }
+  }
+  // ...
+}
+```
+
+
+<Accordion title="ZIM call invitation received callback interface" defaultOpen="false">
+
+
+`onCallInvitationReceived`:
+
+```dart
+/// Detail description: After the inviter initiates a call invitation, the invitee will receive this callback when the invitee is online.
+///
+/// Business scenario: The invitee will call this callback after the inviter sends a call invitation.
+///
+/// When to call: After creating a ZIM instance through [ZIM.create].
+///
+/// Note: If the user is not in the invitation list or not online, this callback will not be called.
+///
+/// Related interface: [ZIM.callInvite].
+///
+/// [zim] ZIM instance.
+/// [info] Information about received call invitations.
+/// [callID] Received CallID.
+static void Function(ZIM zim, ZIMCallInvitationReceivedInfo info, String callID)? onCallInvitationReceived;
+```
+
+`ZIMCallInvitationReceivedInfo` inside the `onCallInvitationReceived`:
+```dart
+/// Information to accept the call invitation.
+class ZIMCallInvitationReceivedInfo {
+  /// Description: The timeout setting of the call invitation, the unit is seconds.
+  int timeout = 0;
+
+  /// Description: Inviter ID.
+  String inviter = "";
+
+  /// Description: Extended field, through which the inviter can carry information to the invitee.
+  String extendedData = "";
+  ZIMCallInvitationReceivedInfo();
+}
+```
+
+Interfaces used to accept and reject the call invite:
+
+```dart
+/// Detail description: When the calling party initiates a call invitation, the called party can accept the call invitation through this interface.
+///
+/// Service scenario: When you need to accept the call invitation initiated earlier, you can accept the call invitation through this interface.
+///
+/// When to call: It can be called after creating a ZIM instance through [create].
+///
+/// Note: The callee will fail to accept an uninvited callid.
+///
+/// [callID] The call invitation ID to accept.
+/// [config]  config.
+Future<ZIMCallAcceptanceSentResult> callAccept(String callID, ZIMCallAcceptConfig config);
+
+/// Detail description: When the calling party initiates a call invitation, the called party can reject the call invitation through this interface.
+///
+/// Service scenario: When you need to reject the call invitation initiated earlier, you can use this interface to reject the call invitation.
+///
+/// When to call: It can be called after creating a ZIM instance through [create].
+///
+/// Note: The callee will fail to reject the uninvited callid.
+///
+/// [callID] The ID of the call invitation to be rejected.
+/// [config] Related configuration for rejecting call invitations.
+Future<ZIMCallRejectionSentResult> callReject(String callID, ZIMCallRejectConfig config);
+
+/// Behavior property that accept the call invitation setting.
+class ZIMCallAcceptConfig {
+  /// Description: Extended field.
+  String extendedData = "";
+  ZIMCallAcceptConfig();
+}
+
+/// The behavior property of the reject call invitation setting.
+class ZIMCallRejectConfig {
+  /// Description: Extended field, through which the inviter can carry information to the invitee.
+  String extendedData = "";
+  ZIMCallRejectConfig();
+}
+
+class ZIMCallAcceptanceSentResult {
+  String callID;
+  ZIMCallAcceptanceSentResult({required this.callID});
+}
+
+class ZIMCallRejectionSentResult {
+  String callID;
+  ZIMCallRejectionSentResult({required this.callID});
+}
+```
+</Accordion>
+
+### Implement busy state 
+
+Finally, you also need to check the user's busy status, similar to the busy signal logic when making a phone call.
+
+> A busy signal refers to the situation where, when you try to dial a phone number, the target phone is being connected by other users, so you cannot connect with the target phone. In this case, you usually hear a busy tone or see a busy line prompt.
+
+In general, **being called, calling, and being in a call** are defined as **busy states**. In the busy state, you can only handle the current call invitation or call, and cannot accept or send other call invitations. The state transition diagram is as follows:
+
+<img src="https://doc-media.zego.im/sdk-doc/Pics/zegocloud/call/CallState.jpg" />
+
+In the example demo, you can use `ZegoCallManager` to manage the user's busy status:
+
+
+1. When transitioning between states, set the call data to `ZegoCallManager`, or clear the call data of `currentCallData`.
+
+```dart
+// When startCall or CallInvitation Received
+currentCallData = ZegoCallData();
+
+// When IncomingCallInvitation end, Timeout, etc.
+ZegoCallManager().clearCallData()
+```
+
+
+2. Then, when receiving a call invitation, check whether the callee is in a busy state. If so, reject the call invitation directly and inform the caller that the call was rejected due to being busy.
+
+For details, see [complete source code](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_flutter/blob/master/best_practices/lib/pages/call/call_controller.dart). The key code is as follows:
+
+```dart
+class ZegoCallController {
+  // ...
+  void onIncomingCallInvitationReceived(IncomingCallInvitationReceivedEvent event) {
+    final extendedData = jsonDecode(event.info.extendedData);
+    if (extendedData is Map && extendedData.containsKey('type')) {
+      final callType = extendedData['type'];
+      if (ZegoCallManager().isCallBusiness(callType)) {
+        final inRoom = ZEGOSDKManager().expressService.currentRoomID.isNotEmpty;
+        if (inRoom || (ZegoCallManager().currentCallData?.callID != event.callID)) {
+          final rejectExtendedData = {'type': callType, 'reason': 'busy', 'callID': event.callID};
+          ZegoCallManager().rejectCallInvitationCauseBusy(event.callID, jsonEncode(rejectExtendedData), callType);
+          return;
+        }
+        //..
+      }
+    }
+  }
+}
+```
+
+
+
+### Start the call 
+
+After the callee accepts the call invitation, the caller will receive the callback notification via `onUserRequestStateChanged`, and both parties can start the call. 
+You can refer to the implementation of the call page in [Quick start](../quick-start/quick-start.mdx), or you can directly refer to the demo's [sample code](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_flutter/blob/master/best_practices/lib/pages/call/calling_page.dart) included in this doc.
+
+> In this demo, we use `callID` as the `roomID` for `zego_express_sdk`.
+> For information on `roomID`, refer to **Key concepts**.
+
+
+
+
+<Warning title="Warning">
+**Resolution And Pricing Attention!**
+
+Please pay close attention to the relationship between **video resolution and price** when implementing video call, live streaming, and other video scenarios.
+
+
+**When playing multiple video streams in the same room, the billing will be based on the sum of the resolutions, and different resolutions will correspond to different billing tiers.**
+
+
+The video streams that are included in the calculation of the final resolution are as follows:
+
+1. Live streaming video view (such as host view, co-host view, PKBattle view, etc.)
+2. Video call's video view for each person
+3. Screen sharing view
+4. Resolution of the cloud recording service
+5. Resolution of the Live stream creation
+
+Before your app goes live, please **make sure you have reviewed all configurations and confirmed the billing tiers** for your business scenario to avoid unnecessary losses. For more details, please refer to [Pricing](https://www.zegocloud.com/pricing).
+</Warning>
+
+
+
+
+
+
+
+
+
+## Conclusion
+
+Congratulations! Hereby you have completed the development of the call invitation feature. 
+
+If you have any suggestions or comments, feel free to share them with us via [Discord](https://discord.gg/EtNRATttyp). We value your feedback.
