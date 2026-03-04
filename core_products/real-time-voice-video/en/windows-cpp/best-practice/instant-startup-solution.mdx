@@ -1,0 +1,97 @@
+---
+articleID: 19545
+date: "2024-09-27"
+---
+# Instant Startup Solution for Show Live Streaming
+
+- - -
+
+## Introduction
+
+In the show live streaming scenario, instant startup is achieved by optimizing the audience's stream playing speed. Compared with the normal stream playing process, the advantage of instant startup stream playing is that it does not rely on the successful login room status. It initiates stream playing while initiating login room to speed up stream playing. The following is a comparison between normal stream playing and instant startup stream playing:
+
+```mermaid
+sequenceDiagram
+    participant Audience
+    participant ZEGO Express SDK
+    note over Audience,ZEGO Express SDK: Normal play stream process
+    Audience->>ZEGO Express SDK: Login room <br/> [loginRoom]
+    ZEGO Express SDK-->>Audience: Login succeeded
+    ZEGO Express SDK-->>Audience: New stream notification
+    Audience->>ZEGO Express SDK: Start playing stream <br/> [startPlayingStream]
+    note over Audience,ZEGO Express SDK: Instant-on play stream process
+    Audience->>ZEGO Express SDK: Login room <br/> [loginRoom]
+    Audience->>ZEGO Express SDK: Start playing stream <br/> [startPlayingStream]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Second_opening_scheme.png" /></Frame>
+*/}
+
+
+## Prerequisites
+
+Before implementing the instant startup solution for show live streaming, ensure that:
+
+- A project has been created in the [ZEGOCLOUD Console](https://console.zego.im), and valid AppID and AppSign have been obtained. For details, please refer to [Console - Project Information](/console/project-info).
+- ZEGO Express SDK has been integrated into the project, and basic audio and video streaming functionality has been implemented. For details, please refer to [Quick Start - Integration](/real-time-video-windows-cpp/quick-start/integrating-sdk) and [Quick Start - Implementation Process](/real-time-video-windows-cpp/quick-start/implementing-video-call).
+
+- Before playing streams, the stream ID has been obtained, and it must be ensured that the host is in the broadcasting status. The broadcasting status is managed by the business side.
+  <Note title="Note">
+  The playing end needs to know the stream ID in advance. Usually, the stream ID is spliced according to fixed rules (such as splicing in the roomId_userId manner), or the room information obtained in advance by the business side adds the stream ID parameter.
+  </Note>
+
+
+
+## Implementation Process
+
+### Initialization
+
+For details, please refer to the "Initialization" section in [Quick Start - Implementation Process](/real-time-video-windows-cpp/quick-start/implementing-video-call).
+
+```cpp
+ZegoEngineProfile profile;
+// AppID and AppSign are assigned to each App by ZEGO; for security reasons, it is recommended to store AppSign in the App's business backend and obtain it from the backend when needed
+profile.appID = appID;
+profile.appSign = appSign;
+// Specify to use the live streaming scenario (please fill in the scenario suitable for your business according to the actual situation)
+profile.scenario = ZegoScenario::ZEGO_SCENARIO_BROADCAST;
+// Create engine instance
+auto engine = ZegoExpressSDK::createEngine(profile, nullptr);
+```
+
+### Login room
+
+For details, please refer to the "Login room" section in [Quick Start - Implementation Process](/real-time-video-windows-cpp/quick-start/implementing-video-call).
+
+```cpp
+// Create user object
+ZegoUser user("user1", "user1");
+// Only by passing in ZegoRoomConfig with the "isUserStatusNotify" parameter set to "true" can you receive the onRoomUserUpdate callback.
+ZegoRoomConfig roomConfig;
+//If you use appsign for authentication, the token parameter does not need to be filled; if you need to use a more secure authentication method: token authentication, please refer to [How to upgrade from AppSign authentication to Token authentication](https://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo&platform=all)
+// roomConfig.token = "xxxx";
+roomConfig.isUserStatusNotify = true;
+// Login room
+engine->loginRoom(roomID, user, roomConfig, [=](){
+    // (Optional callback) Login room result. If you only care about the login result, just pay attention to this callback
+});
+```
+
+### Audience plays stream
+
+After logging in to the room, without relying on the successful login room status, you can initiate stream playing while initiating login room to speed up stream playing and achieve the instant startup effect.
+
+<Note title="Note">
+- It is recommended that developers use Ultra-Low Latency Live Streaming (L3) for stream playing to achieve a higher quality live streaming experience. For details, please refer to [Ultra-Low Latency Live Streaming](/real-time-video-windows-cpp/live-streaming/low-latency-live-streaming).
+- When developers use ZEGO-configured CDN for direct publishing, they can directly play streams through streamID. Please refer to "Playing stream" in [Quick Start - Implementing Video Call](/real-time-video-windows-cpp/quick-start/implementing-video-call).
+- When developers use third-party CDN for direct publishing, they can play streams through URL. Please refer to [Playing Stream by URL](/real-time-video-windows-cpp/live-streaming/playing-stream-by-url).
+</Note>
+
+
+```cpp
+// Start playing stream, set the remote playing rendering view canvas, and use the SDK's default mode for the view mode, scaling proportionally to fill the entire View
+ZegoCanvas canvas((void*)view);
+// After filling in the url parameter, the sdk will pull the audio and video stream from the url, but still needs to pass a unique streamID to the SDK, which will use this streamID to identify the stream internally
+// For specific stream playing methods, please refer to L3 stream playing, RTC stream playing, CDN stream playing
+engine->startPlayingStream(streamID, &canvas, config);
+```

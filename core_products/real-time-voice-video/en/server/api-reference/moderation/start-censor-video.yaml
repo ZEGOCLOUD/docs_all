@@ -1,0 +1,344 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact: { name: Real-time Voice/Video API Support, email: support@zegocloud.com }
+
+tags:
+  - name: moderation
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+paths:
+  /:
+    post:
+      tags: [moderation]
+      summary: StartCensorVideoV2
+      description: |
+        Video stream moderation is an interactive extension service of ZEGOCLOUD's real-time audio/video products. Through the video stream moderation API, developers can invoke real-time video moderation to moderate audio and video content, including audio semantics and features (pitch, timbre, voiceprint, melody, etc.) recognition, and text semantics and content recognition in video frames. ZEGOCLOUD will send the recognition results to developers through [video stream moderation callback](/real-time-video-server/callback/moderation/video) or a configured custom callback URL. The start video stream moderation feature should be used in conjunction with [stop video stream moderation](/real-time-video-server/api-reference/moderation/stop-censor-video).
+
+        <Warning title="Warning">
+        Before using this API, please refer to [Console - Cloud Market - Shumei Content Moderation](/console/cloud-market/shumei-moderation) and follow the on-page instructions to enable the relevant permissions for `Shumei Content Moderation`.
+
+        </Warning>
+
+        <Note title="Rate Limit">For all rooms under the same AppID: 100 times/second</Note>
+        ## FAQ
+
+        1. **What happens if I start audio/video stream moderation API but don't call the stop audio/video stream moderation API?**
+
+            It will automatically end after pulling an empty stream for about 5 minutes. It is recommended to actively call the API to end moderation when you finish moderating.
+
+        2. **How do I identify which stream violated the rules in the audio/video stream moderation result callback?**
+
+            After completing moderation, ShuMei will return multiple callbacks based on 10s audio segment AudioUrls. The current results do not directly expose streamID information, but you can obtain it by extracting information from resultTaskId.
+
+            Example (assuming streamID is 0001, you can see that AudioUrl contains streamID 0001):
+            <Frame width="auto" height="auto" >
+            <img src="https://media-resource.spreading.io/docuo/workspace741/896bc39e2e65b82d5670b01b7c131c30/5852a1ffcc.png" />
+            </Frame>
+      operationId: start-censor-video
+      parameters:
+        - name: Action
+          in: query
+          required: true
+          description: |
+            > API prototype parameters
+            >
+            > https://rtc-api.zego.im?Action=StartCensorVideoV2
+          schema: { type: string, enum: [StartCensorVideoV2] }
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartCensorVideoRequest'
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartCensorVideoResponse'
+
+components:
+  schemas:
+    StartCensorVideoRequest:
+      type: object
+      required: [RoomId, EventId, VideoParam]
+      properties:
+        RoomId:
+          type: string
+          description: |
+            Room ID of the video moderation to be performed.
+            By default, all streams in the room will be submitted for moderation. If there are streams in the room that do not need moderation (such as streams published by trusted users), please set 'ZegoPulisherConfig.streamCensorshipFlag' to not allow moderation when calling the client SDK's 'startPublishingStream' to publish streams.
+          example: "room_1"
+        EventId:
+          type: string
+          description: |
+            Scenario identifier.
+
+            Use this parameter to identify the scenario corresponding to the audio stream. Moderation policies can be adjusted based on scenarios, thereby achieving control over moderation strictness for different scenarios.
+            - Live streaming: live_streaming
+            - 1v1: private_chat
+
+            If the above optional values cannot fully meet your requirements, please contact ZEGOCLOUD Technical Support.
+          example: "live_streaming"
+        Language:
+          type: string
+          enum: [zh,en,ar,hi,es,fr,ru,pt,id,de,ja,tr,vi,it,th,tl,ko,ms]
+          default: "zh"
+          description: |
+            Optional, language type. Specifies the language type for text content detection in video frames and audio segments (default is Chinese).
+              - zh: Chinese (default)
+              - en: English
+              - ar: Arabic
+              - hi: Hindi
+              - es: Spanish
+              - fr: French
+              - ru: Russian
+              - pt: Portuguese
+              - id: Indonesian
+              - de: German
+              - ja: Japanese
+              - tr: Turkish
+              - vi: Vietnamese
+              - it: Italian
+              - th: Thai
+              - tl: Filipino
+              - ko: Korean
+              - ms: Malay
+          example: "zh"
+        AudioParam:
+          type: object
+          description: Audio parameters. If not passed, audio streams will not be moderated
+          properties:
+            RiskTypeList:
+              type: array
+              items: { type: string }
+              description: |
+                Risk moderation category.
+
+                At least one of RiskTypeList and BusinessTypeList must not be empty. If both are empty, audio will not be moderated, only video. Values that can be added to the array are as follows:
+                Audio semantics:
+                - EROTIC: Pornography
+                - DIRTY: Abuse
+                - POLITY: Politics
+                - BAN: Prohibited
+                - VIOLENT: Violence/Terrorism
+                - ADVERT: Advertisement
+
+                Audio features:
+                - MOAN: Moaning
+                - ANTHEN: National anthem recognition
+                - BANEDAUDIO: Prohibited songs
+
+                For other features, please contact ZEGOCLOUD Technical Support.
+              example: ["ADLAW", "ADVERT", "AUDIOPOLITICAL", "DIRTY", "EROTIC", "MOAN", "POLITY"]
+            BusinessTypeList:
+              type: array
+              items: { type: string }
+              description: |
+                Business recognition category.
+
+                At least one of RiskTypeList and BusinessTypeList must not be empty. If both are empty, audio will not be moderated, only video. Values that can be added to the array are as follows:
+                Audio semantics:
+                - MOINIR: Minors
+
+                Audio features:
+                - SING: Singing
+                - LANGUAGE: Language recognition
+                - VOICE: Voice attribute recognition
+
+                For other features, please contact ZEGOCLOUD Technical Support.
+                Audio stream recognition is not limited to violating content, but can also assist developers in business operations.
+                If the above optional values cannot meet your business requirements, please contact ZEGOCLOUD Technical Support.
+            AudioLanguage:
+              type: string
+              enum: [zh,ja,ko,th,vi,ms,tl,id,hi,ar,tr,en,es,pt,it,fr,de,ru]
+              description: |
+                > This parameter has been deprecated. Please use the `Language` parameter instead.
+              deprecated: true
+            ReturnAllText:
+              type: integer
+              format: int32
+              enum: [0,1]
+              default: 0
+              description: |
+                Whether to return all text of the current 10s segment:
+                - 0: (Default) Return audio segment text with risk level other than PASS
+                - 1: Return audio segment text of all risk levels
+
+                The risk levels of moderation results will be divided into the following three categories:
+
+                PASS: Normal content, recommended to allow directly.
+
+                REVIEW: Suspicious content, recommended for manual review.
+
+                REJECT: Violating content, recommended to block directly.
+              example: 1
+            ReturnPreText:
+              type: integer
+              format: int32
+              enum: [0,1]
+              default: 0
+              description: |
+                Whether to return the text of the previous 10s segment of the violating segment:
+                - 0: (Default) Do not return the text of the previous 10s segment of the violating segment
+                - 1: Return the text of the previous 10s segment of the violating segment
+              example: 1
+            ReturnPreAudio:
+              type: integer
+              format: int32
+              enum: [0,1]
+              default: 0
+              description: |
+                Whether to return the previous audio segment link of the violating segment:
+                - 0: (Default) Do not return the previous 10s segment audio of the violating segment, only return the violating segment audio link
+                - 1: Return the previous 10s segment audio link of the violating segment
+              example: 1
+            ResultCallbackUrl:
+              type: string
+              description: |
+                Custom callback URL for moderation results.
+
+                If you need to send moderation results for this moderation task through another callback URL, you can use this parameter. If not needed, you can configure a unified callback URL in the ZEGOCLOUD Console. For details, please refer to [Console - Cloud Market - Shumei Content Moderation](/console/cloud-market/shumei-moderation#configure-audio-video-stream-moderation-callback-url).
+              example: ""
+            StatusCallbackUrl:
+              type: string
+              description: |
+                Custom callback URL for moderation status.
+
+                If you need to send moderation status for this moderation task through another callback URL, you can use this parameter. If not needed, you can configure a unified callback URL in the ZEGOCLOUD backend. For details, please refer to [Console - Cloud Market - Shumei Content Moderation](/console/cloud-market/shumei-moderation#configure-audio-video-stream-moderation-callback-url).
+              example: ""
+        VideoParam:
+          type: object
+          description: Video moderation related parameters
+          properties:
+            RiskTypeList:
+              type: array
+              items: { type: string }
+              description: |
+                Risk moderation category.
+
+                At least one of RiskTypeList and BusinessTypeList must not be empty. Values that can be added to the array are as follows:
+
+                Text semantics in video frames:
+                - IMGTEXTRISK: Basic violation recognition, including multiple common tags (politics, violence/terrorism, prohibited, pornography, abuse, advertisement, spam privacy, advertising law)
+
+                Video content:
+                - POLITY: Politics
+                - EROTIC: Pornography, sexy
+                - VIOLENT: Violence/Terrorism, prohibited
+                - QRCODE: QR code
+                - ADVERT: Advertisement
+
+                If the above optional values cannot meet your business requirements, please contact ZEGOCLOUD Technical Support.
+              example: ["ADVERT", "EROTIC", "IMGTEXTRISK", "POLITY", "QRCODE", "VIOLENT"]
+            BusinessTypeList:
+              type: array
+              items: { type: string }
+              description: |
+                Business recognition category.
+
+                At least one of RiskTypeList and BusinessTypeList must not be empty. Values that can be added to the array:
+
+                Video content:
+                - AGE: Minors
+                - PHOTOMATERIALLOGO: CFP and other copyright LOGOs, also supports more than a dozen other LOGOs. Please contact technical support for details.
+
+                Video content extensions:
+                - FACEDETECTION: Face detection
+                - BEAUTY: Beauty score
+
+                Video stream recognition is not limited to violating content, but can also assist developers in business operations. If the above optional values cannot meet your business requirements, please contact ZEGOCLOUD Technical Support.
+            ReturnAllImg:
+              type: integer
+              format: int32
+              enum: [0,1]
+              default: 0
+              description: |
+                Risk level for video frame capture, recommended to pass 1:
+                - 0: (Default) Return frame capture moderation information with risk level other than PASS
+                - 1: Return frame capture moderation information of all risk levels
+
+                The risk levels of moderation results will be divided into the following three categories:
+                - PASS: Normal content, recommended to allow directly
+                - REVIEW: Suspicious content, recommended for manual review
+                - REJECT: Violating content, recommended to block directly
+              example: 1
+            DetectFrequency:
+              type: integer
+              format: int32
+              description: |
+                Frame capture frequency.
+                Unit: seconds. Default is 3s, capture one frame for moderation.
+              example: 5
+            ResultCallbackUrl:
+              type: string
+              description: |
+                Custom callback URL for moderation results.
+
+                If you need to send moderation results for this moderation task through another callback URL, you can use this parameter. If not needed, you can configure a unified callback URL in the ZEGOCLOUD Console. For details, please refer to [Console - Cloud Market - Shumei Content Moderation](/console/cloud-market/shumei-moderation#configure-audio-video-stream-moderation-callback-url).
+              example: ""
+            StatusCallbackUrl:
+              type: string
+              description: |
+                Custom callback URL for moderation status.
+
+                If you need to send moderation status for this moderation task through another callback URL, you can use this parameter. If not needed, you can configure a unified callback URL in the ZEGOCLOUD backend. For details, please refer to [Console - Cloud Market - Shumei Content Moderation](/console/cloud-market/shumei-moderation#configure-audio-video-stream-moderation-callback-url).
+              example: ""
+        ReturnFinishInfo:
+          type: integer
+          format: int32
+          enum: [0,1]
+          default: 0
+          description: |
+            When the moderation task ends, whether to perform a "moderation task status" callback:
+            - 0: Do not send end notification when moderation ends
+            - 1: Send end notification when moderation ends
+          example: 1
+    StartCensorVideoResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int32
+          description: |
+            Return code.
+            The following only lists some return codes related to the API business logic. For complete return codes, please refer to [Global Return Codes](/real-time-video-server/api-reference/return-codes).
+            <table>
+              <thead>
+                <tr><th>Return Code</th><th>Description</th><th>Suggested Action</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>50006、50007</td><td>HTTP request failed.</td><td>Please retry later (recommended 300s), or contact ZEGOCLOUD Technical Support.</td></tr>
+                <tr><td>50009</td><td>Moderation failed.</td><td>Please retry later (recommended 300s), or contact ZEGOCLOUD Technical Support.</td></tr>
+                <tr><td>50117</td><td>Configuration error, ShuMei permissions not enabled.</td><td>Please refer to <a href="/console/cloud-market/shumei-moderation">Console - Cloud Market - Shumei Content Moderation</a> and follow the on-page instructions to enable `Shumei Content Moderation` permissions.</td></tr>
+              </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: Operation result description
+          example: "success"
+        RequestId:
+          type: string
+          description: Request ID
+          example: "TestRequestId1722597387688544000"
+        Data:
+          type: object
+          description: Response data
+          properties:
+            TaskId:
+              type: string
+              description: Moderation task ID, used to end the moderation task
+              example: "05e7a786a5191e8f5eb8e5851b01afcd"
+
+

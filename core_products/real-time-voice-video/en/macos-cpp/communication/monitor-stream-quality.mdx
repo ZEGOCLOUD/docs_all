@@ -1,0 +1,514 @@
+---
+articleID: 10185
+date: "2023-11-21"
+---
+# Publish/Play Stream Monitoring
+
+- - -
+
+## Feature Overview
+
+During the stream publishing and playing process, users can obtain information about published and played streams by registering relevant callbacks, including publishing/playing stream quality, first frame callbacks, resolution changes, CDN (Content Delivery Network) related information, and receiving SEI (Supplemental Enhancement Information). This document will introduce the following six features:
+
+| Feature Name | Description |
+| - | - |
+| Monitor publishing/playing stream quality | Developers can separately monitor publishing stream quality and playing stream quality to determine user network conditions and make corresponding handling to provide better services for users. Publishing stream quality includes parameters such as frame rate, bitrate, latency, and packet loss rate. Playing stream quality includes parameters such as frame rate and resolution for receiving, decoding, and rendering stages. |
+| Monitor user state | User state can be divided into publisher state and player state. Developers can monitor user states, such as requesting to publish, publishing, not publishing, requesting to play, playing, and not playing, to perform corresponding operations. |
+| Publish/Play stream first frame callback | Developers can set to receive callbacks when sending or receiving the first frame of video or audio. |
+| Monitor video resolution changes | Developers can choose to receive notifications when the video capture or playing resolution changes to perform related operations. |
+| Monitor CDN relay status | When developers choose to relay audio and video streams to CDN, they can monitor the CDN relay status to determine whether the relayed audio and video streams are normal. |
+| Receive SEI | When the player receives SEI, developers can obtain the SEI information content through callbacks. |
+
+By obtaining the above information, developers can perform related operations based on the publishing/playing stream state. For example, make corresponding handling when publishing stream quality is poor, determine whether publishing/playing stream is successful, determine whether the audio and video streams relayed to CDN are normal, or receive SEI information, etc.
+
+Related concept explanation:
+- Publish stream: Refers to the process of transmitting the content packaged during the capture stage to the server.
+- Play stream: Refers to the process of pulling existing live content from the server using a specified address.
+
+<Note title="Note">
+
+For SEI related concepts and principles, please contact ZEGOCLOUD Technical Support.
+
+</Note>
+
+
+
+## Prerequisites
+
+Before monitoring publishing and playing stream information, ensure:
+
+- ZEGO Express SDK has been integrated into the project and basic real-time Video Call functions have been implemented. For details, please refer to [Quick Start - Integration](/real-time-video-macos-cpp/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-macos-cpp/quick-start/implementing-video-call).
+- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com) and a valid AppID and AppSign have been applied. For details, please refer to [Console - Project Management](/console-old/project-management).
+
+## Example Source Code Download
+
+Please refer to [Download Example Source Code](/real-time-video-macos-cpp/quick-start/run-example-code) to obtain the source code.
+
+For related source code, please check the files in the "/ZegoExpressExample/AdvancedStreaming/src/main/java/im/zego/streammonitoring" directory.
+
+## Usage Steps
+
+### Monitor publishing stream quality
+
+Developers can receive publishing stream quality callbacks by registering [onPublisherQualityUpdate](@onPublisherQualityUpdate). After successful publishing, this callback will be received every three seconds. Developers can monitor the health of the published audio and video streams in real-time based on the quality parameters returned by the callback to display the uplink network status in real-time on the device UI interface.
+
+Call example:
+
+```cpp
+class MyEventHandler : public IZegoEventHandler{
+public:
+    void onPublisherQualityUpdate(String streamID, ZegoPublishStreamQuality quality){
+        // Developers can monitor specific quality in this callback to report to the business server for monitoring, or monitor a certain field of the quality object to give user-friendly prompts
+        // If developers don't know which field of the quality to monitor, they can focus on the level field, which is the comprehensive value of the quality object
+    }
+}
+auto eventhandler = std::make_shared<MyEventHandler>();
+engine->setEventHandler(eventhandler);
+```
+
+### Publishing stream quality details
+
+
+Publishing stream quality includes the frame rate and resolution of audio and video streams during the capture and encoding stages, as well as the frame rate, bitrate, latency, and packet loss rate of the audio and video streams during transmission (sending). This section will introduce the parameters within the publishing stream quality [ZegoPublishStreamQuality](@-ZegoPublishStreamQuality).
+
+
+#### Publishing capture quality
+
+
+Publishing capture quality is close to the user's subjective experience during preview. The relevant parameters of the audio and video quality during the capture stage when publishing are as follows:
+
+
+- [audioCaptureFPS](@audioCaptureFPS): Audio capture frame rate (fps)
+- [videoCaptureFPS](@videoCaptureFPS): Video capture frame rate (fps)
+
+#### Publishing encoding quality
+
+
+The relevant parameters of the audio and video quality during the encoding stage when publishing are as follows:
+
+
+- [videoEncodeFPS](@videoEncoderFPS): The target video encoding frame rate of the current encoder (fps)
+
+
+#### Publishing sending quality
+
+
+Publishing sending quality is the actual publishing quality, which is related to the set encoding resolution and actual network quality. The relevant parameters are as follows:
+
+
+- [audioSendFPS](@audioSendFPS): Actual audio sending frame rate (fps)
+- [audioKBPS](@audioKBPS): Actual audio sending bitrate (kbps)
+- [videoSendFPS](@videoSendFPS): Actual video sending frame rate (fps)
+- [videoKBPS](@videoKBPS): Actual video sending bitrate (kbps)
+- [rtt](@rtt): Round-trip time (RTT) from device to ZEGO Server (ms)
+- [packetLostRate](@packetLostRate): Device uplink packet loss rate
+
+#### Byte count statistics
+Developers can count the total bytes of sent video, audio, and total bytes. The relevant parameters are as follows:
+- [totalSendBytes](@totalSendBytes): Total bytes sent
+- [audioSendBytes](@audioSendBytes): Audio bytes sent
+- [videoSendBytes](@videoSendBytes): Video bytes sent
+
+#### Encoding information
+Developers can obtain the encoding information of the published stream. The relevant parameters are as follows:
+- [videoCodecID](@videoCodecID): Video encoding format
+- [isHardwareEncode](@isHardwareEncode): Whether hardware encoding is enabled
+
+#### Uplink network comprehensive quality
+
+
+If publishers are unclear about how to use each parameter of this callback interface, they can focus on the [level](@level) parameter, which is a comprehensive value describing the uplink network calculated internally by ZegoExpressEngine based on quality parameters.
+
+The description of the level field is as follows:
+
+| Field Name | Description |
+| - | - |
+| ZEGO_STREAM_QUALITY_LEVEL_EXCELLENT | Stream quality is excellent. |
+| ZEGO_STREAM_QUALITY_LEVEL_GOOD | Stream quality is good. |
+| ZEGO_STREAM_QUALITY_LEVEL_MEDIUM | Stream quality is normal. |
+| ZEGO_STREAM_QUALITY_LEVEL_BAD | Stream quality is poor. |
+| ZEGO_STREAM_QUALITY_LEVEL_DIE | Stream quality is abnormal. |
+
+### Monitor playing stream quality
+
+Developers can receive playing stream quality callbacks by registering [onPlayerQualityUpdate](@onPlayerQualityUpdate). After successful playing, this callback will be received every three seconds. Developers can monitor the health of the played audio and video streams in real-time based on the quality parameters returned by the callback to display the downlink network status in real-time on the device UI interface.
+
+Call example:
+
+```cpp
+class MyEventHandler : public IZegoEventHandler{
+public:
+    void onPlayerQualityUpdate(String streamID, ZegoPlayStreamQuality quality){
+        // Developers can monitor specific quality in this callback to report to the business server for monitoring, or monitor a certain field of the quality object to give user-friendly prompts
+        // If developers don't know which field of the quality to monitor, they can focus on the level field, which is the comprehensive value of the quality object
+    }
+}
+auto eventhandler = std::make_shared<MyEventHandler>();
+engine->setEventHandler(eventhandler);
+```
+
+### Playing stream quality details
+
+Playing stream quality includes the frame rate, bitrate, latency, and packet loss rate of received audio and video streams, the frame rate and resolution of audio and video streams during the decoding stage, as well as the frame rate, resolution, freeze rate, and overall audio and video quality during the rendering stage. This section will introduce the parameters within the playing stream quality [ZegoPlayStreamQuality](@ZegoPlayStreamQuality).
+
+
+
+#### Playing receiving quality
+
+Playing receiving quality is the actual playing quality, which is related to the actual publishing stream quality and current network quality. The relevant parameters are as follows:
+
+- [audioRecvFPS](@audioRecvFPS): Actual received audio frame rate (fps)
+- [audioDejitterFPS](@audioDejitterFPS): Audio dejitter frame rate, unit is f/s
+- [audioKBPS](@audioKBPS): Actual received audio bitrate (kbps)
+- [audioBreakRate](@audioBreakRate): Actual received audio freeze rate (freeze count/10 seconds)
+- [videoRecvFPS](@videoRecvFPS): Actual received video frame rate (fps)
+- [videoDejitterFPS](@videoDejitterFPS): Video dejitter frame rate, unit is f/s
+- [videoKBPS](@videoKBPS): Actual received video bitrate (kbps)
+- [videoBreakRate](@videoBreakRate): Actual received video freeze rate (freeze count/10 seconds)
+- [packetLostRate](@packetLostRate): Device downlink packet loss rate
+- [rtt](@rtt): Round-trip time (RTT) from device to ZEGO Server (ms)
+- [avTimestampDiff](@avTimestampDiff): The difference between the video timestamp and the audio timestamp, used to reflect audio-video synchronization, unit is milliseconds. A value less than 0 indicates the number of milliseconds the video is ahead of the audio, greater than 0 indicates the number of milliseconds the video lags behind the audio, equal to 0 means no difference. When the absolute value is less than 200, it can be considered that audio and video are synchronized. When the absolute value is continuously greater than 200 for 10 seconds, it can be considered abnormal
+- [packetLostRate](@packetLostRate): Packet loss rate, unit is percentage, 0.0 ~ 1.0
+- [peerToPeerDelay](@peerToPeerDelay): Peer-to-peer delay, unit is milliseconds
+- [peerToPeerPacketLostRate](@peerToPeerPacketLostRate): Peer-to-peer packet loss rate, unit is percentage, 0.0 ~ 1.0
+
+#### Playing rendering quality
+
+Playing rendering quality is close to the user's subjective experience of watching audio and video. This quality may be lower than the actual received playing stream quality due to decoder influence. The relevant parameters are as follows:
+
+- [audioRenderFPS](@audioRenderFPS): Actual audio rendering frame rate
+- [videoRenderFPS](@videoRenderFPS): Actual video rendering frame rate
+- [delay](@delay): The delay from when the local end receives data to playback, unit is milliseconds
+
+#### Byte count statistics
+Developers can count the total bytes of received video, audio, and total bytes. The relevant parameters are as follows:
+- [totalRecvBytes](@totalRecvBytes): Total bytes received, including audio, video, and SEI
+- [audioRecvBytes](@audioRecvBytes): Audio bytes received
+- [videoRecvBytes](@videoRecvBytes): Video bytes received
+
+#### Decoding information
+Developers can obtain the decoding information of the played stream. The relevant parameters are as follows:
+- [videoCodecID](@videoCodecID): Video decoding format
+- [isHardwareDecode](@isHardwareDecode): Whether hardware decoding is enabled
+
+### Monitor publishing/playing stream state
+#### Publishing state callback
+After successful publishing, developers can receive notifications of publishing state changes through [onPublisherStateUpdate](@onPublisherStateUpdate).
+
+Call example:
+```cpp
+class MyEventHandler : public IZegoEventHandler{
+public:
+    void onPublisherStateUpdate(String streamID, ZegoPublisherState state, int errorCode, JSONObject extendedData){
+    // When state is PUBLISHER_STATE_NO_PUBLISH and errcode is not 0, it indicates publishing failed and will not retry publishing. At this time, a publishing failure prompt can be displayed on the interface;
+    // When state is PUBLISHER_STATE_PUBLISH_REQUESTING and errcode is not 0, it indicates retrying publishing. If publishing is not successful within the retry time, a publishing failure notification will be thrown.
+    }
+}
+auto eventhandler = std::make_shared<MyEventHandler>();
+engine->setEventHandler(eventhandler);
+```
+
+Developers can roughly judge the user's publishing network situation based on whether the "state" parameter in the callback is in "requesting to publish stream state". The values of the "state" parameter correspond to the user's publishing state as follows:
+
+| Enum Value | Description |
+| - | - |
+| ZEGO_PUBLISHER_STATE_NO_PUBLISH | Not publishing state, in this state before publishing. If a steady-state exception occurs during the publishing process, such as incorrect AppID and AppSign, or if other users are already publishing and publishing streams with the same stream ID will fail, it will enter the not publishing state |
+| ZEGO_PUBLISHER_STATE_PUBLISH_REQUESTING | Requesting to publish stream state, after the publishing operation is executed successfully, it will enter the requesting to publish stream state, usually this state is used for UI interface display. If interruption occurs due to poor network quality, the SDK will perform internal retry and will also return to the requesting to publish stream state |
+| ZEGO_PUBLISHER_STATE_PUBLISHING | Publishing stream state, entering this state indicates that publishing has been successful and users can communicate normally |
+
+The parameter "extendedData" is extended information attached to the state update. If using ZEGO's CDN content delivery network, after successful publishing, the keys of the content of this parameter are "flv_url_list", "rtmp_url_list", "hls_url_list". These correspond to the playing URLs for flv, rtmp, and hls protocols.
+
+#### Playing state change callback
+After successful playing, developers can receive notifications of publishing state changes through [onPlayerStateUpdate](@onPlayerStateUpdate).
+
+Call example:
+```cpp
+class MyEventHandler : public IZegoEventHandler{
+public:
+    void onPlayerStateUpdate(String streamID, ZegoPlayerState state, int errorCode, JSONObject extendedData){
+        // When state is PLAYER_STATE_NO_PLAY and errcode is not 0, it indicates playing failed and will not retry playing. At this time, a playing failure prompt can be displayed on the interface;
+        // When state is PLAYER_STATE_PLAY_REQUESTING and errcode is not 0, it indicates retrying playing. If playing is not successful within the retry time, a playing failure notification will be thrown.
+    }
+}
+auto eventhandler = std::make_shared<MyEventHandler>();
+engine->setEventHandler(eventhandler);
+```
+
+Developers can roughly judge the user's playing network situation based on whether the "state" parameter is in "requesting to play stream state". The values of the "state" parameter correspond to the user's playing state as follows:
+
+| Enum Value | Description |
+| - | - |
+| ZEGO_PLAYER_STATE_NO_PLAY | Not playing state, in this state before playing. If a steady-state exception occurs during the playing process, such as incorrect AppID and AppSign, it will enter the not playing state |
+| ZEGO_PLAYER_STATE_PLAY_REQUESTING | Requesting to play stream state, after the playing operation is executed successfully, it will enter the requesting to play stream state, usually this state is used for application interface display. If interruption occurs due to poor network quality, the SDK will perform internal retry and will also return to the requesting to play stream state |
+| ZEGO_PLAYER_STATE_PLAYING | Playing stream state, entering this state indicates that playing has been successful and users can communicate normally |
+
+### Audio/Video first frame callback
+#### Publisher audio capture first frame callback
+Developers can receive audio first frame callbacks by registering [onPublisherCapturedAudioFirstFrame](@onPublisherCapturedAudioFirstFrame). After calling the publishing interface successfully, this callback will be received when the SDK captures the first frame of audio data.
+
+Call example:
+```cpp
+class MyEventHandler : public IZegoEventHandler{
+public:
+    void onPublisherCapturedAudioFirstFrame(){
+
+    }
+}
+auto eventhandler = std::make_shared<MyEventHandler>();
+engine->setEventHandler(eventhandler);
+```
+
+<Note title="Note">
+
+In the case of not publishing or not previewing, when publishing or previewing for the first time, that is, when the audio and video module engine inside the SDK starts, it will capture audio data from the local device and this callback will be received. Developers can use this callback to judge whether the SDK has actually captured audio data. If this callback is not received, it means the audio capture device is occupied or abnormal.
+
+
+</Note>
+
+
+
+#### Publisher video capture first frame callback
+Developers can receive video first frame callbacks by registering [onPublisherCapturedVideoFirstFrame](@onPublisherCapturedVideoFirstFrame). After calling the publishing interface successfully, this callback will be received when the SDK captures the first frame of video data.
+
+Call example:
+```cpp
+class MyEventHandler : public IZegoEventHandler{
+public:
+    void onPublisherCapturedVideoFirstFrame(ZegoPublishChannel channel){
+
+    }
+}
+auto eventhandler = std::make_shared<MyEventHandler>();
+engine->setEventHandler(eventhandler);
+```
+
+<Note title="Note">
+
+
+In the case of not publishing or not previewing, when publishing or previewing for the first time, that is, when the audio and video module engine inside the SDK starts, it will capture video data from the local device and this callback will be received. Developers can use this callback to judge whether the SDK has actually captured video data. If this callback is not received, it means the video capture device is occupied or abnormal.
+
+
+</Note>
+
+
+
+#### Player audio receive first frame callback
+Developers can listen for the playing audio receive first frame callback by registering [onPlayerRecvAudioFirstFrame](@onPlayerRecvAudioFirstFrame). After calling the playing interface successfully, this callback will be received when the SDK plays the first frame of audio data.
+
+Call example:
+```cpp
+class MyEventHandler : public IZegoEventHandler{
+public:
+    void onPlayerRecvAudioFirstFrame(String streamID){
+
+    }
+}
+auto eventhandler = std::make_shared<MyEventHandler>();
+engine->setEventHandler(eventhandler);
+```
+#### Player video receive first frame callback
+Developers can listen for the playing receive video first frame callback by registering [onPlayerRecvVideoFirstFrame](@onPlayerRecvVideoFirstFrame). After calling the playing interface successfully, this callback will be received when the SDK plays the first frame of video data.
+
+Call example:
+
+```cpp
+class MyEventHandler : public IZegoEventHandler{
+public:
+    void onPlayerRecvVideoFirstFrame(String streamID)(ZegoPublishChannel channel){
+
+    }
+}
+auto eventhandler = std::make_shared<MyEventHandler>();
+engine->setEventHandler(eventhandler);
+```
+#### Player rendered video first frame callback
+Developers can listen for the playing rendered video first frame callback by registering [onPlayerRenderVideoFirstFrame](@onPlayerRenderVideoFirstFrame). After calling the playing interface successfully, this callback will be received when the SDK plays and renders the first frame of video data.
+
+Call example:
+```cpp
+class MyEventHandler : public IZegoEventHandler{
+public:
+    void onPlayerRenderVideoFirstFrame{
+
+    }
+}
+auto eventhandler = std::make_shared<MyEventHandler>();
+engine->setEventHandler(eventhandler);
+```
+
+<Note title="Note">
+
+
+Developers can use this callback to count the time of the first frame or update the UI component of the playing stream.
+
+
+</Note>
+
+
+
+### Monitor video resolution changes
+#### Capture video resolution change callback
+Developers can listen for the capture video size change callback by registering [onPublisherVideoSizeChanged](@onPublisherVideoSizeChanged). After successful publishing, if the video capture resolution changes during publishing, this callback will be received.
+
+<Note title="Note">
+
+When not publishing or not previewing, when publishing or previewing for the first time, that is, when the audio and video module engine inside the SDK starts, it will capture video data from the local device, and the capture resolution will change at this time.
+
+</Note>
+
+
+
+Call example:
+```cpp
+class MyEventHandler : public IZegoEventHandler{
+public:
+    void onPublisherVideoSizeChanged(int width, int height, ZegoPublishChannel channel){
+
+    }
+}
+auto eventhandler = std::make_shared<MyEventHandler>();
+engine->setEventHandler(eventhandler);
+```
+
+<Note title="Note">
+
+
+Developers can use this callback to remove UI masks for local preview and similar operations. Developers can also dynamically adjust the proportion of the preview view based on the resolution of this callback.
+
+
+</Note>
+
+
+
+#### Playing resolution change notification
+Developers can receive playing resolution change notifications by registering [onPlayerVideoSizeChanged](@onPlayerVideoSizeChanged). After successful playing, if the video resolution changes during playing, this callback will be received, and users can adjust the display based on the final resolution of the stream.
+
+<Warning title="Caution">
+
+If the played stream only has audio data, this callback will not be received.
+
+
+</Warning>
+
+
+Call example:
+
+```cpp
+class MyEventHandler : public IZegoEventHandler{
+public:
+    void onPlayerVideoSizeChanged(String streamID, int width, int height){
+
+    }
+}
+auto eventhandler = std::make_shared<MyEventHandler>();
+engine->setEventHandler(eventhandler);
+```
+
+<Note title="Note">
+
+
+If the publisher triggers SDK's internal traffic control due to network issues, it may dynamically reduce the encoding resolution of the publisher, and this callback will also be received at this time.
+
+
+</Note>
+
+
+
+<Note title="Note">
+
+
+This callback is triggered when the played audio and video stream is actually rendered to the set UI playback interface. Developers can use this callback notification to update or switch the UI component that actually plays the stream.
+
+
+</Note>
+
+
+
+### Monitor CDN relay status
+#### Add/Remove relay CDN address state callback
+Developers can receive add/remove relay CDN address state callbacks by registering [onPublisherRelayCDNStateUpdate](@onPublisherRelayCDNStateUpdate). After the ZEGO RTC server relays audio and video streams to CDN, if the CDN relay status changes, such as relay stopping or relay retrying, this callback will be received.
+
+Call example:
+
+```cpp
+class MyEventHandler : public IZegoEventHandler{
+public:
+    void onPublisherRelayCDNStateUpdate(String streamID, ArrayList<ZegoStreamRelayCDNInfo> infoList){
+
+    }
+}
+auto eventhandler = std::make_shared<MyEventHandler>();
+engine->setEventHandler(eventhandler);
+```
+
+<Note title="Note">
+
+
+Developers can use this callback to judge whether the audio and video streams relayed to CDN are normal. If not normal, further locate the cause of the abnormal audio and video streams relayed to CDN based on the abnormal reason, and perform corresponding disaster recovery strategies.
+
+
+</Note>
+
+
+
+<Note title="Note">
+
+
+If you don't understand the cause of the abnormality, you can contact ZEGO technical personnel to analyze the specific cause of the abnormality.
+
+
+</Note>
+
+
+
+#### Relay CDN information details
+Relay CDN information [ZegoStreamRelayCDNInfo](@-ZegoStreamRelayCDNInfo) contains the URL of the CDN publishing stream, relay status, reason for relay status change, and time when the status occurred. All parameters within [ZegoStreamRelayCDNInfo](@-ZegoStreamRelayCDNInfo) are as follows:
+
+| Parameter Name | Description |
+| - | - |
+| url | URL of the CDN publishing stream |
+| state | Relay status |
+| updateReason | Reason for relay status change |
+| stateTime | Time when the status occurred |
+
+Among them, state values are as follows:
+
+| Enum Value | Description |
+| - | - |
+| ZEGO_STREAM_RELAY_CDN_STATE_NO_RELAY | Not relaying state, in this state before relaying. If a continuous exception occurs during the relaying process, such as incorrect relay address, it will enter the not relaying state. |
+| ZEGO_STREAM_RELAY_CDN_STATE_RELAY_REQUESTING | Requesting to relay state, after the relay operation is executed successfully, it will enter the requesting to relay state, usually this state is used for application interface display. If interruption occurs due to poor network quality, the SDK will perform internal retry and will also return to the relaying state. |
+| ZEGO_STREAM_RELAY_CDN_STATE_RELAYING | Relaying state, entering this state indicates that relaying has been successful. |
+
+updateReason values are as follows:
+
+| Enum Value | Description |
+| - | - |
+| ZEGO_STREAM_RELAY_CDN_UPDATE_REASON_NONE | None |
+| ZEGO_STREAM_RELAY_CDN_UPDATE_REASON_SERVER_ERROR | Server error |
+| ZEGO_STREAM_RELAY_CDN_UPDATE_REASON_HANDSHAKE_FAILED | Handshake failed |
+| ZEGO_STREAM_RELAY_CDN_UPDATE_REASON_ACCESS_POINT_ERROR | Access point error |
+| ZEGO_STREAM_RELAY_CDN_UPDATE_REASON_CREATE_STREAM_FAILED | Create stream failed |
+| ZEGO_STREAM_RELAY_CDN_UPDATE_REASON_BAD_NAME | BAD NAME |
+| ZEGO_STREAM_RELAY_CDN_UPDATE_REASON_CDN_SERVER_DISCONNECTED | CDN server disconnected actively |
+| ZEGO_STREAM_RELAY_CDN_UPDATE_REASON_DISCONNECTED | Disconnected actively |
+| ZEGO_STREAM_RELAY_CDN_UPDATE_REASON_MIX_STREAM_ALL_INPUT_STREAM_CLOSED | All input stream sessions of the mixed stream are closed |
+| ZEGO_STREAM_RELAY_CDN_UPDATE_REASON_MIX_STREAM_ALL_INPUT_STREAM_NO_DATA | All input streams of the mixed stream have no data |
+| ZEGO_STREAM_RELAY_CDN_UPDATE_REASON_MIX_STREAM_SERVER_INTERNAL_ERROR | Mixed stream server internal error |
+
+## API Reference List
+
+| Method | Description |
+|-------|--------|
+| [onPublisherQualityUpdate](@onPublisherQualityUpdate) | Publishing stream quality callback |
+| [onPlayerQualityUpdate](@onPlayerQualityUpdate) | Playing stream quality update callback |
+| [onPublisherStateUpdate](@onPublisherStateUpdate)| Publishing stream state callback |
+| [onPlayerStateUpdate](@onPlayerStateUpdate)| Playing stream state callback |
+| [onPublisherCapturedAudioFirstFrame](@onPublisherCapturedAudioFirstFrame) | Publisher audio capture first frame callback |
+| [onPublisherCapturedVideoFirstFrame](@onPublisherCapturedVideoFirstFrame) | Publisher video capture first frame callback |
+| [onPlayerRecvAudioFirstFrame](@onPlayerRecvAudioFirstFrame) | Player audio receive first frame callback |
+| [onPlayerRecvVideoFirstFrame](@onPlayerRecvVideoFirstFrame) | Player video receive first frame callback |
+| [onPlayerRenderVideoFirstFrame](@onPlayerRenderVideoFirstFrame) | Player rendered video first frame callback |
+| [onPublisherVideoSizeChanged](@onPublisherVideoSizeChanged)| Capture video size change callback |
+| [onPlayerVideoSizeChanged](@onPlayerVideoSizeChanged) | Playing resolution change notification |
+| [onPublisherRelayCDNStateUpdate](@onPublisherRelayCDNStateUpdate) | Add/Remove relay CDN address state callback |
+| [onPlayerRecvSEI](@onPlayerRecvSEI) | Received SEI content from remote stream |

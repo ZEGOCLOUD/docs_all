@@ -1,0 +1,215 @@
+---
+articleID: 4799
+date: "2024-01-02"
+---
+# Login to Multiple Rooms
+
+---
+
+## Feature Overview
+
+The same user can join multiple rooms at the same time, and simultaneously publish streams, play streams, send real-time messages, and receive message callbacks in multiple rooms.
+
+
+<Note title="Note">
+
+- ZEGO Express SDK has supported this feature since version 2.9.0.
+- This feature is not enabled by default. If you need to use it, please contact ZEGO Technical Support to enable relevant permissions.
+- After this feature is enabled, it supports joining up to 5 rooms at the same time by default. If you have more requirements, please contact ZEGO Technical Support for assistance.
+</Note>
+
+
+### Application Scenarios
+
+This feature can isolate messages and callbacks of multiple rooms, achieving more flexible co-hosting business. ZEGO recommends using it for cross-room co-hosting and super small class scenarios in online education.
+
+- Cross-room Co-hosting
+
+    Streamer A and Streamer B perform cross-room co-hosting. Streamer A can notify all viewers in Room A to log in to Streamer B's room to play streams. Streamer B can similarly notify all viewers in Room B to log in to Streamer A's room to play streams.
+
+
+- Super Small Class
+
+    The teacher enters the large class room to publish streams, and all students log in to the large class room to play streams. At the same time, they log in to the group room to discuss and co-host with students in the same group. The teaching assistant logs in to the group room to maintain classroom order or answer student questions.
+
+## Example Source Code Download
+
+Please refer to [Download Example Source Code](/real-time-video-android-java/quick-start/run-example-code) to get the source code.
+
+For related source code, please check the files in the "/ZegoExpressExample/Others/src/main/java/im/zego/others/multiplerooms" directory.
+
+## Prerequisites
+
+Before implementing multi-room functionality, please ensure:
+
+- You have integrated ZEGO Express SDK (version 2.9.0 and above) in your project and implemented basic real-time audio and video functionality. For details, please refer to [Quick Start - Integration](/real-time-video-android-java/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-android-java/quick-start/implementing-video-call).
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+
+- You have contacted ZEGO Technical Support to enable the multi-room feature.
+
+
+## Usage Steps
+
+Taking the same user joining two rooms as an example, the overall implementation flow is as follows:
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant ZEGO Express SDK
+
+    Client->>ZEGO Express SDK: Initialize Express SDK <br/> [createEngine]
+
+    Client->>ZEGO Express SDK: Set multi-room mode <br/> [enableMultiRoom]
+
+    critical Call loginRoom multiple times with different roomID and same userID to login to multiple rooms simultaneously.
+        Client->>ZEGO Express SDK: Login room <br/> [loginRoom]
+
+        Client->>ZEGO Express SDK: Publish stream, play stream <br/> [startPublishingStream, startPlayingStream]
+
+        Client->>ZEGO Express SDK: Send real-time message <br/> [sendCustomCommand]
+
+        ZEGO Express SDK-->>Client: Receive related room callbacks <br/> [on]
+
+        Client->>ZEGO Express SDK: Logout room <br/> [logoutRoom]
+    end
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/MultiRoom/MultiRoom_new.png" /></Frame>
+*/}
+
+1. Before initializing the SDK, set the room mode to multi-room.
+2. Initialize the SDK.
+3. Join the first room. After successful login, you can publish streams, play streams, send and receive real-time messages in that room.
+4. Join the second room. After successful login, you can publish streams, play streams, send and receive real-time messages in that room.
+5. Leave the first and second rooms. There is no timing restriction on leaving rooms.
+
+The implementation of specific functions is as follows:
+
+
+### 1 Set Multi-Room Mode
+
+Before initializing the SDK, you must call the [setRoomMode](@setRoomMode) interface and use the [ZegoRoomMode](@-ZegoRoomMode) class to set the room mode to multi-room mode, that is, the "mode" value is "MULTI_ROOM".
+
+<Note title="Note">
+
+
+If you set multi-room mode without enabling the multi-room feature, logging in to the room will fail with an error, returning error code "1002036".
+</Note>
+
+
+```java
+// Set room mode to multi-room mode
+ZegoExpressEngine.setRoomMode(ZegoRoomMode.MULTI_ROOM)
+```
+### 2 Initialize SDK
+
+Please refer to "Initialization" in [Quick Start - Implementation](/real-time-video-android-java/quick-start/implementing-video-call) to initialize the SDK.
+
+### 3 Login to Room
+
+Pass in parameters such as room ID (roomID) and call the [loginRoom](@loginRoom) interface to log in to the room.
+
+- In single-room mode, you can only log in to one room at the same time. When calling the [loginRoom](@loginRoom) interface, if you have already logged in to another room, you will be prompted that you are already logged in to the same room.
+- In multi-room mode, you can log in to multiple rooms at the same time, and the logged-in user information must be the same.
+
+```java
+// Create user
+ZegoUser user = new ZegoUser("user1");
+
+// Start logging in to room
+engine.loginRoom("room1", user);
+```
+
+
+### 4 Publish Stream
+
+Pass in parameters such as stream ID (streamID) and room ID (roomID), and call the [startPublishingStream](@startPublishingStream) (with "ZegoPublisherConfig" parameter) interface to publish stream in the specified room.
+
+<Warning title="Warning">
+
+
+In multi-room mode, you must use [ZegoPublisherConfig](@-ZegoPublisherConfig) to specify the "roomID" associated with "streamID". After exiting the specified room, the stream publishing operation for that room will be stopped.
+</Warning>
+
+```java
+ZegoPublisherConfig config = new ZegoPublisherConfig();
+config.roomID = "room1";
+
+// Start publishing stream
+engine.startPublishingStream("stream1", config, ZegoPublishChannel.MAIN);
+```
+
+### 5 Play Stream
+
+Pass in parameters such as stream ID (streamID) and room ID (roomID), and call the [startPlayingStream](@startPlayingStream) (with "ZegoPlayerConfig" parameter) interface to play stream in the specified room.
+
+<Warning title="Warning">
+
+
+In multi-room mode, you must use [ZegoPlayerConfig](@-ZegoPlayerConfig) to specify the "roomID" associated with "streamID". After exiting the specified room, the stream playing operation for that room will be stopped.
+</Warning>
+
+
+```java
+ZegoPlayerConfig config = new ZegoPlayerConfig();
+config.roomID = "room1";
+
+// The following play_view is a SurfaceView/TextureView/SurfaceTexture object on the UI interface
+engine.startPlayingStream("stream1", new ZegoCanvas(play_view), config);
+```
+
+
+### 6 Send/Receive Real-Time Messages
+
+The implementation of sending and receiving real-time messages in multi-room and single-room is the same. For details, please refer to [Common Features - Real-Time Messages](/real-time-video-android-java/room/messaging-and-signaling).
+
+### 7 Logout Room
+
+Pass in the room ID (roomID) and call the [logoutRoom](@logoutRoom__2) interface to leave the room.
+
+<Note title="Note">
+
+
+If you want to exit all logged-in rooms at once, you can directly call the [logoutRoom](@logoutRoom__2) interface without "roomID".
+</Note>
+
+- In single-room mode, exiting the room will stop all stream publishing and playing at the same time.
+- In multi-room mode, exiting the room can only exit the specified room and stop stream publishing and playing for that room.
+
+
+```java
+// Logout room
+engine.logoutRoom("room1");
+```
+
+
+## FAQ
+
+
+<Accordion title="Calling setRoomMode interface failed, what is the reason?" defaultOpen="false">
+
+- Whether the [setRoomMode](@setRoomMode) interface was called before initializing the SDK. In this case, error code "1001020" will be reported.
+- Whether you have contacted ZEGO Technical Support to enable the multi-room feature.
+- Whether the correct parameters were passed in.
+</Accordion>
+
+
+<Accordion title="Calling loginRoom failed with error code 1002037, what is the reason?" defaultOpen="false">
+
+When the number of rooms logged in at the same time exceeds the maximum number of rooms, error code "1002037" will be returned. Currently, it supports joining up to 5 rooms at the same time by default. If you have more requirements, please contact ZEGO Technical Support for extended capabilities.
+</Accordion>
+
+<Accordion title="Calling loginRoom failed with error code 1002018, what is the reason?" defaultOpen="false">
+
+In multi-room mode, if the logged-in user information passed in is not the same, error code "1002018" will be returned.
+</Accordion>
+
+<Accordion title="Calling startPublishingStream failed to publish stream with error code 1003070, what is the reason?" defaultOpen="false">
+
+In multi-room mode, you must call the [startPublishingStream](@startPublishingStream) interface with the "ZegoPublisherConfig" parameter to publish stream, otherwise error code "1003070" will be returned.
+</Accordion>
+
+<Accordion title="Calling startPlayingStream failed to play stream with error code 1004070, what is the reason?" defaultOpen="false">
+
+In multi-room mode, you must call the [startPlayingStream](@startPlayingStream) interface with the "ZegoPlayerConfig" parameter to play stream, otherwise error code "1004070" will be returned.
+</Accordion>

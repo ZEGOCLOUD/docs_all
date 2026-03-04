@@ -1,0 +1,132 @@
+---
+articleID: 19694
+---
+
+
+# On-Demand Transcoding Completed Callback
+
+- - -
+
+## Description
+
+After developers complete media file transcoding through the [Start On-Demand Transcoding](/real-time-video-server/api-reference/cdn/start-on-demand-transcoding) interface, they can view the transcoding task status, file replay URL, and other detailed information through this callback or the [Query Media Task](/real-time-video-server/api-reference/cdn/describe-media-task) interface.
+
+<Warning title="Warning">
+
+
+If the CDN vendor you use is Tencent Cloud, you need to set this callback URL.
+
+</Warning>
+
+
+
+
+## Callback instructions
+
+- Request method: POST.
+
+<Note title="Note">
+
+  The callback data format is JSON. You need to perform UrlDecode decoding on it.
+
+</Note>
+
+
+
+- Request URL: Please contact ZEGOCLOUD Technical Support to configure the callback URL.
+- Transfer protocol: HTTPS/HTTP. HTTPS is recommended.
+
+## Callback parameters
+
+| Common parameters | Type | Description |
+|---|---|---|
+| event | String | Callback event. This callback returns <code>procedure</code>. |
+| appid | String | Unique identifier of the App. |
+| timestamp | String | Server current time, Unix timestamp. |
+| nonce | String | Random number. |
+| signature | String | Verification string. For details, see [Verification instructions](/real-time-video-server/callback/receiving-callback). |
+
+| Business parameters | Type | Description |
+|---|---|---|
+| task_id | String | Unique identifier ID of the transcoding task, consistent with the task_id in the response result of <a href="/real-time-video-server/api-reference/cdn/start-on-demand-transcoding" target="balnk">Start On-Demand Transcoding</a>. |
+| status | String | <p>Overall status of the transcoding task.</p><ul><li>SUCCESS: Transcoding succeeded. Please combine the transcode.code value to determine the specific task processing result.</li><li>FAILED: Transcoding failed, extra_params will be empty.</li></ul> |
+| fileId | String | Source media file ID. |
+| extra_params | String | Extended field, transcoding task processing result. |
+| └ media | Object | Processing result of the media file. For details, see [media](#media). |
+
+<a id="media"></a>
+**media**
+| Common parameters | Type | Description |
+|---|---|---|
+| transcode | Array of Object | <p>List of transcoding task processing results.</p> |
+| code | String | <p>Error code.</p><ul><li>0: Success.</li><li>Other values: Failure. Please handle based on the message information.</li></ul> |
+| message | String | Error message. |
+| replay_url | String | Replay URL of the transcoded media file. |
+| size |  | Size of the transcoded media file, unit: bytes. |
+| duration | Float | Duration of the video stream, unit: seconds. |
+| video | Object | Transcoded video information, related to the Resolution configuration in the request parameters of <a href="/real-time-video-server/api-reference/cdn/start-on-demand-transcoding" target="balnk">Start On-Demand Transcoding</a>. |
+| └ height | Int | Maximum height of the video stream, unit: px. |
+| └ width | Int | Maximum width of the video stream, unit: px. |
+| └ bitrate | Int | Bitrate of the video stream, unit: bps. |
+| └ codec | String | Encoding format of the video stream, e.g.: H.264, HEVC, etc. |
+| └ fps | Int | Frame rate of the video stream, unit: Hz. |
+| audio | Object | Transcoded audio information, related to the Resolution configuration in the request parameters of <a href="/real-time-video-server/api-reference/cdn/start-on-demand-transcoding" target="balnk">Start On-Demand Transcoding</a>. |
+| └ bitrate | Int | Bitrate of the audio stream, unit: bps. |
+| └ codec | String | Encoding format of the audio stream, e.g.: AAC, etc. |
+| └ sampling_rate | Int | Sampling rate of the audio stream, unit: Hz. |
+
+
+
+## Data example
+
+```json
+{
+    "appid": "12345",
+    "event": "procedure", // Callback event, this callback returns: procedure
+    "task_id": "xxxxx", // Tencent Cloud on-demand task ID
+    "status": "SUCCESS", // Task status
+    "file_id":"3270835010897125368", // File ID
+    "extra_params": "extra_params",
+    "timestamp": "148150008",
+    "nonce": "158243",
+    "signature": "signature"
+}
+```
+
+The content of the callback parameter `extra_params` is as follows:
+
+```json
+{
+    "media": { // Media task processing result. When the key represents different task types and the value is trancode, it indicates a transcoding task
+        "transcode": [{ // List of transcoding task processing results
+            "code": "0", // Error code. 0 indicates success, other values indicate failure
+            "message": "SUCCESS", // Error message
+            "replay_url": "http://vod-tencent-eddietest.zego.im/playlist.m3u8", // Replay URL of the transcoded media file
+            "size": 6833612, // Media file size, unit: bytes
+            "duration": 170.612, // Video stream duration, unit: seconds
+            "video": { // Video information
+                "bitrate": 205290, // Video stream bitrate, unit: bps
+                "codec": "hevc", // Video stream encoding format, e.g. h264
+                "fps": 15, // Frame rate, unit: hz
+                "height": 540, // Maximum height of video stream, unit: px
+                "width": 960  // Maximum width of video stream, unit: px
+            },
+            "audio": { // Audio information
+                "bitrate": 49040, // Audio stream bitrate, unit: bps.
+                "codec": "aac", // Audio stream encoding format, e.g. aac.
+                "sampling_rate": 44100 // Audio stream sampling rate, unit: hz
+            }
+        }]
+    }
+}
+```
+
+
+## Return response
+
+Return HTTP status code 2XX (e.g., 200) indicates success, and other responses indicate failure.
+
+
+## Callback retry strategy
+
+If the ZEGO server does not receive a response, or the received HTTP status code is not 2XX (e.g., 200), it will attempt to retry, **up to 5 retries**. The interval between each retry request and the **previous request** is 2s, 4s, 8s, 16s, and 32s respectively. If the 5th retry still fails, no more retries will be made, and the callback will be lost.

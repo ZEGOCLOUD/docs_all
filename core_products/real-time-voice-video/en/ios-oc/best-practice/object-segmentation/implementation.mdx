@@ -1,0 +1,226 @@
+---
+articleID: 17831
+date: "2023-07-26"
+---
+# Implementation Flow
+
+- - -
+
+## Overview
+
+This document introduces the principles and steps of using the ZIM SDK and ZEGO Express SDK's object segmentation and Alpha data transmission and rendering capabilities to implement multi-user same-scene real-time video interaction and mic position management in the room.
+
+In most video interactions, users participating in the interaction are separated by their respective rectangular video areas, and the subject in the picture often accounts for less than half of the picture. In this case, the interaction experience is that different users' different backgrounds easily bring a cluttered visual impression to the overall picture, making it difficult to form an immersive interaction experience, as shown in the following figure:
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/group_video_chat.jpeg" /></Frame>
+
+To improve the interaction experience, in addition to the object segmentation capability, ZEGO Express SDK has pioneered the Alpha data transmission function. The principle is to splice the original video and the Alpha information obtained by object segmentation below the original video to obtain a video with height * 2. After encoding, it is transmitted to the playing end. The playing end will separate the original video and Alpha data and use the Alpha data for rendering, which can form the visual effect of only showing the subject in the picture.
+
+As shown in the following figure, the Alpha information below the original video at the publishing end uses black to represent that this part of the content is transparent. After decoding at the playing end, the black part is normalized to Alpha data, so that the corresponding area of the original video picture can be rendered as a transparent effect. On the view, only the subject part of the person will be displayed, and the user's real background will not be displayed.
+
+For information on the implementation principle of the rendering part, please refer to [Play Transparent Gift Effects](/real-time-video-ios-oc/other/play-transparent-gift-effects).
+
+<table>
+
+<tbody><tr>
+<th>Publishing Picture</th>
+<th>Playing Picture</th>
+<th>Display Effect After Rendering</th>
+</tr>
+<tr>
+<td><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/alphaLayoutTypeBottom.png" /></Frame></td>
+<td><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/alphaLayoutTypeBottom.png" /></Frame></td>
+<td><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/videoObjectAfterRender.png" /></Frame></td>
+</tr>
+</tbody></table>
+
+Through this method, the subjects of multiple users can be rendered onto the same background image or background video. Although they are in different spaces, they can still interact in real time in the same scene.
+
+## Application Scenarios
+
+<table>
+
+<tbody><tr>
+<th>Application Scenario</th>
+<th>Immersive Conference, Watch Movies Together</th>
+<th>Anchor Co-hosting</th>
+<th>Large Events, such as Press Conferences, etc.</th>
+</tr>
+<tr>
+<th>Illustration</th>
+<td><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/videoOS_scene2.png" /></Frame></td>
+<td><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/scene_2.png" /></Frame></td>
+<td><Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/videoOS_scene1.png" /></Frame></td>
+</tr>
+</tbody></table>
+
+## Solution Architecture
+
+The overall architecture of the in-room business of this best practice is shown in the following figure. Since the developer's business backend only manages the room list and does not involve in-room business, it is not reflected in the figure below. Among them:
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/structure_en.jpeg" /></Frame>
+
+## Prerequisites
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Management - Project Information](/console/project-info).
+- You have contacted ZEGO sales to enable the object segmentation permission.
+- You have contacted ZEGO technical support to obtain the real-time audio and video SDK containing the object segmentation feature, and referred to Real-time Audio and Video's [Quick Start - Integration](/real-time-video-ios-oc/quick-start/integrating-sdk) to integrate the SDK. **If your project has previously integrated the official website version of the real-time audio and video SDK, you need to replace it.**
+- You have self-enabled the ZIM service in the [ZEGOCLOUD Console](https://console.zegocloud.com) (for details, please refer to the Console's [Service Configuration - Instant Messaging - Enable Service](/console/service-configuration/im/activate-service)). If you cannot enable the ZIM service, please contact ZEGO technical support to enable it.
+- You have integrated the ZIM SDK. For details, please refer to "Integrate SDK" in [Quick Start - Implement Basic Message Sending and Receiving](/zim-ios/send-and-receive-messages).
+
+## Implementation Flow
+
+The implementation flow mainly includes 6 steps: initializing SDK, joining room, managing mic positions, using object segmentation, playing stream, and leaving room.
+
+### 1 Initialize SDK
+
+- Before managing mic positions in the room, you need to initialize the ZIM SDK first and set notification callbacks to listen to ZIM events. For interface call details, please refer to "Create ZIM Instance" and "Use EventHandler Protocol" in [Instant Messaging - Implement Basic Message Sending and Receiving](/zim-ios/send-and-receive-messages#3-implement-basic-send-and-receive).
+- Before implementing object segmentation, you need to initialize the ZEGO Express SDK first and set notification callbacks to listen to Express events. For interface calls, please refer to "Initialize" in [Real-time Audio and Video - Implementing Video Call](/real-time-video-ios-oc/quick-start/implementing-video-call#1-initialization).
+
+```mermaid
+sequenceDiagram
+    participant ZIM SDK
+    participant App
+    participant ZEGO Express SDK
+    note over ZIM SDK,ZEGO Express SDK: Initialize SDK
+    App->>ZIM SDK: Initialize SDK<br/>[createWithAppConfig]
+    App->>ZIM SDK: Set event notification callback<br/>[setEventHandler]
+    App->>ZEGO Express SDK: Initialize SDK and set event notification callback<br/>[createEngineWithProfile:eventHandler]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/init_iOS.png" /></Frame>
+*/}
+
+### 2 Join room
+
+- To implement publishing stream, users need to log in to the RTC room first. For interface call details, please refer to "Login Room" in [Real-time Audio and Video - Implementing Video Call](/real-time-video-ios-oc/quick-start/implementing-video-call#2-login-room).
+- This best practice implements the business logic of users getting on and off the mic by modifying ZIM room attributes. Therefore, users need to:
+    1. Log in to the ZIM service. For interface call details, please refer to "Login ZIM" in [Instant Messaging - Implement Basic Message Sending and Receiving](/zim-ios/send-and-receive-messages#login).
+    2. Users need to create or join a ZIM room. For details, please refer to "Create Room, Join Room" in [Instant Messaging - Room Management](/zim-ios/guides/room/manage-rooms#create-room-join-room).
+
+```mermaid
+sequenceDiagram
+    participant ZIM_SDK as ZIM SDK
+    participant App
+    participant ZEGO_Express_SDK as ZEGO Express SDK
+    note over ZIM_SDK,ZEGO_Express_SDK: Join room
+    App->>ZEGO_Express_SDK: Login RTC room<br/>[loginRoom]
+    App->>ZIM_SDK: Login ZIM service<br/>[loginWithUserInfo]
+    App->>ZIM_SDK: Create/join ZIM room<br/>[createRoom / joinRoom]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/joinRoom_iOS.png" /></Frame>
+*/}
+
+### 3 Manage mic positions
+
+- After joining the ZIM room, users can understand the mic position information in the room by querying all room attributes. For interface call details, please refer to "Get Room Attributes" in [Instant Messaging - Room Attribute Management](/zim-ios/guides/room/room-properties#get-room-attributes).
+- If users need to get on the mic, they can modify the mic position information by modifying room attributes. For interface call details, please refer to "Set Room Attributes" in [Instant Messaging - Room Attribute Management](/zim-ios/guides/room/room-properties#set-room-attributes).
+
+```mermaid
+sequenceDiagram
+    participant ZIM SDK
+    participant App
+    participant ZEGO Express SDK
+
+    note over ZIM SDK,ZEGO Express SDK: Manage mic positions
+    App->>ZIM SDK: Query all room attributes (includes mic position info)<br/>[queryRoomAllAttributes]
+    ZIM SDK-->>App: Return all room attributes<br/>[ZIMRoomAttributesQueriedCallback]
+    App->>ZIM SDK: Set room attributes (join mic)<br/>[setRoomAttributes]
+    ZIM SDK-->>App: Notify user that local has joined mic<br/>[onRoomAttributesUpdated]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/micManagement_iOS.png" /></Frame>
+*/}
+
+
+### 4 Use object segmentation
+
+1. To transmit the image segmented by object when publishing stream, you need to set the alpha channel. Please refer to "Use Alpha Channel to Transmit Segmented Subject" in [Real-time Audio and Video - Object Segmentation](/real-time-video-ios-oc/video/object-segmentation#7-optional-use-alpha-channel-to-transmit-segmented-subject) to learn how to call [enableAlphaChannelVideoEncoder](@enableAlphaChannelVideoEncoder) to set the alpha channel.
+
+2. Since the picture captured by the mobile phone's front camera is opposite to the actual left and right, you need to enable screen mirroring to obtain the correct direction picture when previewing or playing stream. For interface call details, please refer to "Set Mirror Mode" in [Real-time Audio and Video - Common Video Configuration](/real-time-video-ios-oc/video/common-video-configuration#set-mirror-mode).
+
+3. For the aesthetic angle of the picture when rotating the mobile phone screen, you need to set the orientation of the captured video. For interface call details, please refer to [Real-time Audio and Video - Video Capture Rotation](/real-time-video-ios-oc/video/video-capture-rotation).
+
+4. If you need to preview the local picture, you first need to set the backgroundColor property of the View used for rendering to clearColor (transparent color). For interface call details, please refer to "Special Settings for View" in [Real-time Audio and Video - Object Segmentation](/real-time-video-ios-oc/video/object-segmentation#2-special-settings-for-view).
+
+    Preview and publish local picture. For interface call details, please refer to "Start Preview and Publishing Stream" in [Real-time Audio and Video - Object Segmentation](/real-time-video-ios-oc/video/object-segmentation#8-start-preview-and-publishing-stream).
+
+5. Enable object segmentation and receive segmentation results. For interface call details, please refer to "Listen to Object Segmentation Status Callback" and "Use Object Segmentation to Implement Multiple Business Functions" in [Real-time Audio and Video - Object Segmentation](/real-time-video-ios-oc/video/object-segmentation#5-listen-to-object-segmentation-status-callback).
+
+    <Note title="Note">
+
+
+    Since the RTC room is only related to publishing stream, developers can also preview the object segmentation effect outside the RTC room.
+    </Note>
+
+```mermaid
+sequenceDiagram
+    participant ZIM_SDK as ZIM SDK
+    participant App
+    participant ZEGO_Express_SDK as ZEGO Express SDK
+
+    note over ZIM_SDK, ZEGO_Express_SDK: Use subject segmentation
+
+    App->>ZEGO_Express_SDK: [enableAlphaChannelVideoEncoder] <br/> Set alpha channel
+    App->>ZEGO_Express_SDK: [setVideoMirrorMode] <br/> Enable screen mirror
+    App->>ZEGO_Express_SDK: [setAppOrientationMode] <br/> Set captured video orientation
+    App->>ZEGO_Express_SDK: [startPreview & startPublishingStream] <br/> Start preview and publish stream <br/> For preview only, set View's backgroundColor to transparent
+    App->>ZEGO_Express_SDK: [enableVideoObjectSegmentation] <br/> Enable subject segmentation
+    ZEGO_Express_SDK-->>App: [onVideoObjectSegmentationStateChanged] <br/> Notify subject segmentation result
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/previewAndPublishing_iOS.png" /></Frame>
+*/}
+
+
+### 5 Play stream
+
+After the user receives the ZIM event notification and learns that someone has gotten on the mic in the room:
+1. Call the real-time audio and video interface to set the backgroundColor property of the View used for rendering to clearColor (transparent color). For interface call details, please refer to "Special Settings for View" in [Real-time Audio and Video - Object Segmentation](/real-time-video-ios-oc/video/object-segmentation#2-special-settings-for-view).
+
+    <Note title="Note">
+
+
+    If the View settings were implemented during preview, this step can be omitted.
+    </Note>
+
+2. Play the video stream of the other party that has implemented object segmentation, thereby achieving the visual effect of two users being in the "same space" facing each other for dialogue. For interface call details, please refer to "Start Playing Stream" in [Real-time Audio and Video - Object Segmentation](/real-time-video-ios-oc/video/object-segmentation#9-optional-set-alpha-channel-rendering-at-playing-end-and-play-stream).
+3. If you need to stop playing stream, for interface call details, please refer to "Stop Audio and Video Call" in [Real-time Audio and Video - Implementing Video Call](/real-time-video-ios-oc/quick-start/implementing-video-call#6-stop-audio-and-video-call).
+
+```mermaid
+sequenceDiagram
+    participant ZIM SDK
+    participant App
+    participant ZEGO Express SDK
+
+    note over ZIM SDK,ZEGO Express SDK: Play stream
+    ZIM SDK->>App: Notify that other users have joined mic in room <br/>[nonRoomAttributesUpdated]
+    App->>ZEGO Express SDK: Start playing stream <br/>[startPlayingStream] <br/>For preview only, call setOpaque to set the opaque property of the rendering TextureView to false (transparent)
+    App->>ZEGO Express SDK: Stop playing stream <br/>[stopPlayingStream]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/playingStream_iOS.png" /></Frame>
+*/}
+
+### 6 Leave room
+
+1. Stop preview and publishing stream. For interface call details, please refer to "Stop Audio and Video Call" in [Real-time Audio and Video - Implementing Video Call](/real-time-video-ios-oc/quick-start/implementing-video-call#6-stop-audio-and-video-call).
+2. Leave the ZIM room. For interface call details, please refer to "Leave Room" in [Instant Messaging - Room Management](/zim-ios/guides/room/manage-rooms#leave-room).
+3. Log out of the RTC room. For interface call details, please refer to "Stop Audio and Video Call" in [Real-time Audio and Video - Implementing Video Call](/real-time-video-ios-oc/quick-start/implementing-video-call#6-stop-audio-and-video-call).
+
+```mermaid
+sequenceDiagram
+    participant ZIM SDK
+    participant App
+    participant ZEGO Express SDK
+
+    note over ZIM SDK, ZEGO Express SDK: Logout room
+    App->>ZEGO Express SDK: Stop preview <br/> [stopPreview]
+    App->>ZEGO Express SDK: Stop publishing stream <br/> [stopPublishingStream]
+    App->>ZIM SDK: Leave ZIM room <br/> [leaveRoom]
+    App->>ZEGO Express SDK: Logout RTC room <br/> [logoutRoom]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoObjectSegmentation/logoutRoom_iOS.png" /></Frame>
+*/}

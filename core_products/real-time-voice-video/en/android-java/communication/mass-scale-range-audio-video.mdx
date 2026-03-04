@@ -1,0 +1,313 @@
+---
+articleID: 16339
+date: "2024-09-27"
+---
+# Mass-Scale Range Audio and Video
+
+- - -
+
+
+## Feature Overview
+
+Starting from version 3.0.0, ZEGO Express SDK has added mass-scale range audio and video functionality, supporting ultra-large-scale range audio and video interaction scenarios. The cloud service dynamically selects routes based on user location, significantly reducing customer audio and video costs while maintaining an immersive interactive experience in virtual scenes.
+This capability relies on the multi-user status real-time synchronization service, which automatically pulls remote audio and video within the listening range based on cloud user locations and provides spatial audio effects. Users by default pull the closest 12 (configurable) audio and video streams. A single scenario supports up to 10,000 users simultaneously enabling microphone and camera.
+
+In large virtual worlds, users generally do not need to perceive distant remote users. ZEGO provides AOI (Area Of Interest) capability to reduce remote audio and video information outside the user's visible range, minimizing unnecessary user-side traffic and performance consumption.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/express_AOI_en.jpeg" /></Frame>
+
+### Concept Explanation
+
+- Scene: Users need to login to the scene first. Only users who enter the same scene can conduct range audio and video calls and use the multi-user status real-time synchronization service.
+- Listening Range: The reception range of the local user's audio and video. The local user automatically pulls audio and video from remote users within the listening range.
+- AOI (Area of Interest) Range: The area of interest to the user (square), generally the user's visible range in a virtual scene. This range follows the user's position in real-time and only receives audio and video information, network status, device status, etc. from remote users within the AOI range.
+
+### Application Scenarios
+
+Virtual offices, virtual exhibitions, open virtual worlds, and other virtual scenarios.
+
+
+
+## Prerequisites
+
+<Warning title="Warning">
+
+
+Using this service will incur corresponding fees. Please contact ZEGO business personnel for specific fee information.
+</Warning>
+
+Before implementing real-time range audio and video, please ensure:
+- You have contacted ZEGO Technical Support for special packaging and enabled the mass-scale range audio and video service.
+- You have integrated ZEGO Express SDK in your project.
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Management](/console-old/project-management).
+
+
+## Implementation Process
+
+The following figure shows the API interface call sequence diagram:
+
+```mermaid
+sequenceDiagram
+    participant Client App
+    participant ZEGO Express SDK
+
+    Client App->>ZEGO Express SDK: Create engine <br/> [createEngine]
+
+    Client App->>ZEGO Express SDK: Create range scene module <br/> [createRangeScene]
+
+    Client App->>ZEGO Express SDK: Listen to range scene event callbacks <br/> [setEventHandler]
+
+    critical Critical steps
+    Client App->>ZEGO Express SDK: Set range scene stream management parameters <br/> [setReceiveRange / enableRangeSpatializer]
+
+    Client App->>ZEGO Express SDK: Login scene <br/> [loginScene]
+
+    Client App->>ZEGO Express SDK: Publish stream to scene <br/> [startPublishingStreamInScene]
+
+    Client App->>ZEGO Express SDK: Update user position <br/> [updateUserPosition]
+
+    Client App->>ZEGO Express SDK: Logout scene <br/> [logoutScene]
+    end
+
+    Client App->>ZEGO Express SDK: Destroy range scene module <br/> [destroyRangeScene]
+
+    Client App->>ZEGO Express SDK: Destroy engine <br/> [destroyEngine]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/rangeScene.png" /></Frame>
+*/}
+
+The following sections describe in detail the corresponding implementation steps for each API interface.
+
+### 1 Create Engine
+
+Call the [createEngine](@createEngine) interface, passing the obtained AppID and AppSign to the parameters "appID" and "appSign", to create an engine singleton object. The engine currently only supports creating one instance at a time; beyond that it will return null.
+
+```java
+/** Define SDK engine object */
+ZegoExpressEngine engine;
+
+ZegoEngineProfile profile = new ZegoEngineProfile();
+/** Please obtain through official website registration, format: 123456789L */
+profile.appID = appID;
+/** 64 characters, please obtain through official website registration, format: "0123456789012345678901234567890123456789012345678901234567890123" */
+profile.appSign = appSign;
+/** General scenario access */
+profile.scenario = ZegoScenario.DEFAULT;
+/** Set app's application object */
+profile.application = getApplication();
+/** Create engine */
+engine = ZegoExpressEngine.createEngine(profile, null);
+```
+
+
+### 2 Create Range Scene Module
+
+Call the [createRangeScene](@createRangeScene) interface to create a range scene instance. Currently only supports creating one instance at a time; beyond that it will return null.
+
+```java
+/** Define range scene object */
+ZegoRangeScene rangeScene;
+
+/** Create range scene */
+rangeScene = engine.createRangeScene();
+```
+
+### 3 Listen for Range Scene Event Callbacks
+
+You can call the [ZegoRangeSceneStream.setEventHandler](@setEventHandler-ZegoRangeSceneStream) interface as needed to set range scene and range scene stream management event callbacks respectively, for listening to range scene and range scene stream management event callbacks.
+
+```java
+/** Set range scene event callback */
+rangeScene.setEventHandler(new IZegoRangeSceneEventHandler() {
+    @Override
+    public void onSceneStateUpdate(ZegoRangeScene rangeScene, ZegoSceneState state, int errorCode) {
+        super.onSceneStateUpdate(rangeScene, state, errorCode);
+    }
+
+    @Override
+    public void onEnterView(ZegoRangeScene rangeScene, ZegoUser user, ZegoPosition position) {
+        super.onEnterView(rangeScene, user, position);
+    }
+
+    @Override
+    public void onLeaveView(ZegoRangeScene rangeScene, String userID) {
+        super.onLeaveView(rangeScene, userID);
+    }
+
+    // No need to pay attention
+    @Override
+    public void onUserStatusUpdate(ZegoRangeScene rangeScene, String userID, ZegoPosition position, int channel, byte[] status) {
+        super.onUserStatusUpdate(rangeScene, userID, position, channel, status);
+    }
+
+    // No need to pay attention
+    @Override
+    public void onUserCommandUpdate(ZegoRangeScene rangeScene, String userID, ZegoPosition position, int channel, byte[] command) {
+        super.onUserCommandUpdate(rangeScene, userID, position, channel, command);
+    }
+
+    // No need to pay attention
+    @Override
+    public void onCustomCommandUpdate(ZegoRangeScene rangeScene, byte[] command) {
+        super.onCustomCommandUpdate(rangeScene, command);
+    }
+});
+
+/** Range scene stream management event callback */
+rangeScene.getRangeSceneStream().setEventHandler(new IZegoRangeSceneStreamEventHandler() {
+    @Override
+    public void onUserStreamStateUpdate(ZegoRangeScene rangeScene, String userID, String streamID, ZegoStreamState state) {
+        super.onUserStreamStateUpdate(rangeScene, userID, streamID, state);
+    }
+
+    @Override
+    public void onUserMicUpdate(ZegoRangeScene rangeScene, String userID, ZegoDeviceState state) {
+        super.onUserMicUpdate(rangeScene, userID, state);
+    }
+
+    @Override
+    public void onUserCameraUpdate(ZegoRangeScene rangeScene, String userID, ZegoDeviceState state) {
+        super.onUserCameraUpdate(rangeScene, userID, state);
+    }
+
+    @Override
+    public void onUserSpeakerUpdate(ZegoRangeScene rangeScene, String userID, ZegoDeviceState state) {
+        super.onUserSpeakerUpdate(rangeScene, userID, state);
+    }
+});
+```
+
+### 4 Set Range Scene Stream Management Parameters
+
+You can call the [setReceiveRange](@setReceiveRange) and [enableRangeSpatializer](@enableRangeSpatializer) interfaces as needed to set range scene parameters, control the current user's audio and video reception range, set the 3D audio effect distance attenuation range interval [min, max], and whether to enable 3D audio effects.
+
+<Warning title="Warning">
+
+
+The current user's actual stream pulling range is affected by both "audio and video reception range" and "AOI range". When a remote user is within the current user's "AOI range", assuming the "absolute distance" between them is r, and the "audio and video reception range" is R, then when r < R, ZEGO Express SDK will actively pull the remote user's audio and video stream.
+</Warning>
+
+```java
+/** Set maximum stream pulling reception range */
+int errorCode = rangeScene.getRangeSceneStream().setReceiveRange(reciveRange);
+
+/** (Optional) Further set the 3D audio effect attenuation range interval [min, max] */
+/** When distance is less than min, volume will not attenuate with increasing distance; when distance is greater than max, the other party's sound cannot be heard */
+ZegoReceiveRangeParam param = new ZegoReceiveRangeParam();
+param.min = reciveRangeMin;
+param.max = reciveRangeMax;
+int errorCode = rangeScene.getRangeSceneStream().setReceiveRange(param);
+
+/** Enable 3D audio effects */
+int error = rangeScene.getRangeSceneStream().enableRangeSpatializer(enable);
+```
+
+### 5 Login to Scene
+
+Call the [loginScene](@loginScene) interface, passing in scene parameters: `sceneID`, `user`, `position`, `broadcastMode`, to login to the scene.
+
+<Warning title="Warning">
+
+
+- Within the same AppID, must ensure userID is globally unique. It is recommended that developers set it to a meaningful value and associate userID with their business account system.
+- userID cannot be empty, otherwise it will cause scene login failure.
+</Warning>
+
+```java
+/** Login to scene parameters */
+ZegoSceneParam param = new ZegoSceneParam();
+/** Create user */
+ZegoUser user = new ZegoUser(userID, userName);
+/** Set user's scene coordinates, motion orientation, camera orientation */
+ZegoPosition position = new ZegoPosition()
+for (int i = 0; i < 3; ++i) {
+    position.coordinate[i] = coordinate[i];
+    position.motionOrientation.axisForward[i] = rotateMatrixFront[i];
+    position.motionOrientation.axisRight[i] = rotateMatrixRight[i];
+    position.motionOrientation.axisUp[i] = rotateMatrixUp[i];
+    position.cameraOrientation.axisForward[i] = rotateMatrixFront[i];
+    position.cameraOrientation.axisRight[i] = rotateMatrixRight[i];
+    position.cameraOrientation.axisUp[i] = rotateMatrixUp[i];
+}
+/** Set scene ID */
+param.sceneID = sceneID;
+/** (Optional) Configure template ID. If custom template is not needed, i.e., using default scene configuration, this parameter need not be passed */
+param.templateID = templateID;
+param.user = user;
+param.position = position;
+/** Set user's broadcast mode when logging into scene */
+param.broadcastMode = ZegoBroadcastMode.ALL;
+rangeScene.loginScene(param, new IZegoRangeSceneLoginSceneCallback() {
+    @Override
+    public void onLoginSceneCallback(int errorCode, ZegoSceneConfig config) {
+    }
+});
+```
+
+<Warning title="Warning">
+
+
+
+If you need custom templates, please refer to [Server API - Scene Template Configuration](/real-time-video-server/api-reference/scene/set-scene-template).
+</Warning>
+
+### 6 Publish Stream to Scene
+
+Call the [startPublishingStreamInScene](@startPublishingStreamInScene) interface to publish stream within the scene. If the current user is within the audio and video reception range of other users in the scene, other users can receive the current user's audio and video stream.
+```java
+/** Create publish stream to scene configuration */
+ZegoScenePublisherConfig scenePublisherConfig = new ZegoScenePublisherConfig();
+/** Publish stream to the scene logged into by rangeScene */
+scenePublisherConfig.rangeSceneHandle = rangeScene.getRangeSceneHandle();
+engine.startPublishingStreamInScene(streamID, ZegoPublishChannel.MAIN, scenePublisherConfig);
+```
+
+### 7 Update User Position
+
+Call the [updateUserPosition](@updateUserPosition) interface to update the current user's position.
+
+```java
+/** Set user's scene coordinates, motion orientation, camera orientation */
+ZegoPosition position = new ZegoPosition()
+for (int i = 0; i < 3; ++i) {
+    position.coordinate[i] = coordinate[i];
+    position.motionOrientation.axisForward[i] = rotateMatrixFront[i];
+    position.motionOrientation.axisRight[i] = rotateMatrixRight[i];
+    position.motionOrientation.axisUp[i] = rotateMatrixUp[i];
+    position.cameraOrientation.axisForward[i] = rotateMatrixFront[i];
+    position.cameraOrientation.axisRight[i] = rotateMatrixRight[i];
+    position.cameraOrientation.axisUp[i] = rotateMatrixUp[i];
+}
+/** Update user position */
+int errorCode = rangeScene.updateUserPosition(position);
+```
+
+### 8 Logout from Scene
+
+Call the [logoutScene](@logoutScene) interface to logout from the scene.
+
+```java
+/** Logout from scene */
+rangeScene.logoutScene(new IZegoRangeSceneLogoutSceneCallback() {
+    @Override
+    public void onLogoutSceneCallback(int errorCode) {
+    }
+});
+```
+
+### 9 Destroy Range Scene Module
+
+When the range scene module is no longer needed, you can call the [destroyRangeScene](@destroyRangeScene) interface to destroy the range audio module.
+
+```java
+engine.destroyRangeScene(rangeScene);
+```
+
+### 10 Destroy Engine
+
+When ZEGO Express SDK is no longer needed, you can call [destroyEngine](@destroyEngine) to destroy the engine.
+
+```java
+ZegoExpressEngine.destroyEngine(null);
+```

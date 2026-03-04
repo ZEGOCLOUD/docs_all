@@ -100,9 +100,57 @@ articleID: 19680
 
 - 流创建回调处理流程：
 
+```mermaid
+flowchart TD
+    A[流创建回调] --> B{zego.RoomId 是否存在于房间列表？}
+
+    B -- 否 --> C[乱序，存入回调缓存队列，等接收到房间创建回调后，再做处理]
+
+    B -- 是 --> D{zego.room_session_id ==local.RoomSessionId?}
+
+    D -- 否 --> E{zego.create_time_ms≥local.RoomCreateTime?}
+    E -- 是 --> C
+    E -- 否 --> F[乱序，此次回调的流所属的房间会话已结束，不处理此次回调]
+
+    D -- 是 --> G{zego.stream_id 是否存在于流列表？}
+
+    G -- 否 --> H[根据回调数据，新增流信息]
+
+    G -- 是 --> I[比较 zego.stream_seq、local.StreamSeq，以较大值的数据为准]
+
+    H --> J[读取缓存队列，合并回调数据]
+    I --> J
+    F --> J
+```
+{/*
     <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/server_v2/solution_of_stream_create.jpeg" /></Frame>
+*/}
 
 
 - 流关闭回调处理流程：
 
+```mermaid
+flowchart TD
+    A[流关闭回调] --> B{zego.RoomId 是否存在于房间列表？}
+
+    B -- 否 --> C[乱序，存入回调缓存队列，等接收到房间创建回调后，再做处理]
+
+    B -- 是 --> D{zego.room_session_id ==local.RoomSessionId?}
+
+    D -- 否 --> E{zego.destroy_timemillis >local.RoomCreateTime?}
+    E -- 是 --> C
+    E -- 否 --> F[乱序，此次回调的流所属的房间会话已结束，不处理此次回调]
+
+    D -- 是 --> G{zego.stream_id 是否存在于流列表？}
+
+    G -- 否 --> H[乱序，尚未收到该条流对应的流创建回调通知，存入回调缓存队列，等待处理]
+
+    G -- 是 --> I{zego.stream_seq >local.StreamSeq?}
+
+    I -- 是 --> J[删除流数据]
+
+    I -- 否 --> K[乱序，此次回调的流所属的房间会话已结束，不处理此次回调]
+```
+{/*
     <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/server_v2/solution_of_stream_close.jpeg" /></Frame>
+*/}

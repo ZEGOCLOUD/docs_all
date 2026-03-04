@@ -1,0 +1,226 @@
+---
+articleID: 15475
+date: "2024-01-02"
+---
+# Multi-room Login
+
+---
+
+## Feature Overview
+
+The same user can join multiple rooms at the same time, and simultaneously stream, play streams, send real-time messages, and receive message callbacks in multiple rooms.
+
+<Note title="Note">
+
+- This feature is not enabled by default. If you need to use it, please contact ZEGO technical support to enable relevant permissions.
+- After this feature is enabled, it supports joining up to 5 rooms at the same time by default. If you have more needs, please contact ZEGO technical support for assistance.
+
+</Note>
+
+
+
+
+### Application Scenarios
+
+This feature can isolate messages and callbacks of multiple rooms and implement more flexible co-hosting services. ZEGO recommends using it for cross-room co-hosting and super small class scenarios in online education.
+
+- Cross-room Co-hosting
+
+Host A and Host B perform cross-room co-hosting. Host A can notify all viewers in Room A to log in to Host B's room for streaming, and Host B can also notify all viewers in Room B to log in to Host A's room for streaming.
+
+
+- Super Small Class
+
+The teacher enters the large class room to stream, and all students log in to the large class room to play streams, while simultaneously logging in to small group rooms to discuss and co-host with students in the same group. The teaching assistant logs in to the small group room to maintain classroom order or answer students' questions.
+
+
+
+## Example Source Code Download
+
+Please refer to [Download Example Source Code](/real-time-video-flutter/quick-start/run-example-code) to get the source code.
+
+For related source code, please check the files in the "lib/topics/OtherFunctions/multiple_rooms" directory.
+
+## Prerequisites
+
+Before implementing the multi-room feature, please ensure:
+
+- You have integrated ZEGO Express SDK (version 2.9.0 and above) in your project and implemented basic real-time audio and video functions. For details, please refer to [Quick Start - Integration](/real-time-video-flutter/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-flutter/quick-start/implementing-video-call).
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+
+- You have contacted ZEGO technical support to enable the multi-room feature.
+
+
+## Usage Steps
+
+Taking the same user joining two rooms as an example, the overall implementation process is as follows:
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant ZEGO Express SDK
+
+    Client->>ZEGO Express SDK: Initialize Express SDK <br/> [createEngine]
+
+    Client->>ZEGO Express SDK: Set multi-room mode <br/> [enableMultiRoom]
+
+    critical Call loginRoom multiple times with different roomID and same userID to login to multiple rooms simultaneously.
+        Client->>ZEGO Express SDK: Login room <br/> [loginRoom]
+
+        Client->>ZEGO Express SDK: Publish stream, play stream <br/> [startPublishingStream, startPlayingStream]
+
+        Client->>ZEGO Express SDK: Send real-time message <br/> [sendCustomCommand]
+
+        ZEGO Express SDK-->>Client: Receive related room callbacks <br/> [on]
+
+        Client->>ZEGO Express SDK: Logout room <br/> [logoutRoom]
+    end
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/MultiRoom/MultiRoom_new.png" /></Frame>
+*/}
+
+1. Set the room mode to multi-room before initializing the SDK.
+2. Initialize the SDK.
+3. Join the first room. After successful login, you can stream, play streams, send and receive real-time messages in that room.
+4. Join the second room. After successful login, you can stream, play streams, send and receive real-time messages in that room.
+5. Leave the first and second rooms. There is no timing restriction on leaving rooms.
+
+The implementation of specific functions is as follows:
+
+
+### 1 Set Multi-room Mode
+
+You must call the [setRoomMode](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/setRoomMode.html) interface before initializing the SDK, and set the room mode to multi-room mode through the [ZegoRoomMode](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoRoomMode.html) class, that is, the "mode" value is "MultiRoom".
+
+<Note title="Note">
+
+If you set multi-room mode without enabling the multi-room feature, logging in to the room will fail and an error will be returned with error code "1002036".
+
+</Note>
+
+
+
+
+```dart
+// Set room mode to multi-room mode
+ZegoExpressEngine.setRoomMode(ZegoRoomMode.MultiRoom)
+```
+
+### 2 Initialize SDK
+
+Please refer to "Initialization" in [Quick Start - Implementation](/real-time-video-flutter/quick-start/implementing-video-call) to initialize the SDK.
+
+### 3 Login to Room
+
+Pass in parameters such as room ID (roomID) and call the [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) interface to log in to the room.
+
+- In single-room mode, you can only log in to one room at the same time. When calling the [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) interface, if you have already logged in to another room, you will be prompted that you have logged in to the same room.
+- In multi-room mode, you can log in to multiple rooms at the same time, and the logged-in user information must be the same.
+
+```dart
+// Create user
+var user = ZegoUser.id("user1");
+
+// Start logging in to room
+ZegoExpressEngine.instance.loginRoom("room1", user);
+```
+
+
+### 4 Publish Stream
+
+Pass in parameters such as stream ID (streamID) and room ID (roomID), and call the [startPublishingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPublishingStream.html) interface (with "ZegoPublisherConfig" parameter) to publish streams in the specified room.
+
+<Warning title="Warning">
+In multi-room mode, you must use [ZegoPublisherConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoPublisherConfig-class.html) to specify the "roomID" associated with the "streamID". After exiting the specified room, the streaming operation corresponding to that room will stop.
+
+</Warning>
+
+
+
+
+```dart
+var config = ZegoPublisherConfig();
+config.roomID = "room1";
+
+// Start publishing stream
+ZegoExpressEngine.instance.startPublishingStream("stream1", config: config, channel: ZegoPublishChannel.Main);
+```
+
+### 5 Play Stream
+
+Pass in parameters such as stream ID (streamID) and room ID (roomID), and call the [startPlayingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/startPlayingStream.html) interface (with "ZegoPlayerConfig" parameter) to play streams in the specified room.
+
+<Warning title="Warning">
+- In multi-room mode, you must use [ZegoPlayerConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoPlayerConfig-class.html) to specify the "roomID" associated with the "streamID". After exiting the specified room, the streaming operation corresponding to that room will stop.
+- On the Web platform, there is no difference between multi-room and single-room streaming methods. You do not need to pass in "roomID" and can pass in a unique "streamID" to play streams.
+</Warning>
+
+
+
+
+```dart
+var config = ZegoPlayerConfig.defaultConfig();
+config.roomID = "room1";
+
+/**
+ *  If using real-time audio and video SDK or audio and video scenarios, playViewID is the viewID obtained by calling the SDK's ZegoExpressEngine.instance.createCanvasView
+ */
+ZegoExpressEngine.instance.startPlayingStream("stream1", canvas: ZegoCanvas(playViewID), config: config);
+// If using real-time voice SDK or pure audio scenarios, you do not need to pass the canvas parameter
+// ZegoExpressEngine.instance.startPlayingStream("stream1", config: config);
+```
+
+
+### 6 Send/Receive Real-time Messages
+
+The implementation of sending and receiving real-time messages in multi-room is the same as in single-room. For details, please refer to [Common Features - Real-time Messages](/real-time-video-flutter/room/messaging-and-signaling).
+
+### 7 Leave Room
+
+Pass in the room ID (roomID) and call the [logoutRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/logoutRoom.html) interface to leave the room.
+
+<Note title="Note">
+If you want to leave all logged-in rooms at once, you can omit the "roomID".
+
+</Note>
+
+
+
+- In single-room mode, leaving the room will stop all streaming and playing operations at the same time.
+- In multi-room mode, leaving the room can only leave the specified room and stop streaming and playing operations in that room.
+
+
+```dart
+// Leave room
+ZegoExpressEngine.instance.logoutRoom("room1");
+```
+
+
+## FAQ
+
+**1. Calling the [setRoomMode](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/setRoomMode.html) interface returns failed. What is the reason?**
+
+- Whether the [setRoomMode](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/setRoomMode.html) interface was called before initializing the SDK. In this case, error code "1001020" will be reported.
+- Whether you have contacted ZEGO technical support to enable the multi-room feature.
+- Whether the correct parameters are passed in.
+
+**2. Calling [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) fails to log in, and the error code is "1002036". What is the reason?**
+
+If you set multi-room mode without enabling the multi-room feature, logging in to the room will fail, and error code "1002036" will be returned.
+
+**3. Calling [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) fails to log in, and the error code is "1002037". What is the reason?**
+
+When the number of rooms logged in at the same time exceeds the maximum number of rooms, error code "1002037" will be returned. Currently, the default is to join up to 5 rooms at the same time. If you have more needs, please contact ZEGO technical support for extended capabilities.
+
+**4. Calling [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) fails to log in, and the error code is "1002018". What is the reason?**
+
+In multi-room mode, if the logged-in user information passed in is not the same, error code "1002018" will be returned.
+
+**5. Calling [startPublishingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPublishingStream.html) fails to publish stream, and the error code is "1003070". What is the reason?**
+
+In multi-room mode, you must call the [startPublishingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPublishingStream.html) interface with the "ZegoPublisherConfig" parameter to publish streams, otherwise error code "1003070" will be returned.
+
+**6. Calling [startPlayingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/startPlayingStream.html) fails to play stream, and the error code is "1004070". What is the reason?**
+
+In multi-room mode, you must call the [startPlayingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/startPlayingStream.html) interface with the "ZegoPlayerConfig" parameter to play streams, otherwise error code "1004070" will be returned.

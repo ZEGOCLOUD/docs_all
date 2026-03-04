@@ -1,0 +1,289 @@
+---
+articleID: 16461
+date: "2024-09-27"
+---
+# Real-Time Multi-User Status Synchronization
+
+- - -
+
+## Feature Overview
+
+
+Starting from version 3.0.0, ZEGO Express SDK has added real-time multi-user status synchronization functionality, providing an ordered, high-frequency, low-latency, large-scale status synchronization service to help developers quickly implement real-time information synchronization capabilities for player positions, actions, appearances, etc., in virtual gameplay. A single scene supports up to 10,000 users online simultaneously.
+
+In large virtual worlds, users generally do not need to perceive distant scenes or remote users. ZEGOCLOUD provides AOI (Area Of Interest) capability to eliminate information acquisition outside the user's visible range, greatly reducing customer traffic costs, client-side traffic, and performance consumption.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/state_sync_aoi_en.jpg" /></Frame>
+
+### Concept Explanation
+
+- **Scene**: Users need to log in to a scene first. Only users who enter the same scene can synchronize status information.
+- **AOI (Area of interest) range**: The square size of the user's area of interest, generally the user's visible range in a virtual scene. This range follows the user's position in real-time and only synchronizes user information from remote users within the AOI range.
+
+
+### Application Scenarios
+
+- Metaverse scenarios such as virtual offices, virtual exhibitions, virtual social networking, virtual KTV, etc.
+- General scenarios requiring ultra-high-frequency, low-latency, large-scale synchronization of information or control commands.
+
+## Prerequisites
+
+<Warning title="Caution">
+
+
+Using this service will incur corresponding fees. Please contact ZEGOCLOUD business personnel to learn about specific fee details.
+</Warning>
+
+Before implementing status synchronization, ensure that:
+
+- You have contacted ZEGOCLOUD Technical Support for special packaging and enabled the status synchronization service.
+- You have integrated the ZEGO Express SDK into your project.
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, see [Console - Project Management](/console-old/project-management).
+
+## Implementation Flow
+
+### 1 Create Engine
+
+Call the [createEngineWithProfile](@createEngineWithProfile) interface, pass the applied AppID and AppSign into the parameters "appID" and "appSign", and create an engine singleton object. The engine currently only supports creating one instance at a time. Beyond that, it will return null.
+
+```objc
+ZegoEngineProfile *profile = [[ZegoEngineProfile alloc] init];
+/** Please obtain through official website registration, format: 123456789 */
+profile.appID = appID;
+/** 64 characters, please obtain through official website registration, format: "0123456789012345678901234567890123456789012345678901234567890123" */
+profile.appSign = appSign;
+/** General scenario access */
+profile.scenario = ZegoScenarioDefault;
+/** Create engine and register self as eventHandler callback. If you don't need to register callback, the eventHandler parameter can be nil. You can call "-setEventHandler:" method later to set callback */
+[ZegoExpressEngine createEngineWithProfile:profile eventHandler:self];
+```
+
+### 2 Create Range Scene Module
+
+Call the [createRangeScene](@createRangeScene) interface to create a range scene instance. Currently only one instance can be created at a time. Beyond that, it will return null.
+
+```objc
+/** Define range scene object */
+ZegoRangeScene *rangeScene;
+
+/** Create range scene */
+rangeScene = [[ZegoExpressEngine sharedEngine] createRangeScene];
+```
+
+### 3 Listen to Range Scene Event Callbacks
+
+Call the [setEventHandler](@setEventHandler-ZegoRangeScene) interface as needed to set range scene event callbacks for listening to range scene status, login status, enter/leave AOI notifications, etc. Call the [ZegoRangeSceneItem.setEventHandler](@setEventHandler-ZegoRangeSceneItem) interface to set range scene item management class event callbacks for listening to item enter/leave AOI range events, item binding status changes, item status and command update events.
+
+```objc
+/** Set range scene event callback */
+[rangeScene setEventHandler:self];
+[[rangeScene getRangeSceneItem] setEventHandler:self];
+```
+
+### 4 Login to Scene
+
+Call the [loginScene](@loginScene) interface, pass in scene parameters: sceneID, user, position, broadcastMode, to log in to the scene.
+
+<Warning title="Caution">
+
+
+- Within the same AppID, ensure that userID is globally unique. It is recommended that developers set it to a meaningful value and associate userID with their own business account system.
+- userID cannot be empty, otherwise logging in to the scene will fail.
+</Warning>
+
+```objc
+/** Login scene parameters */
+ZegoSceneParam *param = [[ZegoSceneParam alloc] init];
+/** Create user */
+ZegoUser *user = [[ZegoUser alloc] initWithUserID:userID userName:userName];
+/** Set user's scene coordinates, motion orientation, and camera orientation */
+ZegoPosition *position = [[ZegoPosition alloc] init];
+ZegoPositionOrientation *motionOrientation = [[ZegoPositionOrientation alloc] init];
+ZegoPositionOrientation *cameraOrientation = [[ZegoPositionOrientation alloc] init];
+motionOrientation.axisForward = [NSArray arrayWithObjects:rotateMatrixForward[0], rotateMatrixForward[1], rotateMatrixForward[2], nil];
+motionOrientation.axisRight = [NSArray arrayWithObjects:rotateMatrixRight[0], rotateMatrixRight[1], rotateMatrixRight[2], nil];
+motionOrientation.axisUp = [NSArray arrayWithObjects:rotateMatrixUp[0], rotateMatrixUp[1], rotateMatrixUp[2], nil];
+cameraOrientation.axisForward = [NSArray arrayWithObjects:rotateMatrixForward[0], rotateMatrixForward[1], rotateMatrixForward[2], nil];
+cameraOrientation.axisRight = [NSArray arrayWithObjects:rotateMatrixRight[0], rotateMatrixRight[1], rotateMatrixRight[2], nil];
+cameraOrientation.axisUp = [NSArray arrayWithObjects:rotateMatrixUp[0], rotateMatrixUp[1], rotateMatrixUp[2], nil];
+position.coordinate = [NSArray arrayWithObjects:coordinate[0], coordinate[1], coordinate[2], nil];
+position.motionOrientation = motionOrientation;
+position.cameraOrientation = cameraOrientation;
+/** Set scene ID */
+param.sceneID = sceneID;
+/** (Optional) Configure template ID */
+param.templateID = templateID;
+param.user = user;
+param.position = position;
+/** Set user's broadcast mode when logging in to the scene */
+param.broadcastMode = ZegoBroadcastModeAll;
+[rangeScene loginScene:param callback:^(int errorCode, ZegoSceneConfig * _Nonnull config) {}];
+```
+
+<Warning title="Caution">
+
+
+If you need to customize templates, please refer to [Server API - Scene Template Configuration](/real-time-video-server/api-reference/scene/set-scene-template).
+</Warning>
+
+
+### 5 Synchronize Status
+
+Update user status and user commands through the [updateUserStatus](@updateUserStatus) and [updateUserCommand](@updateUserCommand) interfaces. Receive status information such as remote user positions and commands within the AOI range through the [userStatusUpdate](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoRangeSceneEventHandler#range-scene-user-status-update-position-channel-status) and [userCommandUpdate](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoRangeSceneEventHandler#range-scene-user-command-update-position-channel-command) callbacks.
+
+<Note title="Note">
+
+
+- User status (status, S) is a full update, user commands are incremental updates (command, C), and user status can be calculated from a previous user status through a series of user commands.
+- The model for user status updates should be Si->Ci->Ci+1->Ci+2->...Ci+j->S(i+1)->C(i+1)+1->C(i+1)+2->...C(i+1)+k->S(i+2)->C(i+2)->...
+- The status synchronization service will guarantee that incremental updates (commands) between two full statuses (status) Si and Si+1 arrive in order.
+</Note>
+
+```objc
+/** Set user's scene coordinates, motion orientation, and camera orientation */
+ZegoPosition *position = [[ZegoPosition alloc] init];
+ZegoPositionOrientation *motionOrientation = [[ZegoPositionOrientation alloc] init];
+ZegoPositionOrientation *cameraOrientation = [[ZegoPositionOrientation alloc] init];
+motionOrientation.axisForward = [NSArray arrayWithObjects:rotateMatrixForward[0], rotateMatrixForward[1], rotateMatrixForward[2], nil];
+motionOrientation.axisRight = [NSArray arrayWithObjects:rotateMatrixRight[0], rotateMatrixRight[1], rotateMatrixRight[2], nil];
+motionOrientation.axisUp = [NSArray arrayWithObjects:rotateMatrixUp[0], rotateMatrixUp[1], rotateMatrixUp[2], nil];
+cameraOrientation.axisForward = [NSArray arrayWithObjects:rotateMatrixForward[0], rotateMatrixForward[1], rotateMatrixForward[2], nil];
+cameraOrientation.axisRight = [NSArray arrayWithObjects:rotateMatrixRight[0], rotateMatrixRight[1], rotateMatrixRight[2], nil];
+cameraOrientation.axisUp = [NSArray arrayWithObjects:rotateMatrixUp[0], rotateMatrixUp[1], rotateMatrixUp[2], nil];
+position.coordinate = [NSArray arrayWithObjects:coordinate[0], coordinate[1], coordinate[2], nil];
+position.motionOrientation = motionOrientation;
+position.cameraOrientation = cameraOrientation;
+/** Update user status */
+NSData *status = [NSData data];
+[rangeScene updateUserStatus:position channel:0 status:status];
+
+/** Update user command */
+NSData *command = [NSData data];
+[rangeScene updateUserCommand:position channel:0 command:command];
+```
+
+### 6 (Optional) Get User Count in Scene and Get User List within AOI Range
+
+<Accordion title="Get User Count in Scene and Get User List within AOI Range" defaultOpen="false">
+You can call the [getUserCount](@getUserCount) and [getUserListInView](@getUserListInView) interfaces as needed to get the user count in the scene and the user list within the AOI range.
+
+```objc
+/** Get user count in scene */
+[rangeScene getUserCount:^(int errorCode, unsigned int count) {}];
+
+/** Get user list within AOI range */
+[rangeScene getUserListInView:^(int errorCode, NSArray<NSString *> * _Nonnull userList) {}];
+```
+</Accordion>
+
+### 7 (Optional) Item Status and Competitive Lock
+
+<Accordion title="Item Status and Competitive Lock" defaultOpen="false">
+Through item status synchronization, you can implement item movement and placement gameplay in virtual scenes, such as placement systems, ball kicking, etc. Through item locks, you can implement item grabbing gameplay, such as picking up equipment, grabbing chairs, etc., which can be set according to requirements.
+
+1. Create Item
+
+Call the [createItem](@createItem) interface as needed to create an item in the scene.
+
+```objc
+/** Create item parameters */
+ZegoItemParam *param = [[ZegoItemParam alloc] init];
+/** Set item's scene coordinates and motion orientation */
+ZegoPosition *position = [[ZegoPosition alloc] init];
+ZegoPositionOrientation *motionOrientation = [[ZegoPositionOrientation alloc] init];
+motionOrientation.axisForward = [NSArray arrayWithObjects:rotateMatrixForward[0], rotateMatrixForward[1], rotateMatrixForward[2], nil];
+motionOrientation.axisRight = [NSArray arrayWithObjects:rotateMatrixRight[0], rotateMatrixRight[1], rotateMatrixRight[2], nil];
+motionOrientation.axisUp = [NSArray arrayWithObjects:rotateMatrixUp[0], rotateMatrixUp[1], rotateMatrixUp[2], nil];
+position.coordinate = [NSArray arrayWithObjects:coordinate[0], coordinate[1], coordinate[2], nil];
+position.motionOrientation = motionOrientation;
+/** Set item ID */
+param.itemID = itemID;
+/** Set maximum number of users bound to the item */
+param.capacity = capacity;
+param.position = position;
+/** Set create item mode */
+param.createMode = ZegoCreateItemModeNoBind;
+[[rangeScene getRangeSceneItem] createItem:param callback:^(int errorCode, long long itemID) {}];
+```
+
+2. Bind Item
+
+If you need to operate on an item (i.e., update item status commands), you first need to call [bindItem](@bindItem) to bind the item.
+
+```objc
+[[rangeScene getRangeSceneItem] bindItem:itemID callback:^(int errorCode, long long itemID) {}];
+```
+
+3. Synchronize Item Status
+
+Update item status and item commands through the [updateItemStatus](@updateItemStatus) and [updateItemCommand](@updateItemCommand) interfaces. Receive status information such as remote item positions and commands within the AOI range through the [itemStatusUpdate](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoRangeSceneItemEventHandler#range-scene-item-status-update-position-channel-status) and [itemCommandUpdate](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoRangeSceneItemEventHandler#range-scene-item-command-update-position-channel-command) callbacks.
+
+<Note title="Note">
+
+
+- Before updating item status and commands, you need to bind the item first.
+- Item status (status, S) is a full update, item commands are incremental updates (command, C), and item status can be calculated from a previous item status through a series of item commands.
+- The model for item status updates should be Si->Ci->Ci+1->Ci+2->...Ci+j->S(i+1)->C(i+1)+1->C(i+1)+2->...C(i+1)+k->S(i+2)->C(i+2)->...
+- The status synchronization service will guarantee that incremental updates (commands) between two full statuses (status) Si and Si+1 arrive in order.
+</Note>
+
+```objc
+/** Set item's scene coordinates and motion orientation */
+ZegoPosition *position = [[ZegoPosition alloc] init];
+ZegoPositionOrientation *motionOrientation = [[ZegoPositionOrientation alloc] init];
+motionOrientation.axisForward = [NSArray arrayWithObjects:rotateMatrixForward[0], rotateMatrixForward[1], rotateMatrixForward[2], nil];
+motionOrientation.axisRight = [NSArray arrayWithObjects:rotateMatrixRight[0], rotateMatrixRight[1], rotateMatrixRight[2], nil];
+motionOrientation.axisUp = [NSArray arrayWithObjects:rotateMatrixUp[0], rotateMatrixUp[1], rotateMatrixUp[2], nil];
+position.coordinate = [NSArray arrayWithObjects:coordinate[0], coordinate[1], coordinate[2], nil];
+position.motionOrientation = motionOrientation;
+/** Update item status */
+NSData *status = [NSData data];
+[[rangeScene getRangeSceneItem] updateItemStatus:itemID position:position channel:0 status:status callback:^(int errorCode, long long itemID) {}];
+
+/** Update item command */
+NSData *command = [NSData data];
+[[rangeScene getRangeSceneItem] updateItemCommand:itemID position:position channel:0 command:command callback:^(int errorCode, long long itemID) {}];
+```
+
+4. Unbind Item
+
+If you don't need to operate on an item (i.e., update item status commands), you can call [unbindItem](@unbindItem) to unbind the item.
+
+```objc
+[[rangeScene getRangeSceneItem] unbindItem:itemID callback:^(int errorCode, long long itemID) {}];
+```
+
+5. Destroy Item
+
+Call [destroyItem](@destroyItem) as needed to destroy items in the scene.
+
+```objc
+[[rangeScene getRangeSceneItem] destroyItem:itemID callback:^(int errorCode, long long itemID) {}];
+```
+</Accordion>
+
+
+### 8 Logout from Scene
+
+Call the [logoutScene](@logoutScene) interface to log out from the scene.
+
+```objc
+/** Logout from scene */
+[rangeScene logoutScene:^(int errorCode) {}];
+```
+
+### 9 Destroy Range Scene Module
+
+When the range scene module is no longer needed, you can call the [destroyRangeScene](@destroyRangeScene) interface to destroy the range scene module.
+
+```objc
+[[ZegoExpressEngine sharedEngine] destroyRangeScene:rangeScene];
+```
+
+### 10 Destroy Engine
+
+When the ZEGO Express SDK is no longer needed, you can call [destroyEngine](@destroyEngine) to destroy the engine.
+
+```objc
+[ZegoExpressEngine destroyEngine:nil];
+```

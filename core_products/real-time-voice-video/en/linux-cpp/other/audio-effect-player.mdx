@@ -1,0 +1,189 @@
+---
+articleID: 6898
+date: "2025-06-23"
+---
+
+
+# Audio Effect Player
+
+- - -
+
+## Feature Overview
+
+Audio effects mainly refer to short effect sounds played to enhance realism or set the atmosphere of a scene. For example: during live streaming, there are often scenes for playing sound effects, such as applause, gift sound effects, prompt sounds, etc. In games, sometimes it is necessary to play bullet sounds, collision impact sounds, etc.
+
+ZEGO Express SDK provides an audio effect player (IZegoAudioEffectPlayer) to uniformly manage audio effects, supporting audio effect playback (multiple audio effects can be played simultaneously), playback control (such as pause playback, volume adjustment, set playback progress), preloading audio effects, and other functions.
+
+import Content from '/core_products/real-time-voice-video/en/snippets/audio-effect-player-pre.mdx'
+
+<Content />
+
+## Prerequisites
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in the project and implemented basic audio and video publishing and playing functions. For details, please refer to [Quick Start - Integration](/real-time-video-linux-cpp/quick-start/integrating-sdk) and [Quick Start - Implementation Flow](/real-time-video-linux-cpp/quick-start/implementing-video-call).
+
+
+## Usage Steps
+
+### 1 Create Audio Effect Player
+
+Call the [createAudioEffectPlayer](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#create-audio-effect-player) method of [IZegoExpressEngine](@-IZegoExpressEngine) to create an audio effect player instance.
+
+<Warning title="Warning">
+
+The engine currently only supports creating one instance at the same time. Beyond that, it will return null.
+
+
+
+
+```cpp
+IZegoAudioEffectPlayer* audioEffectPlayer = engine->createAudioEffectPlayer();
+if (audioEffectPlayer == nullptr) {
+    printf("Failed to create audio effect player");
+}
+```
+
+### 2 (Optional) Preload Resources
+
+<Accordion title="Preload Resources" defaultOpen="false">
+In scenarios where the same sound effect is played frequently, the SDK provides the function of preloading audio effect files into memory to optimize the performance of repeated file reading and decoding.
+
+Call the [loadResource](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-audio-effect-player#load-resource) method to load audio effect resources. You can listen to the loading result through the `callback` parameter. The sound effect can be played only after the loading is successful. It supports preloading up to 15 local audio effect files at the same time (network resources are not supported), and the duration of a single audio effect file cannot exceed 30s, otherwise the loading will fail.
+
+When the loaded audio effect is used up, you can call the [unloadResource](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-audio-effect-player#unload-resource) interface to unload it to release related resources. Otherwise, the SDK will automatically unload the loaded audio effects when the [IZegoAudioEffectPlayer](@-IZegoAudioEffectPlayer) instance is released.
+
+<Note title="Note">
+Preloading is a non-mandatory operation. It is recommended to use it to improve performance or when you need to play a specific audio effect repeatedly.
+</Note>
+
+
+
+```cpp
+// Load audio effect resource
+audioEffectPlayer->loadResource(audioEffectID, "D:/soundEffectSample.mp3", [](int errorCode){
+    printf("loadResource result=%s", errorCode==0? "succeed", "failed");
+});
+
+// Unload audio effect resource
+audioEffectPlayer->unloadResource(audioEffectID);
+```
+</Accordion>
+
+### 3 Playback Control
+
+#### (Optional) Set Event Callback for Audio Effect Player
+
+<Accordion title="Preload Resources" defaultOpen="false">
+You can call the audio effect player's [setEventHandler](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-audio-effect-player#set-event-handler) method as needed to set the event callback for the player to listen for notifications such as `audio effect playing state change`.
+
+```cpp
+class MyAudioEffectPlayerEventHandler: public IZegoAudioEffectPlayerEventHandler{
+public:
+    // Callback for state change when the player plays a certain audio effect
+    // Please note, do not call any SDK interfaces in the SDK callback thread, you need to manually switch to another thread, otherwise a deadlock will occur
+    void onAudioEffectPlayStateUpdate(IZegoAudioEffectPlayer* audioEffectPlayer, unsigned int audioEffectID, ZegoAudioEffectPlayState state, int errorCode) override{
+        printf("effect %d : currentState=%d, errorCode=%d", audioEffectID, state, errorCode);
+    }
+}
+
+auto eventHandler = std::make_shared<MyAudioEffectPlayerEventHandler>();
+audioEffectPlayer->setEventHandler(eventHandler);
+```
+</Accordion>
+
+#### Start Playing
+
+Call the [start](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-audio-effect-player#start) method to play audio effects. Currently, it only supports playing 12 audio effects at the same time, and they can only be local files. Playing network resources is not supported. The `audioEffectID` must remain globally unique.
+
+* If the audio effect has been preloaded through the [loadResource](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-audio-effect-player#load-resource) method, you only need to pass in the `audioEffectID` when preloading, and the `path` (path of the audio effect resource) field can be empty.
+* If you need to repeat playback, you can configure the number of repetitions through `playCount` in [ZegoAudioEffectPlayConfig](@-ZegoAudioEffectPlayConfig). If set to 0, it means infinite repetition until the user manually calls [stop](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-audio-effect-player#stop) to stop.
+
+```cpp
+ZegoAudioEffectPlayConfig config;
+config.repeatCount = 1; // Play once
+config.isPublishOut = false; ; // Mix into published stream
+audioEffectPlayer->start(audioEffectID, "D:/soundEffectSample.mp3", &config);
+```
+
+#### Pause, Resume, Stop Playing
+
+1. Call the [pause](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-audio-effect-player#pause) method to pause the audio effect specified by audioEffectID. Call the [pauseAll](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-audio-effect-player#pause-all) method to pause all playing audio effects.
+2. After the audio effect is paused, call the [resume](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-audio-effect-player#resume) method to resume the audio effect specified by audioEffectID. Call the [resumeAll](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-audio-effect-player#resume-all) method to resume all paused audio effects.
+3. Call the [stop](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-audio-effect-player#stop) method to stop the audio effect specified by audioEffectID. Call the [stopAll](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-audio-effect-player#stop-all) method to stop all audio effects.
+
+```cpp
+// Pause playback
+audioEffectPlayer->pause(audioEffectID);
+// Resume playback
+audioEffectPlayer->resume(audioEffectID);
+// Stop playback
+audioEffectPlayer->stop(audioEffectID);
+
+// Pause playback of all audio effects
+audioEffectPlayer->pauseAll();
+// Resume playback of all audio effects
+audioEffectPlayer->resumeAll();
+// Stop playback of all audio effects
+audioEffectPlayer->stopAll();
+```
+
+#### Adjust Volume
+
+1. Call the [setVolume](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-audio-effect-player#set-volume) method to set the volume of the audio effect specified by audioEffectID. The value range is [0-200], and the default value is 100.
+2. Call the [setVolumeAll](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-audio-effect-player#set-volume-all) method to set the volume of all audio effects at the same time. The value range is [0-200], and the default value is 100.
+
+```cpp
+// Set volume
+audioEffectPlayer->setVolume(audioEffectID, volume);
+
+// Set volume of all audio effects
+audioEffectPlayer->setVolumeAll(volume);
+```
+
+#### Playback Progress Control
+
+1. Call the [getTotalDuration](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-audio-effect-player#get-total-duration) method to get the total duration of a single audio effect.
+2. Call the [getCurrentProgress](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-audio-effect-player#get-current-progress) method to get the current playback progress of the audio effect.
+3. Call the [seekTo](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-audio-effect-player#seek-to) method to set the playback progress as needed.
+
+```cpp
+// Get the total duration of the audio effect
+auto totalDuration = audioEffectPlayer->getTotalDuration(audioEffectID);
+// Get the current playback progress of the audio effect
+auto currentProgress = audioEffectPlayer->getCurrentProgress(audioEffectID);
+// Set playback progress
+audioEffectPlayer->seekTo(audioEffectID, total / 2, [](int errorCode){
+    printf("seekTo result=%s", errorCode==0? "succeed", "failed");
+});
+```
+
+### 4 Destroy Audio Effect Player
+
+After using the audio effect player, you need to call the [destroyAudioEffectPlayer](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#destroy-audio-effect-player) method in time to destroy it and release the resources occupied by the player.
+
+```cpp
+engine->destroyAudioEffectPlayer(audioEffectPlayer);
+```
+
+## FAQ
+
+1. **What is the difference between the audio effect player and the media player?**
+
+<table>
+
+    <tbody><tr>
+    <th>Player Type</th>
+    <th>Difference</th>
+    </tr>
+    <tr>
+    <td>
+    Media Player
+    </td>
+    <td>Mainly used for playing videos and longer music, supports playing network resources. Supports creating up to 4 player instances at the same time, and one instance can only play one audio/video file.</td>
+    </tr>
+    <tr>
+    <td>Audio Effect Player</td>
+    <td>Mainly used for playing shorter sound effects, does not support playing network resources. Only supports creating one audio effect player instance at the same time. The audio effect player supports concurrent playback of multiple audio effects, and one instance can play up to 12 audio effects at the same time.</td>
+    </tr>
+    </tbody></table>

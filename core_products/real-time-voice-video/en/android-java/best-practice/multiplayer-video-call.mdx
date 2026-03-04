@@ -1,0 +1,251 @@
+---
+articleID: 9812
+date: "2024-01-04"
+---
+# Multi-Person Video Call
+
+- - -
+
+## Feature Overview
+
+This article demonstrates how to use ZEGO Express SDK to construct multi-person video call scenarios, that is, to implement multi-to-multi real-time audio and video interaction. Users can conduct real-time video calls with other users in the Room, and publish and play streams with each other. This scenario can be used for multi-person real-time video chat, video conferences, etc.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Android/ZegoLiveRoom/videoCommunicationSample.png" /></Frame>
+
+## Prerequisites
+
+Before applying multi-person video call scenarios, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in your project and implemented basic audio and video streaming functionality. For details, please refer to [Quick Start - Integration](/real-time-video-android-java/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-android-java/quick-start/implementing-video-call).
+
+
+## Example Source Code Download
+
+Please refer to [Download Example Source Code](/real-time-video-android-java/quick-start/run-example-code) to get the source code.
+
+For related source code, please check the files in the "/ZegoExpressExample/Scenes/src/main/java/im/zego/Scenes/VideoForMultipleUsers" directory.
+
+## Usage Steps
+
+This section will introduce how to use ZEGO Express SDK to implement multi-person video calls.
+
+- The flow chart of multi-person video calls is as follows:
+
+```mermaid
+graph TD
+    1[Create engine] --> 2[Login room]
+    2 --> 3[Listen to callbacks]
+    3 --> 4[onRoomStateUpdate]
+    3 --> 10[onRoomUserUpdate]
+    3 --> 7[onRoomStreamUpdate]
+    7
+
+    4 --> 5[Get room login status]
+    5 --> 6[Start publishing stream after successful login]
+    6 --> 14[Conduct video call]
+
+    7 --> 8[Get list of audio/video stream changes in callback]
+    8 --> 9[Iterate list, play newly added audio/video streams]
+    9 --> 14[Conduct video call]
+
+    10 --> 11[Get list of user changes in callback]
+    11 --> 12[Display user join/leave room info]
+    12 --> 14[Conduct video call]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/Android/eventhandler_process_new.jpeg" /></Frame>
+*/}
+
+- The API call sequence diagram is as follows:
+
+```mermaid
+sequenceDiagram
+    participant A as ClientA
+    participant SDK as ZEGO Express SDK
+    participant B as ClientB
+
+    %% Initial stage ClientA operations
+    A->>SDK: User A creates engine <br/> [createEngine]
+    A->>SDK: User A logs in to room <br/> [loginRoom]
+    A->>SDK: Set event notification callback <br/> [setEventHandler]
+    A->>SDK: User A previews publishing stream <br/> [startPreview]
+    A->>SDK: User A starts publishing stream <br/> [startPublishingStream]
+    A->>SDK: User A starts playing stream <br/> [startPlayingStream]
+
+    %% UserB joins stage
+    rect rgb(46, 170, 153, 0.2)
+        note over A,B: User B joins
+    end
+
+    B->>SDK: User B creates engine <br/> [createEngine]
+    B->>SDK: User B logs in to room <br/> [loginRoom]
+    B->>SDK: Set event notification callback <br/> [setEventHandler]
+    SDK-->>A: Notify A of user update in room <br/> [onRoomUserUpdate]
+    B->>SDK: User B previews publishing stream <br/> [startPreview]
+    B->>SDK: User B starts publishing stream <br/> [startPublishingStream]
+    SDK-->>A: Notify A of stream update in room <br/> [onRoomStreamUpdate]
+    B->>SDK: User B starts playing stream <br/> [startPlayingStream]
+
+    %% UserA exits stage
+    rect rgb(46, 170, 153, 0.2)
+        note over A,B: User A exits
+    end
+
+    A->>SDK: User A stops preview <br/> [stopPreview]
+    A->>SDK: User A stops publishing stream <br/> [stopPublishingStream]
+    SDK-->>B: Notify B of stream update in room <br/> [onRoomStreamUpdate]
+    A->>SDK: User A stops playing stream <br/> [stopPlayingStream]
+    A->>SDK: User A logs out of room <br/> [logoutRoom]
+    SDK-->>B: Notify B of user update in room <br/> [onRoomUserUpdate]
+
+    %% UserB exits stage
+    rect rgb(46, 170, 153, 0.2)
+        note over A,B: User B exits
+    end
+
+    B->>SDK: User B stops preview <br/> [stopPreview]
+    B->>SDK: User B stops publishing stream <br/> [stopPublishingStream]
+    B->>SDK: User B stops playing stream <br/> [stopPlayingStream]
+    B->>SDK: User B logs out of room <br/> [logoutRoom]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Android/ExpressSDK/Scenes/VideoForMultipleUsers/Video_for_Multiple_Users_android_new.png" /></Frame>
+*/}
+
+  <Note title="Note">
+
+
+  ZEGO Express SDK can support multi-person video calls. The above sequence diagram takes real-time video calls between 2 Room members as an example. It is recommended that developers refer to the above process to design their own multi-person real-time video call scenarios.
+</Note>
+
+
+### Create Engine
+
+Define the SDK engine object, call the [createEngine](@createEngine) interface, pass the applied AppID and AppSign to the parameters "appID" and "appSign", and create an engine singleton object.
+
+If you need to register a callback delegate, you can pass an object that implements [IZegoEventHandler](@-IZegoEventHandler) to the parameter "eventHandler". If you do not need to register a callback delegate, you can pass "null" to the parameter "eventHandler". After creating the engine, if you still need to register a callback, you can set the callback delegate by calling the [setEventHandler](@setEventHandler-ZegoExpressEngine) interface.
+
+
+```java
+// Define SDK engine object
+ZegoExpressEngine engine;
+
+ZegoEngineProfile profile = new ZegoEngineProfile();
+// Please obtain through official website registration, format: 123456789L
+profile.appID = appID;
+// 64 characters, please obtain through official website registration, format: "0123456789012345678901234567890123456789012345678901234567890123"
+profile.appSign = appSign;
+// General scenario access
+profile.scenario = ZegoScenario.DEFAULT;
+// Set app's application object
+profile.application = getApplication();
+// Create engine
+engine = ZegoExpressEngine.createEngine(profile, null);
+```
+
+### Enable Room User Change Notification
+
+Developers need to set "isUserStatusNotify" in [ZegoRoomConfig](@-ZegoRoomConfig) to "true" when each user logs in to the Room, to receive callback notifications for other users entering and leaving the Room.
+
+```java
+ZegoRoomConfig RoomConfig = new ZegoRoomConfig();
+RoomConfig.isUserStatusNotify = true;
+// Login to Room
+engine.loginRoom(roomID, user, RoomConfig);
+```
+
+### Preview your own image and publish to remote end
+
+After the user calls [loginRoom](@loginRoom), they can call the [startPublishingStream](@startPublishingStream) interface, pass in "streamID", and publish their audio and video stream to ZEGO audio and video cloud. You can listen to the [onPublisherStateUpdate](@onPublisherStateUpdate) callback through the callback [setEventHandler](@setEventHandler) to know whether the publishing is successful.
+
+If you want to see your own image, you can call the [startPreview](@startPreview) interface to set the preview view and start local preview.
+
+"streamID" is generated locally by you, but you need to ensure that: under the same AppID, "streamID" is globally unique. If under the same AppID, different users each publish a stream with the same "streamID", it will cause the user who publishes later to fail to publish the stream.
+
+
+```java
+// Perform preview and publishing stream
+// preview is a View object, developers can customize it according to business, generally commonly used is TextureView object
+engine.startPreview(new ZegoCanvas(preview));
+// User's local StreamID
+engine.startPublishingStream("YOUR_STREAM_ID");
+```
+
+### Play audio and video streams
+
+#### Play other users' audio and video
+
+When making video calls, we need to play other users' audio and video.
+
+ [onRoomStreamUpdate](@onRoomStreamUpdate): When other users in the same Room publish audio and video streams to ZEGO audio and video cloud, we will receive notifications of new audio and video streams in this callback.
+
+We can call [startPlayingStream](@startPlayingStream) in this callback, pass in "streamID" to play this user's audio and video. You can listen to the [onPlayerStateUpdate](@onPlayerStateUpdate) callback to know whether the audio and video are successfully played.
+
+#### Display information about users entering and leaving the Room
+
+The [onRoomUserUpdate](@onRoomUserUpdate) callback can be used to listen for user changes in the Room. Other users entering or leaving the Room will trigger this callback.
+
+<Warning title="Warning">
+
+
+When the number of people in the Room is greater than 500, the [onRoomUserUpdate](@onRoomUserUpdate) callback is not guaranteed to be valid. If the business scenario has more than 500 people in the Room, business logic should not rely on this callback. If there is a need to use this callback when the number of people in the Room is greater than 500, please contact ZEGO Technical Support.
+</Warning>
+
+Code example:
+
+```java
+engine.setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onRoomUserUpdate(String roomID, ZegoUpdateType updateType, ArrayList<ZegoUser> userList) {
+        super.onRoomUserUpdate(roomID, updateType, userList);
+        // Room user change callback, this example takes toast as a display example, actual business process needs developers to design as needed
+        if(updateType == ZegoUpdateType.ADD){
+            // When "updateType" is "ZegoUpdateTypeADD", users can process users in userList
+            for(ZegoUser user : userList){
+                // Perform Toast display
+                // myActivity is a content object, if in activity, you can use this Activity as parameter
+                Toast.makeText(myActivity,user.userID+"joined Room",Toast.LENGTH_SHORT).show();
+            }
+        }else{
+            // When "updateType" is "ZegoUpdateTypeDelete", users can process users in userList
+            for(ZegoUser user : userList){
+                // Perform Toast display
+                // myActivity is a content object, if in activity, you can use this Activity as parameter
+                Toast.makeText(myActivity,user.userID+"joined Room",Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+    @Override
+    public void onRoomStateUpdate(String roomID, ZegoRoomState state, int errorCode, JSONObject extendedData) {
+        // Room state callback
+        super.onRoomStateUpdate(roomID, state, errorCode, extendedData);
+        if(state == ZegoRoomState.CONNECTED){
+            // Can be designed according to actual business
+        }
+    }
+    @Override
+    public void onRoomStreamUpdate(String roomID, ZegoUpdateType updateType, ArrayList< ZegoStream > streamList, JSONObject extendedData) {
+        // Stream change callback
+        super.onRoomStreamUpdate(roomID, updateType, streamList, extendedData);
+        // Update UI or perform other operations here
+        if(updateType == ZegoUpdateType.ADD){
+            // When "updateType" is "ZegoUpdateTypeADD", users can play each audio and video stream in streamList to display images and sounds of other users in the Room
+            for(ZegoStream stream : streamList){
+                // Play stream, preview is a View object, developers can customize it according to business, generally commonly used is TextureView object; when displaying multi-person video, developers need to use different Views to carry images of different audio and video streams to ensure that videos of different users do not overlap; the example code here will overwrite the currently playing stream image
+                engine.startPlayingStream( stream.streamID,new ZegoCanvas(preview));
+            }
+        }else{
+            // When "updateType" is "ZegoUpdateTypeDELETE", users can stop playing the corresponding audio and video streams
+            for(ZegoStream stream : streamList){
+                // Stop playing stream
+                engine.stopPlayingStream( stream.streamID);
+            }
+        }
+    }
+});
+```
+
+### Stop video call
+
+During the call, if users in the Room need to end the call, please refer to [Quick Start - Implementation](/real-time-video-android-java/quick-start/implementing-video-call) to complete related operations in sequence.

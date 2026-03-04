@@ -1,0 +1,136 @@
+---
+articleID: 8330
+date: "2024-01-02"
+---
+
+
+# Real-Time Messages and Signaling
+
+
+- - -
+
+## Feature Overview
+
+ZEGO provides multiple text message sending and receiving functions to implement sending broadcast messages in the room, barrage messages, simple IM text chat, likes, sending gifts, answering questions, and other functions.
+
+| Message Type | Function Description | Application Scenarios | Sending Frequency Limit |
+|-------|--------|--------|--------|
+| Broadcast Message | Send text messages to all users in the same room. | Can be used for simple in-room chat room scenarios. | Please refer to [Limitation Description](/real-time-video-linux-cpp/best-practice/restrictions). |
+| Barrage Message | Viewers can express their comments during live streaming, which are displayed as sliding subtitles, increasing interactivity between viewers. | Generally used for scenarios with a large number of messages being sent and received in the room, and where message reliability does not need to be guaranteed, such as live streaming barrage. | Please refer to [Limitation Description](/real-time-video-linux-cpp/best-practice/restrictions).|
+| Custom Signaling | Send messages to one or more users in the same room. | Generally used for remote control signaling or simple text message sending. For example, in the online claw machine scenario, remotely controlling the movement of the claw machine gripper. | Please refer to [Limitation Description](/real-time-video-linux-cpp/best-practice/restrictions).
+
+## Prerequisites
+
+Before sending real-time messages, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in the project and implemented basic audio and video publishing and playing functions. For details, please refer to [Quick Start - Integration](/real-time-video-linux-cpp/quick-start/integrating-sdk) and [Quick Start - Implementation Flow](/real-time-video-linux-cpp/quick-start/implementing-video-call).
+
+
+## Usage Steps
+
+### Send and Receive Broadcast Messages
+
+1. **Send Broadcast Message**
+
+    Call the [sendBroadcastMessage](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#send-broadcast-message) interface to send broadcast messages to other users in the same room. The length cannot exceed 1024 bytes.
+
+    Get the message sending result through the [ZegoIMSendBroadcastMessageCallback](@ZegoIMSendBroadcastMessageCallback) callback.
+
+    ```cpp
+    // Send broadcast message
+    engine->sendBroadcastMessage("ChatRoom-1", "This is a broadcast message", [=](int errorCode, unsigned long long messageID){
+        printf("send broadcast message: errorCode=%d", errorCode);
+    })
+    ```
+
+2. **Receive Broadcast Message**
+
+    Implement the [onIMRecvBroadcastMessage](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-im-recv-broadcast-message) callback in the IZegoEventHandler delegate. After the sender successfully sends a broadcast message, other users in the same room receive relevant information through this callback, including message content, message ID, sending time, and sender information.
+
+    ```cpp
+    class MyEventHandler: public IZegoEventHandler{
+       /**
+        * Receive room broadcast message notification
+        *
+        * @param roomID Room ID
+        * @param messageList Received message list
+        */
+        void onIMRecvBroadcastMessage(const std::string& roomID, std::vector<ZegoBroadcastMessageInfo> messageList) override {
+            printf("received broadcast message");
+            // Please note, do not call any SDK interfaces in the SDK callback thread, you need to manually switch to another thread, otherwise a deadlock will occur
+        }
+    }
+    ```
+
+### Send and Receive Barrage Messages
+
+1. Send Barrage Message
+
+   Call the [sendBarrageMessage](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#send-barrage-message) interface to send barrage messages to other users in the same room. The length cannot exceed 1024 bytes.
+
+   Get the message sending result through the [ZegoIMSendBarrageMessageCallback](@ZegoIMSendBarrageMessageCallback) callback.
+
+   ```cpp
+   // Send barrage message
+   engine->sendBarrageMassage("ChatRoom-1", "This is a barrage message", [=](int errorCode, std::string messageID){
+       printf("send barrage message: errorCode=%d", errorCode);
+   })
+   ```
+
+2. **Receive Barrage Message**
+
+    Implement the [onIMRecvBarrageMessage ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-im-recv-barrage-message) callback in the IZegoEventHandler delegate. After the sender successfully sends a barrage message, other users in the same room receive relevant information through this callback, including message content, message ID, sending time, and sender information.
+
+    ```cpp
+    class MyEventHandler: public IZegoEventHandler{
+       /**
+        * Receive room barrage message notification
+        *
+        * @param roomID Room ID
+        * @param messageList Received message list
+        */
+        void onIMRecvBarrageMessage(const std::string& roomID, std::vector<ZegoBarrageMessageInfo> messageList) override {
+            printf("received barrage message");
+            // Please note, do not call any SDK interfaces in the SDK callback thread, you need to manually switch to another thread, otherwise a deadlock will occur
+        }
+     }
+    ```
+
+### Send and Receive Custom Signaling
+
+1. **Send Custom Signaling**
+
+   Call the [sendCustomCommand ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#send-custom-command) interface to send custom signaling to users specified by `toUserList` in the same room. The length cannot exceed 1024 bytes.
+
+   Get the message sending result through the [ZegoIMSendCustomCommandCallback](@ZegoIMSendCustomCommandCallback) callback.
+
+   ```cpp
+   // Send custom signaling, only users specified in toUserList can receive this signaling through onIMRecvCustomCommand
+   auto user1 = ZegoUser("userID1", "userName1");
+   auto user2 = ZegoUser("userID2", "userName2");
+   std::vector<ZegoUser> toUserList = {user1, user2};
+   engine->sendCustomCommand("ChatRoom-1", "This is a custom command", toUserList, [=](int errorCode){
+       printf("send custom command: errorCode=%d", errorCode);
+   })
+   ```
+
+2. **Receive Custom Signaling**
+
+   Implement the [onIMRecvCustomCommand ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-im-recv-custom-command) callback in the IZegoEventHandler delegate. After the sender successfully sends custom signaling, specified users in the same room receive relevant information through this callback, including message content and message sender information.
+
+   ```cpp
+   class MyEventHandler: public IZegoEventHandler{
+      /**
+       * Receive custom signaling notification
+       *
+       * @param roomID Room ID
+       * @param fromUser Sender of the signaling
+       * @param command Signaling content
+       */
+       void onIMRecvCustomCommand(const std::string& roomID, ZegoUser fromUser, const std::string& command) override {
+            printf("received custom command");
+            // Please note, do not call any SDK interfaces in the SDK callback thread, you need to manually switch to another thread, otherwise a deadlock will occur
+     }
+   }
+   ```

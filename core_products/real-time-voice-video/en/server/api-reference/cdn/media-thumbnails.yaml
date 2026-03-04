@@ -1,0 +1,161 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact: { name: Real-time Voice/Video API Support, email: support@zegocloud.com }
+
+tags:
+  - name: cdn
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+paths:
+  /:
+    get:
+      tags: [cdn]
+      summary: MediaThumbnails
+      description:  |
+        This interface is used to initiate screenshot processing tasks for on-demand audio and video media (such as CDN recorded files), including "time point screenshot" and "time interval screenshot".
+        - Time point screenshot: After the file starts playing, screenshots will be taken at the set time points.
+        - Time interval screenshot: After the file starts playing, screenshots will be taken repeatedly according to the set time interval until the file playback ends.
+        <Note title="Call frequency limit">All rooms under the same AppID are limited to 20 times/second</Note>
+      operationId: media-thumbnails
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > Interface prototype parameters
+            >
+            > https://rtc-api.zego.im?Action=MediaThumbnails
+          required: true
+          schema: { type: string, enum: [MediaThumbnails] }
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - name: Vendor
+          in: query
+          required: true
+          schema: { type: string, enum: [Tencent, Huawei] }
+          description: |
+            Corresponding CDN vendor:<br/><ul><li>Tencent: Tencent Cloud.</li><li>Huawei: Huawei Cloud.</li></ul>
+        - name: FileId
+          in: query
+          required: true
+          schema: { type: string }
+          description: |
+            Unique file identifier. The unique identifiers for recording files are different for each CDN vendor:<br/>
+            <ul>
+            <li>Tencent Cloud: FileID.</li><li>Huawei Cloud: ObsObject.</li>
+            </ul>
+            You can obtain it through the following methods:
+            <ul>
+            <li>FileID and ObsObject parameters of the <a href="/real-time-video-server/callback/cdn/cdn-record-completed" target="blank">recording file generation callback</a>.</li>
+            <li>file_id parameter of the <a href="/real-time-video-server/callback/cdn/merge-media-completed" target="blank">media file merge completion callback</a>.</li>
+            <li>FileId parameter of the <a href="/real-time-video-server/api-reference/cdn/search-media" target="blank">search media</a> interface.</li>
+            </ul>
+
+            >**Note**
+            >
+            > ZEGOCLOUD will not verify whether the "FileId file passed in actually exists", please pay attention to fill in the correct FileId; if an incorrect FileId is passed in, the Code in the response parameter will be 1000.
+        - name: Type
+          in: query
+          required: true
+          schema: { type: string, enum: [SnapshotByTimeOffset, SampleSnapshot] }
+          description: |
+            Screenshot method.
+            <ul>
+            <li>Time point screenshot: SnapshotByTimeOffset.</li><li>Time interval screenshot: SampleSnapshot.</li>
+            </ul>
+        - name: Definition
+          in: query
+          required: false
+          schema: { type: number }
+          description: Screenshot template ID, please contact ZEGOCLOUD Technical Support to obtain.<br/><b>Only valid and required when Vendor is set to Tencent, invalid when set to Huawei.</b><br/>
+        - name: ExtTimeOffsetSet
+          in: query
+          required: false
+          description: Time points for screenshots, in seconds.<br/><b>Required when Type is set to SnapshotByTimeOffset.</b><br/>
+          schema:
+            type: array
+            items: { type: number }
+          style: form
+          explode: true
+        - name: Interval
+          in: query
+          required: false
+          schema: { type: number }
+          description: |
+            Time interval for continuous screenshots, in seconds.
+            <br/><b>Only valid and required when Vendor is set to Huawei, invalid when set to Tencent.</b><br/>
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaThumbnailsResponse'
+
+components:
+  schemas:
+    MediaThumbnailsResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int32
+          description: |
+            Return codes.
+            Only the return codes related to interface business logic are listed here. For the complete return codes, please refer to [Global Return Codes](/real-time-video-server/api-reference/return-codes).
+            <table>
+              <thead>
+                <tr><th>Return Code</th><th>Description</th><th>Solution</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>0</td><td>Request successful.</td><td>-</td></tr>
+                <tr><td>2</td><td>Input parameter error.</td><td>-</td></tr>
+                <tr><td>3</td><td>Related permissions not activated.</td><td>Please contact ZEGOCLOUD Technical Support.</td></tr>
+                <tr><td>4</td><td>CDN type mismatch.</td><td>Please check the parameters.</td></tr>
+                <tr><td>5</td><td>Configuration error.</td><td>Please contact ZEGOCLOUD Technical Support.</td></tr>
+                <tr><td>6</td><td>Request too frequent.</td><td>Please try again later.</td></tr>
+                <tr><td>7</td><td>Authentication failed.</td><td>Please check if the authentication parameters are correct.</td></tr>
+                <tr><td>1000</td><td>Request failed.</td><td>Please contact ZEGOCLOUD Technical Support.</td></tr>
+                <tr><td>41003</td><td>File does not exist.</td><td>Please confirm if the file format, file ID, etc. are correct.</td></tr>
+              </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: Operation result description
+          example: "success"
+        RequestId:
+          type: string
+          description: Request ID returned by ZEGOCLOUD server
+        Data:
+          type: object
+          description: Response data
+          properties:
+            Tencent:
+              type: object
+              description: Tencent Cloud return content (returned when Vendor is Tencent)
+              properties:
+                TaskId:
+                  type: string
+                  description: Globally unique task ID for on-demand thumbnail task
+                  example: "1500030200-procedurev2-afc1fe7dfe51cd88a5d588cacba53393tt0"
+                RequestId:
+                  type: string
+                  description: Unique request ID. If you need ZEGOCLOUD Technical Support to locate problems, you need to provide this RequestId
+                  example: "474284b3-d722-490a-ba2c-de0b472eab83"
+            Huawei:
+              type: object
+              description: Huawei Cloud return content (returned when Vendor is Huawei)
+              properties:
+                task_id:
+                  type: string
+                  description: Globally unique task ID for on-demand thumbnail task
+

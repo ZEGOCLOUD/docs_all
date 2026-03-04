@@ -1,0 +1,473 @@
+---
+articleID: 19698
+---
+
+
+# Video Stream Moderation Callback
+
+---
+
+## Description
+
+When developers have video stream content moderation requirements, after initiating the [Start Video Stream Moderation](/real-time-video-server/api-reference/moderation/start-censor-video) task, a POST request will be made to the callback URL to obtain audio stream moderation recognition results. When the `ReturnFinishInfo` parameter in the [Start Video Stream Moderation](/real-time-video-server/api-reference/moderation/start-censor-video) task is 1, after the moderation task is completed, a moderation task status callback will be initiated.
+
+## Callback instructions
+
+- Request method: POST.
+
+<Note title="Note">
+
+
+  The callback data format is JSON. You need to perform UrlDecode decoding on it.
+
+</Note>
+
+
+
+- Request URL: Please refer to [Console - Cloud Market - Shumei Content Moderation](/console/cloud-market/shumei-moderation) and follow the page instructions to complete the configuration of relevant callback URLs.
+- Transfer protocol: HTTPS/HTTP. HTTPS is recommended.
+
+## Callback parameters
+
+### Moderation result callback
+
+The video stream moderation result callback is divided into two parts: the audio moderation result callback in the video and the image moderation result callback. These two parts are described below.
+
+#### Audio moderation result callback
+
+| Common parameters | Type | Description |
+|---|---|---|
+| Event | String | Callback event. This callback returns `censor_video_v2_audio_result`. |
+| AppId | Number | AppID. |
+| Timestamp | Number | Server current time, Unix timestamp (seconds). |
+| Nonce | String | Random number. |
+| Signature | String | Signature. For details, see <a href="/real-time-video-server/callback/receiving-callback" target="_blank">Verification instructions</a>. |
+
+| Business parameters | Type | Description |
+|---|---|---|
+| Code | Number | Return code. 0 indicates success. |
+| Message | String | Description of the operation result. |
+| TaskId | String | TaskId of the moderation task.<br/>Corresponds to the TaskId returned in the response parameters of [Start Video Stream Moderation](/real-time-video-server/api-reference/moderation/start-censor-video). |
+| ResultTaskId | String | ID of this callback information. |
+| Detail | Object | Moderation result details of the 10s segment. |
+| └ RiskLevel | String | Risk level (exists when code is 0).<br/>Developers can perform corresponding processing on the audio stream and user corresponding to the violating segment based on this value.<br/>Note: This field will return the "risk type list" with the highest risk degree in the returned 10s audio (for example, "politics" usually has a higher risk degree). The priority of the risk degree of the specific "risk type list" is determined internally by Shumei moderation.<br/><ul><li>PASS: Normal content, recommended to pass directly.</li><li>REVIEW: Suspicious content, recommended for manual review.</li><li>REJECT: Violating content, recommended to block directly.</li></ul> |
+| └ Content | String | Text content recognized from the audio in the video stream.<br/><br/>When the ReturnPreText value is 1 and the risk level of the current audio segment is REJECT, the text content of the audio segment of 20 seconds in total, including the current 10 seconds and the previous 10 seconds, is returned. Otherwise, only the text content of the current segment is returned. |
+| └ AudioUrl | String | URL of the 10s audio segment. |
+| └ PreAudioUrl | String | This parameter has a value only when the parameter ReturnPreAudio=1 in the start moderation task request. It represents the URL address of the 20s audio segment of the current violating audio segment + the previous audio segment. |
+| └ RiskDescription | String | The specific "risk type list" and detailed categories of the violating content with the highest risk degree in the current 10s segment.<br/>It will be divided into level-1 tags, level-2 tags, and level-3 tags according to the detailed degree.<br/>Note: This is only for reference when people understand the risk cause. Please do not rely on the value of this parameter for logical processing.<br/><ul><li>When RiskLevel is PASS, return "Normal".</li><li>When a custom list is hit, return the custom list name.</li><li>In other cases, the display format is: level-1 tag: level-2 tag: level-3 tag.</li></ul> |
+| └ RiskLabel1 | String | Level-1 tag.<br/>When RiskLevel is PASS, return "normal". |
+| └ RiskLabel2 | String | Level-2 tag.<br/>Level-2 tag belongs to level-1 tag. When riskLevel is PASS, it is empty. |
+| └ RiskLabel3 | String | Level-3 tag.<br/>Level-3 tag belongs to level-2 tag. When riskLevel is PASS, it is empty. |
+| └ VadStatus | Number | Silence status of the audio segment:<ul><li>0: Silent segment. When it is a silent segment, other partial fields will return empty, subject to the actual callback content.</li><li>1: Non-silent segment.</li></ul> |
+| └ RiskDetail | Object | Risk details, displaying the risk information with the highest risk degree in the 10s segment.<br/>For example, if the current 10s segment hits two "risk type lists" of "pornography" and "politics", and the backend determines that the risk degree of "politics" is higher than "pornography", the current return will be risk details related to "politics". For details, see [RiskDetail](#riskDetail). |
+| └ RiskInfoList | Array of Object | List of all risk information in the 10s audio segment.<br/>Sorted from large to small according to the risk degree priority customized internally by Shumei. For details, see [RiskInfoList](#riskInfoList). |
+| └ BusinessInfoList | Array of Object | List of all business information.<br/>If the following fields cannot meet your needs, you can contact technical support for adjustments. For details, see [BusinessInfoList](#businessInfoList). |
+| AuxInfo | Object | Auxiliary information. |
+| └ RoomId | String | Room ID of the moderation. |
+| └ ProcessBeginTime | Number | Time when the 10s audio starts moderation (13-digit Unix timestamp). |
+| └ ProcessFinishTime | Number | Time when the 10s audio finishes moderation (13-digit Unix timestamp). |
+| └ StreamId | String | Stream ID. |
+
+<a id="riskdetail"></a>
+**RiskDetail**
+| Common parameters | Type | Description |
+|---|---|---|
+| RiskSource | Number | Risk source:<ul><li>1000: No risk.</li><li>1001: Audio semantics.</li><li>1003: Audio features (e.g., pitch, timbre, voiceprint, melody, etc.).</li></ul> |
+| AudioText | String | Text translated from 10s audio semantics. |
+| MatchedLists | Array of Object | Custom lists hit (configured by developers contacting technical support). |
+| Name | String | Custom list name. |
+
+<a id="riskinfolist"></a>
+**RiskInfoList**
+| Common parameters | Type | Description |
+|---|---|---|
+| RiskLevel | Number | Risk level (exists when code is 0). Developers can perform corresponding processing on the audio stream and user corresponding to the violating segment based on this value.<ul><li>PASS: Normal content, recommended to pass directly.</li><li>REVIEW: Suspicious content, recommended for manual review.</li><li>REJECT: Violating content, recommended to block directly.</li></ul> |
+| RiskDescription | String | The specific "risk type list" and detailed categories of the violating content with the highest risk degree in the current 10s segment.<br/>It will be divided into level-1 tags, level-2 tags, and level-3 tags according to the detailed degree.<br/>Note: This is only for reference when people understand the risk cause. Please do not rely on the value of this parameter for logical processing.<br/><ul><li>When RiskLevel is PASS, return "Normal".</li><li>When a custom list is hit, return the custom list name.</li><li>In other cases, the display format is: level-1 tag: level-2 tag: level-3 tag.</li></ul> |
+| RiskLabel1 | String | Level-1 tag.<br/>When RiskLevel is PASS, return "normal". |
+| RiskLabel2 | String | Level-2 tag.<br/>Level-2 tag belongs to level-1 tag. When riskLevel is PASS, it is empty. |
+| RiskLabel3 | String | Level-3 tag.<br/>Level-3 tag belongs to level-2 tag. When riskLevel is PASS, it is empty. |
+| RiskDetail | Object | Risk details, displaying the risk information with the highest risk degree in the 10s segment.<br/>For example, if the current 10s segment hits two "risk type lists" of "pornography" and "politics", and the backend determines that the risk degree of "politics" is higher than "pornography", the current return will be risk details related to "politics". |
+| RiskSource | Number | Risk source:<ul><li>1000: No risk.</li><li>1001: Audio semantics.</li><li>1003: Audio features (e.g., pitch, timbre, voiceprint, melody, etc.).</li></ul> |
+| AudioText | String | Text translated from 10s audio semantics.<br/>Only the risk information with the highest risk degree has a value in this field. |
+| MatchedLists | Array of Object | Custom lists hit (configured by developers contacting technical support). |
+| Name | String | Custom list name. |
+
+<a id="businessinfolist"></a>
+**BusinessInfoList**
+| Common parameters | Type | Description |
+|---|---|---|
+| BusinessDescription | String | Chinese description of the business tag.<br/>Format
+| BusinessLabel1 | String | Level-1 business tag. |
+| BusinessLabel2 | String | Level-2 business tag. |
+| BusinessLabe3 | String | Level-3 business tag. |
+
+
+#### Image moderation result callback
+
+| Common parameters | Type | Description |
+|---|---|---|
+| Event | String | Callback event. This callback returns `censor_video_v2_img_result`. |
+| AppId | Number | AppID. |
+| Timestamp | Number | Server current time, Unix timestamp (seconds). |
+| Nonce | String | Random number. |
+| Signature | String | Signature. For details, see <a href="/real-time-video-server/callback/receiving-callback" target="_blank">Verification instructions</a>. |
+
+| Business parameters | Type | Description |
+|---|---|---|
+| Code | Number | Return code. 0 indicates success. |
+| Message | String | Description of the operation result. |
+| TaskId | String | TaskId of the moderation task.<br/>Corresponds to the TaskId returned in the response parameters of [Start Video Stream Moderation](/real-time-video-server/api-reference/moderation/start-censor-video). |
+| ResultTaskId | String | ID of this callback information. |
+| Detail | Object | Overall risk tag details of the captured frame. |
+| └ RiskLevel | String | Risk level (exists when code is 0).<br/>Developers can perform corresponding processing on the video stream and user corresponding to the violating segment based on this value.<br/>Note: This field will return the "risk type list" with the highest risk degree in the returned captured frame (for example, "politics" usually has a higher risk degree). The priority of the risk degree of the specific "risk type list" is determined internally by Shumei moderation.<ul><li>PASS: Normal content, recommended to pass directly.</li><li>REVIEW: Suspicious content, recommended for manual review.</li><li>REJECT: Violating content, recommended to block directly.</li></ul> |
+| └ ImgUrl | String | Captured frame address. |
+| └ RiskDescription | String | The specific "risk type list" and detailed categories of the violating content with the highest risk degree in the current captured frame.<br/>It will be divided into level-1 tags, level-2 tags, and level-3 tags according to the detailed degree.<br/>Note: This is only for reference when people understand the risk cause. Please do not rely on the value of this parameter for logical processing.<br/><ul><li>When RiskLevel is PASS, return "Normal".</li><li>When a custom list is hit, return the custom list name.</li><li>In other cases, the display format is: level-1 tag: level-2 tag: level-3 tag.</li></ul> |
+| └ RiskLabel1 | String | Level-1 tag.<br/>When RiskLevel is PASS, return "normal". |
+| └ RiskLabel2 | String | Level-2 tag.<br/>Level-2 tag belongs to level-1 tag. When riskLevel is PASS, it is empty. |
+| └ RiskLabel3 | String | Level-3 tag.<br/>Level-3 tag belongs to level-2 tag. When riskLevel is PASS, it is empty. |
+| └ RiskDetail | Object | Risk details, displaying the risk information with the highest risk degree in the current captured frame.<br/>For example, if the current captured frame hits two "captured frame content risks" of "pornography" and "politics", and the backend determines that the risk degree of "politics" is higher than "pornography", the current return will be risk details related to "politics". For details, see [RiskDetail](#riskDetail). |
+| └ RiskInfoList | Array of Object | All risk detail information. For details, see [RiskInfoList](#riskInfoList). |
+| └ BusinessInfoList | Array of Object | List of all business information.<br/>If the following fields cannot meet your needs, you can contact technical support for adjustments. For details, see [BusinessInfoList](#businessInfoList). |
+| AuxInfo | Object | Auxiliary information. |
+| └ RoomId | String | Room ID of the moderation. |
+| └ ImgTime | String | Absolute time when the captured frame was generated (Beijing time). |
+| └ StreamId | String | Stream ID. |
+
+<a id="riskdetail"></a>
+**RiskDetail**
+| Common parameters | Type | Description |
+|---|---|---|
+| RiskSource | Number | Risk source:<ul><li>1000: No risk.</li><li>1001: Text risk.</li><li>1002: Visual image risk.</li></ul> |
+| FaceInfoList | Array of String | Name and location information of politically sensitive figures in the captured frame.<br/>When multiple faces are hit, the array elements list up to 10 at most. If more than 10, select the 10 with the highest `probability`. |
+| Name | String | Person name. |
+| Id | String | Number of the same person in the current captured frame.<ul><li>The same person at the same location in the captured frame has the same number under different `RiskLabel` tags.</li><li>If the same person appears multiple times in the same captured frame, multiple IDs will be assigned.</li></ul> |
+| FaceRatio | Float | Face ratio, that is, the ratio of the face area to the entire area of the captured frame.<br/>In the range 0~1, the larger the value, the higher the face ratio. |
+| Probability | Float | Confidence.<br/>Optional values are between 0~1. The larger the value, the higher the credibility. |
+| Location | Array of Number | Person location information.<br/>This array has four values, representing the coordinates of the upper-left corner and the lower-right corner of the face respectively.<br/>For example, [207,522,340,567]: Taking the upper-left corner of the captured frame as the origin, 207 represents the x coordinate of the upper-left corner of the face, 522 represents the y coordinate of the upper-left corner of the face, 340 represents the x coordinate of the lower-right corner of the face, and 567 represents the y coordinate of the lower-right corner of the face. |
+| OcrInfo | Object | Return the content recognized by OCR text in the captured frame.<br/>Exists when the request parameter `RiskTypeList` contains `IMGTEXTRISK` or `ADVERT`. |
+| Text | String | Recognized text information. |
+| MatchedLists | Array of Object | Custom lists hit (configured by developers contacting technical support). |
+| Name | String | Custom list name. |
+
+<a id="riskinfolist"></a>
+**RiskInfoList**
+| Common parameters | Type | Description |
+|---|---|---|
+| RiskLevel | String | Risk level (exists when code is 0).<br/>Developers can perform corresponding processing on the violating captured frame and user based on this value.<br/><ul><li>PASS: Normal content, recommended to pass directly.</li><li>REVIEW: Suspicious content, recommended for manual review.</li><li>REJECT: Violating content, recommended to block directly.</li></ul> |
+| Probability | Float | Confidence.<br/>Optional values are between 0~1. The larger the value, the higher the credibility. |
+| RiskDescription | String | The specific "risk type list" and detailed categories of the violating content with the highest risk degree in the current captured frame.<br/>It will be divided into level-1 tags (e.g., contraband), level-2 tags (e.g., contraband goods), and level-3 tags (e.g., tobacco) according to the detailed degree.<br/>Note: This is only for reference when people understand the risk cause. Please do not rely on the value of this parameter for logical processing.<br/><ul><li>When RiskLevel is PASS, return "Normal".</li><li>When a custom list is hit, return the custom list name.</li><li>In other cases, the display format is: level-1 tag: level-2 tag: level-3 tag.</li></ul> |
+| RiskLabel1 | String | Level-1 tag.<br/>When RiskLevel is PASS, return "normal". |
+| RiskLabel2 | String | Level-2 tag.<br/>Level-2 tag belongs to level-1 tag. When riskLevel is PASS, it is empty. |
+| RiskLabel3 | String | Level-3 tag.<br/>Level-3 tag belongs to level-2 tag. When riskLevel is PASS, it is empty. |
+| RiskDetail | Object | Risk details, with the same content as the details in RiskDetail above. |
+| RiskSource | Number | Risk source:<ul><li>1000: No risk.</li><li>1001: Text risk.</li><li>1002: Visual image risk.</li></ul> |
+| FaceInfoList | Array of String | Name and location information of politically sensitive figures in the captured frame.<br/>When multiple faces are hit, the array elements list up to 10 at most. If more than 10, select the 10 with the highest `probability`. |
+| Name | String | Person name. |
+| Id | String | Number of the same person in the current captured frame.<ul><li>The same person at the same location in the captured frame has the same number under different `RiskLabel` tags.</li><li>If the same person appears multiple times in the same captured frame, multiple IDs will be assigned.</li></ul> |
+| FaceRatio | Float | Face ratio, that is, the ratio of the face area to the entire area of the captured frame.<br/>In the range 0~1, the larger the value, the higher the face ratio. |
+| Probability | Float | Confidence.<br/>Optional values are between 0~1. The larger the value, the higher the credibility. |
+| Location | Array of Number | Person location information.<br/>This array has four values, representing the coordinates of the upper-left corner and the lower-right corner of the face respectively.<br/>For example, [207,522,340,567]: Taking the upper-left corner of the captured frame as the origin, 207 represents the x coordinate of the upper-left corner of the face, 522 represents the y coordinate of the upper-left corner of the face, 340 represents the x coordinate of the lower-right corner of the face, and 567 represents the y coordinate of the lower-right corner of the face. |
+| OcrInfo | Object | Return the content recognized by OCR text in the captured frame.<br/>Exists when the request parameter `RiskTypeList` contains `IMGTEXTRISK` or `ADVERT`. |
+| Text | String | Recognized text information. |
+| MatchedLists | Array of Object | Custom lists hit (configured by developers contacting technical support). |
+| Name | String | Custom list name. |
+
+<a id="businessinfolist"></a>
+**BusinessInfoList**
+| Common parameters | Type | Description |
+|---|---|---|
+| BusinessDescription | String | Chinese description of the business tag.<br/>The format is the Chinese name of "level-1 business tag: level-2 business tag: level-3 business tag", such as portrait: portrait posture: sitting posture. |
+| BusinessLabel1 | String | Level-1 business tag. |
+| BusinessLabel2 | String | Level-2 business tag. |
+| BusinessLabe3 | String | Level-3 business tag. |
+| BusinessDetail | Object | Business risk details. |
+| FaceInfoList | Array of Object | Name and location information of politically sensitive figures in the captured frame.<br/>When multiple faces are hit, the array elements list up to 10 at most. If more than 10, select the 10 with the highest `probability`. |
+| Name | String | Person name. |
+| Id | String | Number of the same person in the current captured frame.<ul><li>The same person at the same location in the captured frame has the same number under different `RiskLabel` tags.</li><li>If the same person appears multiple times in the same captured frame, multiple IDs will be assigned.</li></ul> |
+| FaceRatio | Float | Face ratio, that is, the ratio of the face area to the entire area of the captured frame.<br/>In the range 0~1, the larger the value, the higher the face ratio. |
+| Probability | Float | Confidence.<br/>Optional values are between 0~1. The larger the value, the higher the credibility. |
+| Location | Array of Number | Person location information.<br/>This array has four values, representing the coordinates of the upper-left corner and the lower-right corner of the face respectively.<br/>For example, [207,522,340,567]: Taking the upper-left corner of the captured frame as the origin, 207 represents the x coordinate of the upper-left corner of the face, 522 represents the y coordinate of the upper-left corner of the face, 340 represents the x coordinate of the lower-right corner of the face, and 567 represents the y coordinate of the lower-right corner of the face. |
+
+
+### Moderation task status callback
+
+When the `ReturnFinishInfo` parameter in the [Start Video Stream Moderation](/real-time-video-server/api-reference/moderation/start-censor-video) task is 1, after the video stream moderation task is completed, a moderation task status callback will be initiated.
+
+#### Audio moderation status callback
+
+| Common parameters | Type | Description |
+|---|---|---|
+| Event | String | Callback event. This callback returns `censor_video_v2_audio_status`. |
+| AppId | Number | AppID. |
+| Timestamp | Number | Server current time, Unix timestamp (seconds). |
+| Nonce | String | Random number. |
+| Signature | String | Signature. For details, see <a href="/real-time-video-server/callback/receiving-callback" target="_blank">Verification instructions</a>. |
+
+| Business parameters | Type | Description |
+|---|---|---|
+| Code | Number | Return code. 0 indicates success. |
+| Message | String | Description of the operation result. |
+| TaskId | String | TaskId of the moderation task.<br/>Corresponds to the TaskId returned by [Start Video Stream Moderation](/real-time-video-server/api-reference/moderation/start-censor-video). |
+| Status | Number | Moderation status.<br/>0: Moderation completed. |
+| AuxInfo | Object | Auxiliary information. |
+| └ RoomId | String | Room ID. |
+| └ CensorStreamTime | Number | Total duration of the moderation stream of this task (unit: seconds). |
+
+
+#### Image moderation status callback
+
+| Common parameters | Type | Description |
+|---|---|---|
+| Event | String | Callback event. This callback returns `censor_video_v2_img_status`. |
+| AppId | Number | AppID. |
+| Timestamp | Number | Server current time, Unix timestamp (seconds). |
+| Nonce | String | Random number. |
+| Signature | String | Signature. For details, see <a href="/real-time-video-server/callback/receiving-callback" target="_blank">Verification instructions</a>. |
+
+| Business parameters | Type | Description |
+|---|---|---|
+| Code | Number | Return code. 0 indicates success. |
+| Message | String | Description of the operation result. |
+| TaskId | String | TaskId of the moderation task, corresponding to the TaskId returned by [Start Video Stream Moderation](/real-time-video-server/api-reference/moderation/start-censor-video). |
+| Status | Number | Moderation status.<br/>0: Moderation completed. |
+| AuxInfo | Object | Auxiliary information. |
+| └ RoomId | String | Room ID. |
+| └ CensorStreamTime | Number | Total duration of the moderation stream of this task (unit: seconds). |
+
+
+## Moderation result callback examples
+
+### Audio moderation result callback example
+{/*TODO 这里需要确定英文的示例是否正确*/}
+```json
+{
+    //Common parameters
+    "Event": "censor_video_v2_audio_result",
+    "AppId": 1,
+    "Timestamp": 1724743250,
+    "Nonce": "7407715855877898783",
+    "Signature": "5cc9e67af0ba0c95f99bd73f79a36485f574ad11",
+    //Business parameters
+    "Code": 0,
+    "Message": "Success",
+    "TaskId": "f5312a47e068e934c05bab75d917e48e",
+    "ResultTaskId": "f5312a47e068e934c05bab75d917e48e_s_1_1",
+    "Detail": {
+        "RiskLevel": "REJECT",
+        "Content": "Let's be friends on Facebook: facebook.com/john.smith",
+        "AudioUrl": "http://xxxxx1.cn-shanghai.oss.xxxxx.com/POST_VIDEOSTREAM%2FPOST_VIDEOSTREAM_AUDIO%xxxxxx%2Ff5312a47e068e934c05bab75d917e48e_s_1_1.mp3?Expires=1720336842&OSSAccessKeyId=LTAI5tLsVBxJ8nhyy5gQVW3K&Signature=rxwlXrBi%2FIc33qq3KK5GWNPD6P4%3D",
+        "PreAudioUrl": "http://xxxx1.cn-shanghai.oss.xxxxx.com/POST_VIDEOSTREAM%2FPOST_VIDEOSTREAM_AUDIO%xxxxxxx%2Ff5312a47e068e934c05bab75d917e48e_s_1_1_pre.mp3?Expires=1720336842&OSSAccessKeyId=LTAI5tLsVBxJ8nhyy5gQVW3K&Signature=EkwixrtFuSE3ciqiDMNMcYD%2BBIk%3D",
+        "RiskDescription": "Advertisement:Contact Information:Contact Information",
+        "RiskLabel1": "ad",
+        "RiskLabel2": "contact_info",
+        "RiskLabel3": "contact_info",
+        "VadStatus": 1,
+        "RiskDetail": {
+            "RiskSource": 1001,
+            "AudioText": "Let's be friends on Facebook: facebook.com/john.smith",
+            "MatchedLists": null
+        },
+        "RiskInfoList": [
+            {
+                "RiskLevel": "REJECT",
+                "RiskDescription": "Advertisement:Contact Information:Contact Information",
+                "RiskLabel1": "ad",
+                "RiskLabel2": "contact_info",
+                "RiskLabel3": "contact_info",
+                "RiskDetail": {
+                    "RiskSource": 1001,
+                    "AudioText": "Let's be friends on Facebook: facebook.com/john.smith",
+                    "MatchedLists": null
+                }
+            },
+            {
+                "RiskLevel": "REJECT",
+                "RiskDescription": "Advertisement:Contact Information:Contact Information",
+                "RiskLabel1": "ad",
+                "RiskLabel2": "contact_info",
+                "RiskLabel3": "contact_info",
+                "RiskDetail": {
+                    "RiskSource": 1001,
+                    "AudioText": "Let's be friends on Facebook: facebook.com/john.smith",
+                    "MatchedLists": null
+                }
+            }
+        ],
+        "BusinessInfoList": [
+            {
+                "ConfidenceLevel": 2,
+                "Probability": 0.9980469,
+                "BusinessDescription": "Language:English:English",
+                "BusinessLabel1": "language",
+                "BusinessLabel2": "English",
+                "BusinessLabel3": "English"
+            }
+        ]
+    },
+    "AuxInfo": {
+        "RoomId": "room_1",
+        "ProcessBeginTime": 1717744842377,
+        "ProcessFinishTime": 1717744842655,
+        "StreamId": "stream_1"
+    }
+}
+```
+
+
+### Image moderation result callback example
+{/*TODO 这里需要确定英文的示例是否正确*/}
+```json
+{
+     //Common parameters
+    "Event": "censor_video_v2_img_result",
+    "AppId": 1,
+    "Timestamp": 1724743250,
+    "Nonce": "7407715855877898783",
+    "Signature": "5cc9e67af0ba0c95f99bd73f79a36485f574ad11",
+    //Business parameters
+    "Code": 0,
+    "Message": "Success",
+    "TaskId": "f5312a47e068e934c05bab75d917e48e",
+    "ResultTaskId": "f5312a47e068e934c05bab75d917e48e_s_1_1",
+    "Detail": {
+        "RiskLevel": "REJECT",
+        "ImgUrl": "http://xxxx.cn-shanghai.oss.xxxxx.com/POST_VIDEOSTREAM%2FPOST_VIDEOSTREAM_IMG%xxxxxx%2Ff5312a47e068e934c05bab75d917e48e_vs25_1717744842578756407.jpg?Expires=1720336842&OSSAccessKeyId=LTAI5tLsVBxJ8nhyy5gQVW3K&Signature=eeXh7DUiKlgrCOUTQjU%2B0y8FMrg%3D",
+        "RiskDescription": "ad:contact:contact",
+        "RiskLabel1": "ad",
+        "RiskLabel2": "contact_info",
+        "RiskLabel3": "contact_info",
+        "RiskDetail": {
+            "RiskSource": 1001,
+            "FaceInfoList": null,
+            "OcrInfo": {
+                "Text": "",
+                "MatchedLists": null
+            }
+        },
+        "RiskInfoList": [
+            {
+                "RiskLevel": "REJECT",
+                "Probability": 0.8550949,
+                "RiskDescription": "ad:contact:contact",
+                "RiskLabel1": "ad",
+                "RiskLabel2": "contact_info",
+                "RiskLabel3": "contact_info",
+                "RiskDetail": {
+                    "RiskSource": 1002,
+                    "FaceInfoList": [
+                        {
+                            "Name": "xxx",
+                            "Id": "7dbf511b8de523c8d93873944c2b9bf8",
+                            "FaceRatio": 0.006099537,
+                            "Probability": 0.7561441,
+                            "Location": [
+                                487,
+                                219,
+                                538,
+                                281
+                            ]
+                        }
+                    ],
+                    "OcrInfo": {
+                        "Text": "Let's be friends on Facebook: facebook.com/john.smith",
+                        "MatchedLists": null
+                    }
+                }
+            }
+        ],
+        "BusinessInfoList": [
+            {
+                "Probability": 0.9974654,
+                "ConfidenceLevel": 2,
+                "BusinessDescription": "face:face_type:real_person",
+                "BusinessLabel1": "face",
+                "BusinessLabel2": "face_type",
+                "BusinessLabel3": "zhenren",
+                "BusinessDetail": {
+                    "FaceInfoList": [
+                        {
+                            "Name": "xxx",
+                            "Id": "7dbf511b8de523c8d93873944c2b9bf8",
+                            "FaceRatio": 0.006099537,
+                            "Probability": 0.7561441,
+                            "Location": [
+                                487,
+                                219,
+                                538,
+                                281
+                            ]
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+    "AuxInfo": {
+        "RoomId": "room_1",
+        "ImgTime": "2024-06-07 15:20:42.586",
+        "StreamId": "stream_1"
+    }
+}
+```
+
+
+## Moderation status callback examples
+
+### Audio moderation status callback example
+
+```json
+{
+    //Common parameters
+    "Event": "censor_video_v2_audio_status",
+    "AppId": 1,
+    "Timestamp": 1724743250,
+    "Nonce": "7407715855877898783",
+    "Signature": "5cc9e67af0ba0c95f99bd73f79a36485f574ad11",
+    //Business parameters
+    "Code": 0,
+    "Message": "success",
+    "TaskId": "384a8a77aeb352d3ec8144ab4640cc52",
+    "Status": 0,
+    "AuxInfo": {
+        "RoomId": "room_1",
+        "CensorStreamTime": 31
+    }
+}
+```
+
+### Image moderation status callback example
+
+```json
+{
+    //Common parameters
+    "Event": "censor_video_v2_img_status",
+    "AppId": 1,
+    "Timestamp": 1724743250,
+    "Nonce": "7407715855877898783",
+    "Signature": "5cc9e67af0ba0c95f99bd73f79a36485f574ad11",
+    //Business parameters
+    "Code": 0,
+    "Message": "success",
+    "TaskId": "384a8a77aeb352d3ec8144ab4640cc52",
+    "Status": 0,
+    "AuxInfo": {
+        "RoomId": "room_1",
+        "CensorStreamTime": 31
+    }
+}
+```
+
+## Return response
+
+Return HTTP status code 2XX (e.g., 200) indicates success, and other responses indicate failure.
+
+
+## Callback retry strategy
+
+If the ZEGO server does not receive a response, or the received HTTP status code is not 2XX (e.g., 200), it will attempt to retry, **up to 5 retries**. The interval between each retry request and the **previous request** is 2s, 4s, 8s, 16s, and 32s respectively. If the 5th retry still fails, no more retries will be made, and the callback will be lost.
+
+## FAQ
+
+1. **If I don't call the stop audio/video stream moderation API after calling the start audio/video stream moderation API, what will happen?**
+
+    It will automatically end after about 5 minutes of pulling an empty stream. It is recommended to actively call the API to end it when ending moderation.

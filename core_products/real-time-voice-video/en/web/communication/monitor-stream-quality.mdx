@@ -1,0 +1,416 @@
+---
+articleID: 9506
+date: "2024-01-12"
+---
+# Stream Quality Monitoring
+
+- - -
+
+## Feature Overview
+
+When using ZEGOCLOUD Express SDK for calls, users may experience poor network conditions. You can use relevant callbacks to monitor changes in current call network quality and audio/video information.
+
+For example, in multi-person audio/video calls or multi-person singing scenarios, if you need to display user network quality in real-time, you can refer to this document to implement the corresponding functionality.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Call_quality_monitoring.png" /></Frame>
+
+
+## Example Source Code Download
+
+Please refer to [Download Example Source Code](/real-time-video-web/quick-start/run-example-code) to obtain the source code.
+
+For relevant source code, please view files in the "src/Examples/AdvancedStreaming/StreamMonitoring" directory.
+
+## Prerequisites
+
+Before monitoring stream quality, ensure that:
+
+- A project has been created in the [ZEGOCLOUD Console](https://console.zego.im), and a valid AppID and Server address have been obtained. For details, please refer to [Console - Project Information](/console/project-info).
+- ZEGOCLOUD Express SDK has been integrated into the project, and basic audio/video stream publishing and playing functionality has been implemented. For details, please refer to [Quick Start - Integration](/real-time-video-web/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-web/quick-start/implementing-video-call).
+
+## Basic Network Quality Report
+
+You can listen to the [networkQuality](@networkQuality) callback to receive upstream and downstream network quality for users (including yourself). This callback is triggered every two seconds. For network quality levels, please refer to [QualityGrade](@NetworkQualityCallBack).
+
+[networkQuality](@networkQuality) callback logic:
+
+- You will receive your own network quality callback as long as you publish or play streams.
+- You will receive other users' network quality callbacks only when you are playing audio/video streams published by other users and those users are in your room.
+- When "userID" is "" (empty string), it represents your own network quality. When "userID" is not "" (empty string), it represents reports for other users in the room.
+- You can estimate the network status of remote publishing users. If a remote publishing user's heartbeat is lost once, their network quality will be reported as "unknown". If the heartbeat is lost 3 times, their network quality will be reported as "die".
+
+<Warning title="Warning">
+[networkQuality](@NetworkQuality) is not applicable for live streaming scenarios using CDN.
+</Warning>
+
+
+
+
+```javascript
+zg.on("networkQuality", (userID, upstreamQuality, downstreamQuality) => {
+        console.log("networkQuality", userID, upstreamQuality, downstreamQuality)
+})
+```
+
+
+## Advanced Quality Report
+
+If the basic network quality report above does not meet your needs, ZEGOCLOUD also provides more detailed stream publishing quality reports, stream playing quality reports, and other related information.
+
+### Stream Publishing Quality Report
+
+The stream publishing quality report describes the quality of the process where users push audio/video streams to the ZEGOCLOUD server. It includes the frame rates of audio/video streams during the capture and encoding phases, as well as the frame rate, bitrate, latency, and packet loss rate of the transmitted (sent) audio/video streams.
+
+You can register [publishQualityUpdate](@publishQualityUpdate) to receive stream publishing quality callbacks. This callback is received every three seconds after successful stream publishing. You can use the stats ([ZegoPublishStats](@-ZegoPublishStats)) parameter to understand the health status of published audio/video streams in real-time.
+
+- In most cases, you only need to pay attention to the `videoQuality` parameter of `video` and the `audioQuality` parameter of `audio`. You can determine the overall quality of stream publishing through the enumeration values of these two parameters.
+- If you want to focus on more detailed stream publishing quality parameters, please refer to [ZegoPublishStats](@-ZegoPublishStats).
+
+
+```javascript
+zg.on('publishQualityUpdate', (streamId, stats) => {
+    console.log('publishQualityUpdate', streamId, stats);
+})
+```
+### Stream Publishing Quality Details
+
+Stream publishing quality includes video quality and audio quality during publishing, such as video bitrate, audio bitrate, video frame rate, etc.
+
+#### Video Quality
+
+The relevant parameters for video quality [ZegoPublishVideoStats](@-ZegoPublishVideoStats) data during stream publishing are as follows:
+
+<table>
+
+<tbody><tr>
+<th>Parameter Name</th>
+<th>Description</th>
+</tr>
+<tr>
+<td>
+[frameHeight](@frameHeight-ZegoPublishVideoStats)
+</td>
+<td>
+Captured video height.
+</td>
+</tr>
+<tr>
+<td>[frameWidth](@frameWidth-ZegoPublishVideoStats)</td>
+<td>Captured video width.</td>
+</tr>
+<tr>
+<td>[googCodecName](@googCodecName-ZegoPublishVideoStats)</td>
+<td>Video encoding format.</td>
+</tr>
+<tr>
+<td>[muteState](@muteState-ZegoPublishVideoStats)</td>
+<td>Whether the video track is muted.</td>
+</tr>
+<tr>
+<td>[videoBitrate](@videoBitrate-ZegoPublishVideoStats)</td>
+<td>Video bitrate, in kbps.</td>
+</tr>
+<tr>
+<td>[videoFPS](@videoFPS-ZegoPublishVideoStats)</td>
+<td>Video encoding frame rate, in f/s.</td>
+</tr>
+<tr>
+<td>[videoPacketsLost](@videoPacketsLost-ZegoPublishVideoStats)</td>
+<td>Number of video packets lost.</td>
+</tr>
+<tr>
+<td>[videoPacketsLostRate](@videoPacketsLostRate-ZegoPublishVideoStats)</td>
+<td>Video packet loss rate, in percentage, ranging from 0.0 to 1.0.</td>
+</tr>
+<tr>
+<td>[videoTransferFPS](@videoTransferFPS-ZegoPublishVideoStats)</td>
+<td>Video sending frame rate, in f/s.</td>
+</tr>
+<tr>
+<td>[videoQuality](@videoQuality-ZegoPublishVideoStats)</td>
+<td>Stream publishing video quality:
+<ul><li>-1: Unknown
+</li><li>0: Excellent
+</li><li>1: Good
+</li><li>2: Fair
+&nbsp;</li><li> 3: Poor
+&nbsp;</li><li> 4: Very poor</li></ul></td>
+</tr>
+</tbody></table>
+
+
+#### Audio Quality
+
+The relevant parameters for audio quality [ZegoPublishAudioStats](@-ZegoPublishAudioStats) during stream publishing are as follows:
+
+<table>
+
+<tbody><tr>
+<th>Parameter Name</th>
+<th>Description</th>
+</tr>
+<tr>
+<td>
+&nbsp;[audioBitrate](@audioBitrate-ZegoPublishAudioStats)
+</td>
+<td>Audio bitrate, in kbps.</td>
+</tr>
+<tr>
+<td>[audioPacketsLost](@audioPacketsLost-ZegoPublishAudioStats)</td>
+<td>Number of audio packets lost.</td>
+</tr>
+<tr>
+<td>[audioPacketsLostRate](@audioPacketsLostRate-ZegoPublishAudioStats)</td>
+<td>Audio packet loss rate, in percentage, ranging from 0.0 to 1.0.</td>
+</tr>
+<tr>
+<td>[googCodecName](@googCodecName-ZegoPublishAudioStats)</td>
+<td>Audio encoding format.</td>
+</tr>
+<tr>
+<td>[muteState](@muteState-ZegoPublishAudioStats)</td>
+<td>Whether the audio track is muted.</td>
+</tr>
+<tr>
+<td>[audioFPS](@audioFPS-ZegoPublishAudioStats)</td>
+<td>Audio frame rate, in f/s.</td>
+</tr>
+<tr>
+<td>[audioQuality](@audioQuality-ZegoPublishAudioStats)</td>
+<td>Stream publishing audio quality:
+<ul><li>-1: Unknown
+</li><li>0: Excellent
+</li><li>1: Good
+</li><li>2: Fair
+</li><li>3: Poor
+</li><li>4: Very poor</li></ul></td>
+</tr>
+</tbody></table>
+
+
+### Stream Playing Quality Report
+
+The stream playing quality report describes the quality of the process where users play audio/video streams. It includes the frame rate, bitrate, latency, and packet loss rate of received audio/video streams, as well as the frame rate during the decoding phase and the overall audio/video quality.
+
+You can register [playQualityUpdate](@playQualityUpdate) to receive stream playing quality callbacks. This callback is received every three seconds after successful stream playing. Developers can use the stats ([ZegoPlayStats](@-ZegoPlayStats)) parameter to understand the health status of played audio/video streams in real-time.
+
+- In most cases, you only need to pay attention to the `videoQuality` parameter of `video` and the `audioQuality` parameter of `audio`. You can determine the overall quality of stream playing through the enumeration values of these two parameters.
+- If you want to focus on more detailed stream playing quality parameters, please refer to [ZegoPlayStats](@-ZegoPlayStats).
+
+
+```javascript
+zg.on('playQualityUpdate', (streamId, stats) => {
+    console.log('publishQualityUpdate', streamId, stats);
+})
+```
+
+### Stream Playing Quality Details
+
+Stream playing quality includes video quality and audio quality during playing, such as video bitrate, audio bitrate, video frame rate, etc.
+
+#### Video Quality
+
+The relevant parameters for video quality [ZegoPlayVideoStats](@-ZegoPlayVideoStats) data during stream playing are as follows:
+
+<table>
+
+<tbody><tr>
+<th>Parameter Name</th>
+<th>Description</th>
+</tr>
+<tr>
+<td>
+[frameHeight](@frameHeight-ZegoPlayVideoStats)
+</td>
+<td>Received video height.</td>
+</tr>
+<tr>
+<td>[frameWidth](@frameWidth-ZegoPlayVideoStats)</td>
+<td>Received video width.</td>
+</tr>
+<tr>
+<td>[googCodecName](@googCodecName-ZegoPlayVideoStats)</td>
+<td>Video encoding format.</td>
+</tr>
+<tr>
+<td>[muteState](@muteState-ZegoPlayVideoStats)</td>
+<td>Whether the video track is muted.</td>
+</tr>
+<tr>
+<td>[videoBitrate](@videoBitrate-ZegoPlayVideoStats)</td>
+<td>Video bitrate, in kbps.</td>
+</tr>
+<tr>
+<td>[videoFPS](@videoFPS-ZegoPlayVideoStats)</td>
+<td>Video decoding frame rate, in f/s.</td>
+</tr>
+<tr>
+<td>[videoPacketsLost](@videoPacketsLost-ZegoPlayVideoStats)</td>
+<td>Number of video packets lost.</td>
+</tr>
+<tr>
+<td>[videoPacketsLostRate](@videoPacketsLostRate-ZegoPlayVideoStats)</td>
+<td>Video packet loss rate, in percentage, ranging from 0.0 to 1.0.</td>
+</tr>
+<tr>
+<td>[videoTransferFPS](@videoTransferFPS-ZegoPlayVideoStats)</td>
+<td>Video receiving frame rate, in f/s.</td>
+</tr>
+<tr>
+<td>[videoFramesDecoded](@videoFramesDecoded-ZegoPlayVideoStats)</td>
+<td>Total size of decoded video frames.</td>
+</tr>
+<tr>
+<td>[videoFramesDropped](@videoFramesDropped-ZegoPlayVideoStats)</td>
+<td>Number of currently received video frames dropped.</td>
+</tr>
+<tr>
+<td>[videoQuality](@videoQuality-ZegoPlayVideoStats)</td>
+<td>Stream playing video quality:
+<ul><li>-1: Unknown
+</li><li>0: Excellent
+</li><li>1: Good
+&nbsp;</li><li>2: Fair
+&nbsp;</li><li>3: Poor
+&nbsp;</li><li>4: Very poor</li></ul></td>
+</tr>
+</tbody></table>
+
+#### Audio Quality
+
+The relevant parameters for audio quality [ZegoPlayAudioStats](@-ZegoPlayAudioStats) during stream playing are as follows:
+
+<table>
+
+<tbody><tr>
+<th>Parameter Name</th>
+<th>Description</th>
+</tr>
+<tr>
+<td>
+[audioBitrate](@audioBitrate-ZegoPlayAudioStats)
+</td>
+<td>Audio bitrate, in kbps.</td>
+</tr>
+<tr>
+<td>[audioJitter](@audioJitter-ZegoPlayAudioStats)</td>
+<td>Network jitter.</td>
+</tr>
+<tr>
+<td>[audioLevel](@audioLevel-ZegoPlayAudioStats)</td>
+<td>Volume level.</td>
+</tr>
+<tr>
+<td>[audioPacketsLost](@audioPacketsLost-ZegoPlayAudioStats)</td>
+<td>Number of packets lost.</td>
+</tr>
+<tr>
+<td>[audioPacketsLostRate](@audioPacketsLostRate-ZegoPlayAudioStats)</td>
+<td>Packet loss rate, in percentage, ranging from 0.0 to 1.0.</td>
+</tr>
+<tr>
+<td>[audioSamplingRate](@audioSamplingRate-ZegoPlayAudioStats)</td>
+<td>Sampling rate.</td>
+</tr>
+<tr>
+<td>[muteState](@muteState-ZegoPlayAudioStats)</td>
+<td>Whether the audio track is muted.</td>
+</tr>
+<tr>
+<td>[audioFPS](@audioFPS-ZegoPlayAudioStats)</td>
+<td>Audio frame rate, in f/s.</td>
+</tr>
+<tr>
+<td>[audioSendLevel](@audioSendLevel-ZegoPlayAudioStats)</td>
+<td>Audio sending energy.</td>
+</tr>
+<tr>
+<td>[googCodecName](@googCodecName-ZegoPlayAudioStats)</td>
+<td>Audio encoding format.</td>
+</tr>
+<tr>
+<td>[audioQuality](@audioQuality-ZegoPlayAudioStats)</td>
+<td>Stream playing audio quality:
+<ul><li>-1: Unknown
+</li><li>0: Excellent
+</li><li>1: Good
+</li><li>2: Fair
+</li><li>3: Poor
+</li><li>4: Very poor</li></ul></td>
+</tr>
+</tbody></table>
+
+## Other Information Monitoring
+
+### Stream Publishing/Playing Status Change Notification
+
+#### Stream Publishing Status Callback
+
+After successful stream publishing, you can use [publisherStateUpdate](@publisherStateUpdate) to receive notifications of stream publishing status changes.
+
+```javascript
+zg.on('publisherStateUpdate', result => {
+    console.log('publisherStateUpdate: ', result.streamID, result.state, result);
+});
+```
+
+You can roughly determine the user's stream publishing network status based on whether the `state` parameter in the callback is in the "requesting stream publishing status". The values of the `state` parameter correspond to user stream publishing status as follows:
+
+<table>
+
+<tbody><tr>
+<th>Status Value</th>
+<th>Description</th>
+</tr>
+<tr>
+<td>NO_PUBLISH</td>
+<td>No stream publishing status, which is the state before stream publishing. If a stable exception occurs during the stream publishing process, such as incorrect AppID, AppSign, or Token, or if other users are already publishing streams, publishing streams with the same stream ID will fail and enter the no stream publishing status.</td>
+</tr>
+<tr>
+<td>PUBLISH_REQUESTING</td>
+<td>Requesting stream publishing status. After the stream publishing operation is executed successfully, it will enter the requesting stream publishing status. Usually, this status is used for UI interface display. If an interruption occurs due to poor network quality, the SDK will perform internal retry and return to the requesting stream publishing status.</td>
+</tr>
+<tr>
+<td>PUBLISHING</td>
+<td>Publishing stream status. Entering this status indicates that stream publishing has been successful and users can communicate normally.</td>
+</tr>
+</tbody></table>
+
+
+#### Stream Playing Status Change Callback
+
+After successful stream playing, developers can use [playerStateUpdate](@playerStateUpdate) to receive notifications of stream playing status changes.
+
+```javascript
+zg.on('playerStateUpdate', result => {
+        console.warn('playerStateUpdate', result.streamID, result.state);
+})
+```
+
+Developers can roughly determine the user's stream playing network status based on whether the `state` parameter is in the "requesting stream playing status". The values of the `state` parameter correspond to user stream playing status as follows:
+
+<table>
+
+<tbody><tr>
+<th>Status Value</th>
+<th>Description</th>
+</tr>
+<tr>
+<td>NO_PLAY</td>
+<td>No stream playing status, which is the state before stream playing. If a stable exception occurs during the stream playing process, such as incorrect AppID, AppSign, or Token, it will enter the no stream playing status.</td>
+</tr>
+<tr>
+<td>PLAY_REQUESTING</td>
+<td>Requesting stream playing status. After the stream playing operation is executed successfully, it will enter the requesting stream playing status. Usually, this status is used for application interface display. If an interruption occurs due to poor network quality, the SDK will perform internal retry and return to the requesting stream playing status.</td>
+</tr>
+<tr>
+<td>PLAYING</td>
+<td>Playing stream status. Entering this status indicates that stream playing has been successful and users can communicate normally.</td>
+</tr>
+</tbody></table>
+
+## Related Documents
+
+- [How to handle video freezing issues?](https://doc-zh.zego.im/faq/video_freeze?product=ExpressVideo&platform=all)
+- [How to handle audio freezing issues?](https://doc-zh.zego.im/faq/audio_freeze?product=ExpressVideo&platform=all)
+- [How to understand and use SEI (Supplemental Enhancement Information)?](https://doc-zh.zego.im/faq/sei?product=ExpressVideo&platform=all)

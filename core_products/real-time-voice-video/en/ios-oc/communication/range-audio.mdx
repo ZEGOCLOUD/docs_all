@@ -1,0 +1,794 @@
+---
+articleID: 11666
+date: "2024-09-27"
+---
+# Game Voice
+
+- - -
+
+## Feature Overview
+
+### Concept Explanation
+
+- Range: The distance range within which a listener receives audio.
+- Orientation: Refers to the position and facing direction of the listener in the game world coordinates. For details, refer to `5 Set the current position of the listener`.
+- Listener: A user in the Room who receives audio.
+- Speaker: A user in the Room who sends audio.
+
+### Feature Description
+
+Starting from version **2.11.0**, ZEGO Express SDK has added a game voice module, which mainly includes: range voice, 3D audio effects, and team voice.
+
+<table>
+
+<tbody><tr>
+<th>Feature</th>
+<th>Description</th>
+</tr>
+<tr>
+<td>
+Range Voice
+</td>
+<td>
+<p>The listener in the Room has a range limit for receiving audio. If the distance between the speaker and the listener exceeds this range, the speaker's voice cannot be heard. To ensure voice clarity, when more than 20 people nearby are speaking, only the voices of the 20 speakers closest to the listener can be heard.</p>
+<p>Assuming the maximum range of audio reception is set to R, and the distance between the speaker and the listener is r, then:</p>
+<ul><li>When r &lt; R, it means the speaker is within the normal range, and the listener can hear the voice.</li><li>When r ≥ R, it means the speaker is beyond the maximum range, and the listener cannot hear the voice.</li></ul>
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/AudioRange_en.jpeg" /></Frame>
+<p>The above diagram only shows an example where the range voice mode is "World". For more information about voice reachability under different mode combinations, please refer to <a href="#optional-set-common-voice-mode">Set Common Voice Mode</a>.</p>
+</td>
+</tr>
+<tr>
+<td>3D Audio Effects</td>
+<td>The voice has a 3D spatial sense and attenuates with distance.</td>
+</tr>
+<tr>
+<td>
+Common Voice Mode
+</td>
+<td>
+<p>Players can choose to join a team and switch between "World", "Team Only", and "Secret Team" voice modes within the Room.</p>
+<ul><li>World: Players can talk with other players in the world, and can also talk with teammates.</li><li>Team Only: Players can only talk with teammates.</li><li>Secret Team: Players can talk with teammates and can only hear the voices of other players in the world.</li></ul>
+<Note title="Note">
+<ul><li>Communication between teammates is not affected by "Range" and "3D Audio Effects". For details, please refer to <a href="#optional-set-common-voice-mode">Set Common Voice Mode</a>.</li><li>If you want to customize voice sending and receiving capabilities, please refer to <a href="#optional-set-custom-voice-mode">Set Custom Voice Mode</a>.</li></ul>
+</Note>
+</td>
+</tr>
+</tbody></table>
+
+### Applicable Scenarios
+
+The game voice feature is suitable for battle royale games and metaverse scenarios.
+
+In battle royale games, the team voice feature provides team formation functionality. Teams can be changed before and after the game starts. Developers do not need to focus on stream grouping and the implementation of publishing and playing streams, and can directly implement the team voice feature.
+
+In battle royale games and metaverse scenarios, 3D audio effects capability is provided. When listening to speakers' audio effects, there is a sense of direction and distance, making the scene feel more realistic.
+
+## Example Source Code Download
+
+Please refer to [Download Example Source Code](/real-time-video-ios-oc/quick-start/run-example-code) to get the source code.
+
+For relevant source code, please view files in the "/ZegoExpressExample/Examples/AdvancedAudioProcessing/RangeAudio" directory.
+
+## Prerequisites
+
+Before implementing range voice, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com), and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in your project and implemented basic audio/video publishing and playing stream functionality. For details, please refer to [Quick Start - Integration](/real-time-video-ios-oc/quick-start/integrating-sdk) and [Quick Start - Implementation Flow](/real-time-video-ios-oc/quick-start/implementing-video-call).
+
+
+## Important Notes
+
+<Warning title="Warning">
+
+
+When using the range voice feature, please pay close attention to the following notes to avoid affecting integration.
+</Warning>
+
+If you are already using the real-time audio/video features of ZEGO Express SDK, please note the following:
+
+- Since the range voice feature module is implemented based on the publishing and playing stream interfaces of ZegoExpressEngine, you do not need to focus on the concept of publishing and playing streams when using it. In range voice scenarios, the concept of publishing audio stream is changed to "turning on the microphone", and the concept of playing audio stream is changed to "turning on the speaker". It is recommended that you do not use the [startPublishingStream](@startPublishingStream) and [startPlayingStream](@startPlayingStream) interfaces to perform publishing and playing stream operations while integrating the range voice feature, to avoid effect conflicts.
+- The related callbacks for publishing and playing streams in the range voice feature module ([onPublisherStateUpdate](@onPublisherStateUpdate), [onPlayerStateUpdate](@onPlayerStateUpdate), [onPublisherQualityUpdate](@onPublisherQualityUpdate), and [onPlayerQualityUpdate](@onPlayerQualityUpdate)) will no longer take effect.
+
+
+## Usage Steps
+
+```mermaid
+sequenceDiagram
+    participant App as Client App
+    participant SDK as ZEGO Express SDK
+
+    App->>SDK: Create engine <br/> [CreateEngine]
+    App->>SDK: Create range audio module <br/> [CreateRangeAudio]
+    App->>SDK: Listen to range audio event callbacks <br/> [IZegoRangeAudioHandler]
+    App->>SDK: Login room <br/> [LoginRoom]
+
+    critical Critical steps
+        App->>SDK: Set listener's current position <br/> [UpdateSelfPosition]
+        App->>SDK: Add/Update audio source position info <br/> [UpdateAudioSource]
+        App->>SDK: Enable microphone, speaker <br/> [EnableMicrophone / EnableSpeaker]
+        SDK-->>App: Callback microphone usage status <br/> [OnRangeAudioMicrophoneStateUpdate]
+    end
+
+    App->>SDK: Destroy range audio module <br/> [DestroyRangeAudio]
+    App->>SDK: Logout room <br/> [LogoutRoom]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/RangeVoice_ios.png" /></Frame>
+*/}
+
+The above diagram only shows the core steps and interfaces for implementing the game voice feature. Developers can implement other related interfaces according to business needs, referring to the detailed introduction in the documentation below.
+
+### 1 Create Engine
+
+Call the [createEngineWithProfile](@createEngineWithProfile) interface, pass the applied AppID and AppSign to the parameters "appID" and "appSign", and create an engine singleton object. The engine currently only supports creating one instance at the same time. After exceeding this limit, null will be returned.
+
+
+```objc
+ZegoEngineProfile *profile = [ZegoEngineProfile new];
+// Please obtain through official website registration, format: 1234567890
+profile.appID = appID;
+// 64 characters, please obtain through official website registration, format: "0123456789012345678901234567890123456789012345678901234567890123"
+profile.appSign = appSign;
+// For general scenario access, please select the appropriate scenario according to the actual situation
+profile.scenario = ZegoScenarioDefault;
+// Create the engine and register self as the eventHandler callback. If you do not need to register a callback, the eventHandler parameter can be passed as nil, and you can call the "-setEventHandler:" method later to set the callback
+[ZegoExpressEngine createEngineWithProfile:profile eventHandler:self];
+```
+
+### 2 Create Range Voice Module
+
+Call the [createRangeAudio](@createRangeAudio) method to create a range audio instance.
+
+```objc
+ZegoRangeAudio *rangeAudio = [[ZegoExpressEngine sharedEngine] createRangeAudio];
+if (rangeAudio == nil) {
+    printf("Failed to create range audio instance module");
+}
+```
+
+### 3 Listen to Range Voice Event Callbacks
+
+If necessary, call the [setEventHandler](@setEventHandler-ZegoRangeAudio) interface to set event callbacks for the microphone, used to listen to the microphone on/off state [microphoneStateUpdate](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~protocol~ZegoRangeAudioEventHandler#range-audio-microphone-state-update-error-code) notifications.
+
+```objc
+/// Set event callback listener
+[rangeAudio setEventHandler:self];
+···
+
+/// Microphone state callback
+- (void)rangeAudio:(ZegoRangeAudio *)rangeAudio microphoneStateUpdate:(ZegoRangeAudioMicrophoneState)state errorCode:(int)errorCode {
+    [self appendLog:[NSString stringWithFormat:@"microphone state update. state: %td, errorCode: %d", state, errorCode]];
+}
+```
+
+
+### 4 Login Room
+
+After creating a ZegoUser user object by passing in the userID and userName parameters, call the [loginRoom](@loginRoom) interface, pass in the roomID parameter and the user parameter to login to the Room.
+
+<Warning title="Warning">
+
+
+- Within the same AppID, ensure that roomID is globally unique.
+- Within the same AppID, ensure that userID is globally unique. It is recommended that developers set it to a meaningful value and associate userID with their business account system.
+- userID cannot be empty, otherwise it will cause Room login failure.
+</Warning>
+
+```objc
+// Create user object
+ZegoUser *user = [ZegoUser userWithUserID:@"user1"];
+
+// Start logging into the Room
+[[ZegoExpressEngine sharedEngine] loginRoom:@"room1" user:user];
+```
+
+<Note title="Note">
+
+
+When the user has successfully logged into the Room, if the application exits abnormally, after restarting the application, the developer needs to first call the [logoutRoom](@logoutRoom) interface to leave the Room, and then call the [loginRoom](@loginRoom) interface to log in to the Room again.
+
+</Note>
+
+
+### 5 Set the Current Position of the Listener
+
+Developers can call the [updateSelfPosition](@updateSelfPosition) interface to set their own position and orientation, or update their position and facing direction in the world coordinate system when their own orientation changes.
+
+<Note title="Note">
+
+
+- If this interface is not called to set position information before calling [enableSpeaker](@enableSpeaker) to turn on the speaker, you will not be able to hear the voices of people other than teammates.
+- The coordinate values of the three axes of your own coordinate system can be obtained by converting the rotation angle matrix through a third-party 3D engine.
+</Note>
+
+<table>
+
+  <tbody><tr>
+    <td>Parameter Name</td>
+    <td>Description</td>
+  </tr>
+  <tr>
+    <td>position</td>
+    <td>The coordinates of oneself in the world coordinate system. The parameter is a float array of length 3. The three values represent the coordinate values of front, right, and up.</td>
+  </tr>
+  <tr>
+    <td>axisForward</td>
+    <td>The unit vector of the front axis of your own coordinate system. The parameter is a float array of length 3. The three values represent the coordinate values of front, right, and up.</td>
+  </tr>
+  <tr>
+    <td>axisRight</td>
+    <td>The unit vector of the right axis of your own coordinate system. The parameter is a float array of length 3. The three values represent the coordinate values of front, right, and up.</td>
+  </tr>
+  <tr>
+    <td>axisUp</td>
+    <td>The unit vector of the up axis of your own coordinate system. The parameter is a float array of length 3. The three values represent the coordinate values of front, right, and up.</td>
+  </tr>
+</tbody></table>
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/Coordinate_System_en.jpeg" /></Frame>
+
+```objc
+// The coordinates of oneself in the world coordinate system, in the order of front, right, up
+float position[3] = {100.0, 100.0, 100.0};
+// The unit vector of the front orientation of your own coordinate system
+float axisForward[3] = {1.0,0.0,0.0};
+// The unit vector of the right orientation of your own coordinate system
+float axisRight[3] = {0.0,1.0,0.0};
+// The unit vector of the up orientation of your own coordinate system
+float axisUp[3] = {0.0,0.0,1.0};
+
+// Update your own position and orientation
+[self.rangeAudio updateSelfPosition: position axisForward: axisForward axisRight: axisRight axisUp: axisUp];
+```
+
+### 6 Add or Update Speaker Position Information
+
+After successfully logging into the Room, you can add or update speaker position information by calling the [updateAudioSource](@updateAudioSource) interface.
+
+<Warning title="Warning">
+- In World mode: You need to update the positions of all listeners and speakers in the Room. In Secret Team mode: You need to update the positions of all speakers in the audio reception range who are in World mode within the Room. If the speaker position is not set, or the speaker is beyond the listener's range, you will not be able to hear the voice.
+- Here, speakers refer to other people in the Room, and listeners refer to yourself.
+</Warning>
+
+- userID: The ID of other speaking users in the Room.
+- position: The coordinates of the speaker in the world coordinate system. The parameter is a float array of length 3. The three values represent the coordinate values of front, right, and up.
+
+```objc
+// The coordinates of the user in the world coordinate system, in the order of front, right, up
+float position[3] = {100.0, 100.0, 100.0};
+// Add/update user position
+[self.rangeAudio updateAudioSource:@"abc" position:position];
+```
+
+### 7 (Optional) Set Audio Reception Range
+
+<Accordion title="Please choose whether to set the audio reception range according to business needs. If not set, it means you can only receive the voices of members in your own team." defaultOpen="false">
+Call the [setAudioReceiveRange](@setAudioReceiveRange) interface to set the maximum range for the listener to receive audio. That is, taking yourself as the starting point, the set distance is a three-dimensional space in 3D space. After setting this range, when 3D audio effects are enabled, the sound will attenuate with increasing distance until it exceeds the set range, at which point there will be no more sound.
+
+```objc
+// Set the maximum range for audio reception. Sounds beyond this range will not be heard
+[self.rangeAudio setAudioReceiveRange:1000];
+```
+
+You can also further control the attenuation range by calling the [setAudioReceiveRangeWithParam](@setAudioReceiveRangeWithParam) interface. When the distance is less than min, the volume will not attenuate as the distance increases; when the distance is greater than max, you will not be able to hear the other party's voice.
+
+```objc
+// Set the attenuation range interval [min, max] for 3D audio effects
+ZegoReceiveRangeParam *param = [[ZegoReceiveRangeParam alloc] init];
+param.min = reciveRangeMin;
+param.max = reciveRangeMax;
+[self.rangeAudio setAudioReceiveRangeWithParam:param];
+```
+
+<Note title="Note">
+
+
+If the audio reception range is not set, it means you can only receive the voices of members in your own team and cannot receive any sounds outside the team. After setting, team voice will not be limited by the audio reception range and will not have 3D audio effects.
+</Note>
+</Accordion>
+
+### 8 (Optional) Implement 3D Audio Effects
+
+<Accordion title="Please choose whether to enable 3D audio effects and whether to set 3D audio effects for the local player according to business needs." defaultOpen="false">
+#### Enable 3D Audio Effects
+
+Call the [enableSpatializer](@enableSpatializer) interface to set 3D audio effects. When enable is true, it means 3D audio effects are enabled. At this time, the audio of non-team members in the Room will produce spatial changes with the change in distance and direction of the speaker from yourself. When false, it means 3D audio effects are disabled. (Can be enabled or disabled at any time)
+
+<Warning title="Warning">
+
+
+This feature only takes effect for people outside the team.
+</Warning>
+
+```objc
+[self.rangeAudio enableSpatializer:true];
+```
+
+#### Set 3D Audio Effects for Local Player
+
+Developers can use the media player or audio effect player as a sound source and set its position in the world coordinate system. This feature can be applied to play background music at a specified location in a virtual world scene, giving it a 3D audio effect.
+
+To implement this feature, complete the following steps:
+1. Call the [enableSpatializer](@enableSpatializer) interface to enable 3D audio effects.
+2. Set 3D audio effects for the local player
+    - Media Player:
+
+        <Note title="Note">
+
+
+        Please refer to [Media Player](/real-time-video-ios-oc/other/media-player) to learn how to create a media player and load media resources.
+        </Note>
+
+        1. Call the [createMediaPlayer](@createMediaPlayer) interface to create a media player.
+        2. Call the [ZegoMediaPlayer.updatePosition](@updatePosition-ZegoMediaPlayer-class) interface to set the position of the media player in the world coordinate system.
+        3. Call the [loadResourceWithConfig](@loadResourceWithConfig) interface to load media resources.
+    - Audio Effect Player:
+
+        <Note title="Note">
+
+
+        Please refer to [Audio Effect Player](/real-time-video-ios-oc/other/audio-effect-player) to learn how to create an audio effect player and load audio effect resources.
+      </Note>
+
+        1. Call the [createAudioEffectPlayer](@createAudioEffectPlayer) interface to create an audio effect player.
+        2. Call the [ZegoAudioEffectPlayer.start](@start-ZegoAudioEffectPlayer-class) interface to play audio effect resources.
+        3. After receiving the [audioEffectPlayer](@audioEffectPlayer) callback status as `ZegoAudioEffectPlayState.Playing`, call the [ZegoAudioEffectPlayer.updatePosition](@updatePosition-ZegoAudioEffectPlayer-class) interface to set the position of the currently playing audio effect resource in the world coordinate system.
+
+```objc
+// Enable 3D audio effects, this step is a prerequisite
+[self.rangeAudio enableSpatializer:YES];
+
+// Set the position of the local player
+// Media Player
+// 1. Create a media player
+ZegoMediaPlayer *mediaPlayer = [[ZegoExpressEngine sharedEngine] createMediaPlayer];
+// 2. Set the position of the media player in the world coordinate system, in the order of front, right, up
+float mediaPlayerPosition[3] = {0, 0, 0};
+[mediaPlayer updatePosition:mediaPlayerPosition];
+// 3. Use the media player to load media resources
+ZegoMediaPlayerResource *resource = [[ZegoMediaPlayerResource alloc] init];
+resource.loadType = ZegoMultimediaLoadTypeFilePath;
+resource.filePath = @"path";
+[mediaPlayer loadResourceWithConfig:resource callback:^(int errorCode) {
+    if (errorCode == 0)
+        [mediaPlayer start];
+}];
+
+// Audio Effect Player
+// 1. Create an audio effect player
+self.audioEffectPlayer = [[ZegoExpressEngine sharedEngine] createAudioEffectPlayer];
+// 2. Start playing audio effect resources
+unsigned int effectSoundID = 1;
+NSString *path = @"path";
+[self.audioEffectPlayer start:effectSoundID path:path config:nil];
+// 3. After receiving the [audioEffectPlayer] callback status as ZegoAudioEffectPlayState.Playing
+//    Set the position of the audio effect player in the world coordinate system, in the order of front, right, up
+float audioEffectPlayerposition[3] = {0, 0, 0};
+[self.audioEffectPlayer updatePosition:effectSoundID position:audioEffectPlayerposition];
+```
+</Accordion>
+
+
+### 9 Enable Microphone and Speaker
+
+After successfully logging into the Room:
+
+- Call the [enableMicrophone](@enableMicrophone) interface to set whether to enable the microphone. When enable is true, it means enabled. At this time, the SDK will automatically use the main channel to publish audio stream. When false, it means disabled. (Can be enabled or disabled at any time)
+
+    Developers can listen to the [microphoneStateUpdate](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~protocol~ZegoRangeAudioEventHandler#range-audio-microphone-state-update-error-code) event callback to get the updated microphone state.
+
+- Call the [enableSpeaker](@enableSpeaker) interface to set whether to enable the speaker. When enable is true, it means enabled. At this time, the audio stream in the Room will be automatically played. When false, it means disabled. (Can be enabled or disabled at any time)
+
+<Warning title="Warning">
+
+
+After calling the [enableSpeaker](@enableSpeaker) interface, when the maximum playing stream limit is exceeded (currently 20 streams), team member audio streams will be played first (team mode needs to be set), and then audio streams within the world closest to your own range will be played.
+</Warning>
+
+```objc
+// Enable microphone
+[self.rangeAudio enableMicrophone:true];
+// Enable speaker
+[self.rangeAudio enableSpeaker:true];
+```
+
+### 10 (Optional) Join Team, Set Voice Mode
+
+<Accordion title="Please choose whether to implement game team, team voice and other features according to business needs." defaultOpen="false">
+#### Join Team
+
+Call the [setTeamID](@setTeamID) interface to set the team ID you want to join as needed (you can change the ID at any time). After setting the ID, you can directly join. After joining a team, communication with teammates in the same team is not limited by range voice and 3D audio effects.
+
+<p id="setRangeAudioMode"></p>
+
+```objc
+[self.rangeAudio setTeamID:@"123"];
+```
+
+#### Set Common Voice Mode
+
+Call the [setRangeAudioMode](@setRangeAudioMode) interface to set the range voice mode (you can switch modes at any time). When the mode parameter is ZegoRangeAudioModeWorld or ZegoRangeAudioSecretTeam, it means you can hear the voices of all people in World mode. When the mode parameter is ZegoRangeAudioModeTeam, it means you can only hear the voices of other members in the same team.
+
+
+<table>
+
+<tbody><tr>
+<th>Voice Mode</th>
+<th>Parameter Value</th>
+<th>Feature Description</th>
+</tr>
+<tr>
+<td>World</td>
+<td>ZegoRangeAudioModeWorld</td>
+<td>After setting this mode, this user can talk with team members and can talk with people in World mode within the range.</td>
+</tr>
+<tr>
+<td>Team Only</td>
+<td>ZegoRangeAudioModeTeam</td>
+<td>After setting this mode, this user can only talk with team members.</td>
+</tr>
+<tr>
+<td>Secret Team</td>
+<td>ZegoRangeAudioModeSecretTeam</td>
+<td>After setting this mode, this user can talk with team members and can unidirectionally receive the voices of people in World mode within the range.</td>
+</tr>
+</tbody></table>
+
+```objc
+[self.rangeAudio setRangeAudioMode:ZegoRangeAudioModeWorld];
+```
+
+The audibility of speakers' voices varies under different range voice modes.
+
+- Assuming user A's mode is "World", the audibility of user B's voice under different range voice modes is as follows:
+
+<table>
+  <colgroup>
+    <col/>
+    <col/>
+    <col/>
+    <col/>
+    <col/>
+  </colgroup>
+  <tbody><tr>
+    <th>Same Team</th>
+    <th>Within Maximum Range</th>
+    <th>Range Voice Mode</th>
+    <th>Can A hear B's voice?</th>
+    <th>Can B hear A's voice?</th>
+  </tr>
+  <tr>
+    <td rowspan="6">Yes</td>
+    <td rowspan="3">Yes</td>
+    <td>World</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>Team Only</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>Secret Team</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td rowspan="3">No</td>
+    <td>World</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>Team Only</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>Secret Team</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td rowspan="6">No</td>
+    <td rowspan="3">Yes</td>
+    <td>World</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>Team Only</td>
+    <td>No</td>
+    <td>No</td>
+  </tr>
+  <tr>
+    <td>Secret Team</td>
+    <td>No</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td rowspan="3">No</td>
+    <td>World</td>
+    <td>No</td>
+    <td>No</td>
+  </tr>
+  <tr>
+    <td>Team Only</td>
+    <td>No</td>
+    <td>No</td>
+  </tr>
+  <tr>
+    <td>Secret Team</td>
+    <td>No</td>
+    <td>No</td>
+  </tr>
+</tbody></table>
+
+- Assuming user A's mode is "Team Only", the audibility of user B's voice under different range voice modes is as follows:
+
+<table>
+  <colgroup>
+    <col/>
+    <col/>
+    <col/>
+    <col/>
+    <col/>
+  </colgroup>
+  <tbody><tr>
+    <th>Same Team</th>
+    <th>Within Maximum Range</th>
+    <th>Range Voice Mode</th>
+    <th>Can A hear B's voice?</th>
+    <th>Can B hear A's voice?</th>
+  </tr>
+  <tr>
+    <td rowspan="6">Yes</td>
+    <td rowspan="3">Yes</td>
+    <td>World</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>Team Only</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>Secret Team</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td rowspan="3">No</td>
+    <td>World</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>Team Only</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>Secret Team</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td rowspan="6">No</td>
+    <td rowspan="3">Yes</td>
+    <td>World</td>
+    <td>No</td>
+    <td>No</td>
+  </tr>
+  <tr>
+    <td>Team Only</td>
+    <td>No</td>
+    <td>No</td>
+  </tr>
+  <tr>
+    <td>Secret Team</td>
+    <td>No</td>
+    <td>No</td>
+  </tr>
+  <tr>
+    <td rowspan="3">No</td>
+    <td>World</td>
+    <td>No</td>
+    <td>No</td>
+  </tr>
+  <tr>
+    <td>Team Only</td>
+    <td>No</td>
+    <td>No</td>
+  </tr>
+  <tr>
+    <td>Secret Team</td>
+    <td>No</td>
+    <td>No</td>
+  </tr>
+</tbody></table>
+
+
+- Assuming user A's mode is "Secret Team", the audibility of user B's voice under different range voice modes is as follows:
+
+<table>
+  <colgroup>
+    <col/>
+    <col/>
+    <col/>
+    <col/>
+    <col/>
+  </colgroup>
+  <tbody><tr>
+    <th>Same Team</th>
+    <th>Within Maximum Range</th>
+    <th>Range Voice Mode</th>
+    <th>Can A hear B's voice?</th>
+    <th>Can B hear A's voice?</th>
+  </tr>
+  <tr>
+    <td rowspan="6">Yes</td>
+    <td rowspan="3">Yes</td>
+    <td>World</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>Team Only</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>Secret Team</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td rowspan="3">No</td>
+    <td>World</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>Team Only</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>Secret Team</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td rowspan="6">No</td>
+    <td rowspan="3">Yes</td>
+    <td>World</td>
+    <td>Yes</td>
+    <td>No</td>
+  </tr>
+  <tr>
+    <td>Team Only</td>
+    <td>No</td>
+    <td>No</td>
+  </tr>
+  <tr>
+    <td>Secret Team</td>
+    <td>No</td>
+    <td>No</td>
+  </tr>
+  <tr>
+    <td rowspan="3">No</td>
+    <td>World</td>
+    <td>No</td>
+    <td>No</td>
+  </tr>
+  <tr>
+    <td>Team Only</td>
+    <td>No</td>
+    <td>No</td>
+  </tr>
+  <tr>
+    <td>Secret Team</td>
+    <td>No</td>
+    <td>No</td>
+  </tr>
+</tbody></table>
+
+
+#### Set Custom Voice Mode
+
+<Warning title="Warning">
+<ul>
+<li>Custom voice mode and common voice mode cannot be used at the same time.</li>
+<li>If you need to use custom voice mode, please ensure that all online users in game voice are using Express SDK version 3.3.0 or above.</li>
+</ul>
+</Warning>
+
+Through custom voice mode, you can freely control the audio sending and receiving logic to complete various audio interactions. Examples are as follows:
+    Assuming A, B, and C are members of the same team, and C is within A's reception range, the expected audio experience can be achieved through the configuration in the table
+
+
+<table>
+  <colgroup>
+    <col/>
+    <col/>
+  </colgroup>
+<tbody><tr>
+<th>User</th>
+<th>Speaking Expectation</th>
+<th>Listening Expectation</th>
+<th>Speaking Mode Configuration</th>
+<th>Listening Mode Configuration</th>
+<th>Remarks</th>
+</tr>
+<tr>
+<td>&nbsp;A</td>
+<td>Send audio to team members and other users within range</td>
+<td>Listen to audio from team members and other users within range</td>
+<td>All</td>
+<td>All</td>
+<td>A can communicate with both B and C</td>
+</tr>
+<tr>
+<td>B</td>
+<td>Send audio only to team members</td>
+<td>Listen only to audio from team members</td>
+<td>Team</td>
+<td>Team</td>
+<td>B can only communicate with A</td>
+</tr>
+<tr>
+<td>C</td>
+<td>Send audio only to users within range</td>
+<td>Listen only to audio from users within range</td>
+<td>World</td>
+<td>World</td>
+<td>C can only communicate with A</td>
+</tr>
+</tbody></table>
+
+```objc
+[self.rangeAudio setRangeAudioCustomMode:ZegoRangeAudioSpeakModeAll listenMode:ZegoRangeAudioListenModeAll];
+```
+</Accordion>
+
+
+### 11 Destroy Range Voice Module
+
+When the range voice module is no longer in use, call the [destroyRangeAudio](@destroyRangeAudio) interface to destroy it and release the resources occupied by the range voice module.
+
+```objc
+[[ZegoExpressEngine sharedEngine] destroyRangeAudio:rangeAudio];
+```
+
+### 12 Leave Room
+
+Call the [logoutRoom](@logoutRoom) interface to leave the Room. After leaving, the microphone and speaker will be automatically turned off (i.e., you cannot send your own audio and cannot hear other people's voices), and the speaker information list will be cleared.
+
+```objc
+// Leave the Room
+[[ZegoExpressEngine sharedEngine] logoutRoom:@"room1"];
+```
+
+
+## FAQ
+
+
+1. **How many streams can be played simultaneously within the listening range?**
+
+To ensure voice clarity, when more than 20 people nearby are speaking, only the voices of the 20 speakers closest to you can be heard. If there are more than 20 people and the distance is the same, the order is determined by the order in which each userID is first passed when calling the [updateAudioSource](@updateAudioSource) interface.
+
+2. **Does the "range" in range voice refer to the listening range or the speaking range?**
+
+The "range" in range voice refers to the listening range.
+
+3. **Do team members have 3D audio effects when communicating through the microphone?**
+
+The voice within the team has the effect of ordinary communication. There are no 3D audio effects for now.
+
+4. **If I am already calling the publishing stream interface, will there be a conflict when I need to use range voice?**
+
+Range voice currently uses the main channel to send audio. If the customer has already used the main channel, there will be a conflict.

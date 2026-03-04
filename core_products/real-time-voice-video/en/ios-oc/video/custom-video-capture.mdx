@@ -1,0 +1,242 @@
+---
+articleID: 3676
+date: "2024-12-09"
+---
+# Custom Video Capture
+
+- - -
+
+## Feature Overview
+
+Custom video capture refers to the functionality where developers capture video themselves and provide video data to the ZEGO Express SDK, which then encodes and publishes the stream. When users enable custom video capture functionality, by default, the ZEGO Express SDK will render the local preview on the publishing side, and users do not need to perform rendering themselves.
+
+It is recommended to use the SDK's custom video capture feature when the following situations occur in your business:
+
+- The developer's App uses a third-party beauty effects vendor's beauty SDK, which can directly interface with the ZEGO Express SDK's custom video capture functionality. That is, the third-party beauty effects vendor's beauty SDK is responsible for video data capture and pre-processing, while the ZEGO Express SDK is responsible for video data encoding and publishing the audio/video stream to the ZEGO audio/video cloud.
+- During live streaming, the developer needs to use the camera for additional functions that conflict with the ZEGO Express SDK's default video capture logic, causing the camera to not work properly. For example, recording a short video in the middle of a live stream.
+- Live streaming data not captured by the camera. For example, local video file playback, screen sharing, game streaming, etc.
+
+## Example Source Code Download
+
+Please refer to [Download Example Source Code](/real-time-video-ios-oc/quick-start/run-example-code) to get the source code.
+
+For related source code, please view files in the "/ZegoExpressExample/Examples/AdvancedVideoProcessing/CustomVideoCapture" directory.
+
+## Prerequisites
+
+Before implementing custom video capture, ensure that:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, see [Console - Project Information](/console/project-info).
+- You have integrated the ZEGO Express SDK into your project and implemented basic audio/video publishing and playing functionality. For details, see [Quick Start - Integration](/real-time-video-ios-oc/quick-start/integrating-sdk) and [Quick Start - Implementation Flow](/real-time-video-ios-oc/quick-start/implementing-video-call).
+
+
+## Usage Steps
+
+The API interface call sequence diagram is as follows:
+
+```mermaid
+sequenceDiagram
+    participant Client App
+    participant ZEGO Express SDK
+
+    Client App->>ZEGO Express SDK: Create engine <br/> [createEngineWithProfile]
+    Client App->>ZEGO Express SDK: Enable custom video capture <br/> [enableCustomVideoCapture]
+    Client App->>ZEGO Express SDK: Set capture callback handler,<br/>implement callback methods <br/> [setCustomVideoCaptureHandler]
+    Client App->>ZEGO Express SDK: Login room <br/> [loginRoom]
+    Client App->>ZEGO Express SDK: Start preview, publish stream <br/> [startPreview, startPublishingStream]
+    ZEGO Express SDK-->>Client App: Custom video capture start notification <br/> [onStart]
+
+    Client App->>ZEGO Express SDK: Start capturing video <br/> [startCapture]
+    Client App->>ZEGO Express SDK: Send video frame data <br/> [sendCustomVideoCapturePixelBuffer]
+    Client App->>ZEGO Express SDK: Stop preview, publish stream <br/> [stopPreview, stopPublishingStream]
+    ZEGO Express SDK-->>Client App: Custom video capture stop notification<br/> Stop capturing video <br/> [onStop]
+    Client App->>ZEGO Express SDK: Stop capturing video <br/> [stopCapture]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/custom_video_capture_uml_ios_new.png" /></Frame>
+*/}
+
+1. Create the ZegoExpressEngine engine.
+2. Call the [enableCustomVideoCapture](@enableCustomVideoCapture) interface to enable custom video capture functionality.
+3. Call the [setCustomVideoCaptureHandler](@setCustomVideoCaptureHandler) interface to set the custom video capture callback object; and implement the corresponding [onStart](@onStart-ZegoCustomVideoCaptureHandler) and [onStop](@onStop-ZegoCustomVideoCaptureHandler) callback methods to receive notifications for custom video capture start and end, respectively.
+4. After logging in to the room and starting preview/publishing, the [onStart](@onStart-ZegoCustomVideoCaptureHandler) custom video capture start callback notification will be triggered.
+5. Call [startCapture](@startCapture) to start capturing video; or implement your own video capture related business logic, such as enabling the camera, etc.
+6. Call the [sendCustomVideoCapturePixelBuffer](@sendCustomVideoCapturePixelBuffer), [sendCustomVideoCaptureTextureData](@sendCustomVideoCaptureTextureData), and [sendCustomVideoCaptureEncodedData](@sendCustomVideoCaptureEncodedData) interfaces to send video frame data to the SDK.
+7. Finally, ending preview/publishing will trigger the [onStop](@onStop-ZegoCustomVideoCaptureHandler) custom video capture end callback notification.
+8. Call [stopCapture](@stopCapture) to stop capturing video.
+
+<Warning title="Caution">
+
+
+When enabling custom video capture functionality, you need to keep the [enableCamera](@enableCamera) interface at its default setting "True", otherwise there will be no video data for publishing.
+</Warning>
+
+### 1 Enable Custom Video Capture
+
+1. After initializing the SDK, create a custom video capture object [ZegoCustomVideoCaptureConfig](@-ZegoCustomVideoCaptureConfig) and set the [bufferType](@bufferType-ZegoCustomVideoCaptureConfig) property to provide the video frame data type to the SDK.
+2. Call the [enableCustomVideoCapture](@enableCustomVideoCapture) interface to enable custom video capture functionality.
+
+<Note title="Note">
+
+
+Due to the diversity of iOS capture, the SDK supports multiple video frame data types [bufferType](@bufferType-ZegoCustomVideoCaptureConfig). Developers need to inform the SDK of the data type being used. Currently, the iOS SDK supports the following video frame data types:
+
+- ZegoVideoBufferTypeCVPixelBuffer: CVPixelBuffer type, supporting multiple video data formats, such as RGBA32, I420, NV12, etc.
+- ZegoVideoBufferTypeGLTexture2D: OpenGL Texture 2D type.
+- ZegoVideoBufferTypeEncodedData: Encoded type.
+
+Setting it to other enum values will prevent providing video frame data to the SDK.
+</Note>
+
+```objc
+ZegoCustomVideoCaptureConfig *captureConfig = [[ZegoCustomVideoCaptureConfig alloc] init];
+// Select CVPixelBuffer type video frame data
+captureConfig.bufferType = ZegoVideoBufferTypeCVPixelBuffer;
+
+[[ZegoExpressEngine sharedEngine] enableCustomVideoCapture:YES config:captureConfig channel:ZegoPublishChannelMain];
+```
+
+### 2 Set Custom Video Capture Callback
+
+#### Set custom video capture callback object
+
+Set `ViewController` as the custom video capture callback object, conforming to the [ZegoCustomVideoCaptureHandler](@-ZegoCustomVideoCaptureHandler) protocol.
+
+```objc
+@interface ViewController () <ZegoEventHandler, ZegoCustomVideoCaptureHandler>
+
+    ......
+
+@end
+```
+
+Call the [setCustomVideoCaptureHandler](@setCustomVideoCaptureHandler) interface to set the custom video capture callback.
+
+```objc
+// Set self as the custom video capture callback object
+[[ZegoExpressEngine sharedEngine] setCustomVideoCaptureHandler:self];
+```
+
+#### Implement custom video capture callback methods
+
+Implement the [onStart](@onStart) and [onStop](@onStop) custom capture callback methods.
+
+<Note title="Note">
+
+
+When custom capturing multiple streams, you need to specify the publishing channel in the [onStart](@onStart-ZegoCustomVideoCaptureHandler) and [onStop](@onStop-ZegoCustomVideoCaptureHandler) callbacks, otherwise only the main channel notifications will be callbacked by default.
+</Note>
+
+```objc
+// Note: This callback is not on the main thread. Please switch to the main thread yourself if there are UI operations
+- (void)onStart {
+
+    // After receiving the callback, developers need to execute business logic related to starting capture, such as enabling the camera, etc.
+
+    // This example starts a self-implemented video capture device
+    [self.captureDevice startCapture];
+}
+
+// Note: This callback is not on the main thread. Please switch to the main thread yourself if there are UI operations
+- (void)onStop {
+
+    // After receiving the callback, developers need to execute business logic related to stopping capture, such as disabling the camera, etc.
+
+    // This example stops a self-implemented video capture device
+    [self.captureDevice stopCapture];
+}
+```
+
+### 3 Send Video Frame Data to SDK
+
+After calling the start preview interface [startPreview](@startPreview) or start publishing stream interface [startPublishingStream](@startPublishingStream), the [onStart](@onStart-ZegoCustomVideoCaptureHandler) callback will be triggered; after the developer starts the capture-related business logic, call the send custom captured video frame data interface to send video frame data to the SDK. The custom captured video frame data interfaces correspond one-to-one with the video frame data type [bufferType](@bufferType-ZegoCustomVideoCaptureConfig) provided to the SDK in [1 Enable Custom Video Capture](/real-time-video-ios-oc/video/custom-video-capture#1-enable-custom-video-capture):
+
+| Video Frame Type | bufferType | Send Video Frame Data Interface |
+|---|---|---|
+|CVPixelBuffer Type|ZegoVideoBufferTypeCVPixelBuffer|[sendCustomVideoCapturePixelBuffer ](@sendCustomVideoCapturePixelBuffer)|
+|OpenGL Texture 2D Type|ZegoVideoBufferTypeGLTexture2D|[sendCustomVideoCaptureTextureData ](@sendCustomVideoCaptureTextureData) |
+|Encoded Type| ZegoVideoBufferTypeEncodedData |[sendCustomVideoCaptureEncodedData ](@sendCustomVideoCaptureEncodedData) |
+
+<Warning title="Caution">
+
+
+When performing external capture, if the data sent to the SDK through the [sendCustomVideoCaptureEncodedData](@sendCustomVideoCaptureEncodedData) interface is encoded video frame data, the SDK is only responsible for transmitting the data and cannot preview. Developers need to preview themselves, and pre-processing effects like watermarks will not take effect.
+</Warning>
+
+Taking receiving the camera video frame callback and calling the [sendCustomVideoCapturePixelBuffer ](@sendCustomVideoCapturePixelBuffer) interface to send video frame data to the SDK as an example:
+
+
+```objc
+#pragma mark - AVCaptureVideoDataOutputSampleBufferDelegate
+
+- (void)captureOutput:(AVCaptureOutput *)captureOutput didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
+    CVPixelBufferRef buffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+    CMTime timeStamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer);
+
+    // Send custom captured video frame CVPixelBuffer data to the SDK
+    [[ZegoExpressEngine sharedEngine] sendCustomVideoCapturePixelBuffer:buffer timeStamp:timeStamp];
+}
+```
+
+After stopping publishing/previewing, when leaving the room or destroying the engine, the [onStop](@onStop-ZegoCustomVideoCaptureHandler) callback will be triggered, and developers can stop capture-related business logic, such as disabling the camera, etc.
+
+### 4 (Optional) Set Custom Capture Device State
+
+1. After receiving the [onStart](@onStart-ZegoCustomVideoCaptureHandler) callback, you can call the [setCustomVideoCaptureDeviceState](@setCustomVideoCaptureDeviceState) interface as needed to specify the custom capture device state for the publishing channel.
+
+2. The playing side can get the publishing side's device state by listening to the [onRemoteCameraStateUpdate](@onRemoteCameraStateUpdate) callback.
+
+<Warning title="Caution">
+
+
+- When the publishing side sets the device state to `ZegoRemoteDeviceStateDisable` or `ZegoRemoteDeviceStateMute` through the [setCustomVideoCaptureDeviceState](@setCustomVideoCaptureDeviceState) interface, it is invalid, that is, the playing side cannot receive the [onRemoteCameraStateUpdate](@onRemoteCameraStateUpdate) callback.
+- When the publishing side disables the camera through [enableCamera](@enableCamera), the playing side will receive the `ZegoRemoteDeviceStateDisable` state through the [onRemoteCameraStateUpdate](@onRemoteCameraStateUpdate) callback, and there is no video data for publishing at this time.
+- When the publishing side stops sending the video stream through the [mutePublishStreamVideo](@mutePublishStreamVideo) interface, the playing side will receive the `ZegoRemoteDeviceStateMute` state through the [onRemoteCameraStateUpdate](@onRemoteCameraStateUpdate) callback.
+</Warning>
+
+
+## FAQ
+
+1. **How to use "ZegoVideoBufferTypeGLTexture2D" to pass capture data?**
+
+    1. Set the [bufferType](@bufferType-ZegoCustomVideoCaptureConfig) of [ZegoCustomVideoCaptureConfig](@-ZegoCustomVideoCaptureConfig) to `ZegoVideoBufferTypeGLTexture2D`.
+    2. Call the [sendCustomVideoCaptureTextureData](@sendCustomVideoCaptureTextureData) interface to send video frame data to the SDK.
+
+2. **When using custom video capture, the local preview image is normal, but the image seen by the audience after publishing is distorted. How should this be handled?**
+
+    This problem is caused by the image ratio captured by custom video capture being inconsistent with the SDK's default resolution ratio. For example, the video frame image ratio captured by custom video capture is 4:3, while the SDK's default publishing image resolution ratio is 16:9.
+
+    There are the following solutions:
+
+    - Solution 1: Manually modify the custom video capture's video resolution ratio to 16:9.
+
+    - Solution 2: Call the [setVideoConfig](@setVideoConfig) interface to customize the SDK's publishing resolution ratio to 4:3.
+
+    - Solution 3: Call the [setCustomVideoCaptureFillMode](@setCustomVideoCaptureFillMode) interface to set the video capture image scaling fill mode to "ZegoViewModeAspectFit" (aspect ratio scaling, may have black edges) or "ZegoViewModeAspectFill" (aspect ratio fill, may have some image cropped).
+
+
+3. **After enabling custom video capture, the captured frame rate is inconsistent with the playing frame rate?**
+
+    This can be handled in the following ways:
+
+    - When sending `ZegoVideoBufferTypeCVPixelBuffer` type video frame data to the SDK, the frame rate set by the [setVideoConfig](@setVideoConfig) interface and the frame rate of the video data provided by calling the custom capture [sendCustomVideoCapturePixelBuffer](@sendCustomVideoCapturePixelBuffer) interface need to be consistent.
+    - When sending `ZegoVideoBufferTypeGLTexture2D` type video frame data to the SDK, the frame rate set by the [setVideoConfig](@setVideoConfig) interface and the frame rate of the video data provided by calling the custom capture [sendCustomVideoCaptureTextureData](@sendCustomVideoCaptureTextureData) interface need to be consistent.
+
+
+4. **Does the SDK's video frame data receiving method process the passed-in data synchronously or asynchronously?**
+
+    After receiving video frame data, the SDK will first synchronously copy the data, and then asynchronously perform operations such as encoding, so the data can be released immediately after being passed to the SDK.
+
+
+5. **How to implement video rotation during custom video capture?**
+
+    You can refer to the following two ways to implement landscape/portrait switching:
+
+    - Process video frame data yourself: In the device orientation change callback, perform rotation processing on the captured video frame data, then pass the processed data to the SDK through the [sendCustomVideoCapturePixelBuffer](@sendCustomVideoCapturePixelBuffer) interface.
+    - Let the SDK process video frame data: In the device orientation change callback, before passing the captured video frame data to the SDK, set "rotation" in [ZegoVideoEncodedFrameParam](@-ZegoVideoEncodedFrameParam) according to the actual orientation, call the [sendCustomVideoCaptureEncodedData](@sendCustomVideoCaptureEncodedData) interface to pass in the video frame data and orientation-setting parameters, and pass the data to the SDK.
+
+
+## Related Documents
+
+- [How to handle video pixelation or green screen issues?](https://www.zegocloud.com/docs/faq/pixelated_green)
+- [How to handle audio-video desynchronization issues?](https://www.zegocloud.com/docs/faq/unsynchronized)

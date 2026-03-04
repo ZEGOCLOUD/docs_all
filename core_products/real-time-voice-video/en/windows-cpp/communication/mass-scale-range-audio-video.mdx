@@ -1,0 +1,209 @@
+---
+articleID: 7586
+date: "2025-07-31"
+---
+# Mass-Scale Range Audio and Video
+
+- - -
+
+## Feature Introduction
+
+Since version 3.0.0, ZEGO Express SDK has added mass-scale range audio and video functionality, supporting ultra-large-scale range audio and video interaction scenarios. The cloud service dynamically selects routes based on user locations, significantly reducing customer audio and video costs while maintaining an immersive interactive experience in virtual scenarios. This capability depends on the multi-user status real-time synchronization service, which automatically plays remote audio and video within the listening range based on cloud user locations and provides spatial audio effects. Users play the nearest 12 audio and video streams (configurable) by default. A single scenario supports up to 10,000 users enabling microphones and cameras simultaneously.
+
+In large virtual worlds, users generally do not need to perceive remote users who are far away. ZEGO provides AOI (Area Of Interest) capability to eliminate remote audio and video information outside the user's visible range, reducing unnecessary user-side traffic and performance consumption.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/express_AOI_en.jpeg" /></Frame>
+
+### Concept Explanation
+
+- Scenario: Users need to login to the scenario first. Only users who enter the same scenario can conduct range audio and video calls and use the multi-user status real-time synchronization service.
+- Listening Range: The receiving range of the local user's audio and video. The local user automatically plays audio and video from remote users within the listening range.
+- AOI (Area of Interest) Range: The square size of the user's area of interest, which is generally the user's visible range in virtual scenarios. This range follows the user's position in real-time and only receives audio and video information, network status, device status, etc. from remote users within the AOI range.
+
+### Application Scenarios
+
+Virtual offices, virtual exhibitions, open virtual worlds, and other virtual scenarios.
+
+## Prerequisites
+
+<Warning title="Warning">
+
+Using this service will incur corresponding fees. Please contact ZEGO business personnel for specific fee information.
+
+</Warning>
+
+Before implementing real-time range audio and video, ensure that:
+- You have contacted ZEGO Technical Support for special packaging and enabled the mass-scale range audio and video service.
+- You have integrated ZEGO Express SDK into your project.
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Management](/console-old/project-management).
+
+## Implementation Flow
+
+### 1 Create Engine
+
+Call the [createEngine](@createEngine) interface, passing the obtained AppID and AppSign to the "appID" and "appSign" parameters, to create an engine singleton object. The engine currently only supports creating one instance at a time; exceeding this will return null.
+
+```cpp
+ZegoEngineProfile profile;
+/** Please obtain through official website registration, format: 123456789L */
+profile.appID = appID;
+/** 64 characters, please obtain through official website registration, format: "0123456789012345678901234567890123456789012345678901234567890123" */
+profile.appSign = appSign;
+/** General scenario access */
+profile.scenario = ZegoScenario::ZEGO_SCENARIO_DEFAULT;
+/** Create engine and register self as eventHandler callback. If you don't need to register callback, eventHandler parameter can be nil, and you can call "-setEventHandler:" method later to set callback */
+engine_ = ZegoExpressSDK::createEngine(profile, nullptr);
+```
+
+### 2 Create Range Scenario Module
+
+Call the [createRangeScene](@createRangeScene) interface to create a range scenario instance. Currently only one instance can be created at a time; exceeding this will return null.
+
+```cpp
+/** Create range scenario */
+range_scene_ = engine_->createRangeScene();
+```
+
+### 3 Listen to Range Scenario Event Callbacks
+
+As needed, call the [IZegoRangeScene.setEventHandler](@setEventHandler-IZegoRangeScene) and [IZegoRangeSceneStream.setEventHandler](@setEventHandler-IZegoRangeSceneStream) interfaces to set range scenario and range scenario stream management event callbacks respectively, used to listen to range scenario and range scenario stream management event callbacks.
+
+```cpp
+/** Set range scenario event callback */
+range_scene_->setEventHandler(rangeSceneCallbackCenter);
+
+/** Range scenario stream management event callback */
+range_scene_->getRangeSceneStream()->setEventHandler(rangeSceneCallbackCenter);
+```
+
+### 4 Set Range Scenario Stream Management Parameters
+
+As needed, call the [setReceiveRange](@setReceiveRange) and [enableRangeSpatializer](@enableRangeSpatializer) interfaces to set range scenario parameters, controlling the current user's audio and video receiving range, setting the 3D audio effect distance attenuation range [min, max], and whether to enable 3D audio effects.
+
+<Warning title="Warning">
+
+The current user's actual stream playing range is affected by both "audio and video receiving range" and "AOI range". When a remote user is within the current user's "AOI range", assuming the "absolute distance" between them is r and the "audio and video receiving range" is R, then when r < R, ZEGO Express SDK will actively play the remote user's audio and video stream.
+
+</Warning>
+
+```cpp
+/** Set maximum receiving range for playing streams */
+int errorCode = range_scene_->getRangeSceneStream()->setReceiveRange(receive_range);
+
+/** (Optional) Further set the attenuation range [min, max] for 3D audio effects */
+/** When distance is less than min, volume will not attenuate with increasing distance; when distance is greater than max, the other party's sound cannot be heard */
+ZegoReceiveRangeParam param;
+param.min = reciveRangeMin;
+param.max = reciveRangeMax;
+int errorCode = range_scene_->getRangeSceneStream()->setReceiveRange(param);
+
+/** Enable 3D audio effects */
+int error = range_scene_->getRangeSceneStream()->enableRangeSpatializer(enable);
+```
+
+### 5 Login to Scenario
+
+Call the [loginScene](@loginScene) interface, passing scenario parameters: `sceneID`, `user`, `position`, `broadcastMode`, to login to the scenario.
+
+<Warning title="Warning">
+
+- Within the same AppID, ensure userID is globally unique. Developers are advised to set it to a meaningful value and can associate userID with their business account system.
+- userID cannot be empty, otherwise login to the scenario will fail.
+
+</Warning>
+
+```cpp
+/** Login to scenario parameters */
+ZegoSceneParam param;
+/** Create user */
+ZegoUser user = ZegoUser(user_id, user_name);
+/** Set user's scenario coordinates, motion orientation, camera orientation */
+ZegoPosition position;
+memset(&position, 0, sizeof(ZegoPosition));
+for (int i = 0; i < 3; ++i) {
+    position.coordinate[i] = user_coordinate_[i];
+    position.motionOrientation.axisForward[i] = user_orientation_forward_[i];
+    position.motionOrientation.axisRight[i] = user_orientation_right_[i];
+    position.motionOrientation.axisUp[i] = user_orientation_up_[i];
+    position.cameraOrientation.axisForward[i] = user_orientation_forward_[i];
+    position.cameraOrientation.axisRight[i] = user_orientation_right_[i];
+    position.cameraOrientation.axisUp[i] = user_orientation_up_[i];
+}
+/** Set scenario ID */
+param.sceneID = scene_id;
+/** (Optional) Configure template ID. If custom template is not needed, i.e., using default scenario configuration, this parameter does not need to be passed */
+param.templateID = template_id;
+param.user = user;
+param.position = position;
+/** Set user's broadcast mode for logging into the scenario */
+param.broadcastMode = ZegoBroadcastModeAll::ZEGO_BROADCAST_MODE_ALL;
+range_scene_->loginScene(param, [](int errorCode, const ZegoSceneConfig &config) {
+});
+```
+
+<Warning title="Warning">
+
+If you need to customize templates, please refer to [Server API - Scenario Template Configuration](/real-time-video-server/api-reference/scene/set-scene-template) for details.
+
+</Warning>
+
+### 6 Publish Stream to Scenario
+
+Call the [startPublishingStreamInScene](@startPublishingStreamInScene) interface to publish stream within the scenario. If the current user is within the audio and video receiving range of other users in the scenario, other users can receive the current user's audio and video stream.
+
+```cpp
+/** Create config for publishing stream to scenario */
+ZegoScenePublisherConfig config;
+/** Publish to the scenario logged into by rangeScene */
+config.rangeSceneHandle = range_scene_ ? range_scene_->getRangeSceneHandle() : -1;
+engine_->startPublishingStreamInScene(stream_id, ZegoPublishChannel::ZEGO_PUBLISH_CHANNEL_MAIN, config);
+```
+
+### 7 Update User Position
+
+Call the [updateUserPosition](@updateUserPosition) interface to update the current user's position.
+
+```cpp
+/** Set user's scenario coordinates, motion orientation, camera orientation */
+ZegoPosition position;
+memset(&position, 0, sizeof(ZegoPosition));
+for (int i = 0; i < 3; ++i) {
+    position.coordinate[i] = user_coordinate_[i];
+    position.motionOrientation.axisForward[i] = user_orientation_forward_[i];
+    position.motionOrientation.axisRight[i] = user_orientation_right_[i];
+    position.motionOrientation.axisUp[i] = user_orientation_up_[i];
+    position.cameraOrientation.axisForward[i] = user_orientation_forward_[i];
+    position.cameraOrientation.axisRight[i] = user_orientation_right_[i];
+    position.cameraOrientation.axisUp[i] = user_orientation_up_[i];
+}
+/** Update user position */
+int errorCode = range_scene_->updateUserPosition(position);
+```
+
+### 8 Logout of Scenario
+
+Call the [logoutScene](@logoutScene) interface to logout of the scenario.
+
+```cpp
+/** Logout of scenario */
+range_scene_->logoutScene([](int errorCode) {
+});
+```
+
+### 9 Destroy Range Scenario Module
+
+When the range scenario module is no longer needed, you can call the [destroyRangeScene](@destroyRangeScene) interface to destroy the range audio module.
+
+```cpp
+engine_->destroyRangeScene(range_scene_);
+range_scene_ = nullptr;
+```
+
+### 10 Destroy Engine
+
+When ZEGO Express SDK is no longer needed, you can call [destroyEngine](@destroyEngine) to destroy the engine.
+
+```cpp
+ZegoExpressSDK::destroyEngine(engine_);
+engine_ = nullptr;
+```

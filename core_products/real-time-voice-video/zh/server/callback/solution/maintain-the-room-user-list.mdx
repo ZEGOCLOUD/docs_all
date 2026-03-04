@@ -99,9 +99,64 @@ articleID: 19674
 
 - 房间创建回调处理流程：
 
+```mermaid
+flowchart TD
+    A[登录房间回调] --> B{zego.RoomId 是否存在于房间列表？}
+
+    B -- 否 --> C[乱序存入回调缓存队列，等待处理]
+
+    B -- 是 --> D{zego.RoomSeq ==local.RoomSessionId?}
+
+    D -- 否 --> E{zego.LoginTime >=local.RoomCreateTime?}
+    E -- 是 --> C
+    E -- 否 --> F[乱序此次回调的用户会话已结束，不处理此次回调]
+
+    D -- 是 --> G{zego.UserAccount 是否存在于用户列表？}
+
+    G -- 否 --> H[根据回调数据，新增用户]
+
+    G -- 是 --> I{zego.SessionId ==local.UserSessionId?}
+
+    I -- 是 --> J[比较 zego.LoginTime、local.UserLoginTime，以较新的数据为准]
+
+    I -- 否 --> K{zego.LoginTime >local.UserLoginTime?}
+    K -- 否 --> F
+    K -- 是 --> L[乱序根据回调数据更新用户]
+
+    H --> M[读取缓存队列，合并回调数据]
+    L --> M
+```
+{/*
     <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/server_v2/solution_of_room_login.png" /></Frame>
+*/}
 
 
 - 房间关闭回调处理流程：
 
+```mermaid
+flowchart TD
+    A[退出房间回调] --> B{zego.RoomId 是否存在于房间列表？}
+
+    B -- 否 --> C[乱序存入回调缓存队列，等待处理]
+
+    B -- 是 --> D{zego.RoomSeq ==local.RoomSessionId?}
+
+    D -- 否 --> E{zego.LogoutTime >local.RoomCreateTime?}
+    E -- 是 --> C
+    E -- 否 --> F[乱序此次回调的用户会话已结束，不处理此次回调]
+
+    D -- 是 --> G{zego.UserAccount 是否存在于用户列表？}
+
+    G -- 否 --> H[乱序存入回调缓存队列，等待处理]
+
+    G -- 是 --> I{zego.SessionId ==local.UserSessionId?}
+
+    I -- 是 --> J[删除用户数据]
+
+    I -- 否 --> K{zego.LogoutTime >local.UserLoginTime?}
+    K -- 否 --> F
+    K -- 是 --> L[乱序存入回调缓存队列，等待处理]
+```
+{/*
     <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/server_v2/solution_of_room_logout.png" /></Frame>
+*/}

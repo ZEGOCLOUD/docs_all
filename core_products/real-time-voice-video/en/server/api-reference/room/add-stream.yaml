@@ -1,0 +1,176 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: Real-time Voice/Video API Support
+    email: support@zegocloud.com
+
+tags:
+  - name: room
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+paths:
+  /:
+    get:
+      tags:
+        - room
+      summary: AddStream
+      description: |
+        Use this interface to add a stream to a specified Room. This is commonly used in "watch together" scenarios, such as adding a CDN live stream to a specified Room, allowing users in the Room to obtain the stream ID and enabling server-side control over the live content in the specified Room.
+
+        <Warning title="Warning">
+        - When adding a stream to a specified Room, ensure that the Room exists. This interface cannot create a Room. If you want to automatically create the corresponding Room when adding a stream, please contact ZEGOCLOUD technical support to enable the related feature.
+        - This interface is generally used together with [Delete Room Stream](/real-time-video-server/api-reference/room/delete-stream), for example, when the business needs to stop broadcasting a stream to a Room.
+        </Warning>
+
+        This interface is only used to trigger notifications related to stream addition in the Room and does not perform actual stream publishing operations. Developers need to call the `startPublishingStream` interface from their client (or other stream publishing methods) to publish the stream, so that the added stream can be played by the `startPlayingStream` interface.
+
+        Clients receive notifications of stream addition in the Room using ZEGO Express SDK callback interfaces:
+
+        | |ZegoExpress SDK|LiveRoom SDK|
+        |-|-|-|
+        |iOS/macOS| onRoomStreamUpdate | onStreamUpdated |
+        |Android| onRoomStreamUpdate | onStreamUpdated |
+        |Windows| onRoomStreamUpdate |  OnStreamUpdated |
+        |Web| roomStreamUpdate | onStreamUpdated |
+
+        <Note title="Call Rate Limit">All Rooms under the same AppID: 10 times/second (test environment: 1 time/second)</Note>
+        <Warning title="Warning">
+        - It is not recommended to use the same UserId as actual users in the Room to avoid conflicts with the client SDK's stream addition behavior. You can use a specific name to identify server-side behavior, for example: userId = "Server-Administrator".
+        - If you use the same UserId as actual users in the Room (not recommended), please note the following:
+          - The client with the corresponding operator's UserId will not receive the stream addition callback triggered by this server-side interface.
+          - If the actual user's UserId in the Room has not published the stream, the stream deletion logic for the corresponding StreamId will be triggered.
+          - If the actual user's UserId in the Room leaves the Room, the stream deletion logic for the corresponding StreamId will be triggered.
+        </Warning>
+
+      operationId: add-stream
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > Interface prototype parameters
+            >
+            > https://rtc-api.zego.im?Action=AddStream
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [AddStream]
+          style: form
+          explode: true
+        # Common parameters
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        # Business parameters
+        - name: RoomId
+          in: query
+          description: Room ID.
+          required: true
+          schema:
+            type: string
+        - name: UserId
+          in: query
+          description: User ID.
+          required: true
+          schema:
+            type: string
+        - name: UserName
+          in: query
+          description: Username.
+          required: false
+          schema:
+            type: string
+        - name: StreamId
+          in: query
+          description: Stream ID, not exceeding 256 bytes.
+          required: true
+          schema:
+            type: string
+            maxLength: 256
+        - name: StreamTitle
+          in: query
+          description: |
+            Stream title, not exceeding 127 bytes.
+            When used, URL encoding (UrlEncode) must be performed on its content.
+          required: false
+          schema:
+            type: string
+            maxLength: 127
+        - name: ExtraInfo
+          in: query
+          description: Stream additional information, not exceeding 1024 bytes.
+          required: false
+          schema:
+            type: string
+            maxLength: 1024
+        - name: CensorFlag
+          in: query
+          description: |
+            Moderation flag. Whether the current stream is allowed for moderation when moderating the Room stream list: 0 means allowed, 1 means not allowed.
+            > **📌 Important Note**
+            >
+            > - When set to not allowed for moderation, the moderation service provider will not pull this stream for moderation.
+            >
+            > - When using stream injection to implement cross-room PK business scenarios, it is recommended to set this field to "not allowed" to avoid the same stream being repeatedly moderated in multiple Rooms.
+          required: false
+          schema:
+            type: integer
+            format: int32
+            enum: [0, 1]
+            default: 0
+      responses:
+        "200":
+          description: Operation successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddStreamResponse'
+
+components:
+  schemas:
+    AddStreamResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int32
+          example: 0
+          description: |
+            Return code. The following only lists some return codes related to the interface business logic. For complete return codes, please refer to [Global Return Codes](/real-time-video-server/api-reference/return-codes).
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Return Code</th>
+                  <th>Description</th>
+                  <th>Suggested Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>123</td>
+                  <td>Failed to set stream information.</td>
+                  <td>Please retry, or contact ZEGOCLOUD technical support for assistance.</td>
+                </tr>
+                <tr>
+                  <td>1012</td>
+                  <td>Multiple users operating on the same stream.</td>
+                  <td>Please check the logic.</td>
+                </tr>
+              </tbody>
+            </table>
+        Message:
+          type: string
+          example: success
+          description: Description of the operation result.
+        RequestId:
+          type: string
+          example: 4443515903608307334
+          description: Request ID.
+

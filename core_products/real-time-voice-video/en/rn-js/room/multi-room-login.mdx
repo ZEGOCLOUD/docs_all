@@ -1,0 +1,217 @@
+---
+articleID: 15165
+date: "2024-01-02"
+---
+# Login to Multiple Rooms
+
+---
+
+## Feature Overview
+
+The same user can join multiple rooms simultaneously, and publish streams, play streams, send real-time messages, and receive message callbacks in multiple rooms at the same time.
+
+<Note title="Note">
+- ZEGO Express SDK has supported this feature since version 1.3.0.
+- This feature is disabled by default. To use it, please contact ZEGOCLOUD Technical Support to enable the relevant permissions.
+- After this feature is enabled, it supports joining up to 5 rooms simultaneously by default. If you have more requirements, please contact ZEGOCLOUD Technical Support for assistance.
+</Note>
+
+
+
+
+### Application Scenarios
+
+This feature can isolate messages and callbacks from multiple rooms, enabling more flexible co-hosting services. ZEGO recommends using it for cross-room co-hosting and online education super small class scenarios.
+
+- Cross-room Co-hosting
+
+Host A and Host B conduct cross-room co-hosting. Host A can notify all viewers in room A to log in to host B's room to play streams, and Host B can similarly notify all viewers in room B to log in to host A's room to play streams.
+
+
+- Super Small Class
+
+The teacher enters the large class room to publish streams, and all students log in to the large class room to play streams, while also logging in to group rooms to discuss and co-host with students in the same group. The teaching assistant logs in to group rooms to maintain classroom order or answer students' questions.
+
+
+## Prerequisites
+
+Before implementing multi-room functionality, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for valid AppID and AppSign. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+- You have integrated ZEGO Express SDK (version 2.9.0 and above) in your project and implemented basic audio and video streaming functionality. For details, please refer to [Quick Start - Integration](/real-time-video-rn/quick-start/integrating-sdk) and [Quick Start - Implementing Video Call](/real-time-video-rn/quick-start/implementing-video-call).
+- You have contacted ZEGOCLOUD Technical Support to enable multi-room functionality.
+
+
+## Usage Steps
+
+Taking the same user joining two rooms as an example, the overall implementation flow is as follows:
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant ZEGO Express SDK
+
+    Client->>ZEGO Express SDK: Initialize Express SDK <br/> [createEngine]
+
+    Client->>ZEGO Express SDK: Set multi-room mode <br/> [enableMultiRoom]
+
+    critical Call loginRoom multiple times with different roomID and same userID to login to multiple rooms simultaneously.
+        Client->>ZEGO Express SDK: Login room <br/> [loginRoom]
+
+        Client->>ZEGO Express SDK: Publish stream, play stream <br/> [startPublishingStream, startPlayingStream]
+
+        Client->>ZEGO Express SDK: Send real-time message <br/> [sendCustomCommand]
+
+        ZEGO Express SDK-->>Client: Receive related room callbacks <br/> [on]
+
+        Client->>ZEGO Express SDK: Logout room <br/> [logoutRoom]
+    end
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/MultiRoom/MultiRoom_new.png" /></Frame>
+*/}
+
+1. Before initializing the SDK, set the room mode to multi-room.
+2. Initialize the SDK.
+3. Join the first room. After successful login, you can publish streams, play streams, send and receive real-time messages in that room.
+4. Join the second room. After successful login, you can publish streams, play streams, send and receive real-time messages in that room.
+5. Leave the first and second rooms. There is no timing restriction for leaving rooms.
+
+The implementation of specific functions is as follows:
+
+
+
+### 1 Set Multi-Room Mode
+
+Before initializing the SDK, you must call the [setRoomMode](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#setroommode) interface and set the room mode to multi-room mode through the [ZegoRoomMode](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/enums/_zegoexpressdefines_.zegoroommode.html) class, that is, the "mode" value is "MultiRoom".
+
+<Note title="Note">
+If you set multi-room mode without enabling multi-room functionality, logging in to the room will fail and an error will be returned with error code "1002036".
+</Note>
+
+
+
+
+```javascript
+// Set room mode to multi-room mode
+ZegoExpressEngine.setRoomMode(ZegoRoomMode.MultiRoom)
+```
+
+### 2 Initialize SDK
+
+Please refer to [Quick Start - Implementation Flow](/real-time-video-rn/quick-start/implementing-video-call) "Initialization" to initialize the SDK.
+
+### 3 Login Room
+
+Pass in parameters such as room ID (roomID) and call the [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) interface to log in to the room.
+
+- In single-room mode, you can only log in to one room at the same time. When calling the [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) interface, if you have already logged in to other rooms, you will be prompted that you have logged in to the same room.
+- In multi-room mode, you can log in to multiple rooms at the same time, and the logged-in user information must be the same.
+
+```javascript
+// Create user
+let user = {userID: "userID1", userName: "userName1"};
+
+// Start logging in to room
+ZegoExpressEngine.instance().loginRoom("room1", user);
+```
+
+
+### 4 Publish Stream
+
+Pass in parameters such as stream ID (streamID) and room ID (roomID), and call the [startPublishingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startpublishingstream) interface (with "ZegoPublisherConfig" parameter) to publish stream in the specified room.
+
+<Warning title="Warning">
+
+
+In multi-room mode, you must use [ZegoPublisherConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegopublisherconfig.html) to specify the "roomID" associated with the "streamID". After exiting the specified room, the stream publishing operation corresponding to that room will be stopped.
+
+</Warning>
+
+
+
+```javascript
+let config = new ZegoPublisherConfig();
+config.roomID = "room1";
+
+// Start publishing stream
+ZegoExpressEngine.instance().startPublishingStream("stream1", ZegoPublishChannel.Main, config);
+```
+
+### 5 Play Stream
+
+Pass in parameters such as stream ID (streamID) and room ID (roomID), and call the [startPlayingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startplayingstream) interface (with "ZegoPlayerConfig" parameter) to play stream in the specified room.
+
+<Warning title="Warning">
+
+
+In multi-room mode, you must use [ZegoPlayerConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegoplayerconfig.html) to specify the "roomID" associated with the "streamID". After exiting the specified room, the stream playing operation corresponding to that room will be stopped.
+
+</Warning>
+
+
+
+
+```javascript
+let config = new ZegoPlayerConfig();
+config.roomID = "room1";
+
+// Start playing stream
+ZegoExpressEngine.instance().startPlayingStream("stream1", ZegoPublishChannel.Main, config);
+```
+
+
+### 6 Send/Receive Real-time Messages
+
+The implementation of sending and receiving real-time messages in multi-room mode is the same as in single-room mode. For details, please refer to [Room Real-time Messages](/real-time-video-rn/room/messaging-and-signaling).
+
+### 7 Logout Room
+
+Pass in the room ID (roomID) and call the [logoutRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#logoutroom) interface to leave the room.
+
+<Note title="Note">
+
+
+If you want to leave all logged-in rooms at once, you can directly call the [logoutRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#logoutroom) interface without passing parameters.
+
+</Note>
+
+
+
+- In single-room mode, leaving a room will stop all publishing and playing streams.
+- In multi-room mode, leaving a room can only exit the specified room and stop the publishing and playing streams of that room.
+
+
+```javascript
+// Leave room
+ZegoExpressEngine.instance().logoutRoom("room1");
+```
+
+
+## FAQ
+
+1. **What is the reason for the failure when calling the [setRoomMode](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#setroommode) interface?**
+
+- Whether the [setRoomMode](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#setroommode) interface was called before initializing the SDK. At this time, error code "1001020" will be reported.
+- Whether ZEGOCLOUD Technical Support has been contacted to enable multi-room functionality.
+- Whether correct parameters are passed in.
+
+2. **What is the reason for the login failure when calling [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) with error code "1002036"?**
+
+If multi-room mode is set without enabling multi-room functionality, logging in to the room will fail and error code "1002036" will be returned.
+
+3. **What is the reason for the login failure when calling [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) with error code "1002037"?**
+
+When the number of simultaneously logged-in rooms exceeds the maximum number of rooms, error code "1002037" will be returned. Currently, it supports joining up to 5 rooms at the same time by default. If you have more requirements, please contact ZEGOCLOUD Technical Support for extended capabilities.
+
+4. **What is the reason for the login failure when calling [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) with error code "1002018"?**
+
+In multi-room mode, if the logged-in user information passed in is not the same, error code "1002018" will be returned.
+
+5. **What is the reason for the publishing stream failure when calling [startPublishingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startpublishingstream) with error code "1003070"?**
+
+In multi-room mode, you must call the [startPublishingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startpublishingstream) interface with the "ZegoPublisherConfig" parameter to publish streams. Otherwise, error code "1003070" will be returned.
+
+6. **What is the reason for the playing stream failure when calling [startPlayingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startplayingstream) with error code "1004070"?**
+
+In multi-room mode, you must call the [startPlayingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startplayingstream) interface with the "ZegoPlayerConfig" parameter to play streams. Otherwise, error code "1004070" will be returned.

@@ -1,0 +1,202 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: Real-time Voice/Video API Support
+    email: support@zegocloud.com
+
+tags:
+  - name: room
+
+servers:
+  $ref: '../../shared-components.yaml#/servers'
+
+paths:
+  /:
+    get:
+      tags:
+        - room
+      summary: SetForbidUserRule
+      description: |
+        Sets up user ban rules to ban specific users. After successful setup, you can [query user ban rules](./describe-forbid-user-rules.mdx) or [delete user ban rules](./del-forbid-user-rule.mdx).
+
+        Setting up user ban rules will not interrupt the user's ongoing Stream publishing, and will only take effect on the user's next Stream publishing request. To immediately ban the user's ongoing Stream publishing, you need to separately use [set audio/video Stream ban rules](../forbid-stream-rule/set-forbid-stream-rule.mdx), rather than user ban rules.
+
+        <Note title="Rate Limit">For all Rooms under the same AppID: 10 times/second.</Note>
+        <Accordion title="Parameter Configuration Examples" defaultOpen="true">
+
+        - Assuming the user to be banned is user1, and not logged in to Room room1:
+
+            - When RuleType is 1 and DisabledPrivilege[] is 1, it indicates that the user corresponding to this IP address cannot log in to any Room.
+            - When RuleType is 2 and DisabledPrivilege[] is 1, it indicates that no user can log in to room1.
+            - When RuleType is 3 and DisabledPrivilege[] is 2, it indicates that user1 can log in to any Room normally, but cannot publish Streams in any Room.
+            - When RuleType is 4 and DisabledPrivilege[] is 2, it indicates that user1 can log in to room1 normally, but cannot publish Streams in room1.
+
+        - Assuming the user to be banned is user1, and already logged in to Room room1, regardless of the RuleType value:
+
+            - When DisabledPrivilege[] is 1 or 1&2, user1 is still in room1 but cannot publish Streams normally, and you need to call the [kick Room user out](./../kick-out-user.mdx) interface to kick the user out.
+            - When DisabledPrivilege[] is 2, user1 cannot publish Streams in room1.
+        </Accordion>
+
+      operationId: set-forbid-user-rule
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > Interface prototype parameters
+            >
+            > https://rtc-api.zego.im?Action=SetForbidUserRule
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [SetForbidUserRule]
+          style: form
+          explode: true
+        # Common parameters
+        - $ref: '../../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../../shared-components.yaml#/components/parameters/SignatureVersion'
+        # Business parameters
+        - name: RuleType
+          in: query
+          description: |
+            Ban rule type:
+            - 1: Ban users by IP address, up to 100 rules can be set;
+            - 2: Ban users by RoomId, up to 200 rules can be set;
+            - 3: Ban users by UserId, up to 200 rules can be set;
+            - 4: Ban users by RoomId and UserId, up to 200 rules can be set.
+
+            The maximum number of rules that can be set refers to the number of rules that are valid at the same time, excluding expired rules.
+
+            If you do not need certain rules, please call the [delete user ban rules](./del-forbid-user-rule.mdx) interface in time to clean them up.
+
+          required: true
+          schema:
+            type: integer
+            format: int32
+            enum: [1, 2, 3, 4]
+        - name: IP
+          in: query
+          description: IP address. Required when RuleType is 1.
+          required: false
+          schema:
+            type: string
+        - name: RoomId
+          in: query
+          description: Room ID. Required when RuleType is 2 or 4.
+          required: false
+          schema:
+            type: string
+        - name: UserId
+          in: query
+          description: User ID. Required when RuleType is 3 or 4.
+          required: false
+          schema:
+            type: string
+        - name: DisabledPrivilege
+          in: query
+          description: |
+            Functions that banned users can use. 1: Login. 2: Publish Stream.
+          required: true
+          schema:
+            type: array
+            items:
+              type: integer
+              format: int32
+              enum: [1, 2]
+            minItems: 1
+          style: form
+          explode: true
+        - name: EffectiveTime
+          in: query
+          description: |
+            Valid duration of the ban rule, unit: seconds, value range 1 ~ 86400 (1 day).
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 86400
+      responses:
+        "200":
+          description: Operation successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetForbidUserRuleResponse'
+
+components:
+  schemas:
+    SetForbidUserRuleResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int32
+          example: 0
+          description: |
+            Return code. The following only lists some return codes related to the interface business logic. For complete return codes, please refer to [global return codes](/real-time-video-server/api-reference/return-codes).
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Return Code</th>
+                  <th>Description</th>
+                  <th>Suggested Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>0</td>
+                  <td>Request successful.</td>
+                  <td>-</td>
+                </tr>
+                <tr>
+                  <td>1</td>
+                  <td>Request failed.</td>
+                  <td>Please contact ZEGOCLOUD technical support for assistance.</td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td>Input parameter error.</td>
+                  <td>-</td>
+                </tr>
+                <tr>
+                  <td>9</td>
+                  <td>Permission to use the current interface is not enabled.</td>
+                  <td>Please contact ZEGOCLOUD technical support for assistance.</td>
+                </tr>
+                <tr>
+                  <td>206</td>
+                  <td>App request QPS is too high and is limited.</td>
+                  <td>Reduce request frequency, or contact ZEGOCLOUD technical support to increase the QPS limit threshold.</td>
+                </tr>
+                <tr>
+                  <td>50123</td>
+                  <td>The number of ban rules currently within the validity period exceeds the limit.</td>
+                  <td>Please reduce the number of rules.</td>
+                </tr>
+              </tbody>
+            </table>
+        Message:
+          type: string
+          example: success
+          description: Description of operation result.
+        RequestId:
+          type: string
+          example: TestRequestId1675674022729915000
+          description: Request ID.
+        Data:
+          type: object
+          properties:
+            ExpireTime:
+              type: integer
+              format: int64
+              example: 1704282648
+              description: |
+                Expiration time of the ban rule, Unix timestamp, unit: seconds.
+

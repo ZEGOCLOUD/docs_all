@@ -1,0 +1,191 @@
+---
+articleID: 17421
+date: "2024-01-02"
+---
+# Play Transparent Gift Effects
+
+- - -
+
+## Feature Overview
+
+In scenarios such as voice chat rooms and live streaming, gifts are an important part of the interaction between streamers and viewers. Exquisite gift effects can enhance interaction and improve the viewing experience. With the vigorous development of the industry, gift effects have also evolved from static to dynamic, and from opaque to transparent.
+
+Playing MP4 gift videos to achieve dynamic gift effects is a relatively common approach. Since MP4 does not support Alpha channels, when playing gift effects in full screen, it will block the content of the live room, thereby affecting the user experience. Therefore, ZEGO Express SDK Media Player provides transparent rendering capabilities to achieve the function of playing transparent dynamic gifts.
+
+ZEGO Express SDK Media Player provides the function of playing MP4 materials with separated RGB and Alpha channels (MP4 materials after splicing RGB and Alpha), achieving the dynamic effect of playing transparent gifts. That is, when playing gift effects, it will not block the content of the live room, greatly improving the user experience.
+
+<video poster="https://doc-media.zego.im/sdk-doc/Pics/Express/gift_special_effects.png" src="https://doc-media.zego.im/sdk-doc/doc/video/Express_Video_SDK/gift_special_effects.mp4" width="70%" muted="true" loop="true" autoplay="autoplay" preload="auto" nocontrols></video>
+
+### Feature Advantages
+
+- **Low Development Cost**
+
+    Developers do not need to learn complex animation implementation solutions. They only need to use materials processed by designers to achieve playing transparent gift effects, improving development efficiency and effects.
+
+- **High Animation Fidelity**
+
+    Help designers achieve WYSIWYG output materials. That is, when designing motion effects, designers do not need to worry about whether the technology stack used by developers can restore complex 3D effects, strokes, particle effects, etc.
+
+- **Good Compatibility**
+
+    Avoid the problems of complex implementation, low performance, poor compatibility with some models, and high difficulty in later maintenance of semi-transparent motion effects such as Lottie and Cocos2d-X.
+
+### Implementation Principle
+
+As shown in the figure below, the upper part of the figure shows some pixel points of a material that has undergone Alpha channel separation. The left side uses the RGB channel to store the RGB channel information of the gift material, and the right side uses the RGB channel to store the Alpha channel information of the gift material.
+
+During client playback, the R channel of the video on the right will be extracted as the Alpha channel value of the corresponding pixel point on the left.
+
+When rendering, divide the Alpha channel value by 255 for normalization to obtain an Alpha value between 0 and 1. Finally, render each pixel point to the screen according to the RGBA value to achieve the semi-transparent effect.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/RGBtoRGBA_en.jpeg" /></Frame>
+
+## Prerequisites
+
+Before using the media player to play MP4 dynamic effects, that is, to achieve playing transparent gift effects, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in your project and implemented basic audio and video publish/play stream functionality. For details, please refer to [Quick Start - Integration](/real-time-video-android-java/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-android-java/quick-start/implementing-video-call).
+
+
+
+
+## Implementation Process
+
+### 1 Output Materials
+
+Taking outputting materials in AE software as an example.
+
+1. Normally create a video with transparent effects in AE, and output RGB and Alpha channel videos separately.
+    - Output RGB channel video.
+        <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/output_RGB.jpeg" /></Frame>
+    - Output Alpha channel video.
+        <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/output_Alpha.jpeg" /></Frame>
+
+
+2. In AE, splice the output RGB and Alpha channel videos into one video.
+
+    ZEGO Media Player supports the following four splicing methods. The closer the spliced video is to a square, the better the performance. Developers can choose the appropriate splicing method according to the ratio of the source material:
+    - Alpha channel is at the bottom.
+        <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/RGB_up_Alpha.jpeg" /></Frame>
+    - Alpha channel is on the left.
+        <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/Alpha_RGB.jpeg" /></Frame>
+    - Alpha channel is on the right.
+        <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/RGB_Alpha.jpeg" /></Frame>
+    - Alpha channel is on the upper right, Alpha channel only supports 0.5x scaling rate.
+        <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/RGB_Alpharighttop.jpeg" /></Frame>
+
+### 2 Special Settings for View
+
+Before playing transparent gift effects, you need to set up the view for the player to render transparent effects in advance. Currently, both TextureView and SurfaceView are supported.
+
+- If the view is of TextureView type, you need to call `setOpaque` to set the opaque property to false.
+
+```java
+TextureView mediaPlayerView;// View for playing
+mediaPlayerView.setOpaque(false);
+```
+
+- If the view is of SurfaceView type, you need to call `setFormat` to set the PixelFormat property to TRANSLUCENT, and you need to place the view at the top of the display window.
+
+```java
+SurfaceView mediaPlayerView;// View for playing
+mediaPlayerView.getHolder().setFormat(PixelFormat.TRANSLUCENT)
+mediaPlayerView.setZOrderOnTop(true)// Place SurfaceView at the top of the display window
+```
+
+### 3 Create Media Player
+
+Call [createMediaPlayer](@createMediaPlayer) to create a media player, and call [setPlayerCanvas](@setPlayerCanvas-ZegoMediaPlayer) to set the alphaBlend property of the media player canvas to true.
+
+```java
+mediaPlayer = engine.createMediaPlayer();
+ZegoCanvas canvas = new ZegoCanvas(mediaPlayerView);
+canvas.alphaBlend = true;// Support Alpha channel rendering
+mediaPlayer.setPlayerCanvas(canvas);
+```
+
+### 4 Load Materials
+
+After calling [createMediaPlayer](@createMediaPlayer) to create a media player, use the [loadResourceWithConfig](@loadResourceWithConfig) interface to play the spliced effect materials through **file path** or **binary memory data**.
+
+<Warning title="Warning">
+
+Although the [loadResourceWithConfig](@loadResourceWithConfig) interface supports loading multimedia resources through copyrighted music resource IDs, copyrighted music currently does not support video, so gift effects cannot be loaded through the copyrighted music resource ID loading method.
+</Warning>
+
+<CodeGroup>
+  ```java title="Load via file path"
+  ZegoMediaPlayerResource resource = new ZegoMediaPlayerResource();
+  resource.loadType = ZegoMultimediaLoadType.FILE_PATH; // Select file path loading for loading method
+  resource.filePath = "path";// File path
+  resource.alphaLayout = ZegoAlphaLayoutType.LEFT; // Select Alpha channel layout according to actual resources
+  mediaPlayer.loadResourceWithConfig(resource, new IZegoMediaPlayerLoadResourceCallback() {
+      @Override
+      public void onLoadResourceCallback(int errorCode) {
+          // Resource loading result
+          // Logic such as updating UI can be executed
+          if (errorCode == 0){
+              // File loaded successfully, can start playing media resources at this time
+              mediaPlayer.start();
+          }
+      }
+  });
+  ```
+
+  ```java title="Load via binary memory data"
+  ZegoMediaPlayerResource resource = new ZegoMediaPlayerResource();
+  resource.loadType = ZegoMultimediaLoadType.MEMORY; // Select binary memory data for loading method
+  resource.alphaLayout = ZegoAlphaLayoutType.LEFT; // Select Alpha channel layout according to actual resources
+
+  File file = new File(path); // Resource file
+  int fileLength = (int)file.length();
+
+  resource.memory = ByteBuffer.allocateDirect(fileLength); // ByteBuffer type binary memory data
+  resource.memoryLength = bufferLength; // Binary memory data length
+
+  // Load resources into memory
+  try {
+      BufferedInputStream stream = new BufferedInputStream(new FileInputStream(file));
+      int data_byte=0;
+      while((data_byte = stream.read()) != -1){
+          resource.memory.put((byte)data_byte);
+      }
+  } catch (FileNotFoundException e) {
+      e.printStackTrace();
+  } catch (IOException e) {
+      e.printStackTrace();
+  }
+
+  mediaPlayer.loadResourceWithConfig(resource, new IZegoMediaPlayerLoadResourceCallback() {
+      @Override
+      public void onLoadResourceCallback(int errorCode) {
+          // Resource loading result
+          // Logic such as updating UI can be executed
+          if (errorCode == 0){
+              // File loaded successfully, can start playing media resources at this time
+              mediaPlayer.start();
+          }
+      }
+  });
+  ```
+</CodeGroup>
+
+### 5 Play Materials
+
+After successfully loading the file by calling [loadResourceWithConfig](@loadResourceWithConfig-ZegoMediaPlayer), you can call [start](@start-ZegoMediaPlayer), [pause](@pause-ZegoMediaPlayer), [resume](@resume-ZegoMediaPlayer), [stop](@stop-ZegoMediaPlayer) to start and stop playback. Once the internal state of the player changes, the [onMediaPlayerStateUpdate](@onMediaPlayerStateUpdate-IZegoMediaPlayerEventHandler) callback of [ZegoMediaPlayer](@-ZegoMediaPlayer) will be triggered.
+
+Users can also call [getCurrentState](@getCurrentState-ZegoMediaPlayer) at any time to get the current state of the player.
+
+If [enableRepeat](@enableRepeat-ZegoMediaPlayer) is set to `YES`, the player will automatically replay after finishing playing the file.
+
+```java
+// Start playing, need to call interface to load media file before playing
+mediaPlayer.start();
+// Pause
+mediaPlayer.pause();
+// Resume
+mediaPlayer.resume();
+// Stop
+mediaPlayer.stop();
+```

@@ -1,0 +1,222 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact: { name: Real-time Voice/Video API Support, email: support@zegocloud.com }
+
+tags:
+  - name: cdn
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+paths:
+  /:
+    get:
+      tags: [cdn]
+      summary: MergeMedia
+      description: |
+        When users perform CDN recording, the recorded media files are stored on CDN servers. Users can call this API to `crop` and `merge` multiple media files.
+
+        Currently, only media files in MP3/MP4/M3U8 formats are supported for merging.
+
+        <Warning title="Warning">
+
+        - Before using this API for the first time, please confirm whether the CDN recording service has been enabled. If not enabled, please go to the [ZEGOCLOUD Console](https://console.zegocloud.com) to enable it by yourself. For details, please refer to [Console - Service Configuration - CDN](/console/service-configuration/activate-cdn-service), or contact ZEGOCLOUD Technical Support to enable it.
+        - Please contact ZEGOCLOUD Technical Support to enable the media file merging feature and configure the callback address. After the media file merging is completed, you will be notified via the [Media File Merge Complete Callback](/real-time-video-server/callback/cdn/merge-media-completed).
+        - The recorded files merged using this feature will be permanently saved and the retention period cannot be modified through configuration. If deletion is required, you can use the [Delete Media File](/real-time-video-server/api-reference/cdn/delete-media) API to delete them.
+
+        </Warning>
+        <Note title="Call frequency limit">All rooms under the same AppID: 20 times/second</Note>
+      operationId: merge-media
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > API prototype parameters
+            >
+            > https://rtc-api.zego.im?Action=MergeMedia
+          required: true
+          schema: { type: string, enum: [MergeMedia] }
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - name: Vendor
+          in: query
+          required: true
+          schema: { type: string, enum: [Tencent, Huawei] }
+          description: |
+            Possible values and corresponding CDN vendors:
+            - Tencent: Tencent Cloud.
+            - Huawei: Huawei Cloud.
+        - name: Format
+          in: query
+          required: false
+          schema: { type: string }
+          description: |
+            Merged file format, default format is MP4.
+            - Tencent Cloud: MP3, MP4, M3U8.
+              > When the CDN vendor used is "Tencent Cloud", if the merged file is in MP3 or MP4 format, you need to ensure that the "audio format" of the input source files is AAC-LC encoded, otherwise the merged video file may have no sound.
+            - Huawei Cloud: MP4, M3U8.
+        - name: Type
+          in: query
+          required: false
+          schema: { type: string, enum: ["0","1"] }
+          description: |
+            Merge operation type.
+            - 0: Default value, no cropping, directly merge files.
+            - 1: After cropping media files, then merge files. At this time, the InputFileId[] parameter is invalid, and the HandleMediaArgs.N.FileId parameter must be passed in.
+
+            <b>When the value of this parameter is 1, it is only valid when Vendor is Tencent, and invalid when Vendor is Huawei.</b>
+        - name: InputFileId
+          in: query
+          required: false
+          description: |
+            List of file IDs to be merged, merged in the order of the file list. Where:
+            - Tencent Cloud: Fill in the **FilelD** returned by the <a href="/real-time-video-server/callback/cdn/cdn-record-completed" target="blank">Recording File Generation Callback</a>, and up to 10 files can be merged.
+            - Huawei Cloud: Fill in the **ObsObject** returned by the <a href="/real-time-video-server/callback/cdn/cdn-record-completed" target="blank">Recording File Generation Callback</a>, and up to 5 files can be merged.
+
+            Example: InputFileId[]=5285890813221514958&InputFileId[]=5285890813221513290
+          schema:
+            type: array
+            items: { type: string }
+            minItems: 1
+          style: form
+          explode: true
+        - name: HandleMediaArgs.FileId
+          in: query
+          required: false
+          description: |
+            List of file IDs that need to be cropped and then merged, merged in ascending order of N in the field name, up to 10 files can be merged.
+            - Tencent Cloud: Fill in the **FilelD** returned by the <a href="/real-time-video-server/callback/cdn/cdn-record-completed" target="blank">Recording File Generation Callback</a>.
+            - Huawei Cloud: Fill in the **ObsObject** returned by the <a href="/real-time-video-server/callback/cdn/cdn-record-completed" target="blank">Recording File Generation Callback</a>.
+
+            > N must start from 0 and increase sequentially, the maximum value is 9. If it does not start from 0 or skips a number, the files cannot be cropped and merged correctly.
+
+            For example, HandleMediaArgs.0.FileId=5285890813221514958&HandleMediaArgs.1.FileId=5285890813221513290
+          schema:
+            type: array
+            items: { type: string }
+            minItems: 1
+          style: form
+          explode: true
+        - name: HandleMediaArgs.StartTime
+          in: query
+          required: false
+          description: |
+            The time offset for starting to crop the media file corresponding to HandleMediaArgs.N.FileId, default is 0, unit: seconds.
+
+            For example, HandleMediaArgs.0.StartTime corresponds to the start crop time of the media file HandleMediaArgs.0.FileId.
+          schema:
+            type: array
+            items: { type: number }
+          style: form
+          explode: true
+        - name: HandleMediaArgs.EndTime
+          in: query
+          required: false
+          description: |
+            The time offset for ending the crop of the media file corresponding to HandleMediaArgs.N.FileId, default is the end time of the video file, unit: seconds.
+
+            For example, HandleMediaArgs.0.EndTime corresponds to the end crop time of the media file HandleMediaArgs.0.FileId.
+          schema:
+            type: array
+            items: { type: number }
+          style: form
+          explode: true
+        - name: OutputFileName
+          in: query
+          required: false
+          schema: { type: string }
+          description: |
+            The name of the merged media file, excluding the file format.
+
+            When using, URL encoding (UrlEncode) must be performed on the content.
+        - name: ExpireTime
+          in: query
+          required: false
+          schema: { type: integer, format: int32 }
+          description: |
+            The effective retention duration of the merged media file (unit: hours), i.e., file expiration time = API request time + effective retention duration.
+            - Value is 0 (default value): indicates that the file is permanently saved and does not expire.
+            - Value is greater than 0: the file will be deleted after this duration.
+
+            > **Note**
+            > - This field is only valid when Vendor is Tencent.
+            > - If the completion time of the merge media file task is greater than its effective retention duration, the file will not be generated, and the [Media File Merge Complete Callback](/real-time-video-server/callback/cdn/merge-media-completed) will return a 404 when accessing the merged file URL.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MergeMediaResponse'
+
+components:
+  schemas:
+    MergeMediaResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int32
+          description: |
+            Return code.
+            <br/>
+            The following only lists some return codes related to the API business logic. For complete return codes, please refer to [Global Return Codes](/real-time-video-server/api-reference/return-codes).
+            <table>
+              <thead>
+                <tr><th>Return Code</th><th>Description</th><th>Handling Suggestion</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>0</td><td>Request successful.</td><td>-</td></tr>
+                <tr><td>2</td><td>Input parameter error.</td><td>-</td></tr>
+                <tr><td>3</td><td>Relevant permission not enabled.</td><td>Please contact ZEGOCLOUD Technical Support.</td></tr>
+                <tr><td>4</td><td>CDN type mismatch.</td><td>Please check parameters.</td></tr>
+                <tr><td>5</td><td>Configuration error.</td><td>Please contact ZEGOCLOUD Technical Support.</td></tr>
+                <tr><td>6</td><td>Request too frequent.</td><td>Please try again later.</td></tr>
+                <tr><td>7</td><td>Authentication failed.</td><td>Please check whether the authentication parameters are correct.</td></tr>
+                <tr><td>1000</td><td>Request failed.</td><td>Please contact ZEGOCLOUD Technical Support.</td></tr>
+                <tr><td>41003</td><td>File does not exist.</td><td>Please confirm whether the file format, file ID, etc. are correct.</td></tr>
+              </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: Description of the operation result
+          example: "success"
+        RequestId:
+          type: string
+          description: Request ID, returned by the ZEGO server
+          example: "3574501647605445341"
+        Data:
+          type: object
+          description: Response data
+          properties:
+            Tencent:
+              type: object
+              properties:
+                TaskId:
+                  type: string
+                  description: Task ID
+                  example: "1400341231-EditMedia-0d8b6f0a5c457f5722e6b27796ce1f2ctt0"
+                RequestId:
+                  type: string
+                  description: Unique request ID, returned by the CDN vendor, need to provide the RequestId of this request when locating problems
+                  example: "07f0bdbc-6a52-4ef9-ba7b-e96d6c81d6c3"
+            Huawei:
+              type: object
+              properties:
+                TaskId:
+                  type: string
+                  description: Task ID
+                  example: "112037345"
+                RequestId:
+                  type: string
+                  description: Unique request ID, returned by the CDN vendor, need to provide the RequestId of this request when locating problems
+                  example: "7a690e874857106ccfa5bed198cdsd79"
+

@@ -1,0 +1,249 @@
+---
+articleID: 14914
+date: "2024-02-02"
+---
+# Supplemental Enhancement Information (SEI)
+
+- - -
+
+## Feature Overview
+
+In audio/video streaming applications, in addition to publishing and playing audio/video content through the streaming channel, you can also use stream SEI (Supplemental Enhancement Information) to package text information with audio/video content through the streaming channel, publish it from the host side (stream publishing side), and receive it from the audience side (stream playing side), achieving precise synchronization between text data and audio/video content.
+
+It is generally used for application scenarios such as precise video layout, remote lyric synchronization, live quiz, etc.
+
+<Note title="Note">
+
+
+For related concepts and principles of SEI, please refer to [How to understand and use SEI (Supplemental Enhancement Information)](https://doc-en.zego.im/faq/sei?product=ExpressVideo&platform=web).
+
+</Note>
+
+
+
+
+## Prerequisites
+
+Before implementing SEI functionality, ensure that:
+- A project has been created in the [ZEGOCLOUD Console](https://console.zego.im), and a valid AppID and Server address have been obtained. For details, please refer to [Console - Project Information](/console/project-info).
+- ZEGOCLOUD Express SDK has been integrated into the project, and basic audio/video stream publishing and playing functionality has been implemented. For details, please refer to [Quick Start - Integration](/real-time-video-web/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-web/quick-start/implementing-video-call).
+
+
+## Usage Steps
+
+The function of sending and receiving SEI information requires sending SEI information on the stream publishing side and receiving SEI information on the stream playing side, as shown below:
+
+```mermaid
+sequenceDiagram
+    participant PublishingClientApp
+    participant ZEGO Express SDK
+    participant PlayingClientApp
+
+    PublishingClientApp->>ZEGO Express SDK: Initialize SDK <br/> [createEngineWithProfile]
+
+    PublishingClientApp->>ZEGO Express SDK: Login room <br/> [loginRoom]
+
+    PublishingClientApp->>ZEGO Express SDK: Start publishing stream <br/> [startPublishingStream]
+
+    PlayingClientApp->>ZEGO Express SDK: Initialize SDK <br/> [createEngineWithProfile]
+
+    PlayingClientApp->>ZEGO Express SDK: Implement related callback listeners <br/> [ZegoExpressEngine.onPlayerRecvSEI]
+
+    PlayingClientApp->>ZEGO Express SDK: Login room <br/> [loginRoom]
+
+    PlayingClientApp->>ZEGO Express SDK: Start playing stream <br/> [startPlayingStream]
+
+    critical Critical steps
+        PublishingClientApp->>ZEGO Express SDK: Send SEI info <br/> [sendSEI]
+
+        ZEGO Express SDK-->>PlayingClientApp: Receive SEI info <br/> [onPlayerRecvSEI]
+    end
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/send_and_recv_sei_web_new.png" /></Frame>
+*/}
+
+Stream publishing side:
+
+1. Call the [loginRoom](@loginRoom) interface to log into the room.
+2. Call the [startPublishingStream](@startPublishingStream) interface to publish the stream.
+3. After successful stream publishing, call the [sendSEI](@sendSEI) interface to send SEI information.
+
+Stream playing side:
+
+1. Call [on](@on) to listen for the [playerRecvSEI](@playerRecvSEI) callback.
+2. Call the [loginRoom](@loginRoom) interface to log into the room.
+3. Call the [startPlayingStream](@startPlayingStream) interface to play the stream.
+4. After successful stream playing, when receiving the SEI information sent by the stream publishing side, the [playerRecvSEI](@playerRecvSEI) callback will be triggered.
+
+<Warning title="Warning">
+
+
+- The SEI function is currently only supported in Chrome 87 and above, Safari 15.4 and above, and Firefox 117 and above.
+- The SDK currently supports transmitting SEI information in H.264 encoded video.
+- When publishing streams, if the [enableVideoCaptureDevice](@enableVideoCaptureDevice) interface is called to disable camera capture, SEI data will not be sent.
+- When playing streams, if only playing pure audio, that is, the playOption parameter of [startPlayingStream](@startPlayingStream) specifies only playing audio streams, or if the [mutePlayStreamVideo](@mutePlayStreamVideo) interface is called to stop playing video streams, SEI information cannot be received.
+- When playing streams through CDN, you need to use a third-party player such as flv.js, but third-party players do not support parsing SEI by default.
+
+</Warning>
+
+
+
+### 1 (Optional) Set SEI Additional Information
+
+<Accordion title="Set SEI Additional Information" defaultOpen="false">
+- Since the SDK uses ZEGOCLOUD's self-defined SEI (nalu type = 6, payload type = 243) type for packaging by default, and this type is not specified in the SEI standard, there is no conflict with SEI in video encoders or video files.
+- However, when developers need to use third-party decoders for decoding (such as FFmpeg), it will cause the inability to extract the correct SEI. In this case, when publishing streams [startPublishingStream](@startPublishingStream), you need to specify the sent SEI type as UserUnregister SEI (nalu type = 6, payload type = 5), and call the [setSEIConfig](@setSEIConfig) interface before publishing and playing streams to set the uuid (UserUnregisterID) to distinguish whether the SEI is generated by the video encoder itself or is business SEI.
+
+- When the App sends this type of SEI, it can fill in a business-specific uuid (16 bytes in length). When the receiving side uses the SDK to parse SEI with payload type of 5, it will filter out SEI with matching uuid based on the set filter string and throw it to the business. If no filter string is set, the SDK will throw all received SEI to the developer.
+
+<Note title="Note">
+
+
+This step is only required when developers use third-party decoders to decode SEI.
+
+</Note>
+
+
+
+
+```javascript
+let appID = ;
+let server = "";
+
+// Initialize
+const zg = new ZegoExpressEngine(appID, server);
+
+zg.setSEIConfig({
+// Custom specific string to filter out business SEI
+    unregisterSEIFilter: "zegozegozegozego"
+});
+```
+</Accordion>
+
+
+### 2 Stream Publishing Side
+
+The interface for sending SEI information needs to be called after successful stream publishing.
+
+```javascript
+let appID = ;
+let server = "";
+
+// Initialize
+const zg = new ZegoExpressEngine(appID, server);
+
+// User ID, custom
+let userID = "user_" + new Date().getTime();
+// roomID, custom
+let roomID = "0001";
+// Authentication token
+let token = "";
+// Stream publishing ID
+let publishStreamID = "00001";
+
+// Log into room
+zg.loginRoom(roomID, token, { userID, userName: userID }, { userUpdate: true }).then(result => {
+     if (result == true) {
+        console.log("login success")
+     }
+});
+
+// Create local stream preview
+const localStream = await zg.createZegoStream();
+
+zg.on("publisherStateUpdate", async result => {
+    if (result.state === "PUBLISHING") {
+        // The sent SEI content is as follows:
+        // Timestamp
+        const ts = Math.ceil(new Date().getTime() / 1000);
+        // Convert to bytes
+        const u = new Uint8Array(4);
+        u[0] = (ts >> 24) & 0xff;
+        u[1] = (ts >> 16) & 0xff;
+        u[2] = (ts >> 8) & 0xff;
+        u[3] = ts & 0xff;
+
+        // After successful stream publishing, send SEI
+        zg.sendSEI(streamID, u);
+    }
+
+});
+
+// Publish stream
+zg.startPublishingStream(publishStreamID, localStream, {
+  roomID,
+  // Enable sending SEI
+  isSEIStart: true,
+  // Default is 0, representing payload type = 243
+  SEIType: 0
+});
+```
+
+### 3 Stream Playing Side
+
+The callback interface for receiving SEI information needs to be triggered after successful stream playing.
+
+
+```javascript
+let appID = ;
+let server = "";
+
+// Initialize
+const zg = new ZegoExpressEngine(appID, server);
+
+// User ID, custom
+let userID = "user_" + new Date().getTime();
+// roomID, custom
+let roomID = "0001";
+// Authentication token
+let token = "";
+// Stream playing ID, generally obtained through roomStreamUpdate callback
+let playStreamID = "00001";
+
+// Listen for SEI callback
+zg.on("playerRecvSEI", (streamID, uintArray) => {
+    let offset = 0;
+    // The first 4 bytes of the received SEI content represent the sent SEI type, convert it to number,
+    // 1004 represents payload type = 5, 1005 represents payload type = 243
+    let mediaSideInfoType = 0;
+    mediaSideInfoType = uintArray[offset++] << 24;
+    mediaSideInfoType |= uintArray[offset++] << 16;
+    mediaSideInfoType |= uintArray[offset++] << 8;
+    mediaSideInfoType |= uintArray[offset++];
+
+    // Based on the sent SEI, parse the SEI content, example as follows:
+    const view = new DataView(uintArray.buffer);
+    let i = 4;
+    let ts = 0;
+    ts = view.getUint8(i++) << 24;
+    ts |= view.getUint8(i++) << 16;
+    ts |= view.getUint8(i++) << 8;
+    ts |= view.getUint8(i++);
+
+    console.log("recv " + streamID + " " + mediaSideInfoType + " " + ts);
+});
+
+// Log into room
+zg.loginRoom(roomID, token, { userID, userName: userID }, { userUpdate: true }).then(result => {
+     if (result == true) {
+        console.log("login success")
+     }
+});
+
+// Play stream
+zg.startPlayingStream(playStreamID, {
+    // Enable parsing SEI
+    isSEIStart: true
+}).then(stream => {
+
+}).catch(err => {
+
+});
+```
+
+
+
+## Related Documents
+
+[How to understand and use SEI (Supplemental Enhancement Information)?](https://doc-en.zego.im/faq/sei?product=ExpressVideo&platform=web)

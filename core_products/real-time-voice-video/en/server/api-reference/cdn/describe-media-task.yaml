@@ -1,0 +1,181 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact: { name: Real-time Voice/Video API Support, email: support@zegocloud.com }
+
+tags:
+  - name: cdn
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+paths:
+  /:
+    get:
+      tags: [cdn]
+      summary: DescribeMediaTask
+      description: |
+        This interface is used to query the detailed information of [merge media files](/real-time-video-server/api-reference/cdn/merge-media), [start on-demand transcoding](/real-time-video-server/api-reference/cdn/start-on-demand-transcoding) and [start media thumbnails](/real-time-video-server/api-reference/cdn/media-thumbnails) tasks, as a supplement to [media file merge completion callback](/real-time-video-server/callback/cdn/merge-media-completed) and [on-demand transcoding completion callback](/real-time-video-server/callback/cdn/on-demand-transcoding-completed).
+
+        This interface supports querying the progress of "merge tasks", "transcoding tasks" and "thumbnail tasks"; after task completion, you can also get the playback URL of merged files or transcoded files through this interface.
+        <Note title="Call frequency limit">All rooms under the same AppID are limited to 20 times/second</Note>
+      operationId: describe-media-task
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > Interface prototype parameters
+            >
+            > https://rtc-api.zego.im?Action=DescribeMediaTask
+          required: true
+          schema: { type: string, enum: [DescribeMediaTask] }
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - name: TaskId
+          in: query
+          required: true
+          schema: { type: string }
+          description: The task ID to query, which is the TaskId carried in the Data of the response parameters of the <a href="/real-time-video-server/api-reference/cdn/merge-media" target="_blank">merge media files</a>, <a href="/real-time-video-server/api-reference/cdn/start-on-demand-transcoding" target="_blank">start on-demand transcoding</a> and <a href="/real-time-video-server/api-reference/cdn/media-thumbnails" target="_blank">start media thumbnails</a> interfaces.
+        - name: Vendor
+          in: query
+          required: true
+          schema: { type: string, enum: [Tencent, Huawei] }
+          description: |
+            <p>Possible values and corresponding CDN vendors:</p><ul><li>Tencent: Tencent Cloud.</li><li>Huawei: Huawei Cloud.</li></ul>
+            Note: Currently, Huawei Cloud only supports querying thumbnail tasks, and does not support querying merge tasks and transcoding tasks for now.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DescribeMediaTaskResponse'
+
+components:
+  schemas:
+    DescribeMediaTaskResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int32
+          description: |
+              Only the return codes related to interface business logic are listed here. For the complete return codes, please refer to [Global Return Codes](/real-time-video-server/api-reference/return-codes).
+              <table>
+                <thead>
+                  <tr><th>Return Code</th><th>Description</th><th>Solution</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>0</td><td>Request successful.</td><td>-</td></tr>
+                  <tr><td>2</td><td>Input parameter error.</td><td>-</td></tr>
+                  <tr><td>3</td><td>Related permissions not activated.</td><td>Please contact ZEGOCLOUD Technical Support.</td></tr>
+                  <tr><td>4</td><td>CDN type mismatch.</td><td>Please check the parameters.</td></tr>
+                  <tr><td>5</td><td>Configuration error.</td><td>Please contact ZEGOCLOUD Technical Support.</td></tr>
+                  <tr><td>6</td><td>Request too frequent.</td><td>Please try again later.</td></tr>
+                  <tr><td>7</td><td>Authentication failed.</td><td>Please check if the authentication parameters are correct.</td></tr>
+                  <tr><td>1000</td><td>Request failed.</td><td>Please contact ZEGOCLOUD Technical Support.</td></tr>
+                </tbody>
+              </table>
+          example: 0
+        Message:
+          type: string
+          description: Operation result description
+          example: "success"
+        RequestId:
+          type: string
+          description: Request ID returned by ZEGOCLOUD server
+          example: ""
+        Data:
+          type: object
+          description: Response data
+          properties:
+            Tencent:
+              type: object
+              description: Tencent Cloud return content (returned when Vendor is Tencent)
+              properties:
+                TaskId:
+                  type: string
+                  description: The queried task ID
+                  example: "1400341231-ComposeMedia-6fdfc967d7eb12f5e9b27f52519f1afatt0"
+                Event:
+                  type: string
+                  description: |
+                    Task event type, return values are:
+                    - compose: Media file merge
+                    - transcode: Media file on-demand transcoding
+                    - SnapshotByTimeOffset: Time point thumbnail task
+                    - SampleSnapshot: Time interval thumbnail task
+                  example: "compose"
+                Status:
+                  type: string
+                  description: |
+                    Task status:
+                    - WAITING: Waiting
+                    - PROCESSING: Processing
+                    - FINISH: Completed
+                    - FAIL: Failed
+                  example: "FINISH"
+                FileId:
+                  type: string
+                  description: File ID after media file merge or transcoding, same as the FileId carried in the Data of the response parameters of the search media interface
+                  example: "xxxxxxxx"
+                ReplayUrl:
+                  type: string
+                  description: Playback URL of the file after media file merge or transcoding, not exceeding 1024 bytes
+                  example: "https://xxxxx-xxxxxxxx.zego.im/xxxxxxxx/xxxxxxx/xxxxxx.mp4"
+                RequestId:
+                  type: string
+                  description: Unique request ID returned by the CDN vendor corresponding to the Vendor parameter value in the request (i.e., Tencent Cloud), which needs to be provided when locating problems
+                  example: "6aac31f4-xxxx-xxxx-xxxx-5cc10ce11a49"
+                Message:
+                  type: string
+                  description: Error message for failed media file task
+                  example: ""
+                ThumbnailsUrl:
+                  type: array
+                  description: File links generated by on-demand thumbnail task
+                  items: { type: string }
+                  example:
+                    - "http://vod-tc-restorefile.zego.im/43b7b075vodtranscq1500030200/93172bfa1397757897438985100/sampleSnapshot/sampleSnapshot_10_0.jpg"
+                    - "http://vod-tc-restorefile.zego.im/43b7b075vodtranscq1500030200/93172bfa1397757897438985100/sampleSnapshot/sampleSnapshot_10_2.jpg"
+            Huawei:
+              type: object
+              description: Huawei Cloud return content (returned when Vendor is Huawei)
+              properties:
+                TaskId:
+                  type: string
+                  description: The queried task ID
+                  example: "289665200"
+                Status:
+                  type: string
+                  description: |
+                    Task status:
+                    - NO_TASK: Task does not exist
+                    - WAITING: Waiting to process
+                    - PROCESSING: Processing
+                    - SUCCEEDED: Completed
+                    - FAILED: Failed
+                    - CANCELED: Task canceled
+                  example: "SUCCEEDED"
+                CreateTime:
+                  type: string
+                  description: Task start time, UTC time of the cloud vendor server
+                  example: "20241118065429"
+                EndTime:
+                  type: string
+                  description: Task end time, UTC time of the cloud vendor server
+                  example: "20241118065430"
+                FileName:
+                  type: array
+                  description: Files generated by on-demand thumbnail task
+                  items: { type: string }
+                  example:
+                    - "record/pickrecord/command_record/clarechen_test/0.jpg"
+                    - "record/pickrecord/command_record/clarechen_test/10.jpg"
+

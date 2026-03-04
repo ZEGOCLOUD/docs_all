@@ -1,0 +1,157 @@
+---
+articleID: 16888
+date: "2024-09-20"
+---
+# Multi-Source Capture
+
+- - -
+## Introduction
+
+Multi-source capture is used to manage the audio and video source configurations of each channel. Through this capability, you can flexibly and quickly implement real-time interaction of different audio and video content, such as screen sharing, audio mixing, and other functions.
+
+The main capability features and limitations of multi-source capture are as follows:
+- The publishing channel supports setting multiple audio and video sources, but the same audio and video source can only be occupied by one channel.
+- The main channel's audio and video sources support dynamic switching and also support audio mixing capabilities. The auxiliary channel only supports specifying the capture source before publishing and does not support audio mixing.
+- When capturing the screen, only iOS and Android platforms support capturing both video and audio at the same time; other platforms only support capturing video. To capture audio, developers need to implement relevant logic themselves.
+
+## Sample Source Code
+
+Please refer to [Download Sample Source Code](/real-time-video-windows-cpp/quick-start/run-example-code) to obtain the source code.
+
+For related source code, please check the files in the "/ZegoExpressExample/Examples/Others/MultiVideoSource" directory.
+
+## Prerequisites
+
+Before using the multi-source capture feature, ensure that:
+
+- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com), and valid AppID and AppSign have been obtained. For details, please refer to [Console - Project Information](/console/project-info).
+- ZEGO Express SDK has been integrated into the project, and basic audio and video streaming functionality has been implemented. For details, please refer to [Quick Start - Integration](/real-time-video-windows-cpp/quick-start/integrating-sdk) and [Quick Start - Implementation Process](/real-time-video-windows-cpp/quick-start/implementing-video-call).
+
+
+## Implementation Process
+
+<Warning title="Warning">
+The real-time voice product only supports setting the audio capture source.
+</Warning>
+
+### 1 Create ZegoExpressEngine Engine
+
+For the process of creating a ZegoExpressEngine engine, please refer to [Create Engine](/real-time-video-windows-cpp/quick-start/implementing-video-call) in implementing video calls.
+
+```cpp
+ZegoEngineProfile profile;
+/** AppID and AppSign are assigned to each App by ZEGO; for security reasons, it is recommended to store AppSign in the App's business backend and obtain it from the backend when needed*/
+profile.appID = appID;
+profile.appSign = appSign;
+/** Specify using the live streaming scenario (please fill in the scenario suitable for your business according to the actual situation)*/
+profile.scenario = ZegoScenario::ZEGO_SCENARIO_BROADCAST;
+/** Create engine instance */
+auto engine = ZegoExpressSDK::createEngine(profile, nullptr);
+```
+
+### 2 Set Audio and Video Capture Sources
+
+1. Call the [setVideoSource](@setVideoSource) interface to set the video capture source.
+
+```cpp
+/** Use camera as the video capture source */
+engine->setVideoSource(ZEGO_VIDEO_SOURCE_TYPE_CAMERA);
+```
+
+<Note title="Note">
+
+
+- If you need to use custom video capture as the video capture source, you need to set the video capture source type to [ZegoVideoSourceTypeCustom](@ZegoVideoSourceTypeCustom), call the [enableCustomVideoCapture](@enableCustomVideoCapture) interface to set the video frame data type to be sent, and call the [sendCustomVideoCaptureRawData](@sendCustomVideoCaptureRawData) or [sendCustomVideoCaptureEncodedData](@sendCustomVideoCaptureEncodedData) interface to send video frame data to the SDK. For details, please refer to [Advanced Features - Custom Video Capture](/real-time-video-windows-cpp/video/custom-video-capture).
+- If you need to use a media player as the video capture source, you need to call the [createMediaPlayer](@createMediaPlayer) interface to create a media player first, then set the video capture source type to [ZegoVideoSourceTypePlayer](@ZegoVideoSourceTypePlayer) and set the media player instance index used by the video capture source by calling the [setVideoSource](@setVideoSource) interface, and then use the newly created media player to load resources and play. For details, please refer to [Media Player](/real-time-video-windows-cpp/other/media-player).
+- If you need to use screen sharing as the video capture source, you need to set the video capture source type to [ZegoVideoSourceTypeScreenCapture](@ZegoVideoSourceTypeScreenCapture) and enable screen sharing to push screen sharing video data to the SDK. For details, please refer to [Screen Sharing](/real-time-video-windows-cpp/video/screen-sharing).
+</Note>
+
+2. Call the [setAudioSource](@setAudioSource) interface to set the audio capture source.
+
+    - Set audio capture source only
+        ```cpp
+        /** Use microphone as the audio capture source */
+        engine->setAudioSource(ZEGO_AUDIO_SOURCE_TYPE_MICROPHONE);
+        ```
+
+    - Set audio capture source and set audio mixing configuration at the same time
+        ```cpp
+        ZegoAudioSourceMixConfig audioSourceMixConfig;
+        /** Mix the sound played by the system sound card*/
+        audioSourceMixConfig.enableMixSystemPlayout = true;
+        /** Mix the sound played by the SDK*/
+        audioSourceMixConfig.enableMixEnginePlayout = true;
+
+        /** Mix the sound played by the media player with index 0*/
+        audioSourceMixConfig.mediaPlayerCount = 1;
+        audioSourceMixConfig.mediaPlayerIndexList = new int[1];
+        audioSourceMixConfig.mediaPlayerIndexList[0] = 0;
+
+        /** Mix the sound played by the audio effect player with index 0*/
+        audioSourceMixConfig.audioEffectPlayerCount= 1;
+        audioSourceMixConfig.audioEffectPlayerIndexList= new int[1];
+        audioSourceMixConfig.audioEffectPlayerIndexList[0] = 0;
+
+        /** Use microphone as the audio capture source and set audio mixing configuration */
+        engine->setAudioSource(ZEGO_AUDIO_SOURCE_TYPE_MICROPHONE, audioSourceMixConfig);
+
+        delete[] audioSourceMixConfig.audioEffectPlayerIndexList;
+        delete[] audioSourceMixConfig.mediaPlayerIndexList;
+        ```
+
+<Note title="Note">
+
+
+- If you need to use custom audio capture as the audio capture source, you need to set the audio capture source type to [ZegoAudioSourceTypeCustom](@ZegoAudioSourceTypeCustom), and call interfaces such as [sendCustomAudioCaptureAACData](@sendCustomAudioCaptureAACData) or [sendCustomAudioCapturePCMData](@sendCustomAudioCapturePCMData) to send audio data to the SDK. For details, please refer to [Advanced Features - Custom Audio Capture and Rendering](/real-time-video-windows-cpp/audio/custom-audio-capture-and-rendering).
+- If you need to use a media player as the audio capture source, you need to set the audio capture source type to [ZegoAudioSourceTypeMediaPlayer](@ZegoAudioSourceTypeMediaPlayer), call the [createMediaPlayer](@createMediaPlayer) interface to create a media player, and then use the newly created media player to load resources and play. For details, please refer to [Media Player](/real-time-video-windows-cpp/other/media-player).
+</Note>
+
+### 3 Login Room and Publish Stream
+
+For the process of logging in to the room and publishing stream, please refer to [Login Room](/real-time-video-windows-cpp/quick-start/implementing-video-call) and [Publish Stream](/real-time-video-windows-cpp/quick-start/implementing-video-call) in implementing video calls.
+
+### 4 (Optional) Switch Audio and Video Capture Sources
+
+1. Call the [setVideoSource](@setVideoSource) interface to switch the video capture source.
+
+```cpp
+/** Use screen sharing as the video capture source */
+engine->setVideoSource(ZEGO_VIDEO_SOURCE_TYPE_SCREEN_CAPTURE);
+```
+
+2. Call the [setAudioSource](@setAudioSource) interface to switch the audio capture source.
+
+```cpp
+/** Use media player as the audio capture source */
+engine->setAudioSource(ZEGO_AUDIO_SOURCE_TYPE_MEDIA_PLAYER);
+```
+
+### 5 Stop Publishing Stream
+
+For the process of stopping publishing stream, please refer to [Stop Publishing and Playing Stream](/real-time-video-windows-cpp/quick-start/implementing-video-call) in implementing video calls.
+
+```cpp
+/** Stop publishing stream*/
+engine->stopPublishingStream();
+```
+
+
+## FAQ
+
+<Accordion title="How to capture screen video and system sound?" defaultOpen="false">
+If you need to capture screen video and system sound, please refer to [Screen Sharing](/real-time-video-windows-cpp/video/screen-sharing).
+</Accordion>
+
+<Accordion title="Is setting multiple media players supported?" defaultOpen="false">
+Yes, but note that the same player instance can only be occupied by one channel.
+</Accordion>
+
+<Accordion title="What are the limitations when combining video sources and audio sources?" defaultOpen="false">
+The limitations for combining video sources and audio sources are as follows:
+1. The main channel cannot use the media player's video or audio source.
+2. When the auxiliary channel uses a media player as the audio and video source, the main channel needs to use and start the microphone device (`enableMicrophone`).
+If you do not need microphone sound on the main channel, you can disable audio publishing to keep the microphone started through `mutePublishStreamAudio`.
+3. Only when the main channel uses camera video source or microphone audio source, can the auxiliary channel copying the main channel video source or audio source take effect.
+4. The audio source of the main channel cannot be set to `None`, otherwise the audio cannot be rendered.
+</Accordion>
+

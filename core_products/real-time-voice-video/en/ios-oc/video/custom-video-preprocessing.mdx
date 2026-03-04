@@ -1,0 +1,149 @@
+---
+articleID: 7655
+date: "2024-07-11"
+---
+
+
+# Custom Video Preprocessing
+
+- - -
+
+## Feature Introduction
+
+Video preprocessing is a process between capture and encoding. Developers capture video data themselves. After obtaining the video data captured by the SDK, they can perform video preprocessing through the SDK's built-in basic beautification and watermark features. If the SDK cannot meet developers' needs (for example, the beautification effect cannot meet expectations), they can also use the ZEGO Effects SDK to perform special processing on the video, such as beautification, adding accessories, etc. This process is custom video preprocessing.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/video_pre_processing_en.png" /></Frame>
+
+Compared with custom video capture, the advantage of custom video preprocessing is that developers do not need to manage device input sources, they only need to operate on the raw data thrown out by the ZEGO Express SDK, and then send it back to the ZEGO Express SDK.
+
+<Note title="Note">
+
+
+For relatively complex scenarios, such as wanting to perform layer blending through camera images, it is recommended that developers use the [Custom Video Capture](/real-time-video-ios-oc/video/custom-video-capture) feature to implement. This method has more room for performance optimization.
+</Note>
+
+## Sample Source Code Download
+
+ZEGO provides sample source code for implementing beautification features through the Effects SDK. Please refer to [Using Real-time Audio and Video with AI Beautification Together](/real-time-video-ios-oc/best-practice/integration-with-zego-effects-sdk).
+
+## Prerequisites
+
+Before performing custom video preprocessing, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated the ZEGO Express SDK in the project and implemented basic audio and video publishing and playing functions. For details, please refer to [Quick Start - Integration](/real-time-video-ios-oc/quick-start/integrating-sdk) and [Quick Start - Implementation Flow](/real-time-video-ios-oc/quick-start/implementing-video-call).
+
+
+## Usage Steps
+
+The flow and interface calls for custom video preprocessing are as follows:
+
+```mermaid
+sequenceDiagram
+    participant A as Client App
+    participant Z as ZEGO Express SDK
+
+    A->>Z: Initialize Express SDK <br/> [createEngine]
+    A->>Z: Login room <br/> [loginRoom]
+
+    critical Critical steps
+        A->>Z: Enable custom video preprocessing <br/> [enableCustomVideoProcessing]
+        A->>Z: Set custom video preprocessing callback <br/> [setCustomVideoProcessHandler]
+        A->>Z: Start preview, publish stream <br/> [startPreview, startPublishingStream]
+        Z-->>A: Get raw video data,<br>perform video preprocessing <br/> [onCapturedUnprocessedCVPixelBuffer]
+        A->>Z: Send processed image to Express <br/> [sendCustomVideoProcessedCVPixelBuffer]
+    end
+
+    A->>Z: Play processed video data <br/> [startPlayingStream]
+    A->>Z: Stop preview, publish stream <br/> [stopPreview, stopPublishingStream]
+    A->>Z: Logout room <br/> [logoutRoom]
+    A->>Z: Destroy Express SDK <br/> [destroyEngine]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/custom_video_process_ios_new.png" /></Frame>
+*/}
+
+1. Initialize Express SDK and log in to room.
+2. Call the [enableCustomVideoProcessing](@enableCustomVideoProcessing) interface to [enable custom video preprocessing](#1-enable-custom-video-preprocessing) feature.
+5. [Get raw video data and perform video preprocessing](#2-get-raw-video-data-and-perform-video-preprocessing).
+    1. Call the [setCustomVideoProcessHandler](@setCustomVideoProcessHandler) interface to register custom video preprocessing callbacks and implement [onCapturedUnprocessedCVPixelBuffer](@onCapturedUnprocessedCVPixelBuffer) and other callback methods.
+    2. Start preview and publish stream.
+    3. Through the [onStart](@onStart-ZegoCustomVideoProcessHandler) callback, notify that custom video preprocessing has started. If developers use third-party beautification libraries or pre-allocate memory, they can initialize tools and allocate memory at this time.
+    4. Get raw video data through the [onCapturedUnprocessedCVPixelBuffer](@onCapturedUnprocessedCVPixelBuffer) callback interface. Developers can perform related processing according to business needs: can be processed through Express SDK's built-in basic beautification, watermark and other features; can also be used with Effects SDK to implement more processing effects.
+    5. After video data processing is completed, in the [onCapturedUnprocessedCVPixelBuffer](@onCapturedUnprocessedCVPixelBuffer) callback, call the [sendCustomVideoProcessedCVPixelBuffer](@sendCustomVideoProcessedCVPixelBuffer) interface to send the processed video frame data to the Express SDK.
+4. Other clients can play the processed video stream.
+5. Stop preview and publishing stream.
+6. Through the [onStop](@onStop-ZegoCustomVideoProcessHandler) callback, notify that custom video preprocessing has ended. If developers use third-party beautification libraries or pre-allocate memory, they can deinitialize tools and release memory at this time.
+7. Log out of room, destroy engine, and release resources.
+
+
+### 1 Enable custom video preprocessing
+
+Create a custom video preprocessing [ZegoCustomVideoProcessConfig](@-ZegoCustomVideoProcessConfig) object and set the [bufferType](@bufferType-ZegoCustomVideoProcessConfig) property to provide video frame data types.
+
+Currently, the iOS SDK supports the following 2 types of [bufferType ](@-ZegoVideoBufferType) data types. Setting other enumeration values will not work properly:
+
+| Buffer Type | Enumeration Value|Description |
+|-----|------|-----|
+| CVPixelBuffer | ZegoVideoBufferTypeCVPixelBuffer |Indicates raw video data of CVPixelBufferRef type, format is BGRA32.|
+| NV12CVPixelBuffer | ZegoVideoBufferTypeNV12CVPixelBuffer |Indicates raw video data of CVPixelBufferRef type, format is NV12.|
+
+Before starting preview and starting publishing stream, call the [enableCustomVideoProcessing](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine#enable-custom-video-processing-config) interface to enable the custom video preprocessing feature.
+
+The following takes "ZegoVideoBufferTypeCVPixelBuffer" as an example to demonstrate the usage of custom video preprocessing.
+
+```objc
+ZegoCustomVideoProcessConfig *processConfig = [[ZegoCustomVideoProcessConfig alloc] init];
+// Select CVPixelBuffer type video frame data
+processConfig.bufferType = ZegoVideoBufferTypeCVPixelBuffer;
+
+[[ZegoExpressEngine sharedEngine] enableCustomVideoProcessing:YES config:processConfig channel:ZegoPublishChannelMain];
+```
+
+### 2 Get raw video data and perform video preprocessing
+
+#### Register custom video preprocessing callback
+
+1. Use "ViewController" as the custom video preprocessing callback object and conform to the [ZegoCustomVideoProcessHandler ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~protocol~zego-custom-video-process-handler) protocol.
+
+    ```objc
+    @interface ViewController () <ZegoEventHandler, ZegoCustomVideoProcessHandler>
+
+        ......
+
+    @end
+    ```
+
+2. Call the [setCustomVideoProcessHandler ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine#set-custom-video-process-handler) interface to set the custom video capture callback.
+
+    ```objc
+    // Set self as the custom video preprocessing callback object
+    [[ZegoExpressEngine sharedEngine] setCustomVideoProcessHandler:self];
+    ```
+
+#### Get raw video and perform preprocessing
+
+1. Using the "ZegoVideoBufferTypeCVPixelBuffer" type video preprocessing method requires implementing the [onCapturedUnprocessedCVPixelBuffer](@onCapturedUnprocessedCVPixelBuffer) callback method. After the SDK obtains raw video data, it will notify the developer through the [onCapturedUnprocessedCVPixelBuffer](@onCapturedUnprocessedCVPixelBuffer) method.
+
+2. Developers can use Express SDK's built-in basic beautification, watermark and other features to process video data. For details, please refer to [Publishing Stream Video Enhancement](/real-time-video-ios-oc/video/publish-video-enhancement); can also be used with Effects SDK to implement more processing effects. For details, please refer to [Using Real-time Audio and Video with AI Beautification Together](/real-time-video-ios-oc/best-practice/integration-with-zego-effects-sdk).
+    <Warning title="Warning">
+
+
+    If developers use third-party beautification libraries or pre-allocate memory, please:
+    - When custom video preprocessing starts ([onStart](@onStart-ZegoCustomVideoProcessHandler)), initialize tools and allocate memory.
+    - When custom video preprocessing ends ([onStop](@onStop-ZegoCustomVideoProcessHandler)), deinitialize tools and release memory.
+    </Warning>
+
+
+
+3. After processing is completed, call the [sendCustomVideoProcessedCVPixelBuffer](@sendCustomVideoProcessedCVPixelBuffer) interface to send the processed video frame data to the Express SDK for publishing. Other clients can play the processed video stream.
+
+```objc
+- (void)onCapturedUnprocessedCVPixelBuffer:(CVPixelBufferRef)buffer timestamp:(CMTime)timestamp channel:(ZegoPublishChannel)channel {
+    // Custom preprocessing: Here use Effects SDK for video processing
+    [self.effects processImageBuffer:buffer];
+
+    // Send the processed buffer back to Express SDK
+    [[ZegoExpressEngine sharedEngine] sendCustomVideoProcessedCVPixelBuffer:buffer timestamp:timestamp channel:channel];
+}
+```

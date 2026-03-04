@@ -1,0 +1,297 @@
+---
+articleID: 6872
+date: "2024-05-21"
+---
+# Custom Video Rendering
+
+- - -
+
+## Feature Overview
+
+Custom video rendering refers to the SDK providing local preview and remote stream playing video frame data to the outside for users to render themselves.
+
+When the following situations occur in the developer's business, we recommend using the SDK's custom video rendering feature:
+
+1. The App uses a cross-platform UI framework (e.g., QT requires complex hierarchical interfaces for high-experience interaction) or game engine (e.g., Unity, Unreal Engine, Cocos, etc.)
+2. The App needs to obtain video frame data captured or played by the SDK for special processing
+
+## Download Example Source Code
+
+Please refer to [Download Example Source Code](/real-time-video-linux-cpp/quick-start/run-example-code) to get the source code.
+
+For related source code, please check files in the "/ZegoExpressExample/Examples/AdvancedVideoProcessing/CustomVideoRendering" directory.
+
+## Usage Steps
+
+The usage flow for custom video rendering is as follows:
+
+The sequence diagram is as follows:
+
+```mermaid
+sequenceDiagram
+    participant APP
+    participant ZEGO Express SDK
+
+    Note over APP,ZEGO Express SDK: Create ZegoExpressEngine
+    APP ->> ZEGO Express SDK: [createEngine]
+
+    Note over APP,ZEGO Express SDK: Set custom video render configuration and enable
+    APP ->> ZEGO Express SDK: [enableCustomVideoRender]
+
+    Note over APP,ZEGO Express SDK: Set custom video renderer handler and implement callback methods
+    APP ->> ZEGO Express SDK: [setCustomVideoRenderHandler(IZegoCustomVideoRenderHandler)]
+
+    Note over APP,ZEGO Express SDK: Login room then start preview/play stream, receive<br/>custom video render frame data callback
+    APP ->> ZEGO Express SDK: [loginRoom]
+    APP ->> ZEGO Express SDK: [startPreview / startPlayingStream]
+
+    loop loop
+        ZEGO Express SDK -->> APP: IZegoCustomVideoRenderHandler <br/> [onCapturedVideoFrame / onRemoteVideoFrame]
+    end
+
+    Note over APP,ZEGO Express SDK: Stop preview or stop playing stream
+    APP ->> ZEGO Express SDK: [stopPreview / stopPlayingStream]
+
+    Note over APP,ZEGO Express SDK: Logout room
+    APP ->> ZEGO Express SDK: [logoutRoom]
+
+    Note over APP,ZEGO Express SDK: Destroy engine
+    APP ->> ZEGO Express SDK: [destroyEngine]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/custom_video_render_uml_Andriod_Windows_new.png" /></Frame>
+*/}
+
+### 1 Set Custom Video Rendering Configuration
+
+#### Create a [ZegoCustomVideoRenderConfig](@-ZegoCustomVideoRenderConfig) object and configure parameters.
+
+The `bufferType` parameter is the enumeration [ZegoVideoBufferType ](@-ZegoVideoBufferType). Currently, the SDK only supports the `ZEGO_VIDEO_BUFFER_TYPE_RAWDATA` type.
+
+The `frameFormatSeries` parameter is the enumeration [ZegoVideoFrameFormatSeries ](@-ZegoVideoFrameFormatSeries), which can specify the custom video rendering video frame data format required by developers. This parameter can only specify the `RGB` or `YUV` color space categories. The specific data format varies between platforms and is subject to the parameters in the callback.
+
+<Warning title="Warning">
+
+
+If the data format in the callback does not meet your expectations, please contact ZEGOCLOUD Technical Support for processing.
+
+</Warning>
+
+
+
+- `ZegoVideoFrameFormatSeriesRGB`: Returns BGRA.
+- `ZegoVideoFrameFormatSeriesYUV`: Returns I420.
+
+[enableEngineRender](@enableEngineRender) indicates whether the SDK should also render internally while performing custom video rendering. If `false`, the engine will not render on the canvas set by the preview interface [startPreview ](@startPreview) and the stream playing interface [startPlayingStream ](@startPlayingStream).
+
+Interface prototype
+
+  ```cpp
+  // Custom video rendering configuration
+  struct ZegoCustomVideoRenderConfig
+  {
+      // Custom video rendering video frame data type
+      ZegoVideoBufferType bufferType;
+
+      // Custom video rendering video frame data format
+      ZegoVideoFrameFormatSeries frameFormatSeries;
+
+      // Whether the engine also renders during custom video rendering, default is [false]
+      bool enableEngineRender;
+  };
+
+  /**
+   * Start or stop custom video rendering
+   *
+   * Must be set before the engine starts, i.e., before calling [startPreview], [startPublishing], [startPlayingStream]; and the configuration can only be modified after the engine stops
+   * When developers enable custom rendering, by calling [setCustomVideoRenderHandler] they can set to receive local and remote video frame data for custom rendering
+   *
+   * @param enable Whether to enable
+   * @param config Custom rendering configuration
+   */
+  virtual void enableCustomVideoRender(bool enable, ZegoCustomVideoRenderConfig* config) = 0;
+  ```
+
+#### Call the [enableCustomVideoRender](@enableCustomVideoRender) interface to enable custom video rendering.
+
+After creating a [ZegoCustomVideoRenderConfig](@-ZegoCustomVideoRenderConfig) object and configuring parameters, call the [enableCustomVideoRender](@enableCustomVideoRender) interface to enable custom video rendering.
+
+- Call example
+
+  ```cpp
+  ZegoCustomVideoRenderConfig renderConfig;
+  renderConfig.bufferType = ZEGO_VIDEO_BUFFER_TYPE_RAWDATA;
+  renderConfig.frameFormatSeries = ZEGO_VIDEO_FRAME_FORMAT_SERIES_RGB;
+  renderConfig.enableEngineRender = false;
+
+  engine->enableCustomVideoRender(true, &renderConfig);
+  ```
+
+### 2 Set Custom Video Rendering Callback
+
+Call the [setCustomVideoRenderHandler ](@setCustomVideoRenderHandler) interface to set the custom video rendering callback [IZegoCustomVideoRenderHandler ](@-IZegoCustomVideoRenderHandler).
+
+```cpp
+// Inherit from IZegoCustomVideoRenderHandler, implement custom rendering callback
+// Please note, do not call any SDK interfaces in the SDK callback thread, you need to manually switch to another thread, otherwise a deadlock will occur
+class MyCustomVideoRenderHandler: public IZegoCustomVideoRenderHandler{
+    /**
+    * Local preview video frame raw data callback
+    *
+    * @param data Raw data of the video frame (e.g., for RGBA only consider data[0], for I420 consider data[0,1,2])
+    * @param dataLength Length of the data (e.g., for RGBA only consider dataLength[0], for I420 consider dataLength[0,1,2])
+    * @param param Video frame parameters
+    * @param flipMode Video frame flip mode
+    * @param channel Publishing channel
+    */
+    virtual void onCapturedVideoFrameRawData(unsigned char** /*data*/, unsigned int* /*dataLength*/, ZegoVideoFrameParam /*param*/, ZegoVideoFlipMode /*flipMode*/, ZegoPublishChannel /*channel*/) {
+
+    }
+
+    /**
+    * Remote stream playing video frame raw data callback, distinguished by streamID
+    *
+    * @param data Raw data of the video frame (e.g., for RGBA only consider data[0], for I420 consider data[0,1,2])
+    * @param dataLength Length of the data (e.g., for RGBA only consider dataLength[0], for I420 consider dataLength[0,1,2])
+    * @param param Video frame parameters
+    * @param streamID Stream ID of the played stream
+    */
+    virtual void onRemoteVideoFrameRawData(unsigned char** /*data*/, unsigned int* /*dataLength*/, ZegoVideoFrameParam /*param*/, const std::string& /*streamID*/) {
+
+    }
+}
+
+// Set custom rendering callback for the engine
+engine->setCustomVideoRenderHandler(std::make_shared<MyCustomVideoRenderHandler>());
+```
+
+The `param` ([ZegoVideoFrameParam ](@-ZegoVideoFrameParam) object) in the callback method describes some parameters of the video frame, defined as follows:
+
+```cpp
+struct ZegoVideoFrameParam
+{
+    // Format of the video frame
+    ZegoVideoFrameFormat format;
+
+    // Bytes per line for each plane (e.g., for RGBA only consider strides[0], for I420 consider strides[0,1,2])
+    int strides[4];
+
+    // Width of the video frame
+    int width;
+
+    // Height of the video frame
+    int height;
+
+    // Video rotation angle
+    int rotation;
+};
+```
+
+Where `format` identifies the specific data format of the video frame; `strides` is an array describing the bytes per line for each plane; `size` describes the image size of the video frame.
+
+> The relationship between `strides` and the image is shown in the figure:
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/share/strides_new.png" /></Frame>
+
+### 3 Login Room and Publish/Play Stream, Receive Custom Video Rendering Video Frame Data Callback
+
+After starting local preview or publishing stream, the SDK will callback the captured local video to the user through [onCapturedVideoFrameRawData ](@onCapturedVideoFrameRawData).
+
+After starting playing stream, the SDK will callback the obtained remote stream video data to the user through [onRemoteVideoFrameRawData ](@onRemoteVideoFrameRawData).
+
+At this point, the App successfully obtains the video frame data called back by the SDK for actual rendering operations or deep processing operations.
+
+
+## FAQ
+
+1. Custom video rendering is divided into local capture preview custom video rendering and remote stream playing custom video rendering. What are their respective functions? In what scenarios are they used?
+
+   Answer: Local capture preview custom video rendering allows the host to see additional rendering effects, adding effects etc. on top of the original video screen; remote stream playing custom video rendering allows viewers to see different rendering screens, and effects can be added on top of the played screen according to viewers' preferences.
+
+2. If custom video rendering sets the [enableEngineRender ](@enableEngineRender) parameter in the configuration [ZegoCustomVideoRenderConfig ](@-ZegoCustomVideoRenderConfig) to `false`, what should be filled in for the `canvas` parameter in the preview interface [startPreview ](@startPreview) and stream playing interface [startPlayingStream ](@startPlayingStream)?
+
+   Answer: When [enableEngineRender ](@enableEngineRender) is `false`, the engine does not render, so the `canvas` parameter of the preview and playing interfaces can be set to null `nullptr`.
+
+3. When using custom video rendering during stream publishing, will the processed preview video data `buffer` only be displayed locally? Will it be included in the published stream?
+
+   Answer: It will only be displayed locally and will not affect the video data published out.
+
+4. What is the width and height of the video frame for local capture preview custom video rendering?
+
+   Answer: The width and height of the video frame for local capture preview custom video rendering will be returned in the [param ](@-ZegoVideoFrameParam) parameter in the callback, and its value is the same as the resolution set by [setVideoConfig ](@setVideoConfig).
+
+5. What is the video frame data format output by custom video rendering?
+
+   Answer: Determined by the selected rendering data format series [ZegoVideoFrameFormatSeries ](@-ZegoVideoFrameFormatSeries) and the data returned directly after software/hardware decoding, i.e., the `format` parameter in the [ZegoVideoFrameParam ](@-ZegoVideoFrameParam) parameter in the video frame callback method.
+
+   Video frame data format [ZegoVideoFrameFormat ](@-ZegoVideoFrameFormat) description:
+
+<table>
+
+<tbody><tr>
+<th>Video frame data format enumeration value</th>
+<th>Description</th>
+</tr>
+<tr>
+<td>ZEGO_VIDEO_FRAME_FORMAT_I420</td>
+<td>YUV420P; One set of YUV 12bits; Y, U, V three planes, four Y share one set of UV.</td>
+</tr>
+<tr>
+<td>ZEGO_VIDEO_FRAME_FORMAT_NV12</td>
+<td>YUV420SP; One set of YUV 12bits; Y, UV two planes, UV plane data arranged in U then V order, four Y share one set of UV.</td>
+</tr>
+<tr>
+<td>ZEGO_VIDEO_FRAME_FORMAT_NV21</td>
+<td>YUV420SP; One set of YUV 12bits; Y, UV two planes, UV plane data arranged in V then U order, four Y share one set of UV.</td>
+</tr>
+<tr>
+<td>ZEGO_VIDEO_FRAME_FORMAT_BGRA32</td>
+<td>BGRA32.</td>
+</tr>
+<tr>
+<td>ZEGO_VIDEO_FRAME_FORMAT_RGBA32</td>
+<td>RGBA32.</td>
+</tr>
+<tr>
+<td>ZEGO_VIDEO_FRAME_FORMAT_ARGB32</td>
+<td>ARGB32.</td>
+</tr>
+<tr>
+<td>ZEGO_VIDEO_FRAME_FORMAT_ABGR32</td>
+<td>ABGR32.</td>
+</tr>
+<tr>
+<td>ZEGO_VIDEO_FRAME_FORMAT_I422</td>
+<td>YUV422P; One set of YUV 16bits; Two Y share one set of UV.</td>
+</tr>
+<tr>
+<td>ZEGO_VIDEO_FRAME_FORMAT_BGR24</td>
+<td>BGR24.</td>
+</tr>
+<tr>
+<td>ZEGO_VIDEO_FRAME_FORMAT_RGB24</td>
+<td>RGB24.</td>
+</tr>
+</tbody></table>
+
+6. What is the callback frequency per second for custom video rendering? What should be noted?
+
+   Answer: The local capture preview custom video rendering callback frequency is generally the same as the frame rate set during publishing, but if traffic control is enabled and the control properties include frame rate, the local capture preview custom video rendering callback frequency will change accordingly; the remote stream playing custom video rendering callback frequency will also change with the received video data frame rate, such as when the publishing end enables traffic control causing frame rate changes, the playing end network stutters, or the playing end network recovers and the SDK starts catching up frames, all will affect the playing custom video rendering callback frequency.
+
+7. How to get the first frame data in custom video rendering?
+
+   Answer: The first data returned by the custom video rendering callback [IZegoCustomVideoRenderHandler ](@-IZegoCustomVideoRenderHandler) is the first frame data.
+
+8. Why can't I receive local video data callbacks?
+
+   Answer: You need to start preview [startPreview ](@startPreview) before publishing stream, otherwise you will not receive video data callbacks.
+
+9. Why doesn't the local preview custom video rendering video frame screen perform horizontal mirror flip by default?
+
+   Answer: The video frame screen flip for custom video rendering needs to be implemented by the developer. You can know whether the frame needs to be flipped through the [flipMode ](@-ZegoVideoFlipMode) in the video frame data callback interface.
+
+
+## Related Documentation
+
+- [How to handle video black screen issues?](https://doc-zh.zego.im/faq/video_blank)
+- [How to handle video pixelation or green screen issues?](https://doc-zh.zego.im/faq/pixelated_green)

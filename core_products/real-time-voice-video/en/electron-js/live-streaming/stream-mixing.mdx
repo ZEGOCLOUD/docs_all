@@ -1,0 +1,308 @@
+---
+articleID: 6649
+date: "2025-07-21"
+---
+
+# Multi-Stream Mixing
+
+- - -
+
+## Feature Introduction
+
+Stream mixing is a technology that mixes multiple audio and video streams into a single stream from the cloud. The mixing initiator can mix streams of other users in the room or their own published streams.
+
+### Advantages
+
+1. Reduces the complexity of development and implementation. For example, when there are N hosts conducting co-hosting, if mixing is used, the audience side does not need to pull N video streams at the same time, saving the development implementation steps of pulling N streams and layout.
+2. Lowers the performance requirements for devices, reduces device performance overhead and network bandwidth burden; for example, when there are too many co-hosting parties, the audience side needs to pull N video streams, requiring the device hardware to support pulling N streams simultaneously.
+3. Simple to implement forwarding to multiple CDNs, only need to add output streams on demand when configuring mixing.
+4. When the audience side needs to replay multi-host co-hosting videos, only need to enable recording configuration on the CDN.
+5. When checking for pornography, only need to observe one screen, no need to view multiple screens at the same time.
+
+### Common Application Scenarios
+
+1. Use mixing when the device does not support pulling N streams simultaneously.
+2. Use mixing when multiple video images need to be synthesized into one video, such as in educational scenarios, live streaming the images of teachers and students.
+
+### Usage Instructions
+
+The SDK supports both audio and video mixing and pure audio mixing.
+
+Developers start mixing after successfully playing/publishing streams. For example, after host A and audience B successfully co-host, and successfully pull the image of audience B, they start mixing host A and audience B's streams. You can also mix at other appropriate times according to requirements.
+
+### System Architecture Diagram
+
+When using the mixing function, the SDK pushes the stream to the ZEGO server. The ZEGO server mixes the specified streams into one stream and then pushes it to the CDN. The audience pulls the mixed stream from the CDN for viewing.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/Mixer/mixer-structure.png" /></Frame>
+
+## Prerequisites
+
+- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com), and valid AppID and Server address have been applied for. For details, please refer to [Console - Project Information](/console/project-info).
+- ZEGO Express SDK has been integrated into the project, and basic audio and video publishing and playing functionality has been implemented. For details, please refer to [Quick Start - Integration](/real-time-video-electron-js/quick-start/integrating-sdk) and [Quick Start - Implementation Process](/real-time-video-electron-js/quick-start/implementing-video-call).
+
+- Ensure there are already streams in the room.
+
+<Warning title="Warning">
+
+
+The mixing function is not enabled by default. Please enable it yourself in the [ZEGOCLOUD Console](https://console.zegocloud.com) before use (for enabling steps, please refer to "Mixing" in [Project Management - Service Configuration](/console/service-configuration/enable-stream-mixing-service)), or contact ZEGOCLOUD Technical Support to enable it.
+
+</Warning>
+
+
+
+
+## Usage Steps
+
+### Set Mixing Configuration
+
+[ZegoMixerTask ](@-ZegoMixerTask) is a mixing task configuration object defined in ZegoExpressEngine SDK, which contains information such as input streams and output streams.
+
+#### Create Mixing Video Configuration Object
+
+<Note title="Note">
+The operations in this section only apply to audio and video scenarios, and no settings are required for pure audio scenarios.
+</Note>
+
+Create a [ZegoMixerVideoConfig ](@-ZegoMixerVideoConfig) object to set mixing video related configurations, including video resolution, frame rate and bitrate. Video frame rate cannot be modified after starting mixing.
+
+```JavaScript
+// The fields of the following video configuration must exist and be correct
+let videoConfig = {
+    width: 360,
+    height: 640,
+    fps: 15,
+    bitrate: 600
+}
+```
+
+#### Create Mixing Audio Configuration Object
+
+Create a [ZegoMixerAudioConfig ](@-ZegoMixerAudioConfig) object to set mixing audio configuration, including audio bitrate, channels and codec ID. Audio bitrate cannot be modified after starting mixing.
+
+```JavaScript
+// The fields of the following video configuration must exist and be correct
+let audioConfig = {
+    bitrate: 48,
+    channel: ZegoAudioChannel.MONO,
+    codecID: ZegoAudioCodecID.DEFAULT
+}
+```
+
+#### Create Mixing Output Information Object Array
+
+Create a [ZegoMixerOutput ](@-ZegoMixerOutput) object to set mixing output information.
+
+The array output can set up to 3 elements, indicating that multiple streams are output after mixing. When the output target is in URL format, currently only supports RTMP URL format: rtmp://xxxxxxxx, and two identical mixing output addresses cannot be passed.
+
+The following example code indicates that the mixing output is to the ZEGO server with the stream name "output_streamid_1". By specifying this stream name for pulling, you can see the mixed image.
+
+```JavaScript
+// ZegoMixerOutput object must be an array type
+let outputList = [
+    {target: "output_streamid_1"}
+]
+```
+
+#### Create Mixing Input Stream Information Object Array
+
+Create a [ZegoMixerInput ](@-ZegoMixerInput) object to set mixing input information, including stream ID, mixing content type, mixing layout, etc.
+
+The input stream supports setting up to 9 streams.
+
+<Warning title="Warning">
+
+
+When the mixed stream is an audio stream (that is, the "contentType" parameter is set to audio mixing type), the SDK does not process layout fields internally, so there is no need to pay attention to the "layout" parameter.
+
+
+</Warning>
+
+
+
+
+The following example code takes mixing two streams with top and bottom layout as an example:
+
+```JavaScript
+// ZegoMixerInput object must be an array type. The fields of individual mixing input items below must exist and be correct, and use the videoConfig object created above
+let inputList = [
+    {
+        streamID: "streamID_1",
+        contentType: ZegoMixerInputContentType.Video,
+        layout: {
+            x: 0,
+            y: 0,
+            width: videoConfig.width,
+            height: videoConfig.height/2
+        },
+        soundLevelID: 1
+    },
+    {
+        streamID: "streamID_2",
+        contentType: ZegoMixerInputContentType.Video,
+        layout: {
+            x: 0,
+            y: videoConfig.height/2,
+            width: videoConfig.width,
+            height: videoConfig.height/2
+        },
+        soundLevelID: 2
+    }
+]
+```
+
+#### Create Mixing Watermark Object (Optional)
+
+<Note title="Note">
+1. The operations in this section only apply to real-time audio and video scenarios, not to pure audio scenarios.
+2. In real-time audio and video scenarios, if the mixing watermark is not set, this step can be skipped. When constructing the mixing task task object, there is no need to fill in the "watermark" key.
+</Note>
+
+
+Create a [ZegoWatermark ](@-ZegoWatermark) object to set the mixing watermark. The "imageURL" of the watermark needs to be obtained by contacting ZEGOCLOUD Technical Support.
+
+The following example code takes setting a ZEGO Logo watermark placed in the upper left corner of the image as an example:
+
+```JavaScript
+// ZegoWatermark fields must exist and be correct, and use the videoConfig object created above
+let watermark = {
+    // The value of imageURL should send the image to ZEGOCLOUD Technical Support for configuration to get the specific string value
+    imageURL: "preset-id://zegowp.png",
+    layout: {
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 200
+    }
+}
+```
+
+#### Create Mixing Background Image
+
+<Note title="Note">
+
+The operations in this section only apply to audio and video scenarios, and no settings are required for pure audio scenarios.
+
+</Note>
+
+
+
+
+You can specify a background image for the mixing task. The "backgroundImageURL" of the image needs to be obtained by contacting ZEGOCLOUD Technical Support. If no background image is set, "backgroundImageURL" can be an empty string.
+
+```JavaScript
+let backgroundImageURL = "preset-id://zegobg.png"
+```
+
+#### Create Mixing Task Object
+
+Create a [ZegoMixerTask ](@-ZegoMixerTask) object to set the mixing task.
+
+```JavaScript
+let task = {
+    // Unique identifier of a mixing task
+    "taskID": "task1",
+    // inputList object created in section 3.2.4 above
+    "inputList": inputList,
+    // outputList object created in section 3.2.3 above
+    "outputList": outputList,
+    // videoConfig object created in section 3.2.1 above
+    "videoConfig": videoConfig,
+    // audioConfig object created in section 3.2.2 above
+    "audioConfig": audioConfig,
+    // watermark object created in section 3.2.5 above. If you don't want to set a watermark, don't fill in this key-value pair
+    "watermark": watermark,
+    // backgroundImageURL object created in section 3.2.6 above
+    "backgroundImageURL": backgroundImageURL,
+    "enableSoundLevel": enableSoundLevel
+}
+```
+
+### Start Mixing Task
+
+After the mixing task is created, call the [startMixerTask ](@startMixerTask) interface to start the mixing task. If an exception occurs when requesting to enable the mixing task, such as the input stream of the mixing does not exist, the error code will be given from the callback callback.
+
+<Warning title="Warning">
+If you need to play mixed CDN resources on the Web end, when using CDN recording, please choose AAC-LC for audio encoding. Since some browsers (such as Google Chrome and Microsoft Edge) are incompatible with HE-AAC audio encoding format, recorded files will not be playable.
+</Warning>
+
+
+
+```JavaScript
+// task object created in section 3.2.7 above
+zgEngine.startMixerTask(task).then(function (errorCode, extendedData){
+    // Processing logic for mixing failure
+    ...
+})
+```
+
+### Update Mixing Task Configuration
+
+When the mixing information changes, such as adding or removing input stream lists for mixing, adjusting mixing video output bitrate, etc., modify the parameters of the mixing task object and call the [startMixerTask ](@startMixerTask) interface again to update the configuration.
+
+<Warning title="Warning">
+
+
+When updating the configuration of the mixing task, "taskID" cannot be changed.
+
+</Note>
+
+
+
+
+### Stop Mixing Task
+
+Call the [stopMixerTask ](@stopMixerTask) interface to stop the mixing task.
+
+<Warning title="Warning">
+When starting the next mixing task, it is recommended to stop the previous mixing task first to avoid the situation where the host has already started the next mixing task to mix with other hosts, but the audience is still pulling the output stream of the previous mixing task.
+</Warning>
+
+
+
+
+```JavaScript
+// Pass in the taskID being mixed to stop the mixing task
+// task object is created in section 3.2.7 above
+zgEngine.stopMixerTask(task);
+```
+
+## FAQ
+
+**1. Can mixed streams be pushed to third-party CDNs? How to forward to multiple CDNs?**
+
+If you need to push mixed streams to third-party CDNs, you can fill in the CDN URL in the "target" parameter of the [ZegoMixerOutput ](@-ZegoMixerOutput) interface, and the URL format needs to be RTMP format, such as "rtmp://xxxxxxxx".
+
+To forward to multiple CDNs, you need to create N output stream objects and put [ZegoMixerOutput ](@-ZegoMixerOutput) into the "outputList" output list of [ZegoMixerTask ](@-ZegoMixerTask).
+
+**2. How to set the layout of each stream in the mixing?**
+
+Set it through the "layout" parameter of the [ZegoMixerInput ](@-ZegoMixerInput) object. The usage example is as follows:
+
+1. Assuming that the upper left coordinate of a specified stream is (50, 300) and the lower right coordinate is (200, 450), the "layout" parameter is [ZegoRect rectWithLeft:50 top:300 right:200 bottom:450].
+2. Assuming that the resolution "resolution" in the "setVideoConfig" parameter of the [ZegoMixerTask ](@-ZegoMixerTask) object is "CGSizeMake(375, 667)", the position of this stream in the final output mixing is as follows:
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/Mixer/mixer-layout.png" /></Frame>
+
+**3. When the proportion of the "ZegoRect" layout of the mixing input object [ZegoMixerInput ](@-ZegoMixerInput) does not match the resolution of the stream itself, how will the image be cropped?**
+
+The SDK will perform proportional scaling. Assuming that the resolution of an input stream is "720x1280", that is, the proportion is "9:16", and the "layout" parameter of this stream's [ZegoMixerInput ](@-ZegoMixerInput) is "[left:0 top:0 right:100 bottom:100]", that is, the proportion is "1:1", the image will display the middle part of this stream, that is, cropping the upper and lower parts.
+
+**4. Hosts participating in co-hosting want their respective audiences to see their own video located in the large window in the mixed image layout. How to mix?**
+
+Hosts layout first and then initiate mixing respectively.
+
+For example: Host A sets the width and height of the layout of the stream A image published by himself to be greater than the width and height of the layout of the stream B of host B pulled, and then initiates a mixing task to output a stream "A_Mix". Host B sets the width and height of the layout of the stream B image published by himself to be greater than the width and height of the layout of the stream A of host A pulled, and then initiates mixing to output a stream "B_Mix".
+
+That is, a total of two mixing tasks need to be initiated.
+
+**5. What is the difference between "Method 1: Start mixing immediately after a single host starts live streaming" and "Method 2: Start mixing only when the second host joins co-hosting"? What are the pros and cons?**
+
+- The advantage of starting mixing from the beginning of single-host live streaming is simple implementation, but the disadvantage is that there will be some additional CDN cost overhead for mixing single streams.
+
+- Starting only publishing streams from the beginning of single-host live streaming, and starting mixing only when the second host joins co-hosting, has the advantage of saving costs, but the disadvantage is that development and implementation will be somewhat more complex. The audience side needs to pull the single-host stream first. After the hosts start co-hosting and enable mixing, they need to stop pulling the single-host stream and then change to pulling the mixed stream. In method 1, the audience side does not need to switch from pulling the single-host stream to pulling the mixed stream.
+
+**6. Does mixing support circular or square images?**
+
+Circular shapes are not supported, square shapes can be achieved through layout.

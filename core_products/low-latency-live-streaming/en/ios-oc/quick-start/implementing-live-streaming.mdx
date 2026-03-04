@@ -1,0 +1,518 @@
+---
+articleID: 13415
+---
+# Quick Implement Live Streaming
+
+---
+
+
+This article introduces how to quickly implement a simple video live streaming through the Live Streaming feature.
+
+
+## Introduction
+
+Explanation of related concepts:
+
+- ZEGO Express SDK: A real-time audio and video and live streaming SDK provided by ZEGO, which can provide developers with convenient access, high definition and smoothness, multi-platform interoperability, low latency, and high concurrency audio and video services.
+- Stream: Refers to a group of continuously sending audio and video data encapsulated in a specified encoding format. A user can publish multiple streams at the same time (for example, one stream for camera data and one for screen sharing data) and can also play multiple streams at the same time. Each stream is identified by a stream ID (streamID).
+- Publish stream: The process of pushing the packaged audio and video data stream to the ZEGOCLOUD.
+- Play stream: The process of pulling and playing the existing audio and video data stream from the ZEGO MSDN network.
+- Room: An audio and video space service provided by ZEGO, used to organize user groups. Users in the same room can send and receive real-time audio and video and messages to each other.
+    - Users need to log in to a room before they can publish and play streams.
+    - Users can only receive relevant messages in the room they are in (user entry and exit, audio and video stream changes, etc.).
+    - Each room is identified by a unique roomID within an AppID. All users who log in to the room using the same roomID belong to the same room.
+
+
+For more related concepts, please refer to [Term Explanation](/glossary/term-explanation).
+
+
+## Prerequisites
+
+Before implementing the Live Streaming feature, please make sure:
+
+- ZEGO Express SDK has been integrated into the project. For details, please refer to [Quick Start - Integration](/live-streaming-ios/quick-start/integrating-sdk).
+- A project has been created in the [ZEGOCLOUD Console](https://console.zego.im) and a valid AppID has been applied for. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+
+<a id="process"></a>
+
+## Implementation Process
+
+The basic process for users to conduct video live streaming through ZEGO Express SDK is as follows:
+
+User A and B join the room, User B previews and pushes the audio and video stream to the ZEGO cloud service (publish stream), and User A plays User B's audio and video stream in the notification after receiving the notification of User B's pushed audio and video stream (play stream).
+
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/common_usage_new.png" /></Frame>
+
+
+### Enable Service
+
+The Live Streaming feature is not enabled by default. Please enable it by yourself in the [ZEGOCLOUD Console](https://console.zego.im) before using it (for enabling steps, please refer to "Live Streaming" in [Project Management - Service Configuration](/console/service-configuration/l3)), or contact ZEGOCLOUD Technical Support to enable it.
+
+
+<a id="initialization"> </a>
+
+### Initialization
+
+**1. Create Interface**
+
+According to the scenario needs, create a live streaming user interface for your project. We recommend that you add the following elements to your project:
+
+- Local video window
+- Remote video window
+- Exit live streaming button
+
+<Note title="Note">
+
+
+- The local video window is displayed only when the local user is a host, that is, if the local user is an audience, only the remote video window is displayed.
+- The remote video window is displayed only when the remote user is a host.
+
+</Note>
+
+
+
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/express_quickstart_video_call_new.png" /></Frame>
+
+**2. Import Header File**
+
+Import the ZegoExpressEngine header file in the project.
+
+<h1 id="CreateEngine"> </h1>
+
+```objc
+// Import the ZegoExpressEngine.h header file
+#import <ZegoExpressEngine/ZegoExpressEngine.h>
+```
+
+<a id="CreateEngine"></a>
+
+**3. Create Engine**
+
+Call the [createEngineWithProfile ](@createEngineWithProfile) interface, pass the applied AppID to the parameter "appID", and create an engine singleton object.
+
+
+
+```objc
+ZegoEngineProfile *profile = [[ZegoEngineProfile alloc] init];
+// Please obtain through official website registration, format: 1234567890
+profile.appID = appID;
+// General scenario access
+profile.scenario = ZegoScenarioDefault;
+// Create engine and register self as eventHandler callback. If you don't need to register callback, the eventHandler parameter can be nil, and you can call "-setEventHandler:" method later to set callback
+[ZegoExpressEngine createEngineWithProfile:profile eventHandler:self];
+```
+
+**4. Set Callback**
+
+You can listen to and process the event callbacks you care about by instantiating a class that implements the [ZegoEventHandler](@-ZegoEventHandler) interface and implementing the required callback methods, and then passing the instantiated object (e.g., self) as the eventHandler parameter to the [createEngineWithProfile ](@createEngineWithProfile) or [setEventHandler](@setEventHandler-ZegoExpressEngine) to register the callback
+
+<Warning title="Warning">
+
+
+ It is recommended to register the callback when creating the engine or immediately after creating the engine to avoid missing event notifications due to delayed registration.
+
+</Warning>
+
+
+
+
+<Accordion title="Common Notification Callbacks" defaultOpen="false">
+**1. Notification of Connection Status Change in the Room**
+
+[onRoomStateChanged](@onRoomStateChanged): When the local user calls [loginRoom](@loginRoom) to join the room, you can monitor your connection status in the room in real time by listening to the [onRoomStateChanged](@onRoomStateChanged) callback.
+
+You can handle business logic based on different states in the callback.
+
+```objc
+- (void)onRoomStateChanged:(ZegoRoomStateChangedReason)reason errorCode:(int)errorCode extendedData:(NSDictionary *)extendedData roomID:(NSString *)roomID {
+
+}
+```
+
+The meanings of ZegoRoomStateChangedReason states are as follows:
+
+<table>
+
+  <tbody><tr>
+    <th>State</th>
+    <th>Enum Value</th>
+    <th>Meaning</th>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReasonLogining</td>
+    <td>0</td>
+    <td>Logging in to the room. When calling [loginRoom] to log in to the room or [switchRoom] to switch to the target room, enter this state, indicating that a connection to the server is being requested. Usually, this state is used to display the application interface.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReasonLogined</td>
+    <td>1</td>
+    <td>Logged in to the room successfully. When logging in to the room or switching to the room successfully, enter this state, indicating that logging in to the room has been successful, and users can normally receive callback notifications for additions and deletions of other users and all stream information in the room.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReasonLoginFailed</td>
+    <td>2</td>
+    <td>Failed to log in to the room. When logging in to the room or switching to the room fails, enter this state, indicating that logging in to the room or switching to the room has failed, such as incorrect AppID or Token.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReasonReconnecting</td>
+    <td>3</td>
+    <td>Room connection is temporarily interrupted. If the interruption is caused by poor network quality, the SDK will perform internal retries.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReasonReconnected</td>
+    <td>4</td>
+    <td>Room reconnection successful. If the interruption is caused by poor network quality, the SDK will perform internal retries, and after successful reconnection, enter this state.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReasonReconnectFailed</td>
+    <td>5</td>
+    <td>Room reconnection failed. If the interruption is caused by poor network quality, the SDK will perform internal retries, and after failed reconnection, enter this state.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReasonKickOut</td>
+    <td>6</td>
+    <td>Kicked out of the room by the server. For example, if the same username logs in to the room elsewhere, causing the local end to be kicked out of the room, this state will be entered.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReasonLogout</td>
+    <td>7</td>
+    <td>Logged out of the room successfully. This is the default state before logging in to the room. When calling [logoutRoom] to log out of the room successfully or [switchRoom] internally logs out of the current room successfully, enter this state.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReasonLogoutFailed</td>
+    <td>8</td>
+    <td>Failed to log out of the room. When calling [logoutRoom] to log out of the room fails or [switchRoom] internally fails to log out of the current room, enter this state.</td>
+  </tr>
+</tbody></table>
+
+
+
+**2. Notification of Other Users Entering or Exiting the Room**
+
+[onRoomUserUpdate ](@onRoomUserUpdate): When other users in the same room enter or exit the room, you can receive notifications through this callback.
+
+<Warning title="Warning">
+
+
+- Only when the isUserStatusNotify parameter in the configuration [ZegoRoomConfig ](@-ZegoRoomConfig) passed when logging in to the room [loginRoom ](@loginRoom) is true, users can receive callbacks of other users in the room.
+- When the parameter [ZegoUpdateType ](@-ZegoUpdateType) in the callback is ZegoUpdateTypeAdd, it indicates that a user has entered the room; when [ZegoUpdateType ](@-ZegoUpdateType) is ZegoUpdateTypeDelete, it indicates that a user has exited the room.
+- The onRoomUserUpdate callback is not guaranteed to be valid when the number of people in the room exceeds 500. If your business scenario has more than 500 people in a room, please contact ZEGOCLOUD Technical Support.
+
+
+</Warning>
+
+
+
+```objc
+- (void)onRoomUserUpdate:(ZegoUpdateType)updateType userList:(NSArray<ZegoUser *> *)userList roomID:(NSString *)roomID {
+    // You can handle the corresponding business logic in the callback based on the user's entry/exit situation
+    if (updateType == ZegoUpdateTypeAdd) {
+        for (ZegoUser *user in userList) {
+            NSLog(@"User %@ entered room %@", user.userName, roomID);
+        }
+    } else if (updateType == ZegoUpdateTypeDelete) {
+        for (ZegoUser *user in userList) {
+            NSLog(@"User %@ left room %@", user.userName, roomID);
+        }
+    }
+}
+```
+
+**3. Notification of User Publishing Stream State**
+
+[onPublisherStateUpdate](@onPublisherStateUpdate): According to actual application needs, after the user publishes the audio and video stream, when the state of the published video stream changes (such as stream publishing exception caused by network interruption, etc.), you will receive this callback, and the SDK will automatically retry.
+
+```objc
+- (void)onPublisherStateUpdate:(ZegoPublisherState)state errorCode:(int)errorCode extendedData:(NSDictionary *)extendedData streamID:(NSString *)streamID {
+    if (errorCode != 0) {
+        NSLog(@"Publishing stream state error errorCode: %d", errorCode);
+    } else {
+        switch (state) {
+            case ZegoPublisherStatePublishing:
+                NSLog(@"Publishing");
+                break;
+            case ZegoPublisherStatePublishRequesting:
+                NSLog(@"Requesting to publish");
+                break;
+            case ZegoPublisherStateNoPublish:
+                NSLog(@"Not publishing");
+                break;
+        }
+    }
+}
+```
+
+**4. Notification of User Playing Stream State**
+
+[onPlayerStateUpdate](@onPlayerStateUpdate): According to actual application needs, after the user plays the audio and video stream, when the state of the played video stream changes (such as stream playing exception caused by network interruption, etc.), you will receive this callback, and the SDK will automatically retry.
+
+```objc
+- (void)onPlayerStateUpdate:(ZegoPlayerState)state errorCode:(int)errorCode extendedData:(NSDictionary *)extendedData streamID:(NSString *)streamID {
+    if (errorCode != 0) {
+        NSLog(@"Playing stream state error streamID: %@, errorCode:%d", streamID, errorCode);
+    } else {
+        switch (state) {
+            case ZegoPlayerStatePlaying:
+                NSLog(@"Playing");
+                break;
+            case ZegoPlayerStatePlayRequesting:
+                NSLog(@"Requesting to play");
+                break;
+            case ZegoPlayerStateNoPlay:
+                NSLog(@"Not playing");
+                break;
+        }
+    }
+}
+```
+</Accordion>
+
+<a id="createroom"></a>
+
+### Log In to Room
+
+- Generate Token
+
+Developers can obtain temporary Tokens (valid for 24 hours) from the [ZEGOCLOUD Console](https://console.zego.im/dashboard). For details, please refer to [Console - Development Assistance](/console/development-assistance/temporary-token).
+
+<Warning title="Warning">
+
+
+
+Temporary Tokens are for debugging only. When going live, please generate tokens from the developer's business server. For details, please refer to [Use Token Authentication](/live-streaming-ios/communication/use-token-authentication). If the Token is incorrect, please refer to error codes 1002067 and 1003072 in the [Error Code](/live-streaming-ios/client-sdk/error-code) document to troubleshoot the problem.
+
+</Warning>
+
+
+
+
+You can call the [loginRoom ](@loginRoom) interface to log in to the room. If the room does not exist, calling this interface will create and log in to this room. The parameters of roomID and user are generated locally by you, but need to meet the following conditions:
+
+- Within the same AppID, ensure that "roomID" is globally unique.
+- Within the same AppID, ensure that "userID" is globally unique. It is recommended that developers associate "userID" with their own business account system.
+
+```objc
+// Create user object. The constructor method [userWithUserID ](@userWithUserID) of ZegoUser will set "userName" to be the same as the passed parameter "userID". "userID" and "userName" cannot be "nil", otherwise it will cause login to the room to fail.
+ZegoUser *user = [ZegoUser userWithUserID:@"user1"];
+// Only passing in ZegoRoomConfig with "isUserStatusNotify" parameter set to "true" can receive the onRoomUserUpdate callback.
+ZegoRoomConfig *roomConfig = [[ZegoRoomConfig alloc] init];
+//token is generated by the user's own server. To run the process faster, you can also get a temporary audio and video token through the ZEGO Console
+roomConfig.token = @"xxxxx";
+roomConfig.isUserStatusNotify = YES;
+// Log in to the room
+[[ZegoExpressEngine sharedEngine] loginRoom:roomID user:user config:roomConfig callback:^(int errorCode, NSDictionary * _Nullable extendedData) {
+    // (Optional callback) Login room result. If you only care about the login result, just pay attention to this callback
+}];
+```
+
+#### Login Status (Room Connection Status) Callback
+
+After calling the login room interface, you can monitor your connection status in the room in real time by listening to the [onRoomStateChanged ](@onRoomStateChanged) callback.
+
+```objc
+-(void)onRoomStateChanged:(ZegoRoomStateChangedReason)reason errorCode:(int)errorCode extendedData:(NSDictionary *)extendedData roomID:(NSString *)roomID {
+if(reason == ZegoRoomStateChangedReasonLogining)
+    {
+        // Logging in
+    }
+    else if(reason == ZegoRoomStateChangedReasonLogined)
+    {
+        // Logged in successfully
+        //Only when the room state is successfully logged in or successfully reconnected, can publishing (startPublishingStream) and playing (startPlayingStream) normally send and receive audio and video
+        //Push your own audio and video stream to the ZEGO audio and video cloud
+    }
+    else if(reason == ZegoRoomStateChangedReasonLoginFailed)
+    {
+        // Login failed
+    }
+    else if(reason == ZegoRoomStateChangedReasonReconnecting)
+    {
+        // Reconnecting
+    }
+    else if(reason == ZegoRoomStateChangedReasonReconnected)
+    {
+        // Reconnection successful
+    }
+    else if(reason == ZegoRoomStateChangedReasonReconnectFailed)
+    {
+        // Reconnection failed
+    }
+    else if(reason == ZegoRoomStateChangedReasonKickOut)
+    {
+        // Kicked out of the room
+    }
+    else if(reason == ZegoRoomStateChangedReasonLogout)
+    {
+        // Logged out successfully
+    }
+    else if(reason == ZegoRoomStateChangedReasonLogoutFailed)
+    {
+        // Logout failed
+    }
+}
+```
+
+<a id="publishingStream"></a>
+
+
+### Host Preview Their Own Screen and Publish to ZEGO Cloud
+
+**1. (Optional) Host Preview Their Own Screen
+
+
+If you want to see the local screen, you can call the [startPreview](@startPreview) interface to set the preview view and start local preview.
+
+```objc
+// Set local preview view and start preview, view mode uses SDK default mode, proportionally scaled to fill the entire View
+[[ZegoExpressEngine sharedEngine] startPreview:[ZegoCanvas canvasWithView:self.view]];
+```
+
+**2. Publish Their Own Audio and Video Stream to ZEGO Cloud**
+
+After the user calls the [loginRoom](@loginRoom) interface, you can directly call the [startPublishingStream](@startPublishingStream) interface, pass in the "streamID", and publish your own audio and video stream to the ZEGO cloud. You can know whether the publishing is successful by listening to the [onPublisherStateUpdate](@onPublisherStateUpdate) callback.
+
+The streamID is generated locally by you, but needs to be ensured:
+Under the same AppID, "streamID" is globally unique. If different users publish a stream with the same "streamID" under the same AppID, the user who publishes later will fail to publish.
+
+This example publishes immediately after calling the [loginRoom](@loginRoom) interface. When implementing specific business, you can choose other timing to publish, as long as you ensure to call [loginRoom](@loginRoom) first.
+
+```objc
+// User calls this interface to publish after calling loginRoom
+// Under the same AppID, developers need to ensure that "streamID" is globally unique. If different users publish a stream with the same "streamID", the user who publishes later will fail to publish.
+[[ZegoExpressEngine sharedEngine] startPublishingStream:@"stream1"];
+```
+
+<Note title="Note">
+If you need to know about Express's microphone/audio/speaker related interfaces, please refer to [FAQ - How to Implement Switching Camera/Video Screen/Microphone/Audio/Speaker?](http://doc-zh.zego.im/faq/How_to_switch_devices).
+</Note>
+
+### Play Host's Audio and Video
+
+When conducting live streaming, we need to play the host's audio and video. Using Live Streaming to play streams, the latency can be controlled within 1s, achieving a high-quality live streaming experience with ultra-low latency, strong synchronization, extreme weak network resistance, ultra-low stuttering, ultra-clear picture quality, and instant first frame.
+
+When other users in the same room publish audio and video streams to the ZEGO cloud, we will receive notifications of new audio and video streams in the [onRoomStreamUpdate](@onRoomStreamUpdate) callback, and can obtain the "streamID" of a certain stream through ZegoStream.
+
+We can call the [startPlayingStream](@startPlayingStream) interface in this callback, pass in the "streamID" to play the user's audio and video. You can know whether the audio and video are successfully played by listening to the [onPlayerStateUpdate ](@onPlayerStateUpdate) callback.
+
+<Warning title="Warning">
+
+
+- Live Streaming is not enabled by default. Please enable it by yourself in the ZEGO Console or contact ZEGOCLOUD Technical Support. For details, please refer to [Enable Service](#enableService).
+- If users encounter related errors during live streaming, they can check the [Error Code](/live-streaming-ios/client-sdk/error-code).
+
+</Warning>
+
+
+
+
+Call the [startPlayingStream](@startPlayingStream) interface, and set the [resourceMode](@resourceMode-ZegoPlayerConfig) parameter to "ZegoStreamResourceModeOnlyL3", indicating Live Streaming playing.
+
+
+```objc
+// When other users in the room publish/stop publishing streams, we will receive notifications of corresponding stream additions/deletions here
+- (void)onRoomStreamUpdate:(ZegoUpdateType)updateType streamList:(NSArray<ZegoStream *> *)streamList extendedData:(NSDictionary *)extendedData roomID:(NSString *)roomID {
+    //When updateType is ZegoUpdateTypeAdd, it indicates that there is a new audio and video stream. At this time, we can call the startPlayingStream interface to play the audio and video stream
+    if (updateType == ZegoUpdateTypeAdd) {
+        // Start playing, set remote playing rendering view, view mode uses SDK default mode, proportionally scaled to fill the entire View
+        // The following playView is the UI View. Here, to make the example code more concise, we only play the first stream in the newly added audio and video stream list. In actual business, it is recommended that developers loop through streamList and play each audio and video stream
+        NSString *streamID = streamList[0].streamID;
+        ZegoPlayerConfig *playerConfig = [[ZegoPlayerConfig alloc] init];
+        playerConfig.resourceMode = ZegoStreamResourceModeOnlyL3;
+        [[ZegoExpressEngine sharedEngine] startPlayingStream:streamID canvas:[ZegoCanvas canvasWithView:self.view] config:playerConfig];
+    }
+}
+```
+
+
+### Debug Live Streaming Feature
+
+Run the project on a real device. After running successfully, you can see the local video screen.
+
+For convenience, ZEGO provides a [Web Debug Example ](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html). On this page, enter the same AppID, RoomID, Server address, and [Token](/console/development-assistance/temporary-token) to join the same room and communicate with real devices. When live streaming starts successfully, you can hear remote audio and see remote video screens.
+
+
+
+
+<a id="stopPublishingStream"></a>
+
+### Stop Publishing/Playing Audio and Video Streams
+
+**1. Stop Publishing, Stop Preview**
+
+Call the [stopPublishingStream ](@stopPublishingStream) interface to stop sending the local audio and video stream to remote users.
+
+```objc
+// Stop publishing
+[[ZegoExpressEngine sharedEngine] stopPublishingStream];
+```
+
+If local preview is enabled, call the [stopPreview ](@stopPreview) interface to stop preview.
+
+```objc
+// Stop local preview
+[[ZegoExpressEngine sharedEngine] stopPreview];
+```
+
+**2. Stop Playing**
+
+Call the [stopPlayingStream ](@stopPlayingStream) interface to stop playing the audio and video stream published by the remote end.
+
+<Warning title="Warning">
+
+
+If the developer receives a notification of "reduction" of audio and video streams through the [onRoomStreamUpdate](@onRoomStreamUpdate) callback, please call the [stopPlayingStream ](@stopPlayingStream) interface to stop playing in time to avoid playing empty streams and generating additional costs; or, the developer can choose the appropriate timing according to their own business needs and actively call the [stopPlayingStream ](@stopPlayingStream) interface to stop playing.
+
+</Warning>
+
+
+
+```objc
+// Stop playing
+[[ZegoExpressEngine sharedEngine] stopPlayingStream:@"stream1"];
+```
+
+### Log Out of Room
+
+Call the [logoutRoom ](@logoutRoom) interface to log out of the room.
+
+```objc
+// Log out of the room
+[[ZegoExpressEngine sharedEngine] logoutRoom];
+```
+
+### Destroy Engine
+
+If the user will no longer use audio and video functions, call the [destroyEngine ](@destroyEngine) interface to destroy the engine and release resources such as microphone, camera, memory, and CPU.
+
+- If you need to listen to the callback to ensure that the device hardware resources are released, you can pass in "callback" when destroying the engine. This callback is only used to send notifications. Developers cannot release engine-related resources in the callback.
+- If you do not need to listen to the callback, you can pass in "nil".
+
+```objc
+[ZegoExpressEngine destroyEngine:nil];
+```
+
+
+
+## Live Streaming API Call Sequence
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml.png" /></Frame>
+
+## FAQ
+
+1. **Can I kill the process directly when calling [logoutRoom](@logoutRoom) to log out of the room?**
+
+Calling [logoutRoom ](@logoutRoom) and then directly killing the process has a certain probability of causing the [logoutRoom ](@logoutRoom) signal not to be sent out. In this case, the ZEGO server can only consider that the user has exited the room after the heartbeat times out. To ensure that the [logoutRoom ](@logoutRoom) signal is sent out, it is recommended to call [destroyEngine ](@destroyEngine) again and wait for the callback before killing the process.
+
+## Related Documents
+- [Common Error Codes](/real-time-video-ios-oc/client-sdk/error-code)
+- [How to Handle Room and User Related Issues?](https://doc-zh.zego.im/faq/express_room?product=ExpressVideo&platform=all)
+- [How to Set and Get SDK Logs and Stack Information?](https://doc-zh.zego.im/faq/express_sdkLog?product=ExpressVideo&platform=all)
+- [Does SDK Support Reconnection After Disconnection?](https://doc-zh.zego.im/faq/reconnect?product=ExpressVideo&platform=all)
+- [How to Monitor Remote Audience Role Users Login/Exit Room Events in Live Streaming Scenarios?](https://doc-zh.zego.im/faq/audience_event?product=ExpressVideo&platform=all)
+- [How to Adjust Camera Focal Length (Zoom Feature)?](https://doc-zh.zego.im/faq/express_adjust_focal?product=ExpressVideo&platform=all)
+
+- [Why Can't I Open the Camera?](https://doc-zh.zego.im/faq/camera?product=ExpressVideo&platform=all)
+
+- [How to Ensure Smooth Audio and Video in Poor Network Environments (Traffic Control Feature)?](https://doc-zh.zego.im/faq/flowcontrol?product=ExpressVideo&platform=all)

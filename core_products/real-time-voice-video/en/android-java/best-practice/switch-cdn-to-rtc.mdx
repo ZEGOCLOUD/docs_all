@@ -1,0 +1,147 @@
+---
+articleID: 19342
+date: "2024-04-02"
+---
+# Switching from CDN Playing Stream to Co-hosting Scenario
+
+- - -
+
+## Feature Overview
+
+In the co-hosting scenario, since both CDN playing stream and CDN publishing stream have high latency, the interaction experience during the co-hosting process will be very poor. Therefore, it is recommended to use RTC playing stream and RTC publishing stream during the co-hosting process, and then restore CDN playing stream after getting off the mic to improve the co-hosting experience. This article will introduce how to implement the co-hosting process in the complete CDN address playing stream method.
+
+```mermaid
+sequenceDiagram
+    participant Host
+    participant Audience
+    participant ZEGO Express SDK
+
+    note over Host,ZEGO Express SDK: Audience joins as co-host
+    Audience->>ZEGO Express SDK: Stop CDN play stream, switch to RTC play stream
+    Audience->>ZEGO Express SDK: Start preview and publish stream
+    ZEGO Express SDK-->>Host: Room audience stream added notification
+    Host->>ZEGO Express SDK: Start RTC play stream
+
+    note over Host,ZEGO Express SDK: Audience leaves as co-host
+    Audience->>ZEGO Express SDK: Stop preview and publish stream
+    Audience->>ZEGO Express SDK: Stop RTC play stream, switch to CDN play stream
+    ZEGO Express SDK-->>Host: Room audience stream removed notification
+    Host->>ZEGO Express SDK: Stop RTC play stream
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/CDN_To_Call_Scenario.png" /></Frame>
+*/}
+
+### Comparison of Playing Stream Methods
+
+<table>
+
+<tbody><tr>
+<th>Playing Stream Method</th>
+<th>Applicable Scenario</th>
+<th>Latency</th>
+</tr>
+<tr>
+<td>Playing stream from CDN</td>
+<td>The audience does not need to co-host with the host, and interacts with the host through barrage and other methods. The requirement for real-time viewing is not high.</td>
+<td>Latency exceeds 3 seconds</td>
+</tr>
+<tr>
+<td>Playing stream from RTC</td>
+<td>The audience needs to co-host with the host, and has high requirements for real-time interaction with the host.</td>
+<td>Latency between both co-hosting parties is lower than 300 ms</td>
+</tr>
+</tbody></table>
+
+
+## Prerequisites
+
+If you need to switch from CDN playing stream to co-hosting scenario, please ensure that the current audio and video stream has implemented [Playing Stream by URL](/real-time-video-android-java/live-streaming/playing-stream-by-url).
+
+## Implementation Steps
+
+### Audience side switches playing stream method
+
+When switching from CDN playing stream to co-hosting scenario, the audience side needs to call [stopPlayingStream](@stopPlayingStream) to stop the current CDN playing stream, and call [startPlayingStream](@startPlayingStream__2) to switch to RTC playing stream.
+
+```java
+//Stop the current CDN playing stream, pass in the corresponding host stream ID
+engine.stopPlayingStream(anchorStreamID);
+//Switch to RTC playing stream
+ZegoCanvas zegoCanvas = new ZegoCanvas(view);
+zegoCanvas.viewMode = ZegoViewMode.ASPECT_FILL;
+ZegoPlayerConfig playerConfig = new ZegoPlayerConfig();
+playerConfig.resourceMode = ZegoStreamResourceMode.ONLY_RTC;
+engine.startPlayingStream(anchorStreamID, zegoCanvas, playerConfig);
+```
+
+### Audience side starts preview and publishing stream
+
+Pass in the stream ID of the audience side, and start preview [startPreview](@startPreview) and publishing stream [startPublishingStream](@startPublishingStream), then the co-hosting can be successful.
+
+
+```java
+//Start preview
+ZegoCanvas previewCanvas = new ZegoCanvas(view);
+previewCanvas.viewMode = ZegoViewMode.ASPECT_FILL;
+engine.startPreview(previewCanvas);
+//Start publishing stream, and pass in the stream ID of the audience side
+engine.startPublishingStream(pulishingStreamID);
+```
+
+### Audience side stops preview and publishing stream
+
+If the co-hosting ends, the audience side can call the [stopPreview](@stopPreview) and [stopPublishingStream](@stopPublishingStream) interfaces to stop preview and publishing stream.
+
+```java
+//Stop preview
+engine.stopPreview();
+//Stop publishing stream
+engine.stopPublishingStream();
+```
+
+
+### Audience side co-hosting ends
+
+After the co-hosting ends, pass in the host's stream ID, and call the [stopPlayingStream](@stopPlayingStream) interface on the audience side to stop RTC playing stream, switch back to CDN playing stream, and set CDN parameters through [ZegoViewMode](@-ZegoViewMode). For details, please refer to [Playing Stream by URL](/real-time-video-android-java/live-streaming/playing-stream-by-url).
+
+```java
+//Stop the current RTC playing stream
+engine.stopPlayingStream(anchorStreamID);
+//Switch to CDN playing stream
+ZegoCanvas zegoCanvas = new ZegoCanvas(view);
+zegoCanvas.viewMode = ZegoViewMode.ASPECT_FILL;
+ZegoPlayerConfig playerConfig = new ZegoPlayerConfig();
+playerConfig.cdnConfig = new ZegoCDNConfig(); // Set CDN parameters
+playerConfig.cdnConfig.url = "rtmp://xxxxxxxx"; // URL is the CDN playing stream address
+playerConfig.cdnConfig.authParam = "xxx"; // If authentication is required, set the authentication parameter. If authentication is not required, it can be not set (The authentication parameter cannot contain the "?" character)
+engine.startPlayingStream(anchorStreamID, zegoCanvas, playerConfig);
+```
+
+### Host side starts and stops playing stream
+
+The host side receives the notification of the addition of audience streams through the [onRoomStreamUpdate](@onRoomStreamUpdate) callback in [IZegoEventHandler](@-IZegoEventHandler), and can start RTC playing stream. When receiving the notification of the deletion of audience streams, stop RTC playing stream.
+
+```java
+private final IZegoEventHandler eventHandler = new IZegoEventHandler() {
+    @Override
+    public void onRoomStreamUpdate(String roomID, ZegoUpdateType updateType, ArrayList<ZegoStream> streamList, JSONObject extendedData) {
+        super.onRoomStreamUpdate(roomID, updateType, streamList, extendedData);
+        if (ZegoUpdateType.ADD == updateType) {
+            for (ZegoStream stream : streamList) {
+                //Start RTC playing audience stream
+                ZegoCanvas zegoCanvas = new ZegoCanvas(view);
+                zegoCanvas.viewMode = ZegoViewMode.ASPECT_FILL;
+                ZegoPlayerConfig playerConfig = new ZegoPlayerConfig();
+                playerConfig.resourceMode = ZegoStreamResourceMode.ONLY_RTC;
+                engine.startPlayingStream(stream.streamID, zegoCanvas, playerConfig);
+            }
+        } else if (ZegoUpdateType.DELETE == updateType) {
+            for (ZegoStream stream : streamList) {
+                //Stop RTC playing audience stream
+                engine.stopPlayingStream(stream.streamID);
+            }
+        }
+    }
+};
+```

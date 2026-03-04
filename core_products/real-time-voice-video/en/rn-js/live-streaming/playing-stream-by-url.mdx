@@ -1,0 +1,108 @@
+---
+articleID: 15164
+date: "2024-05-06"
+---
+# Playing Stream by URL
+
+---
+
+## Overview
+
+When the publishing end uses third-party publishing tools (such as OBS software, IP Camera, etc.) to push the stream to CDN, or uses ZEGO SDK to relay the audio and video screen to third-party CDN through the CDN relaying function, you can directly pass in the URL address to play the stream.
+
+## Prerequisites
+
+Before implementing the URL stream playing functionality, ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK into the project and implemented basic audio and video streaming functionality. For details, please refer to [Quick Start - Integration](/real-time-video-rn/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-rn/quick-start/implementing-video-call).
+
+- You have contacted ZEGOCLOUD Technical Support to enable the URL stream playing functionality.
+- You have pushed the audio and video stream to CDN and know the corresponding URL. For details, please refer to [Use CDN for Live Streaming](/real-time-video-rn/live-streaming/using-cdn-for-live-streaming).
+
+
+## Usage Steps
+
+<a id="ZegoCDNConfig"></a>
+
+### 1 Configure Stream Playing Parameters
+
+To play streams directly through the CDN's URL address, you need to use the [ZegoCDNConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegocdnconfig.html) object to fill in the URL parameters. If the corresponding CDN has configured stream playing authentication, you also need to fill in the authentication parameters through the `authParam` field.
+
+import Content from '/core_products/real-time-voice-video/en/snippets/playing-stream-by-url-note.mdx'
+
+<Content />
+
+
+
+
+```javascript
+// Set CDN parameters
+let config = new ZegoCDNConfig();
+// URL is the CDN stream playing address
+config.url = "rtmp://xxxxxxxx";
+// If authentication is required, set the authentication parameters. If authentication is not required, you can leave it unset (the authentication parameter cannot contain the "?" character)
+config.authParam = "xxx";
+
+let playerConfig = { cdnConfig: config }
+```
+
+### 2 Start Playing Stream
+
+Call the [startPlayingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startplayingstream) interface to start playing stream. If an error occurs during stream playing, please refer to [Common Error Codes - 1004xxx Stream Playing Related Error Codes](/real-time-video-rn/client-sdk/error-code#1004xxx-stream-playing-related-error-codes).
+
+<Warning title="Warning">
+
+
+- Before playing stream by URL, ensure that you have logged in to the room.
+- When playing stream by URL, you cannot directly play stream by filling in the stream ID. The actual played stream image is based on the URL.
+- Although the stream ID cannot be used for playing stream at this time, the SDK still uses the stream ID as a unique identifier internally for subsequent stream playing related callbacks. Therefore, the stream ID still needs to be globally unique within the entire AppID.
+
+</Warning>
+
+
+
+
+```javascript
+// Start playing stream
+// After filling in the url parameter, the SDK will pull the audio and video stream from the url, but you still need to pass a unique streamID to the SDK, and the SDK will use this streamID to identify this stream internally
+ZegoExpressEngine.instance().startPlayingStream("STREAM_ID", playerConfig);
+```
+
+### 3 Stop Playing Stream
+
+To stop playing stream, call the [stopPlayingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#stopplayingstream) interface.
+
+```javascript
+// The streamID passed when stopping playing stream is the streamID passed when playing stream
+ZegoExpressEngine.instance().stopPlayingStream("STREAM_ID");
+```
+
+
+### 4 (Optional) Listen to Stream Playing Related Event Notifications
+
+<Accordion title="Listen to Stream Playing Related Event Notifications" defaultOpen="false">
+You can listen to the result of playing stream from CDN through [playerStateUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#playerstateupdate).
+
+<Warning title="Warning">
+
+
+If you are not using ZEGO SDK for publishing, but using third-party publishing tools to publish directly, and using ZEGO SDK for playing, in this scenario, the publishing end has not joined the room using ZEGO SDK, and the playing end will not receive the [roomStreamUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomstreamupdate) callback by default. You can use the [Add Room Stream](/real-time-video-server/api-reference/room/add-stream) and [Delete Room Stream](/real-time-video-server/api-reference/room/delete-stream) functions to allow the playing end to receive the [roomStreamUpdate ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomstreamupdate) callback.
+
+</Warning>
+
+
+
+
+```javascript
+ZegoExpressEngine.instance().on("playerStateUpdate", (streamID, state, errorCode, extendedData) => {
+    console.info(`playerStateUpdate:streamID:${streamID}, state:${state}, errorCode:${errorCode}, extendedData:${JSON.stringify(extendedData)}`);
+
+    // After successfully calling the playing stream interface, when the player state changes, such as network interruption causing publishing exceptions, etc., the SDK will notify through this callback while retrying to play stream
+    // 1. When receiving this callback notification and state is Playing, it indicates successful stream playing
+    // 2. When receiving this callback notification and state is PlayRequesting, it indicates that it may be playing stream or the SDK is retrying to play stream due to network interruption, etc.
+    // 3. When receiving this callback notification and state is NoPlay, it indicates stream playing has stopped
+    // 4. When playing stream by URL, the stream_id in the callback parameters is the stream ID when calling the playing stream API, used to uniquely identify the current stream playing event.
+});
+```
+</Accordion>

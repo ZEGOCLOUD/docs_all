@@ -1,0 +1,162 @@
+---
+articleID: 19674
+---
+
+
+# Solution for Maintaining Room User List via Callbacks
+
+- - -
+
+## Operation scenario
+
+When developers frequently log in to and log out of rooms within a short period of time, the [User Logged in Callback](/real-time-video-server/callback/room/logged-in) and [User Logged out Callback](/real-time-video-server/callback/room/logged-out) provided by ZEGO do not guarantee that the order of results is consistent with the order of execution by the developer.
+
+When developers need to rely on the [User Logged in Callback](/real-time-video-server/callback/room/logged-in) and [User Logged out Callback](/real-time-video-server/callback/room/logged-out) to maintain a local room user list, the inconsistency between the callback order and the execution order may cause some business errors.
+
+For example, the user's behavior order is:
+
+1. User u1 logs in to room r1, triggering user logged in callback c1;
+2. User u2 logs in to room r1, triggering user logged in callback c2;
+3. User u1 logs out of room r1, triggering user logged out callback c3;
+4. User u1 logs in to room r1 again, triggering user logged in callback c4.
+
+After passing through the callback service, the order of reaching the developer's server may become:
+
+1. User logged in callback c1 when user u1 logs in;
+2. User logged in callback c4 when user u1 logs in again;
+3. User logged in callback c2 when user u2 logs in;
+4. User logged out callback c3 when user u1 logs out.
+
+The developer updates the local room user list information based on the order of callbacks. User u1 will be deleted, but in fact user u1 is still in room r1.
+
+## Operation steps
+
+To solve the problems caused by the above callback out-of-order, ZEGO recommends that developers combine [Solution for Maintaining Room List via Callbacks](/real-time-video-server/callback/solution/maintain-the-room-list) and refer to the following solution to maintain the local room user list.
+
+<Warning title="Warning">
+
+
+This solution solves the out-of-order problem based on the situation where callbacks are not lost. If callbacks are lost, it cannot be solved.
+
+</Warning>
+
+
+
+### Pay attention to key callback parameters
+
+Pay attention to the key parameters of [User Logged in Callback](/real-time-video-server/callback/room/logged-in) and [User Logged out Callback](/real-time-video-server/callback/room/logged-out).
+
+| Parameter |	Description |
+| -- | -- |
+| event | <p>Event name:</p><ul><li>Logged in to room: [room_login](/real-time-video-server/callback/room/logged-in)</li><li>Logged out of room: [room_logout](/real-time-video-server/callback/room/logged-out)</li></ul> |
+| room_id | Room ID. |
+| room_seq | <p>Unique identifier of the room lifecycle, which remains unchanged during the entire lifecycle of the room.</p><p>This parameter is consistent with the parameter room_session_id in <a href="/real-time-video-server/callback/room/created">Room Created Callback</a> and <a href="/real-time-video-server/callback/room/destroyed">Room Destroyed Callback</a>.</p> |
+| user_account | User ID (userID used when the client logs in). |
+| session_id | User session ID. |
+| login_time | User login room timestamp, unit: milliseconds. This parameter exists in [User Logged in Callback](/real-time-video-server/callback/room/logged-in). |
+| logout_time | User logout room timestamp, unit: milliseconds. This parameter exists in [User Logged out Callback](/real-time-video-server/callback/room/logged-out). |
+
+### Maintain local room user list
+
+Maintain the local room user list based on user_account, session_id, login_time, and the corresponding room's room_id.
+
+The data structure of the local room user list is as follows:
+
+```php
+{
+    RoomInfo: {//Refer to "Solution for Maintaining Room List via Callbacks"
+        RoomID: room_id,
+        RoomSessionId: room_session_id,
+        RoomCreateTime:room_create_time,
+        ...//Other data that needs to be saved for business
+    },
+    UserList:[
+        {
+            UserId:user_account_1,
+            UserSessionId:session_id_1,
+            UserLoginTime:login_time_1,
+            ...//Other data that needs to be saved for business
+        },{
+            UserId:user_account_2,
+            UserSessionId:session_id_2,
+            UserLoginTime:login_time_2,
+            ...//Other data that needs to be saved for business
+        }
+    ]
+}
+```
+
+### Processing judgment logic
+
+After receiving the [User Logged in Callback](/real-time-video-server/callback/room/logged-in) and [User Logged out Callback](/real-time-video-server/callback/room/logged-out), update the local room list.
+
+The field descriptions in the images below are as follows:
+
+| Field prefix | Meaning |
+| -- | -- |
+| zego.* | Parameters in ZEGO callbacks. |
+| local.* | Parameters maintained locally by the developer. |
+
+- Room created callback processing flow:
+
+```mermaid
+flowchart TD
+    A[Login room callback] --> B{Does zego.RoomId exist in room list?}
+
+    B -- No --> C[Out of order save to callback cache queue, wait for processing]
+
+    B -- Yes --> D{Is zego.RoomSeq ==local.RoomSessionId?}
+
+    D -- No --> E{Is zego.LoginTime >=local.RoomCreateTime?}
+    E -- Yes --> C
+    E -- No --> F[Out of order the user session of this callback has ended, do not process this callback]
+
+    D -- Yes --> G{Does zego.UserAccount exist in user list?}
+
+    G -- No --> H[Add user based on callback data]
+
+    G -- Yes --> I{Is zego.SessionId ==local.UserSessionId?}
+
+    I -- Yes --> J[Compare zego.LoginTime, local.UserLoginTime, use the newer data]
+
+    I -- No --> K{Is zego.LoginTime >local.UserLoginTime?}
+    K -- No --> F
+    K -- Yes --> L[Out of order update user based on callback data]
+
+    H --> M[Read cache queue, merge callback data]
+    L --> M
+```
+{/*
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/server_v2/solution_of_room_login.png" /></Frame>
+*/}
+
+
+- Room destroyed callback processing flow:
+
+```mermaid
+flowchart TD
+    A[Logout room callback] --> B{Does zego.RoomId exist in room list?}
+
+    B -- No --> C[Out of order save to callback cache queue, wait for processing]
+
+    B -- Yes --> D{Is zego.RoomSeq ==local.RoomSessionId?}
+
+    D -- No --> E{Is zego.LogoutTime >local.RoomCreateTime?}
+    E -- Yes --> C
+    E -- No --> F[Out of order the user session of this callback has ended, do not process this callback]
+
+    D -- Yes --> G{Does zego.UserAccount exist in user list?}
+
+    G -- No --> H[Out of order save to callback cache queue, wait for processing]
+
+    G -- Yes --> I{Is zego.SessionId ==local.UserSessionId?}
+
+    I -- Yes --> J[Delete user data]
+
+    I -- No --> K{Is zego.LogoutTime >local.UserLoginTime?}
+    K -- No --> F
+    K -- Yes --> L[Out of order save to callback cache queue, wait for processing]
+```
+{/*
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/server_v2/solution_of_room_logout.png" /></Frame>
+*/}

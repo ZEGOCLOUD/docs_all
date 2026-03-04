@@ -1,0 +1,153 @@
+---
+articleID: 6643
+date: "2024-01-02"
+---
+# Network Speed Test
+
+- - -
+
+## Feature Overview
+
+ZEGOCLOUD provides network speed test functionality to detect uplink and downlink network speeds before users publish/play streams, determining the suitable bitrate for audio/video streams under current network conditions.
+
+
+When the uplink speed test results show a high packet loss rate, it is recommended to reduce the publish stream bitrate by lowering resolution or frame rate to ensure normal streaming; when the downlink speed test results show a high packet loss rate, it is recommended to use the [Layered Video Encoding](/real-time-video-ios-oc/video/set-video-encoding) feature provided by the SDK to play low-bitrate streams to ensure normal stream playing.
+
+ZEGOCLOUD recommends using the SDK's network speed test feature in the following business scenarios:
+
+- Call scenarios: Network quality assessment is required.
+
+- Education scenarios: Pre-class network detection is required.
+
+- Live streaming scenarios: Network connection speed testing is required.
+
+
+
+The basic principle of network speed test is shown below:
+
+<Frame width="512" height="auto" caption="">
+  <img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/Network_speed_test_en.png" />
+</Frame>
+
+
+## Example Source Code Download
+
+Please refer to [Download Example Source Code](/real-time-video-ios-oc/quick-start/run-example-code) to get the source code.
+
+For related source code, please check files in the "/ZegoExpressExample/Examples/Others/NetworkAndPerformance" directory.
+
+## Prerequisites
+
+Before implementing the network speed test feature, ensure that:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, see [Console - Project Information](/console/project-info).
+- You have integrated the ZEGO Express SDK into your project and implemented basic audio/video streaming functionality. For details, see [Quick Start - Integration](/real-time-video-ios-oc/quick-start/integrating-sdk) and [Quick Start - Implementation Flow](/real-time-video-ios-oc/quick-start/implementing-video-call).
+
+
+
+## Usage Steps
+
+### 1 Listen to Speed Test Callbacks
+
+Before starting the speed test, you can set up speed test related callbacks first.
+
+- Under normal speed test conditions, the [onNetworkSpeedTestQualityUpdate](@onNetworkSpeedTestQualityUpdate) callback will be triggered when network speed quality updates.
+- When an error occurs during the speed test, the [onNetworkSpeedTestError](@onNetworkSpeedTestError) callback will be triggered.
+
+```oc
+// Network speed test quality callback
+- (void)onNetworkSpeedTestQualityUpdate:(ZegoNetworkSpeedTestQuality *)quality type:(ZegoNetworkSpeedTestType)type {
+     NSLog(@"onNetworkSpeedTestQualityUpdate rtt=%d packetLostRate=%f connectCost=%d type=%d", quality.rtt, quality.packetLostRate, quality.connectCost, type);
+}
+
+// Network speed test error callback
+- (void)onNetworkSpeedTestError:(int)errorCode type:(ZegoNetworkSpeedTestType)type {
+     NSLog(@"onNetworkSpeedTestError errorCode=%d, type=%d", errorCode, type);
+}
+```
+
+### 2 Start Speed Test
+
+Create an instance of [ZegoNetworkSpeedTestConfig](@-ZegoNetworkSpeedTestConfig) network speed test configuration, set whether to perform uplink/downlink speed tests and expected bitrate according to the actual situation, and call the [startNetworkSpeedTest](@startNetworkSpeedTest) interface to start the network speed test.
+
+<Note title="Note">
+
+
+
+After calling the [startNetworkSpeedTest](@startNetworkSpeedTest) interface to start the speed test, it supports speed testing for 30 seconds by default (if you need to adjust the duration, please contact ZEGOCLOUD Technical Support to modify the dynamic configuration). After timeout, the speed test will be forcibly terminated. If you need to continue the speed test, please call this interface again.
+</Note>
+
+
+
+```oc
+ZegoNetworkSpeedTestConfig *config = [[ZegoNetworkSpeedTestConfig alloc] init];
+ZegoVideoConfig *videoConfig = [[ZegoExpressEngine sharedEngine] getVideoConfig];
+
+// Perform uplink speed test, specify expected publish stream bitrate
+config.testUplink = YES;
+config.expectedUplinkBitrate = videoConfig.bitrate;
+
+// Perform downlink speed test, specify expected play stream bitrate
+config.testDownlink = YES;
+config.expectedDownlinkBitrate = videoConfig.bitrate;
+
+// Start speed test, default callback interval is 3 seconds
+[[ZegoExpressEngine sharedEngine] startNetworkSpeedTest:config];
+
+// If you need to set the callback interval, refer to the following call (1.5 seconds as an example)
+[[ZegoExpressEngine sharedEngine] startNetworkSpeedTest:config interval:1500];
+```
+
+
+Speed test results will be returned in the network speed test quality [ZegoNetworkSpeedTestQuality](@-ZegoNetworkSpeedTestQuality) in [onNetworkSpeedTestQualityUpdate](@onNetworkSpeedTestQualityUpdate). By analyzing each parameter value, you can know whether the current network quality is good.
+
+Parameters in [ZegoNetworkSpeedTestQuality](@-ZegoNetworkSpeedTestQuality) are as follows:
+
+<table>
+
+<tbody><tr>
+<th>Parameter</th>
+<th>Description</th>
+<th>Note</th>
+</tr>
+<tr>
+<td>connectCost</td>
+<td>Time to connect to server, in milliseconds.</td>
+<td>If the network connection is disconnected during the speed test, reconnection will be initiated automatically. This variable will be updated accordingly. The smaller the value, the better.</td>
+</tr>
+<tr>
+<td>rtt</td>
+<td>Network latency, in milliseconds.</td>
+<td>Represents the time consumed between the SDK and the server round trip. The smaller the value, the better.</td>
+</tr>
+<tr>
+<td>packetLostRate</td>
+<td>Packet loss rate, in percentage.</td>
+<td>The value range is 0.0 - 1.0. For example, 0.5 means that for every 10 packets sent to the server, 5 of them may be lost on the way.</td>
+</tr>
+<tr>
+<td>quality</td>
+<td>Network quality</td>
+<td>
+Represents the current network quality level. For details, see [ZegoStreamQualityLevel](@-ZegoStreamQualityLevel).
+<ul>
+<li>ZegoStreamQualityLevelExcellent: Excellent quality.</li>
+<li>ZegoStreamQualityLevelGood: Good quality.</li>
+<li>ZegoStreamQualityLevelMedium: Medium quality.</li>
+<li>ZegoStreamQualityLevelBad: Bad quality.</li>
+<li>ZegoStreamQualityLevelDie: Abnormal quality.</li>
+<li>ZegoStreamQualityLevelUnknown: Unknown quality.</li>
+</ul>
+</td>
+</tr>
+</tbody></table>
+
+### 3 Stop Speed Test
+
+Call the [stopNetworkSpeedTest](@stopNetworkSpeedTest) interface to stop the network speed test.
+
+After stopping the speed test, you will no longer receive [onNetworkSpeedTestQualityUpdate](@onNetworkSpeedTestQualityUpdate) or [onNetworkSpeedTestError](@onNetworkSpeedTestError) callbacks.
+
+```objc
+[[ZegoExpressEngine sharedEngine] stopNetworkSpeedTest];
+```

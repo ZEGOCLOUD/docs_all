@@ -1,0 +1,543 @@
+---
+articleID: 21035
+---
+# Quick Implement Live Streaming
+
+---
+
+This article will introduce how to quickly implement a simple video live streaming through the live streaming function.
+
+
+## Introduction
+
+Explanation of related concepts:
+
+- ZEGO Express SDK: Real-time audio and video and live streaming SDK provided by ZEGO, which can provide developers with convenient access, high definition and smoothness, multi-platform interoperability, low latency, and high concurrency audio and video services.
+- Stream: A group of audio and video data that is continuously sent and encapsulated in a specified encoding format. A user can push multiple streams simultaneously (for example, one pushes camera data and one pushes screen sharing data) and can also pull multiple streams simultaneously. Each stream is identified by a stream ID (streamID).
+- Publish stream: The process of pushing the audio and video data stream packaged in the capture phase to the ZEGOCLOUD.
+- Play stream: The process of pulling and playing existing audio and video streams from the ZEGO MSDN network.
+- Room: An audio and video space service provided by ZEGO, used to organize user groups. Users in the same room can send and receive real-time audio and video and messages to each other.
+    - Users need to log in to a room first before they can perform publish and play stream operations.
+    - Users can only receive relevant messages in the room they are in (user entry/exit, audio and video stream changes, etc.).
+    - Each room is identified by a unique roomID within an AppID. All users who log in to the room using the same roomID belong to the same room.
+
+
+For more related concepts, please refer to [Glossary](/glossary/term-explanation).
+
+
+## Prerequisites
+
+Before implementing basic live streaming functions, please make sure:
+
+- ZEGO Express SDK has been integrated in the project. For details, please refer to [Quick Start - Integration](/live-streaming-u3d/quick-start/integrating-sdk).
+- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com), and a valid AppID has been applied for. For details, please refer to [Console - Project Management](/console/project-info) in "Project Information".
+
+
+## Implementation Process
+
+The basic process for users to perform video live streaming through ZEGO Express SDK is:
+
+User A and B join the room. User B previews and pushes the audio and video stream to the ZEGO cloud service (publish stream). After user A receives the notification of user B's pushed audio and video stream, user A plays user B's audio and video stream in the notification (play stream).
+
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/common_usage_new.png" /></Frame>
+
+### Enable Service
+
+The live streaming function is not enabled by default. Please enable it by yourself in the [ZEGOCLOUD Console](https://console.zegocloud.com) before use (for enabling steps, please refer to [Project Management - Service Configuration](/console/service-configuration/l3) in "Live Streaming"), or contact ZEGOCLOUD Technical Support to enable it.
+
+<a id="CreateEngine"></a>
+
+### Initialization
+
+**1. Create UI (Optional)**
+
+<Accordion title="Add UI Elements" defaultOpen="false">
+Before starting, it is recommended that developers add the following UI elements to facilitate the implementation of basic real-time audio and video functions.
+
+- Local preview window
+- Remote video window
+- End button
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/UI_PC.jpg" /></Frame>
+</Accordion>
+
+**2. Create Engine**
+
+Call the [CreateEngine](@CreateEngine) interface, pass the applied AppID and AppSign into the parameters "appId" and "appSign", and create an engine singleton object.
+
+Developers can choose to use anonymous functions to implement callback functions as needed, and assign them to the corresponding callback delegates of the engine instance to register callbacks.
+
+<Warning title="Warning">
+
+
+To avoid missing any notifications, it is recommended to listen for callbacks immediately after creating the engine
+
+</Warning>
+
+
+
+
+```cs
+// Define SDK engine object
+ZegoExpressEngine engine;
+
+ZegoEngineProfile profile = new ZegoEngineProfile();
+profile.appID = appID; // Please obtain through official website registration, the format is 123456789
+profile.appSign = appSign; // Please obtain through official website registration, the format is "0123456789012345678901234567890123456789012345678901234567890123", 64 characters
+profile.scenario = ZegoScenario.HighQualityVideoCall; // High-quality audio and video call scenario access (please select the appropriate scenario according to the actual situation)
+// Initialize SDK
+engine = ZegoExpressEngine.CreateEngine(profile);
+
+
+// Set SDK callback delegate
+engine.OnRoomStateUpdate = (roomID, state, errorCode, extendedData) => {
+
+};
+```
+
+
+<Accordion title="Common Notification Callbacks" defaultOpen="false">
+**1. Notification of connection status changes in the room**
+
+[OnRoomStateChanged](@OnRoomStateChanged): When you locally call [LoginRoom](@LoginRoom) to join a room, you can monitor your connection status in the room in real time by listening to the [OnRoomStateChanged](@OnRoomStateChanged) callback.
+
+You can handle business logic based on different states in the callback.
+
+```cs
+void OnRoomStateChanged(string roomID, ZegoRoomStateChangedReason reason, int errorCode, string extendedData) {
+}
+
+// Assign to the corresponding event delegate of ZegoExpressEngine
+engine.onRoomStateChanged = OnRoomStateChanged;
+```
+
+The meanings of ZegoRoomStateChangedReason states are as follows. For more information, please refer to [Room State Management ](/live-streaming-android/room/room-connection-status):
+
+<table>
+  <colgroup>
+    <col width="30%"/>
+    <col width="20%"/>
+    <col width="50%"/>
+  </colgroup>
+  <tbody><tr>
+    <th>State</th>
+    <th>Enum Value</th>
+    <th>Meaning</th>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.LOGINING</td>
+    <td>0</td>
+    <td>Logging in to the room. When calling [loginRoom] to log in to the room or [switchRoom] to switch to the target room, enter this state, indicating that a request is being made to connect to the server. Usually, the application interface is displayed through this state.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.LOGINED</td>
+    <td>1</td>
+    <td>Logged in to the room successfully. After logging in to the room or switching rooms successfully, enter this state, indicating that logging in to the room has been successful, and users can normally receive callback notifications for additions and deletions of other users and all stream information in the room.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.LOGIN_FAILED</td>
+    <td>2</td>
+    <td>Failed to log in to the room. After failing to log in to or switch rooms, enter this state, indicating that logging in to or switching rooms has failed, such as incorrect AppID, AppSign, or Token.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.RECONNECTING</td>
+    <td>3</td>
+    <td>Room connection temporarily interrupted. If the interruption is caused by poor network quality, the SDK will perform internal retries.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.RECONNECTED</td>
+    <td>4</td>
+    <td>Room reconnection successful. If the interruption is caused by poor network quality, the SDK will perform internal retries. After successful reconnection, enter this state.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.RECONNECT_FAILED</td>
+    <td>5</td>
+    <td>Room reconnection failed. If the interruption is caused by poor network quality, the SDK will perform internal retries. After failed reconnection, enter this state.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.KICK_OUT</td>
+    <td>6</td>
+    <td>Kicked out of the room by the server. For example, if the same username logs in to the room elsewhere, causing the local end to be kicked out of the room, this state will be entered.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.LOGOUT</td>
+    <td>7</td>
+    <td>Logged out of the room successfully. This is the default state before logging in to the room. After successfully logging out of the room by calling [logoutRoom] or successfully logging out of the current room by [switchRoom], enter this state.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.LOGOUT_FAILED</td>
+    <td>8</td>
+    <td>Failed to log out of the room. After failing to log out of the room by calling [logoutRoom] or failing to log out of the current room by [switchRoom], enter this state.</td>
+  </tr>
+</tbody></table>
+
+
+**2. Notifications of other users entering or leaving the room**
+
+[OnRoomUserUpdate](@OnRoomUserUpdate): When other users in the same room enter or leave the room, you can receive notifications through this callback. In the callback, the parameter [ZegoUpdateType](@-ZegoUpdateType) is ZegoUpdateType.ZegoUpdateTypeAdd, indicating that a user has entered the room; [ZegoUpdateType](@-ZegoUpdateType) is ZegoUpdateType.ZegoUpdateTypeDelete, indicating that a user has left the room.
+
+<Warning title="Warning">
+
+
+- Only when the [isUserStatusNotify ](@isUserStatusNotify) parameter in the configuration [ZegoRoomConfig](@-ZegoRoomConfig) passed when logging in to the room [LoginRoom ](@LoginRoom) is true can users receive callbacks of other users in the room.
+- When the number of people in the room exceeds 500, the [OnRoomUserUpdate](@OnRoomUserUpdate) callback is not guaranteed to be effective. If your business scenario involves more than 500 people in a room, please contact ZEGOCLOUD Technical Support.
+
+
+</Warning>
+
+
+
+
+```cs
+void OnRoomUserUpdate(string roomID, ZegoUpdateType updateType, List<ZegoUser> userList, uint userCount)
+{
+    // You can handle corresponding business logic based on user entry/exit situations in the callback
+    if (updateType == ZegoUpdateType.Add)
+    {
+        userList.ForEach((user)=>{
+            //string.Format("user {0} enter room {1}", user.userID, roomID);
+        });
+    }
+    else
+    {
+        userList.ForEach((user)=>{
+            //string.Format("user {0} exit room {1}", user.userID, roomID);
+        });
+    }
+}
+
+// Assign to the corresponding event delegate of ZegoExpressEngine
+engine.onRoomUserUpdate = OnRoomUserUpdate;
+```
+
+**3. Notification of user audio and video stream publishing status**
+
+[OnPublisherStateUpdate](@OnPublisherStateUpdate): According to actual application needs, after the user publishes the audio and video stream, when the status of the published video stream changes (such as network interruption causing publishing exceptions, etc.), you will receive this callback, and the SDK will automatically retry.
+
+```cs
+void OnPublisherStateUpdate(string streamID, ZegoPublisherState state, int errorCode, string extendedData)
+{
+    // Implement event callback as needed
+}
+
+// Assign to the corresponding event delegate of ZegoExpressEngine
+engine.onPublisherStateUpdate = OnPublisherStateUpdate;
+```
+
+**4. Notification of user audio and video stream playing status**
+
+[OnPlayerStateUpdate](@OnPlayerStateUpdate): According to actual application needs, after the user plays the audio and video stream, when the status of the played video stream changes (such as network interruption causing playing exceptions, etc.), you will receive this callback, and the SDK will automatically retry.
+
+```cs
+void OnPlayerStateUpdate(string streamID, ZegoPlayerState state, int errorCode, string extendedData)
+{
+    // Implement event callback as needed
+}
+
+// Assign to the corresponding event delegate of ZegoExpressEngine
+engine.onPlayerStateUpdate = OnPlayerStateUpdate;
+```
+</Accordion>
+
+<a id="createroom"></a>
+
+### Login Room
+
+Create a ZegoUser user object, set user information "userID" and "userName", then call [LoginRoom](@LoginRoom), pass in the room ID parameter "roomId" and user parameter "user", and log in to the room. If the room does not exist, calling this interface will create and log in to this room.
+
+- Within the same AppID, ensure that "roomId" is globally unique.
+- Within the same AppID, ensure that "userId" is globally unique. It is recommended that developers set it to a meaningful value and associate "userId" with their business account system.
+- "userId" and "userName" cannot be empty, otherwise logging in to the room will fail.
+- When running in the WebGL environment, only Token authentication is supported. Token cannot be empty. Please refer to [Use Token for Authentication](/real-time-video-u3d-cs/communication/using-token-authentication).
+
+```cs
+// Create user
+ZegoUser user = new ZegoUser();
+user.userId="xxx";
+user.userName="xxxx";
+// Only by passing in a ZegoRoomConfig with "isUserStatusNotify" parameter set to "true" can you receive the onRoomUserUpdate callback.
+ZegoRoomConfig roomConfig = new ZegoRoomConfig();
+// If you use AppSign for authentication, the Token parameter does not need to be filled in (except for the WebGL platform); if you need to use a more secure authentication method: Token authentication, please refer to [How to upgrade from AppSign authentication to Token authentication](https://www.zegocloud.com/docs/faq/express-token-upgrade)
+// On the WebGL platform, "token" cannot be empty
+roomConfig.token = "xxxx";
+roomConfig.isUserStatusNotify = true;
+// Log in to room
+engine.LoginRoom("123666", user, roomConfig);
+```
+
+
+<a id="publishingStream"></a>
+
+
+### Host preview their own screen and push to ZEGO audio and video cloud
+
+**1. Host preview their own screen**
+
+<Accordion title="Set Preview View and Start Local Preview" defaultOpen="false">
+If developers want to see their local screen, they can call the StartPreview interface to start local preview.
+
+Since Android devices and iOS devices have four screen orientations: Portrait, PortraitUpsideDown, LandscapeLeft, and LandscapeRight, to ensure that the push streaming preview and playing display interface is always in the correct direction, you need to first add code for push streaming preview and playing display interface to adapt to portrait and landscape screens. Please refer to [Quick Start - Integration](/real-time-video-u3d-cs/quick-start/integrating-sdk) in "4 UI Adaptation".
+
+Unity supports preview through two renderers: RawImage and Renderer.
+
+- Method 1: RawImage
+    1. Create RawImage.
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Unity3D/ZegoExpressEngine/QuickStart/create-raw-image.png" /></Frame>
+    2. Preview displays on RawImage.
+    ```cs
+    RawImageVideoSurface localVideoSurface = null;
+    GameObject mainLocalVideoPlane = null;
+
+    mainLocalVideoPlane = GameObject.Find("MainPreViewRawImage");
+
+    if (mainLocalVideoPlane != null && localVideoSurface == null)
+    {
+        // Add a RawImageVideoSurface component, renderer is RawImage
+        localVideoSurface = mainLocalVideoPlane.AddComponent<RawImageVideoSurface>();
+        // Set as local preview screen
+        localVideoSurface.SetCaptureVideoInfo();
+        // Set video source to engine
+        localVideoSurface.SetVideoSource(engine);
+    }
+
+    // Call start preview interface
+    engine.StartPreview();
+    ```
+
+- Method 2: Renderer
+  1. Create a Plane with Renderer.
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Unity3D/ZegoExpressEngine/QuickStart/create-renderer.png" /></Frame>
+  2. Preview to the Plane's Renderer.
+    ```cs
+    GameObject go = GameObject.CreatePrimitive(PrimitiveType.Plane);// Plane created by code
+
+    if (go == null)
+    {
+        return;
+    }
+    go.name = "preview-render";
+    // Ensure the screen can be displayed
+    go.transform.Rotate(90.0f, -180.0f, 0.0f);
+    go.transform.position = new Vector3(0.0f, 0.0f, 0.0f);
+    go.transform.localScale = new Vector3(0.36f, 1f, 0.64f);
+
+    // Add a RendererVideoSurface component, renderer is Renderer
+    RendererVideoSurface renderer = go.AddComponent<RendererVideoSurface>();
+    // Set as local preview screen
+    renderer.SetCaptureVideoInfo();
+    // Set video source to engine
+    renderer.SetVideoSource(engine);
+
+    // Call start preview interface
+    engine.StartPreview();
+    ```
+</Accordion>
+
+**2. Host push their audio and video stream to ZEGO audio and video cloud**
+
+After the user calls the [LoginRoom ](@LoginRoom) interface, they can directly call the [StartPublishingStream ](@StartPublishingStream) interface and pass in "streamID" to push their audio and video stream to the ZEGO audio and video cloud. You can know whether the push streaming is successful by listening to the [OnPublisherStateUpdate ](@OnPublisherStateUpdate) callback.
+
+"streamID" is generated locally by you, but needs to ensure:
+
+Under the same AppID, "streamID" is globally unique. If under the same AppID, different users each push a stream with the same "streamID", the user who pushes the stream later will fail to push the stream.
+
+The example here pushes the stream immediately after calling the [LoginRoom ](@LoginRoom) interface. When implementing specific business, you can choose other timings to push the stream, as long as you call [LoginRoom](@LoginRoom) first.
+
+```cs
+// After the user calls loginRoom, call this interface to push the stream
+// Under the same AppID, developers need to ensure that "streamID" is globally unique. If different users each push a stream with the same "streamID", the user who pushes the stream later will fail to push the stream.
+engine.StartPublishingStream("stream1");
+```
+
+<Note title="Note">
+If you need to understand Express-related microphone/audio/speaker interfaces, please refer to [FAQ - How to implement switching camera/video screen/microphone/audio/speaker?](https://www.zegocloud.com/docs/faq/device-switching).
+</Note>
+
+### Play host's audio and video
+
+When live streaming, we need to play the host's audio and video. The latency of live streaming playing is within 1s, which can achieve the ultimate live streaming experience of ultra-low latency, strong synchronization, extreme weak network resistance, ultra-low stuttering, ultra-clear picture quality, and instant first frame.
+
+When other users in the same room push audio and video streams to the ZEGO audio and video cloud, we will receive notifications of new audio and video streams in the [OnRoomStreamUpdate](@OnRoomStreamUpdate) callback, and can obtain the "streamID" of a certain stream through ZegoStream.
+
+In this callback, we can call the [StartPlayingStream](@StartPlayingStream) interface and pass in "streamID" to play the user's audio and video. You can know whether the audio and video are successfully played by listening to the [OnPlayerStateUpdate ](@OnPlayerStateUpdate) callback. You can use the following playing methods.
+
+<Warning title="Warning">
+
+
+- Live streaming is not enabled by default. Please enable it by yourself in the ZEGOCLOUD Console or contact ZEGOCLOUD Technical Support. For details, please refer to [Enable Service](#enable-service).
+- If users encounter related errors during live streaming, they can query [Error Codes](/live-streaming-u3d/client-sdk/error-code).
+
+</Warning>
+
+
+
+
+Call the [StartPlayingStream](@StartPlayingStream) interface and set the [resourceMode](@resourceMode-ZegoScenePlayerConfig) parameter to "ZegoScenePlayerConfig.ZegoStreamResourceModeOnlyL3", indicating live streaming playing.
+
+Unity3D supports playing rendering through two renderers: RawImage and Renderer.
+
+- Method 1: RawImage
+    1. Create RawImage.
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Unity3D/ZegoExpressEngine/QuickStart/create-raw-image.png" /></Frame>
+    2. Preview displays on RawImage.
+    ```cs
+    private const float Offset = 100;
+
+    GameObject go = new GameObject();
+
+    if (go == null)
+    {
+        return;
+    }
+
+    go.name = "play-rawimage";
+    // Dynamically create RawImage
+    go.AddComponent<RawImage>();
+    GameObject canvas = GameObject.Find("Canvas");
+    if (canvas != null)
+    {
+        go.transform.parent = canvas.transform;
+    }
+    float xPos = UnityEngine.Random.Range(Offset - Screen.width / 2f, Screen.width / 2f - Offset);
+    float yPos = UnityEngine.Random.Range(Offset, Screen.height / 2f - Offset);
+    go.transform.localPosition = new Vector3(xPos, yPos, 0f);
+    go.transform.localScale = new Vector3(3f, 4f, 1f);
+
+    // Add a RawImageVideoSurface component, renderer is RawImage
+    RawImageVideoSurface videoSurface = go.AddComponent<RawImageVideoSurface>();
+    // Set the video stream ID to display
+    videoSurface.SetPlayVideoInfo("123");
+    // Set video source to engine
+    videoSurface.SetVideoSource(engine);
+
+    // Call playing stream interface
+    ZegoPlayerConfig playerConfig = new ZegoPlayerConfig();
+    playerConfig.resourceMode = ZegoStreamResourceMode.OnlyL3;
+    engine.StartPlayingStream(streamID, playerConfig);
+    ```
+
+- Method 2: Renderer
+    1. Create a Plane with Renderer.
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Unity3D/ZegoExpressEngine/QuickStart/create-renderer.png" /></Frame>
+    2. Preview to the Plane's Renderer.
+    ```cs
+    remoteVideoPlane = GameObject.Find("PlayRender");
+    if (remoteVideoPlane != null)
+    {
+        if (remoteVideoSurface == null)
+        {
+            // Add a RendererVideoSurface component, renderer is Renderer
+            remoteVideoSurface = remoteVideoPlane.AddComponent<RendererVideoSurface>();
+            // Ensure the screen can be displayed
+            remoteVideoSurface.transform.Rotate(90.0f, -180.0f, 0.0f);
+            remoteVideoSurface.transform.position = new Vector3(0.0f, 0.0f, 0.0f);
+            remoteVideoSurface.transform.localScale = new Vector3(0.36f, 1f, 0.64f);
+        }
+        if (remoteVideoSurface != null)
+        {
+            // Set the video stream ID to display
+            remoteVideoSurface.SetPlayVideoInfo("123");
+            // Set video source to engine
+            remoteVideoSurface.SetVideoSource(engine);
+        }
+    }
+
+    // Call playing stream interface
+    ZegoPlayerConfig playerConfig = new ZegoPlayerConfig();
+    playerConfig.resourceMode = ZegoStreamResourceMode.OnlyL3;
+    engine.StartPlayingStream(streamID, playerConfig);
+    ```
+
+### Debug live streaming function
+
+Run the project on a real device. After successful operation, you can see the local video screen.
+
+For convenience, ZEGO provides a [Web Debug Demo ](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html). On this page, enter the same AppID, RoomID, Server address, and [Token](/console/development-assistance/temporary-token) to join the same room and interoperate with real device. When live streaming is successfully started, you can hear remote audio and see remote video screen.
+
+
+<a id="StopPublishingStream"></a>
+
+### Stop publishing/playing audio and video streams
+
+**1. Stop publishing stream, stop preview**
+
+Call the [StopPublishingStream ](@StopPublishingStream) interface to stop sending local audio and video streams to remote users.
+
+```cs
+// Stop publishing stream
+engine.StopPublishingStream();
+```
+
+If local preview is enabled, call the [StopPreview ](@StopPreview) interface to stop preview.
+
+```cs
+// Stop local preview
+engine.StopPreview();
+```
+
+**2. Stop playing stream**
+
+Call the [StopPlayingStream](@StopPlayingStream) interface to stop playing remote pushed audio and video streams.
+
+<Warning title="Warning">
+
+
+If developers receive a notification of "decrease" in audio and video streams through the [OnRoomStreamUpdate](@OnRoomStreamUpdate) callback, please call the [StopPlayingStream ](@StopPlayingStream) interface in time to stop playing streams to avoid playing empty streams and generating additional costs; or, developers can choose the appropriate timing according to their business needs and actively call the [StopPlayingStream ](@StopPlayingStream) interface to stop playing streams.
+
+</Warning>
+
+
+
+
+```cs
+// Stop playing stream
+engine.StopPlayingStream("stream1");
+```
+
+### Logout Room
+
+Call the [LogoutRoom](@LogoutRoom) interface to log out of the room.
+
+```cs
+// Logout room
+engine.LogoutRoom();
+```
+
+### Destroy Engine
+
+If users completely stop using audio and video functions, they can call the [DestroyEngine](@DestroyEngine) interface to destroy the engine and release resources such as microphones, cameras, memory, and CPU.
+
+- If you need to listen for callbacks to ensure that device hardware resources are released, you can pass in "callback" when destroying the engine. This callback is only used to send notifications, and developers cannot release engine-related resources in the callback.
+- If you don't need to listen for callbacks, you can pass in "null".
+
+
+```cs
+ZegoExpressEngine.DestroyEngine();
+engine = null;
+```
+
+
+
+
+## Live Streaming API Call Sequence
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml_video_u3d.png" /></Frame>
+
+## FAQ
+
+**1. Can I kill the process directly when calling [LogoutRoom ](@LogoutRoom) to log out of the room?**
+
+After calling [LogoutRoom](@LogoutRoom), killing the process directly has a certain probability that the [LogoutRoom ](@LogoutRoom) command will not be sent out. Then the ZEGO server can only consider that this user has left the room after waiting for the heartbeat timeout. To ensure that the [LogoutRoom](@LogoutRoom) command is sent out, it is recommended to call [DestroyEngine](@DestroyEngine) again and receive the callback before killing the process.
+
+## Related Documentation
+- [Common Error Codes](/real-time-video-u3d-cs/client-sdk/error-code)
+- [How to handle room and user related issues?](https://www.zegocloud.com/docs/faq/express-room-maintenance)
+- [How to set and get SDK logs and stack information?](https://www.zegocloud.com/docs/faq/express-logs-stacktrace)
+- [Does the SDK support automatic reconnection?](https://www.zegocloud.com/docs/faq/express-reconnect)
+- [In live streaming scenarios, how to listen for remote viewer role users logging in/logout of rooms?](https://www.zegocloud.com/docs/faq/audience-room-events)
+- [How to adjust the camera focal length (zoom function)?](https://www.zegocloud.com/docs/faq/camera-focus-adjustment)
+
+- [Why can't I open the camera?](https://www.zegocloud.com/docs/faq/camera-access-failure)
+
+- [How to ensure smooth audio and video in poor network environments (flow control function)?](https://www.zegocloud.com/docs/faq/flow-control-in-weak-network)

@@ -1,0 +1,793 @@
+---
+articleID: 1058
+date: "2025-05-07"
+---
+# Stream Mixing
+
+- - -
+
+## Feature Overview
+
+### Overview
+
+Stream mixing is a technology that merges multiple audio and video streams into a single stream from the cloud, also known as stream composition. Developers only need to play the mixed stream to see video from all members in the room and hear audio from all members, without needing to manage each stream in the room separately.
+
+This document mainly describes how to initiate stream mixing from the client. If you need to initiate stream mixing from your own server, please refer to [Server API - Start Mix](/real-time-video-server/api-reference/stream-mixing/start-mix).
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/mixed_flow_en.jpeg" /></Frame>
+
+### Stream Mixing Method Classification
+
+ZEGO supports three methods: manual mixing, automatic mixing, and fully automatic mixing. The differences between the three methods are as follows:
+
+<table>
+
+  <tbody><tr>
+    <th>Mixing Method</th>
+    <td>Manual Mixing</td>
+    <td>Automatic Mixing</td>
+    <td>Fully Automatic Mixing</td>
+  </tr>
+  <tr>
+    <th>Meaning</th>
+    <td>Customize control of mixing tasks and mixing content, including input streams, mixing layout, etc. Supports manual mixing of video streams and audio streams.</td>
+    <td>Specify a room to automatically mix all audio streams in the room. Only supports automatic mixing of audio streams.</td>
+    <td>Automatically mix audio streams for each room. Only supports fully automatic mixing of audio streams.</td>
+  </tr>
+  <tr>
+    <th>Application Scenarios</th>
+    <td>Available when merging multiple video images and sound, such as live streaming of teacher and student images in online classrooms, cross-room co-hosting in entertainment scenarios, mixing specified streams in special scenarios; scenarios where devices do not support playing multiple streams simultaneously or have poor device performance.</td>
+    <td>Use automatic mixing when merging all audio streams in the room into one stream, such as voice chat rooms, chorus.</td>
+    <td>Use fully automatic mixing when you don't want to do any development and merge all audio streams in the room into one stream, such as voice chat rooms, chorus.</td>
+  </tr>
+  <tr>
+    <th>Advantages</th>
+    <td>High flexibility, able to implement logic according to business needs.</td>
+    <td>Reduces the complexity of developer integration, no need to manage the lifecycle of specified room audio streams.</td>
+    <td>Very low developer integration complexity, no need to manage the lifecycle of all room audio mixing tasks and audio stream lifecycles.</td>
+  </tr>
+  <tr>
+    <th>Initiation Method</th>
+    <td>User client or user server initiates mixing task, user client maintains stream lifecycle.</td>
+    <td>User client initiates mixing task, ZEGO server automatically maintains stream lifecycle in the room (i.e., input stream list).</td>
+    <td>Contact ZEGO Technical Support to enable fully automatic mixing, ZEGO server maintains mixing task and stream lifecycle in the room (i.e., input stream list).</td>
+  </tr>
+</tbody></table>
+
+
+### Advantages
+
+- Reduces implementation complexity. For example, when there are N hosts co-hosting, if using mixing, the audience doesn't need to play N video streams simultaneously, saving the development steps of playing N streams and laying them out.
+- Reduces device performance requirements, decreasing device performance overhead and network bandwidth burden. For example, when there are too many co-hosting parties, the audience needs to play N video streams, requiring device hardware to support playing N streams simultaneously.
+- Simple to relay to multiple CDNs, just need to add output streams as needed when configuring mixing.
+- When the audience needs to replay multi-host co-hosting video, only need to enable recording configuration on the CDN.
+- When reviewing content, only need to observe one screen, no need to view multiple screens simultaneously.
+
+
+## Example Source Code Download
+
+Please refer to [Download Example Source Code](/real-time-video-android-java/quick-start/run-example-code) to get the source code.
+
+For related source code, please check the files in the "/ZegoExpressExample/Others/src/main/java/im/zego/others/streammixing" directory.
+
+
+## Prerequisites
+
+Before implementing stream mixing functionality, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in your project and implemented basic audio and video publish/play stream functionality. For details, please refer to [Quick Start - Integration](/real-time-video-android-java/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-android-java/quick-start/implementing-video-call).
+
+
+<Warning title="Warning">
+
+The stream mixing feature is not enabled by default. Please enable it yourself in the [ZEGOCLOUD Console](https://console.zegocloud.com) before use (for enabling steps, please refer to "Stream Mixing" in [Project Management - Service Configuration](/console/service-configuration/enable-stream-mixing-service)), or contact ZEGO Technical Support to enable it.
+</Warning>
+
+## Implementation Flow
+
+The main flow of stream mixing is as follows:
+1. Users in the room publish stream A and stream B to the ZEGOCLOUD server.
+2. The ZEGOCLOUD server can configure to push mixed stream or separate stream A and stream B to the CDN server as needed. (Using RTMP protocol)
+3. The playing end can play the mixed stream from the CDN server as needed, or play separate stream A and stream B (supporting RTMP, FLV, HLS and other protocols).
+
+
+## Manual Mixing Usage Steps
+
+Manual mixing allows custom control of mixing tasks and mixing content, including input streams, mixing layout, etc., commonly used in multi-person interactive live streaming and cross-room co-hosting scenarios. Supports manual mixing of video streams and audio streams.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/mixstream_en.jpeg" /></Frame>
+
+Developers can implement manual mixing functionality through SDK or ZEGO server API. For server-related interfaces, please refer to [Start Mix](/real-time-video-server/api-reference/stream-mixing/start-mix) and [Stop Mix](/real-time-video-server/api-reference/stream-mixing/stop-mix).
+
+The following describes how to use SDK to implement manual mixing.
+
+### Initialize and Login to Room
+
+Please refer to [Quick Start - Implementation](/real-time-video-android-java/quick-start/implementing-video-call) for "Create Engine" and "Login to Room".
+
+<Warning title="Warning">
+- The prerequisite for mixing is that there must be existing streams in the room.
+- You can mix existing audio and video streams in the room, whether these streams are published by yourself or by other users.
+</Warning>
+
+### Set Mixing Configuration
+
+[ZegoMixerTask](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-entity-zego-mixer-task) is the mixing task configuration object defined in ZegoExpressEngine SDK, which includes information such as input streams and output streams.
+
+<a name="5_2_1"></a>
+
+#### Create Mixing Task Object
+
+Create a new mixing task object through the constructor [ZegoMixerTask ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-entity-zego-mixer-task#zego-mixer-task), then call instance methods to set input, output and other parameters respectively.
+
+```java
+ZegoMixerTask task = new ZegoMixerTask("task1");
+```
+
+#### (Optional) Set Mixing Video Configuration
+
+<Accordion title="Mixing video configuration settings" defaultOpen="false">
+Developers can configure video parameters (frame rate, bitrate, resolution) of mixing tasks through the [ZegoMixerVideoConfig](@-ZegoMixerVideoConfig) class.
+
+If all streams to be mixed are pure audio, no configuration is required.
+
+The default values for video frame rate, bitrate, and resolution are 15 fps, 600 kbps, and 360p respectively.
+
+<Note title="Note">
+
+
+The maximum frame rate for mixing output is limited to 20 frames by default. If you need to output a higher frame rate, please contact ZEGO Technical Support for configuration.
+</Note>
+
+```java
+// After creating the ZegoMixerVideoConfig object, developers who need it can directly set the corresponding values of the corresponding fields of videoConfig. If not set, the default values set in the default constructor method will be used: 360p, 15 fps, 600 kbps
+ZegoMixerVideoConfig videoConfig = new ZegoMixerVideoConfig();
+videoConfig.width = 360;
+videoConfig.height = 640;
+videoConfig.fps = 15;
+videoConfig.bitrate = 600;
+
+task.setVideoConfig(videoConfig);
+```
+</Accordion>
+
+
+#### (Optional) Set Mixing Audio Configuration
+
+<Accordion title="Mixing audio configuration settings" defaultOpen="false">
+Developers can call the [ZegoMixerAudioConfig](@-ZegoMixerAudioConfig) method to configure the audio bitrate, number of channels, and audio encoding for mixing tasks.
+
+The default value of audio bitrate [bitrate](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~java_android~class~ZegoMixerAudioConfig#bitrate) is 48 kbps.
+
+```java
+// After creating the ZegoMixerAudioConfig object, developers who need it can directly set the corresponding values of the corresponding fields of audioConfig. If not set, the default values set in the default constructor method will be used: 48 kbps, mono, default audio encoding mode
+ZegoMixerAudioConfig audioConfig = new ZegoMixerAudioConfig();
+audioConfig.bitrate = 48;
+audioConfig.channel = ZegoAudioChannel.MONO;
+audioConfig.codecID = ZegoAudioCodecID.DEFAULT;
+
+task.setAudioConfig(audioConfig);
+```
+</Accordion>
+
+<a name="5_2_4"></a>
+
+#### Set Mixing Input Streams
+
+
+According to actual business scenarios, define the input video stream [ZegoMixerInput](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-entity-zego-mixer-input) list, set the "layout" parameter of each video stream to layout the image of each input stream, and the ZEGOCLOUD server will mix the input streams and output the mixed stream in one image.
+
+
+<Warning title="Warning">
+
+
+
+- By default, supports up to 9 input streams. If you need to input more streams, please contact ZEGO Technical Support to confirm and configure.
+- When the "ContentType" of all mixing input streams is set to "AUDIO", the SDK internally does not process layout fields, so there is no need to pay attention to the "layout" parameter.
+- When the "ContentType" of all mixing input streams is set to "AUDIO", the SDK internally sets the resolution to 1*1 by default (i.e., mixing output is pure audio). If you want the mixing output to have video images or background images, you need to set the "ContentType" of at least one input stream to "VIDEO".
+</Warning>
+
+
+The layout of input streams takes the upper left corner of the output mixed stream image as the origin of the coordinate system. Reference the origin to set the layout of input streams, that is, pass `new Rect(left, top, right, bottom)` to the "layout" parameter of the input stream. In addition, the layer hierarchy of input streams is determined by their position in the input stream list. The later the position in the list, the higher the layer hierarchy.
+
+
+`Rect` parameter description is as follows:
+
+<table>
+
+  <tbody><tr>
+    <th>Parameter</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td>left</td>
+    <td>Corresponds to the x coordinate of the upper left corner of the input stream image.</td>
+  </tr>
+  <tr>
+    <td>top&nbsp;</td>
+    <td>Corresponds to the y coordinate of the upper left corner of the input stream image.</td>
+  </tr>
+  <tr>
+    <td>right</td>
+    <td>Corresponds to the x coordinate of the lower right corner of the input stream image.</td>
+  </tr>
+  <tr>
+    <td>bottom&nbsp;</td>
+    <td>Corresponds to the y coordinate of the lower right corner of the input stream image.</td>
+  </tr>
+</tbody></table>
+
+<Warning title="Warning">
+
+
+The above parameters may vary on different development platforms. Please refer to the documentation of each platform for specifics.
+</Warning>
+
+
+
+
+Assuming starting a mixing task with an output image resolution of 375×667, the input stream is a mixing of size 200×450, located 50 from the left and 300 from the top, you need to pass `new Rect(50, 300, 200, 450)` to the "layout" parameter of the input stream.
+
+
+The position of this input stream in the final output mixed stream is as shown below:
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/Mixer/mixer-layout.png" /></Frame>
+
+
+Developers can refer to the following example code to implement common mixing layouts: two images horizontally tiled, four images horizontally and vertically tiled, one large image filling and two small images floating.
+
+The following layout examples are all described with 360×640 resolution.
+
+<Accordion title="Mixing layout example 1: Two images horizontally tiled" defaultOpen="false">
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/mixstreamdemo1.png" /></Frame>
+
+```java
+// Create input stream list object
+ArrayList<ZegoMixerInput> inputList = new ArrayList<>();
+
+// Fill in the first input stream configuration. Each input stream needs to set Stream ID (the value in this parameter must be the actual ID of the input stream), input stream type, layout, etc.
+ZegoMixerInput input_1 = new ZegoMixerInput("streamID_1", ZegoMixerInputContentType.VIDEO, new Rect(0, 0, 180, 640));
+input_1.renderMode = ZegoMixRenderMode.FILL;
+
+// Text watermark for input stream
+input_1.label.text = "text watermark";
+input_1.label.left = 0;
+input_1.label.top = 0;
+input_1.label.font.transparency = 50;
+input_1.label.font.size = 24;
+input_1.label.font.color = 123456;
+input_1.label.font.type = ZegoFontType.SOURCE_HAN_SANS;
+inputList.add(input_1);
+// Fill in the second input stream configuration
+ZegoMixerInput input_2 = new ZegoMixerInput("streamID_2", ZegoMixerInputContentType.VIDEO, new Rect(180, 0, 360, 640));
+input_2.renderMode = ZegoMixRenderMode.FILL;
+
+// Text watermark for input stream
+input_2.label.text = "text watermark";
+input_2.label.left = 0;
+input_2.label.top = 0;
+input_2.label.font.transparency = 50;
+input_2.label.font.size = 24;
+input_2.label.font.color = 123456;
+input_2.label.font.type = ZegoFontType.SOURCE_HAN_SANS;
+inputList.add(input_2);
+
+// Set mixing input
+task.setInputList(inputList);
+```
+</Accordion>
+
+
+<Accordion title="Mixing layout example 2: Four images horizontally and vertically tiled" defaultOpen="false">
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/mixstreamdemo2.png" /></Frame>
+
+
+```java
+// Create input stream list object
+ArrayList<ZegoMixerInput> inputList = new ArrayList<>();
+
+// Fill in the first input stream configuration. Each input stream needs to set Stream ID (the value in this parameter must be the actual ID of the input stream), input stream type, layout, etc.
+ZegoMixerInput input_1 = new ZegoMixerInput("streamID_1", ZegoMixerInputContentType.VIDEO, new Rect(0, 0, 180, 320));
+input_1.renderMode = ZegoMixRenderMode.FILL;
+
+// Text watermark for input stream
+input_1.label.text = "text watermark";
+input_1.label.left = 0;
+input_1.label.top = 0;
+input_1.label.font.transparency = 50;
+input_1.label.font.size = 24;
+input_1.label.font.color = 123456;
+input_1.label.font.type = ZegoFontType.SOURCE_HAN_SANS;
+inputList.add(input_1);
+// Fill in the second input stream configuration
+ZegoMixerInput input_2 = new ZegoMixerInput("streamID_2", ZegoMixerInputContentType.VIDEO, new Rect(180, 0, 360, 320));
+input_2.renderMode = ZegoMixRenderMode.FILL;
+
+// Text watermark for input stream
+input_2.label.text = "text watermark";
+input_2.label.left = 0;
+input_2.label.top = 0;
+input_2.label.font.transparency = 50;
+input_2.label.font.size = 24;
+input_2.label.font.color = 123456;
+input_2.label.font.type = ZegoFontType.SOURCE_HAN_SANS;
+inputList.add(input_2);
+// Fill in the third input stream configuration
+ZegoMixerInput input_3 = new ZegoMixerInput("streamID_3", ZegoMixerInputContentType.VIDEO, new Rect(0, 320, 180, 640));
+input_3.renderMode = ZegoMixRenderMode.FILL;
+
+// Text watermark for input stream
+input_3.label.text = "text watermark";
+input_3.label.left = 0;
+input_3.label.top = 0;
+input_3.label.font.transparency = 50;
+input_3.label.font.size = 24;
+input_3.label.font.color = 123456;
+input_3.label.font.type = ZegoFontType.SOURCE_HAN_SANS;
+inputList.add(input_3);
+// Fill in the fourth input stream configuration
+ZegoMixerInput input_4 = new ZegoMixerInput("streamID_4", ZegoMixerInputContentType.VIDEO, new Rect(180, 320, 360, 640));
+input_4.renderMode = ZegoMixRenderMode.FILL;
+
+// Text watermark for input stream
+input_4.label.text = "text watermark";
+input_4.label.left = 0;
+input_4.label.top = 0;
+input_4.label.font.transparency = 50;
+input_4.label.font.size = 24;
+input_4.label.font.color = 123456;
+input_4.label.font.type = ZegoFontType.SOURCE_HAN_SANS;
+inputList.add(input_4);
+
+// Set mixing input
+task.setInputList(inputList);
+
+
+```
+</Accordion>
+
+
+<Accordion title="Mixing layout example 3: One large image filling and two small images floating" defaultOpen="false">
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/mixstreamdemo3.png" /></Frame>
+
+
+The layer hierarchy of input streams is determined by their position in the input stream list. The later the position in the list, the higher the layer hierarchy. As shown in the following example code, the layer hierarchy of the 2nd input stream and the 3rd input stream is higher than that of the 1st input stream, so the 2nd and 3rd streams float above the 1st stream's image.
+
+
+
+```java
+// Create input stream list object
+ArrayList<ZegoMixerInput> inputList = new ArrayList<>();
+
+// Fill in the first input stream configuration. Each input stream needs to set Stream ID (the value in this parameter must be the actual ID of the input stream), input stream type, layout, etc.
+ZegoMixerInput input_1 = new ZegoMixerInput("streamID_1", ZegoMixerInputContentType.VIDEO, new Rect(0, 0, 360, 640));
+input_1.renderMode = ZegoMixRenderMode.FILL;
+
+// Text watermark for input stream
+input_1.label.text = "text watermark";
+input_1.label.left = 0;
+input_1.label.top = 0;
+input_1.label.font.transparency = 50;
+input_1.label.font.size = 24;
+input_1.label.font.color = 123456;
+input_1.label.font.type = ZegoFontType.SOURCE_HAN_SANS;
+inputList.add(input_1);
+// Fill in the 2nd input stream configuration
+ZegoMixerInput input_2 = new ZegoMixerInput("streamID_2", ZegoMixerInputContentType.VIDEO, new Rect(230, 200, 340, 400));
+input_2.renderMode = ZegoMixRenderMode.FILL;
+
+// Text watermark for input stream
+input_2.label.text = "text watermark";
+input_2.label.left = 0;
+input_2.label.top = 0;
+input_2.label.font.transparency = 50;
+input_2.label.font.size = 24;
+input_2.label.font.color = 123456;
+input_2.label.font.type = ZegoFontType.SOURCE_HAN_SANS;
+inputList.add(input_2);
+// Fill in the 3rd input stream configuration
+ZegoMixerInput input_3 = new ZegoMixerInput("streamID_3", ZegoMixerInputContentType.VIDEO, new Rect(230, 420, 340, 620));
+input_3.renderMode = ZegoMixRenderMode.FILL;
+
+// Text watermark for input stream
+input_3.label.text = "text watermark";
+input_3.label.left = 0;
+input_3.label.top = 0;
+input_3.label.font.transparency = 50;
+input_3.label.font.size = 24;
+input_3.label.font.color = 123456;
+input_3.label.font.type = ZegoFontType.SOURCE_HAN_SANS;
+inputList.add(input_3);
+
+// Set mixing input
+task.setInputList(inputList);
+
+```
+</Accordion>
+
+
+
+
+<a name="5_2_5"></a>
+
+#### Set Mixing Output Information
+
+Up to 3 mixing outputs can be set. When the output target is in URL format, currently only RTMP URL format is supported: rtmp://xxxxxxxx, and two identical mixing output addresses cannot be passed.
+
+The following code demonstrates outputting to ZEGO server (stream ID is "output_streamid_1"). By specifying this stream name for playing, you can see the mixed image:
+
+```java
+// Create output stream list object
+ZegoMixerOutput mixerOutput = new ZegoMixerOutput("output_streamid_1");
+// Build mixing output information list
+ArrayList<ZegoMixerOutput> mixerOutputList = new ArrayList<>();
+mixerOutputList.add(mixerOutput);
+// Set mixing output information
+task.setOutputList(mixerOutputList);
+```
+
+
+#### (Optional) Set Mixing Image Watermark
+
+<Accordion title="Mixing image watermark settings" defaultOpen="false">
+If you need the URL for watermark image, please contact ZEGO Technical Support to obtain.
+
+The following code demonstrates setting a ZEGO image watermark placed in the upper left corner of the image:
+
+```java
+// Create watermark object
+ZegoWatermark watermark = new ZegoWatermark();
+// The value of watermark.imageURL should be obtained by sending the image to Zego technical personnel for configuration to get the specific string value
+watermark.imageURL = "preset-id://zegowp.png";
+watermark.layout.top = 0;
+watermark.layout.left = 0;
+watermark.layout.right = 300;
+watermark.layout.bottom = 200;
+// Set output watermark configuration
+task.setWatermark(watermark);
+```
+</Accordion>
+
+
+#### (Optional) Set Mixing Background Image
+
+<Accordion title="Mixing background image settings" defaultOpen="false">
+If you need the URL for background image, please contact ZEGO Technical Support to obtain.
+
+```java
+task.setBackgroundImageURL("preset-id://zegobg.png");
+```
+</Accordion>
+
+#### (Optional) Set Mixing Sound Level Callback
+
+<Accordion title="Mixing sound level callback settings" defaultOpen="false">
+<Warning title="Warning">
+
+In video scenarios, it is not recommended to enable the sound level switch, otherwise the playing end playing HLS protocol streams may have compatibility issues.
+</Warning>
+
+You can choose whether to enable mixing sound level callback notifications by setting the [enableSoundLevel](@enableSoundLevel-ZegoMixerTask) parameter. After enabling (value is "True"), when users play mixed streams, they can receive volume change (sound level) information of each single stream through the [onMixerSoundLevelUpdate](@onMixerSoundLevelUpdate) callback.
+
+```java
+task.enableSoundLevel(true);
+```
+</Accordion>
+
+
+#### (Optional) Set Advanced Configuration
+
+<Accordion title="Advanced configuration settings" defaultOpen="false">
+Advanced configuration applies to some customization needs, such as: configuring video encoding format.
+
+If you need to know specific supported configuration item information, please contact ZEGO Technical Support.
+
+<Note title="Note">
+
+
+Normal scenarios do not need to set advanced configuration.
+</Note>
+
+```java
+// Specify mixing output video format as vp8, which takes effect only when using specific publishing protocols.
+HashMap advancedConfig = new HashMap();
+advancedConfig.put("video_encode", "vp8");
+task.setAdvancedConfig(advancedConfig);
+
+// If mixing output video format is set to vp8, please synchronously set audio encoding format to LOW3 for the setting to take effect.
+ZegoMixerAudioConfig audioConfig = new ZegoMixerAudioConfig();
+audioConfig.codecID = ZegoAudioCodecID.LOW3;
+task.setAudioConfig(audioConfig);
+```
+</Accordion>
+
+### Start Mixing Task
+
+After completing the configuration of the [ZegoMixerTask](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-entity-zego-mixer-task) mixing task object, call the start mixing interface to start this mixing task, and handle the logic of starting mixing task failure in the callback.
+
+<Warning title="Warning">
+
+
+
+If you need to play mixed CDN resources on the Web, when using CDN recording, please select AAC-LC for audio encoding. Since some browsers (such as Google Chrome and Microsoft Edge) are incompatible with HE-AAC audio encoding format, it will cause recorded files to fail to play.
+</Warning>
+
+
+
+```java
+/**
+ * Start mixing task.
+ *
+ * Due to client device performance considerations, ZegoExpressEngine mixing is performed on the ZEGO audio and video cloud server starting mixing tasks for mixing.
+ * After calling this interface, ZegoExpressEngine sends a mixing request to ZEGO audio and video cloud, which will find currently publishing streams and perform layer mixing according to the parameters of the mixing task requested by ZegoExpressEngine.
+ * If an exception occurs when requesting to start mixing task, such as the most common case where mixing input streams do not exist, the error code will be given from the callback. For specific error codes, please refer to the common error codes document [https://doc-zh.zego.im/real-time-video-android-java/client-sdk/error-code.html].
+ * If a certain input stream disappears midway, the mixing task will automatically retry to play this input stream for 90 seconds, and will not retry after 90 seconds.
+ * @param task Mixing task object.
+ * @param callback Start mixing task result notification.
+ */
+engine.startMixerTask(task, new IZegoMixerStartCallback() {
+    @Override
+    public void onMixerStartResult(int errorCode, JSONObject extendedData) {
+        if (errorCode != 0) {
+            //Mixing task start failed or update mixing failed (update failure does not affect the original mixing task).
+        }
+        else {
+            //Mixing task start succeeded or update mixing succeeded.
+        }
+    }
+});
+```
+
+### Update Mixing Task Configuration
+
+When mixing information changes, such as adding or removing input streams in the mixing list, adjusting mixing video output bitrate, etc., modify the parameters of this mixing task object, then call the [startMixerTask](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#start-mixer-task) interface once to update the configuration.
+
+<Warning title="Warning">
+
+When updating mixing task configuration, "taskID" cannot be changed.
+</Warning>
+
+
+### Stop Mixing
+
+
+```java
+/**
+ * Stop mixing task.
+ *
+ * Similar to [startMixerTask], after calling this interface, ZegoExpressEngine sends a request to ZEGO audio and video cloud server to end mixing.
+ * If a developer starts the next mixing task without stopping the previous mixing task, the previous mixing task will not automatically stop until 90 seconds after all input streams of the previous mixing task do not exist, then the previous mixing task will automatically end.
+ * When developers use the mixing function of ZEGO audio and video cloud service, they should note that when starting the next mixing task, they should stop the previous mixing task to avoid the situation where a host has already started the next mixing task to mix with other hosts, but the audience is still continuously playing the output stream of the previous mixing task.
+ * @param task Mixing task object.
+ * @param callback Stop mixing task result notification.
+ */
+engine.stopMixerTask("task1", new IZegoMixerStopCallback() {
+    @Override
+    public void onMixerStopResult(int i) {
+        if (i != 0) {
+            // Failed to stop mixing task.
+        }
+    }
+});
+```
+
+## Automatic Mixing Usage Steps
+
+### Initialize and Login to Room
+
+Please refer to [Quick Start - Implementation](/real-time-video-android-java/quick-start/implementing-video-call) for "Create Engine" and "Login to Room".
+
+<Warning title="Warning">
+
+- The prerequisite for automatic mixing is that the target room exists.
+- The user initiating automatic mixing can mix streams published by other existing users in the room (only audio streams can be mixed), without needing to log in to the room themselves or publish streams in the room.
+
+</Warning>
+
+### Set Mixing Configuration
+
+[ZegoAutoMixerTask](@-ZegoAutoMixerTask) is the automatic mixing task configuration object defined in the SDK. By configuring this object, you can customize automatic mixing tasks.
+
+```java
+// Automatic mixing task object
+public class ZegoAutoMixerTask {
+// Automatic mixing task ID
+public String taskID = "";
+// Automatic mixing task room ID
+public String roomID = "";
+// Automatic mixing task audio configuration
+public ZegoMixerAudioConfig audioConfig = new ZegoMixerAudioConfig();
+// Automatic mixing task output stream list
+public ArrayList<ZegoMixerOutput> outputList = new ArrayList();
+// Whether to enable automatic mixing sound level callback notification
+public boolean enableSoundLevel = false;
+
+ public ZegoAutoMixerTask() {
+    }
+}
+```
+
+#### Create Automatic Mixing Task Object
+
+Create a new automatic mixing task object, then set input, output and other parameters respectively.
+
+- Only one automatic mixing task ID can exist in a room, that is, ensure the uniqueness of the automatic mixing task ID. It is recommended to associate the automatic mixing task ID with the room ID, and directly use the room ID as the automatic mixing task ID.
+- The room ID that needs automatic mixing. If the room does not exist, automatic mixing cannot be performed.
+
+```java
+ZegoAutoMixerTask task = new ZegoAutoMixerTask();
+task.taskID = "taskID1";
+task.roomID = "roomID1";
+```
+
+#### (Optional) Set Automatic Mixing Audio Configuration
+
+<Accordion title="Automatic mixing audio configuration" defaultOpen="false">
+Set automatic mixing audio related configurations through [ZegoMixerAudioConfig](@-ZegoMixerAudioConfig), mainly including audio bitrate, number of channels, encoding ID, and multi-audio stream mixing mode.
+
+```java
+ZegoMixerAudioConfig audioConfig = new ZegoMixerAudioConfig();
+// Audio bitrate, unit is kbps, default is 48 kbps, cannot be modified after starting mixing task
+audioConfig.bitrate = 48;
+// Audio channel, default is MONO mono
+audioConfig.channel = MONO;
+// Encoding ID, default is DEFAULT
+audioConfig.codecID = DEFAULT;
+// Multi-audio stream mixing mode, default is RAW
+audioConfig.mixMode = RAW;
+task.audioConfig = audioConfig;
+```
+
+Through the [channel](@-ZegoAudioChannel) parameter, you can modify audio channels. Currently the following audio channels are supported:
+
+|Enumeration Value|Description|Application Scenarios|
+|-|-|-|
+|UNKNOWN|Unknown.|-|
+|MONO|Mono.|Scenarios with only mono.|
+|STEREO|Stereo.|Scenarios with stereo.|
+
+Through the [codecID](@-ZegoAudioCodecID) parameter, you can modify the encoding ID. Currently the following encoding IDs are supported:
+
+|Enumeration Value|Description|Application Scenarios|
+|-|-|-|
+|DEFAULT|Default value.|Determined by the [scenario] when calling [createEngine].|
+|NORMAL|Bitrate range 10 kbps ~ 128 kbps; supports stereo; latency around 500ms. Requires server transcoding when interoperating with Web SDK; does not require server cloud transcoding when relaying to CDN.|Can be used for RTC and CDN publishing.|
+|NORMAL2|Good compatibility, bitrate range 16 kbps ~ 192 kbps; supports stereo; latency around 350ms; at the same bitrate (lower bitrate), sound quality is weaker than [Normal]. Requires server transcoding when interoperating with Web SDK; does not require server cloud transcoding when relaying to CDN.|Can be used for RTC and CDN publishing.|
+|NORMAL3|Not recommended for use.|Can only be used for RTC publishing.|
+|LOW|Not recommended for use.|Can only be used for RTC publishing.|
+|LOW2|Not recommended for use, maximum bitrate is 16 kbps.|Can only be used for RTC publishing.|
+|LOW3|Bitrate range 6 kbps ~ 192 kbps; supports stereo; latency around 200ms; at the same bitrate (lower bitrate), sound quality is significantly better than [Normal] and [Normal2]; lower CPU overhead. Does not require server cloud transcoding when interoperating with Web SDK; requires server transcoding when relaying to CDN.|Can only be used for RTC publishing.|
+
+Through the [mixMode](@-ZegoAudioMixMode) parameter, you can modify multi-audio stream mixing mode. Currently the following multi-audio stream mixing modes are supported:
+
+|Enumeration Value|Description|Application Scenarios|
+|-|-|-|
+|RAW|Default mode, no special behavior.|Scenarios with no special audio requirements.|
+|FOCUSED|Audio focus mode, can highlight the sound of a certain stream among multiple audio streams.|Scenarios where you need to highlight the sound of a certain stream.|
+</Accordion>
+
+
+
+#### Set Automatic Mixing Output List
+
+Set the automatic mixing output list through [ZegoMixerOutput](@-ZegoMixerOutput), and users can play the mixed stream from the output targets in the list.
+
+```java
+ArrayList<ZegoMixerOutput> outputList = new ArrayList<>();
+
+// Mixing output target, URL or stream ID
+ZegoMixerOutput output = new ZegoMixerOutput("output-stream");
+
+outputList.add(output);
+task.outputList = outputList;
+```
+
+#### (Optional) Set Automatic Mixing Sound Level Callback
+
+<Accordion title="Automatic mixing sound level callback settings" defaultOpen="false">
+<Warning title="Warning">
+
+
+In video scenarios, it is not recommended to enable the sound level switch, otherwise the web end playing HLS protocol streams may have compatibility issues
+</Warning>
+
+
+You can choose whether to enable automatic mixing sound level callback notifications by setting the [enableSoundLevel](@enableSoundLevel-ZegoAutoMixerTask) parameter. After enabling (value is "True"), when users play mixed streams, they can receive volume change (sound level) information of each single stream through the [onAutoMixerSoundLevelUpdate](@onAutoMixerSoundLevelUpdate) callback.
+
+```java
+task.enableSoundLevel = true;
+```
+</Accordion>
+
+
+
+### Start Automatic Mixing Task
+
+After completing the configuration of the [ZegoAutoMixerTask ](@-ZegoAutoMixerTask) automatic mixing task object, call the [startAutoMixerTask](@startAutoMixerTask) interface to start this automatic mixing task, and receive the start automatic mixing task result in the [IZegoMixerStartCallback ](@-IZegoMixerStartCallback) callback.
+
+```java
+MixerMainActivity.engine.startAutoMixerTask(task, new IZegoMixerStartCallback() {
+    @Override
+    public void onMixerStartResult(int errorCode, JSONObject var2) {
+        if (errorCode != 0) {
+            // Failed to start automatic mixing task
+        }
+    }
+});
+```
+
+### Stop Automatic Mixing
+
+Call the [stopAutoMixerTask ](@stopAutoMixerTask) interface to stop automatic mixing.
+
+<Warning title="Warning">
+
+Before starting the next automatic mixing task in the same room, please call the [stopAutoMixerTask ](@stopAutoMixerTask) interface to end the previous automatic mixing task, to avoid the situation where when a host has already started the next automatic mixing task to mix with other hosts, the audience is still continuously playing the output stream of the previous automatic mixing task. If the user does not actively end the current automatic mixing task, the task will automatically end after the room is closed.
+</Warning>
+
+
+```java
+// Pass the previously created mixing task object
+MixerMainActivity.engine.stopAutoMixerTask(currentMixTask, new IZegoMixerStopCallback() {
+    @Override
+    public void onMixerStopResult(int i) {
+        if (i != 0) {
+            // Failed to stop automatic mixing task
+        }
+    }
+});
+```
+
+## Fully Automatic Mixing Usage Steps
+
+Implement automatic audio stream mixing for each room through ZEGO server configuration. For details, please contact ZEGO Technical Support.
+
+
+## FAQ
+
+1. **Can I push mixed streams to third-party CDNs? How to relay to multiple CDNs?**
+
+  If you need to push mixed streams to third-party CDNs, you can fill in the CDN URL in the "target" parameter of [ZegoMixerOutput](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-entity-zego-mixer-output).
+
+  The filled URL format needs to be in RTMP format: "rtmp://xxxxxxxx".
+
+  To push to multiple CDNs, create N output stream objects [ZegoMixerOutput](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-entity-zego-mixer-output) and put them in the "outputList" output list in [ZegoMixerTask](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-entity-zego-mixer-task).
+
+2. **How to set the layout of each stream in the mix?**
+
+  Example of using the "layout" parameter of [ZegoMixerInput](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-entity-zego-mixer-input).
+
+    - Assume the upper left corner coordinates of a certain stream are specified as (50, 300), and the lower right corner coordinates are (200, 450), that is, the "layout" parameter is "[ZegoRect rectWithLeft:50 top:300 right:200 bottom:450];".
+    - Assume the resolution "resolution" in the "videoConfig" parameter of [ZegoMixerTask](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-entity-zego-mixer-task) is "CGSizeMake(375, 667)".
+
+  The position of this stream in the final output mixed stream is as shown below:
+
+  <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/Mixer/mixer-layout.png" /></Frame>
+
+3. **When the aspect ratio of the "ZegoRect" layout of the mixing input object "ZegoMixerInput" does not match the resolution of the stream itself, how will the image be cropped?**
+
+  The SDK will perform proportional scaling. Assume an input stream has a resolution of "720 × 1280", that is, an aspect ratio of "9:16", and the "layout" parameter of this stream's [ZegoMixerInput](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-entity-zego-mixer-input) is "[left:0 top:0 right:100 bottom:100]", that is, an aspect ratio of "1:1", the image will display the middle part of this stream, that is, the top and bottom parts are cropped.
+
+4. **Hosts participating in co-hosting want their respective audiences to see their own video in the large window in the mixed stream layout, how to mix?**
+
+  Each host sets their own layout and then initiates mixing respectively.
+
+  For example: Host A sets the width and height of their published stream A image layout to be larger than the layout width and height of host B's stream B, then initiates a mixing task to output a stream "A_Mix"; Host B sets the width and height of their published stream B image layout to be larger than the layout width and height of host A's stream A, then initiates mixing to output a stream "B_Mix".
+
+  That is, a total of two mixing tasks need to be initiated.
+
+5. **What are the differences between the two mixing methods: "start mixing immediately after a single host starts live streaming" and "start mixing only when the second host joins co-hosting"? What are the pros and cons?**
+
+  Starting mixing from the beginning of single-host live streaming has the advantage of simple implementation, but the disadvantage is additional CDN cost overhead for single-stream mixing time.
+
+  From the beginning of single-host live streaming, only publish stream, and start mixing only when the second host joins co-hosting. The advantage is saving costs; the disadvantage is that development implementation is more complex. The audience needs to play the single-host stream first. After hosts start co-hosting and enable mixing, the audience needs to stop playing the single-host stream, then switch to playing the mixed stream. The above method of mixing from the beginning does not require the audience to switch from playing single-host stream to playing mixed stream.
+
+6. **Does mixing support circular or square images?**
+
+  Circular is not supported, square can be achieved through layout.
+
+
+7. **When publishing pure audio mixing and setting a background image, the background image cannot be displayed normally, how to handle?**
+
+   In this case, customers need to correctly set the width and height of the output layout according to their own business needs, and contact ZEGO Technical Support to configure and enable black frame filling.

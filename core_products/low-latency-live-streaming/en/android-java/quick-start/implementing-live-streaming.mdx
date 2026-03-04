@@ -1,0 +1,606 @@
+---
+articleID: 13395
+---
+# Implementing Ultra-low Latency Live Streaming
+
+---
+
+
+This article will introduce how to quickly implement a simple video live streaming through the ultra-low latency live streaming function.
+
+
+## Introduction
+
+Explanation of related concepts:
+
+- ZEGO Express SDK: Real-time audio and video and live streaming SDK provided by ZEGO, which can provide developers with convenient access, HD and smooth, multi-platform interoperability, low latency, and high concurrency audio and video services.
+
+- Stream: A group of audio and video data that is continuously sent and encapsulated in a specified encoding format. A user can publish multiple streams at the same time (for example, one for camera data and one for screen sharing data) and can also play multiple streams at the same time. Each stream is identified by a stream ID (streamID).
+
+- Publish stream: The process of pushing packaged audio and video data streams from the capture stage to the ZEGOCLOUD.
+
+- Play stream: The process of pulling and playing existing audio and video data streams from the ZEGO MSDN network.
+
+- Room: An audio and video space service provided by ZEGO, used to organize user groups. Users in the same room can send and receive real-time audio, video, and messages to each other.
+    - Users need to log in to a room first before they can perform publish and play stream operations.
+    - Users can only receive relevant messages in their own room (user entry/exit, audio and video stream changes, etc.).
+    - Each room is identified by a unique roomID within an AppID. All users who log in to the room using the same roomID belong to the same room.
+
+
+For more related concepts, please refer to [Terminology](/glossary/term-explanation).
+
+
+## Prerequisites
+
+Before implementing basic ultra-low latency live streaming functions, please ensure:
+
+- ZEGO Express SDK has been integrated into the project. For details, please refer to [Quick Start - Integration](/live-streaming-android/quick-start/integrating-sdk).
+
+- A project has been created in [ZEGOCLOUD Console](https://console.zegocloud.com), and a valid AppID has been applied for. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+
+<a id="process"></a>
+
+## Implementation Process
+
+The basic process for users to perform video live streaming through ZEGO Express SDK is:
+
+Users A and B join a room. User B previews and pushes the audio and video stream to the ZEGO cloud service (publish stream). After User A receives the notification of the audio and video stream pushed by User B, User A plays User B's audio and video stream in the notification (play stream).
+
+
+<Frame width="512" height="auto" caption="">
+  <img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/common_usage_new.png" />
+</Frame>
+
+
+### Enable Service
+
+The ultra-low latency live streaming function is not enabled by default. Please enable it yourself in [ZEGOCLOUD Console](https://console.zegocloud.com) before use (for enabling steps, please refer to "Ultra-low Latency Live Streaming" in [Project Management - Service Configuration](/console/service-configuration/l3)), or contact ZEGOCLOUD Technical Support to enable it.
+
+<a id="initialization"> </a>
+
+### Initialization
+
+**1. Create Interface**
+
+Create a user interface for video live streaming for your project according to scenario needs. We recommend that you add the following elements to your project:
+
+- Local video window
+
+- Remote video window
+
+- Stop live streaming button
+
+<Note title="Note">
+
+
+- When the local user is the host, the local video window will be displayed. That is, if the local user is a viewer, only the remote video window is displayed.
+
+- When the remote user is the host, the remote video window is displayed.
+
+</Note>
+
+
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/express_quickstart_video_call_new.png" /></Frame>
+
+<Accordion title="Interface Code Example" defaultOpen="false">
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".Playing">
+
+    <TextureView
+        android:id="@+id/logView"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_alignParentTop="true"/>
+
+    <TextureView
+        android:id="@+id/previewView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/logView"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentLeft="true"/>
+
+    <TextView
+        android:id="@+id/roomIDTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:layout_margin="10dp"
+        android:textColor="@color/black"
+        android:textSize="12sp"
+        android:layout_below="@+id/logView"/>
+
+    <TextView
+        android:id="@+id/userIDTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:layout_margin="5dp"
+        android:textColor="@color/black"
+        android:textSize="12sp"
+        android:layout_below="@+id/roomIDTextView"/>
+
+    <TextView
+        android:id="@+id/publishStreamIDTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:layout_margin="5dp"
+        android:textColor="@color/black"
+        android:textSize="12sp"
+        android:layout_below="@+id/userIDTextView"/>
+
+    <Button
+        android:id="@+id/stopButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Stop"
+        android:textSize="15sp"
+        android:layout_alignParentBottom="true"
+        android:layout_marginBottom="30dp"
+        android:layout_centerHorizontal="true"/>
+
+
+    <TextureView
+        android:id="@+id/playView"
+        android:layout_width="108dp"
+        android:layout_height="192dp"
+        android:layout_below="@id/logView"
+        android:layout_alignParentRight="true"
+        android:layout_margin="10dp"/>
+
+</RelativeLayout>
+```
+</Accordion>
+
+
+<h1 id="CreateEngine"> </h1>
+
+**2. Create Engine**
+
+Call the [createEngine](@createEngine) interface and pass the applied AppID to the parameter "appID" to create an engine singleton object.
+
+
+
+```java
+// Create ZegoExpress instance and listen to common events
+ZegoEngineProfile profile = new ZegoEngineProfile();
+profile.appID = ;  // Please obtain through official website registration, format: 1234567890L
+profile.scenario = ZegoScenario.DEFAULT;  // General scenario access
+profile.application = getApplication();
+engine = ZegoExpressEngine.createEngine(profile, null);
+```
+
+**3. Set Callback**
+
+You can listen to and process event callbacks you care about by implementing specific methods in the [IZegoEventHandler](@-IZegoEventHandler) interface (or through anonymous inner classes). Then pass the object of the interface implementation class (or anonymous inner class) as the `eventHandler` parameter to the [createEngine](@createEngine) method or to [setEventHandler](@setEventHandler-ZegoExpressEngine) to register the callback.
+
+<Warning title="Warning">
+
+
+It is recommended to register callbacks when creating the engine or immediately after creating the engine, to avoid missing event notifications due to delayed registration.
+
+</Warning>
+
+
+
+
+<Accordion title="Common Notification Callbacks" defaultOpen="false">
+**1. Notification of my connection status change in the room**
+
+[onRoomStateChanged](@onRoomStateChanged): When the local user calls [loginRoom](@loginRoom) to join a room, you can monitor your connection status in the room in real time by listening to the [onRoomStateChanged](@onRoomStateChanged) callback.
+
+You can handle business logic based on different states in the callback.
+
+```java
+@Override
+public void onRoomStateChanged(String roomID, ZegoRoomStateChangedReason reason, int errorCode, JSONObject extendedData)
+{
+    super.onRoomStateChanged(roomID, reason, errorCode, extendedData);
+}
+```
+
+The meaning of ZegoRoomStateChangedReason status is as follows. For more information, please refer to [Room Status Management](/live-streaming-android/room/room-connection-status):
+
+<table>
+
+  <tbody><tr>
+    <th>Status</th>
+    <th>Enum Value</th>
+    <th>Meaning</th>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.LOGINING</td>
+    <td>0</td>
+    <td>Logging in to the room. When calling [loginRoom] to log in to the room or [switchRoom] to switch to the target room, enter this status, indicating that a request is being made to connect to the server. Usually this status is used to display the application interface.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.LOGINED</td>
+    <td>1</td>
+    <td>Successfully logged in to the room. After successfully logging in or switching rooms, enter this status, indicating that logging in to the room has been successful, and users can normally receive callback notifications for additions and deletions of other users and all streams in the room.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.LOGIN_FAILED</td>
+    <td>2</td>
+    <td>Failed to log in to the room. After failing to log in or switch rooms, enter this status, indicating that logging in or switching to the room has failed, such as incorrect AppID, AppSign or Token.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.RECONNECTING</td>
+    <td>3</td>
+    <td>Room connection temporarily interrupted. If the interruption is caused by poor network quality, the SDK will perform internal retries.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.RECONNECTED</td>
+    <td>4</td>
+    <td>Room reconnection successful. If the interruption is caused by poor network quality, the SDK will perform internal retries. After successful reconnection, enter this status.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.RECONNECT_FAILED</td>
+    <td>5</td>
+    <td>Room reconnection failed. If the interruption is caused by poor network quality, the SDK will perform internal retries. After failed reconnection, enter this status.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.KICK_OUT</td>
+    <td>6</td>
+    <td>Kicked out of the room by the server. For example, if a user with the same username logs in to the room elsewhere, causing the local end to be kicked out of the room, this status will be entered.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.LOGOUT</td>
+    <td>7</td>
+    <td>Successfully logged out of the room. Before logging in to the room, it defaults to this status. After successfully calling [logoutRoom] to log out of the room or internal logout of the current room by [switchRoom] is successful, enter this status.</td>
+  </tr>
+  <tr>
+    <td>ZegoRoomStateChangedReason.LOGOUT_FAILED</td>
+    <td>8</td>
+    <td>Failed to log out of the room. After failing to call [logoutRoom] to log out of the room or internal logout of the current room by [switchRoom] fails, enter this status.</td>
+  </tr>
+</tbody></table>
+
+
+**2. Notifications of other users entering and exiting the room**
+
+[onRoomUserUpdate](@onRoomUserUpdate): When other users in the same room enter or exit the room, you can receive notifications through this callback. When the parameter [ZegoUpdateType](@-ZegoUpdateType) in the callback is ZegoUpdateType.ADD, it means a user has entered the room; when [ZegoUpdateType](@-ZegoUpdateType) is ZegoUpdateType.DELETE, it means a user has exited the room.
+
+<Warning title="Warning">
+
+
+- Only when the [isUserStatusNotify](@isUserStatusNotify) parameter in the configuration [ZegoRoomConfig](@-ZegoRoomConfig) passed when logging in to the room [loginRoom](@loginRoom) is true can users receive callbacks of other users in the room.
+
+- When the number of people in the room is greater than 500, the onRoomUserUpdate callback is not guaranteed to be valid. If your business scenario has more than 500 people in a room, please contact ZEGOCLOUD Technical Support.
+
+
+</Warning>
+
+
+
+```java
+@Override
+public void onRoomUserUpdate(String roomID, ZegoUpdateType updateType, ArrayList<ZegoUser> userList) {
+    super.onRoomUserUpdate(roomID, updateType, userList);
+    // You can handle the corresponding business logic in the callback based on the user's entry/exit situation
+    if (updateType == ZegoUpdateType.ADD) {
+        for (ZegoUser user : userList) {
+            //("User %s entered room %s", user.userName, roomID);
+        }
+    } else if (updateType == ZegoUpdateType.DELETE) {
+        for (ZegoUser user : userList) {
+            //("User %s left room %s", user.userName, roomID);
+        }
+    }
+}
+```
+
+**3. Notification of user publish audio and video stream status**
+
+[onPublisherStateUpdate](@onPublisherStateUpdate): According to actual application needs, after a user publishes audio and video streams, when the status of publishing video streams changes (such as network interruption causing publishing exceptions, etc.), you will receive this callback, and the SDK will automatically retry.
+
+```java
+@Override
+public void onPublisherStateUpdate(String streamID, ZegoPublisherState state, int errorCode, JSONObject extendedData) {
+    super.onPublisherStateUpdate(streamID, state, errorCode, extendedData);
+    if (errorCode != 0) {
+        Log.e("Publish stream status error errorCode: %d", errorCode);
+    } else {
+        switch (state) {
+            case PUBLISHING:
+                //("Publishing stream");
+                break;
+            case PUBLISH_REQUESTING:
+                //("Requesting to publish stream");
+                break;
+            case NO_PUBLISH:
+                //("Not publishing stream");
+                break;
+        }
+    }
+}
+```
+
+**4. Notification of user play audio and video stream status**
+
+[onPlayerStateUpdate](@onPlayerStateUpdate): According to actual application needs, after a user plays audio and video streams, when the status of playing video streams changes (such as network interruption causing playing exceptions, etc.), you will receive this callback, and the SDK will automatically retry.
+
+```java
+@Override
+public void onPlayerStateUpdate(String streamID, ZegoPlayerState state, int errorCode, JSONObject extendedData) {
+    super.onPlayerStateUpdate(streamID, state, errorCode, extendedData);
+    if (errorCode != 0) {
+        Log.e("Play stream status error streamID: %s, errorCode:%d", streamID, errorCode);
+    } else {
+        switch (state) {
+            case PLAYING:
+                //("Playing stream");
+                break;
+            case PLAY_REQUESTING:
+                //("Requesting to play stream");
+                break;
+            case NO_PLAY:
+                //("Not playing stream");
+                break;
+        }
+    }
+}
+```
+</Accordion>
+
+
+<a id="createroom"></a>
+
+### Login Room
+
+- Generate Token
+
+Developers can obtain temporary Tokens (valid for 24 hours) in [ZEGOCLOUD Console](https://console.zegocloud.com/dashboard). For details, please contact ZEGOCLOUD Technical Support.
+
+<Warning title="Warning">
+
+- Temporary Tokens are only for debugging. When going live officially, please generate tokens from the developer's business server. For details, please refer to [Use Token Authentication](/live-streaming-android/communication/use-token-authentication).
+
+- If the Token is incorrect, please refer to error codes 1002067 and 1003072 in the [Error Codes](/live-streaming-android/client-sdk/error-code) document to troubleshoot the problem.
+
+</Warning>
+
+
+You can call the [loginRoom](@loginRoom) interface to log in to the room. If the room does not exist, calling this interface will create and log in to this room. The parameters of roomID and user are generated locally by you, but need to meet the following conditions:
+
+- Within the same AppID, ensure that "roomID" is globally unique.
+
+- Within the same AppID, ensure that "userID" is globally unique. It is recommended that developers associate "userID" with their own business account system.
+
+```java
+// The constructor method public ZegoUser(String userID) of ZegoUser will set "userName" to be the same as the passed parameter "userID". "userID" and "userName" cannot be "null", otherwise login to the room will fail.
+ZegoUser user = new ZegoUser("user1");
+// Only by passing a ZegoRoomConfig with the "isUserStatusNotify" parameter set to "true" can you receive the onRoomUserUpdate callback.
+ZegoRoomConfig roomConfig = new ZegoRoomConfig();
+//token is generated by the user's own server. To run through the process faster, you can also obtain a temporary audio and video token through the ZEGO Console
+roomConfig.token = "xxxx";
+roomConfig.isUserStatusNotify = true;
+// Log in to the room
+engine.loginRoom("room1", user, roomConfig, (int error, JSONObject extendedData)->{
+    // (Optional callback) Login room result. If you only care about the login result, just pay attention to this callback
+});
+```
+
+#### Login Status (Room Connection Status) Callback
+
+After calling the login room interface, you can monitor your connection status in the room in real time by listening to the [onRoomStateChanged](@onRoomStateChanged) callback.
+
+```java
+@Override
+public void onRoomStateChanged(String roomID, ZegoRoomStateChangedReason reason, int errorCode, JSONObject extendedData) {
+    if(reason == ZegoRoomStateChangedReason.LOGINING)
+    {
+        // Logging in
+    }
+    else if(reason == ZegoRoomStateChangedReason.LOGINED)
+    {
+        // Login successful
+        //Only when the room status is login successful or reconnection successful can publish stream (startPublishingStream) and play stream (startPlayingStream) normally send and receive audio and video
+        //Push your own audio and video stream to the ZEGO audio and video cloud
+    }
+    else if(reason == ZegoRoomStateChangedReason.LOGIN_FAILED)
+    {
+        // Login failed
+    }
+    else if(reason == ZegoRoomStateChangedReason.RECONNECTING)
+    {
+        // Reconnecting
+    }
+    else if(reason == ZegoRoomStateChangedReason.RECONNECTED)
+    {
+        // Reconnection successful
+    }
+    else if(reason == ZegoRoomStateChangedReason.RECONNECT_FAILED)
+    {
+        // Reconnection failed
+    }
+    else if(reason == ZegoRoomStateChangedReason.KICK_OUT)
+    {
+        // Kicked out of the room
+    }
+    else if(reason == ZegoRoomStateChangedReason.LOGOUT)
+    {
+        // Logout successful
+    }
+    else if(reason == ZegoRoomStateChangedReason.LOGOUT_FAILED)
+    {
+        // Logout failed
+    }
+}
+```
+
+<a id="publishingStream"></a>
+
+
+### Host previews their own screen and pushes to ZEGO audio and video cloud
+
+**1. (Optional) Host previews their own screen**
+
+
+If you want to see the local screen, you can call the [startPreview](@startPreview) interface to set the preview view and start local preview.
+
+```java
+// Set local preview view and start preview. The view mode uses the SDK's default mode, proportional scaling to fill the entire View
+ZegoCanvas previewCanvas = new ZegoCanvas(previewView);
+engine.startPreview(previewCanvas);
+```
+
+**2. Host pushes their own audio and video stream to ZEGO audio and video cloud**
+
+After the user calls the [loginRoom](@loginRoom) interface, they can directly call the [startPublishingStream](@startPublishingStream) interface and pass in "streamID" to push their own audio and video stream to the ZEGO audio and video cloud. You can know whether the push is successful by listening to the [onPublisherStateUpdate](@onPublisherStateUpdate) callback.
+
+"streamID" is generated locally by you, but needs to ensure:
+
+Within the same AppID, "streamID" is globally unique. If under the same AppID, different users each push a stream with the same "streamID", the user who pushes later will fail to push.
+
+Here, the example is to push immediately after calling the [loginRoom](@loginRoom) interface. When implementing specific business, you can choose other timing to push, as long as you ensure to call [loginRoom](@loginRoom) first.
+
+```java
+// User calls this interface to push stream after calling loginRoom
+// Under the same AppID, developers need to ensure that "streamID" is globally unique. If different users each push a stream with the same "streamID", the user who pushes later will fail.
+engine.startPublishingStream("stream1");
+```
+
+<Note title="Note">
+If you need to understand Express's microphone/audio/speaker related interfaces, please refer to [FAQ - How to implement switching camera/video screen/microphone/audio/speaker?](https://www.zegocloud.com/docs/faq/device-switching).
+</Note>
+
+### Play host's audio and video
+
+When live streaming, we need to pull the host's audio and video. The latency of ultra-low latency live streaming play stream is within 1s, which can better achieve the ultimate live streaming experience of ultra-low latency, ultra-strong synchronization, extreme weak network resistance, ultra-low stuttering, ultra-clear picture quality, and instant first frame.
+
+When other users in the same room push audio and video streams to the ZEGO audio and video cloud, we will receive notifications of new audio and video streams in the [onRoomStreamUpdate](@onRoomStreamUpdate) callback, and can get the "streamID" of a certain stream through ZegoStream.
+
+In this callback, we can call the [startPlayingStream](@startPlayingStream) interface and pass in "streamID" to play the user's audio and video. You can know whether the audio and video are successfully played by listening to the [onPlayerStateUpdate](@onPlayerStateUpdate) callback. You can use the following play stream method.
+
+<Warning title="Warning">
+
+
+- Ultra-low latency live streaming is not enabled by default. Please enable it yourself in ZEGO Console or contact ZEGOCLOUD Technical Support. For details, please refer to [Enable Service](#enable-service).
+
+- If users encounter related errors during live streaming, they can check [Error Codes](/live-streaming-android/client-sdk/error-code).
+
+</Warning>
+
+
+
+Call the [startPlayingStream](@startPlayingStream) interface and set the [resourceMode](@resourceMode-ZegoPlayerConfig) parameter to "ZegoStreamResourceMode.ONLY_L3", indicating ultra-low latency live streaming play stream.
+
+
+```java
+// When other users in the room push/stop pushing streams, we will receive corresponding stream addition/removal notifications here
+public void onRoomStreamUpdate(String roomID, ZegoUpdateType updateType, ArrayList<ZegoStream> streamList, JSONObject extendedData) {
+    super.onRoomStreamUpdate(roomID, updateType, streamList, extendedData);
+    //When updateType is ZegoUpdateType.ADD, it means there is a new audio and video stream. At this time, we can call the startPlayingStream interface to play this audio and video stream
+    if (updateType == ZegoUpdateType.ADD) {
+         // Start playing stream, set remote play rendering view. The view mode uses the SDK's default mode, proportional scaling to fill the entire View
+        // The following playView is a View on the UI interface. Here to make the example code more concise, we only play the first stream in the newly added audio and video stream list. In actual business, it is recommended that developers loop through streamList and play each audio and video stream
+        ZegoStream stream = streamList.get(0);
+        playStreamID = stream.streamID;
+        ZegoCanvas playCanvas = new ZegoCanvas(playView);
+        ZegoPlayerConfig playerConfig = new ZegoPlayerConfig();
+        playerConfig.resourceMode = ZegoStreamResourceMode.ONLY_L3;
+        engine.startPlayingStream(playStreamID, playCanvas, playerConfig);
+    }
+}
+```
+
+### Debug ultra-low latency live streaming function
+
+Run the project on a real device. After successful running, you can see the local video screen.
+
+For convenience, ZEGO provides a [Web Debug Demo](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html). On this page, enter the same AppID, RoomID, Server address and [Token](/console/development-assistance/temporary-token), and you can join the same room to communicate with the real device. When live streaming starts successfully, you can hear remote audio and see remote video screen.
+
+
+<a id="stopPublishingStream"></a>
+
+### Stop publishing/playing audio and video streams
+
+**1. Stop publishing stream, stop preview**
+
+Call the [stopPublishingStream](@stopPublishingStream) interface to stop sending the local audio and video stream to remote users.
+
+```java
+// Stop publishing stream
+engine.stopPublishingStream();
+```
+
+If local preview is enabled, call the [stopPreview](@stopPreview) interface to stop preview.
+
+```java
+// Stop local preview
+engine.stopPreview();
+```
+
+**2. Stop playing stream**
+
+Call the [stopPlayingStream](@stopPlayingStream) interface to stop playing the audio and video stream pushed remotely.
+
+<Warning title="Warning">
+
+
+If the developer receives a notification of "decrease" in audio and video streams through the [onRoomStreamUpdate](@onRoomStreamUpdate) callback, please call the [stopPlayingStream](@stopPlayingStream) interface in time to stop playing streams, to avoid playing empty streams and generating additional costs. Or, developers can choose the appropriate timing according to their business needs and actively call the [stopPlayingStream](@stopPlayingStream) interface to stop playing streams.
+
+</Warning>
+
+
+
+```java
+// Stop playing stream
+engine.stopPlayingStream("stream1");
+```
+
+### Logout Room
+
+Call the [logoutRoom](@logoutRoom) interface to log out of the room.
+
+```java
+// Logout of room
+engine.logoutRoom();
+```
+
+### Destroy Engine
+
+If the user completely no longer uses audio and video functions, they can call the [destroyEngine](@destroyEngine) interface to destroy the engine and release resources such as microphone, camera, memory, and CPU.
+
+- If you need to listen to callbacks to ensure that device hardware resources are released, you can pass "callback" when destroying the engine. This callback is only used for sending notifications. Developers cannot release engine-related resources in the callback.
+
+- If you don't need to listen to callbacks, you can pass "null".
+    ```java
+    ZegoExpressEngine.destroyEngine(null);
+    ```
+
+
+
+## Live Streaming API Call Sequence
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml.png" /></Frame>
+
+## FAQ
+
+1. **Can I kill the process directly when calling logoutRoom to log out of the room?**
+
+After calling [logoutRoom](@logoutRoom), killing the process directly may cause the [logoutRoom](@logoutRoom) signaling to fail to be sent. Then the ZEGO server can only consider that this user has left the room after the heartbeat times out. To ensure that the [logoutRoom](@logoutRoom) signaling is sent, it is recommended to call [destroyEngine](@destroyEngine) again and receive the callback before killing the process.
+
+## Related Documents
+- [Common Error Codes](/real-time-video-android-java/client-sdk/error-code)
+- [How to handle issues related to rooms and users?](https://www.zegocloud.com/docs/faq/express-room-maintenance)
+- [How to set and obtain SDK logs and stack information?](https://www.zegocloud.com/docs/faq/express-logs-stacktrace)
+- [Does the SDK support automatic reconnection after disconnection?](https://www.zegocloud.com/docs/faq/express-reconnect)
+- [In live streaming scenarios, how to listen for events of remote viewer role users logging in/logging out of rooms?](https://www.zegocloud.com/docs/faq/audience-room-events)
+- [How to adjust the camera focal length (zoom function)?](https://www.zegocloud.com/docs/faq/audience-room-events)
+
+- [Why can't I turn on the camera?](https://www.zegocloud.com/docs/faq/camera-access-failure)
+
+- [How to ensure smooth audio and video in poor network environments (traffic control function)?](https://www.zegocloud.com/docs/faq/flow-control-in-weak-network)
+
+
+
+- [Why is audio and video capture invalid after Android 9 app is locked or switched to background](https://www.zegocloud.com/docs/faq/android-background-capture-issue)
+- [How to keep ZEGO SDK audio and video functions running normally when the app goes to background?](/faq/audio-video-background-keep-alive)

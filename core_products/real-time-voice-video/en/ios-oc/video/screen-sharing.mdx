@@ -1,0 +1,333 @@
+---
+articleID: 10460
+date: "2025-01-20"
+---
+# Screen Sharing
+
+- - -
+
+## Feature Introduction
+
+Screen sharing refers to sharing screen content as video with other viewers during video calls or interactive live streaming to enhance interactive experience and improve communication efficiency.
+
+Screen sharing is widely used in the following scenarios:
+
+- In video conference scenarios, screen sharing can share local files, data, web pages, PPT, and other content of the speaker with other participants.
+- In online classroom scenarios, screen sharing can display the teacher's courseware, notes, lecture content, and other content to students.
+
+<Frame width="512" height="auto" caption="">
+  <img src="https://doc-media.zego.im/sdk-doc/Pics/Express/screen_share_scene_new.png" />
+</Frame>
+
+## Sample Source Code Download
+
+Please refer to [Download Sample Source Code](/real-time-video-ios-oc/quick-start/run-example-code) to get the source code.
+
+For related source code, please check the files in the "/ZegoExpressExample/Examples/Others/ScreenSharing" directory.
+
+## Prerequisites
+
+Before implementing screen sharing features, please ensure:
+
+- iOS device or simulator supporting iOS 12.0 or above with audio and video support (real device is recommended).
+- This feature has high requirements on device performance and is recommended for use on iPhone X and later models.
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated the ZEGO Express SDK in the project and implemented basic audio and video publishing and playing functions. For details, please refer to [Quick Start - Integration](/real-time-video-ios-oc/quick-start/integrating-sdk) and [Quick Start - Implementation Flow](/real-time-video-ios-oc/quick-start/implementing-video-call).
+
+## Implementation Flow
+
+<Warning title="Warning">
+
+- When capturing screen, only iOS and Android platforms support simultaneous video and audio capture; other platforms only support video capture. If audio capture is required, developers need to implement related logic themselves.
+- If you have already implemented screen sharing features through ZEGO's old [Screen Sharing](./screen-sharing.mdx) product, or need to implement screen sharing features yourself, please refer to [How to implement screen sharing through custom capture?](https://www.zegocloud.com/docs/faq/custom-capture-screen-share).
+
+</Warning>
+
+
+
+The iOS platform implements screen recording based on Apple's [Replaykit](https://developer.apple.com/documentation/ReplayKit) framework, which can share the entire system's screen content. However, the current App (main App process) needs to additionally provide an Extension component (Extension process) for screen recording, and then combine it with ZEGO Express SDK related APIs to implement screen sharing features.
+
+The main flow for implementing screen sharing is as follows:
+
+1. Switch capture source to screen sharing source
+2. Start screen sharing
+   * In-app sharing
+
+   * Cross-app sharing
+     1. Create Broadcast Upload Extension
+     2. Set up Extension
+     3. Start screen sharing
+     4. Launch Extension process
+     5. Get screen data
+
+3. Login room and publish stream
+4. Watch remote shared screen
+5. Stop screen sharing
+
+For detailed operations, please refer to the following content.
+
+### 1 Set capture source to screen sharing source in main App
+
+To set the capture source to screen sharing source, you need to set both video source and audio source.
+
+The default "video source" for SDK stream publishing is camera source. If you need to publish screen sharing source, you need to switch to screen sharing through [setVideoSource](@setVideoSource).
+
+```objc
+[ZegoExpressEngine.shareEnigne setVideoSource:ZegoVideoSourceScreenCapture channel:ZegoPublishChannelMain];
+```
+
+The default "audio source" for SDK stream publishing is microphone source. If you need to publish screen sharing source, you need to switch to screen sharing through [setAudioSource](@setAudioSource).
+
+<Note title="Note">
+
+If the main channel uses the screen sharing feature, only when the main channel audio source is set to `Microphone`, the SDK will start internal audio capture to maintain background keep-alive; if set to other audio source types, when the application exits to the background, screen sharing will stop working. It is recommended that users add background keep-alive logic to the application themselves.
+
+</Note>
+
+
+
+```objc
+[ZegoExpressEngine.shareEnigne setAudioSource:ZegoAudioSourceTypeScreenCapture channel:ZegoPublishChannelMain];
+```
+
+### 2 Start screen sharing
+
+There are two screen sharing methods: "in-app screen sharing" and "cross-app screen sharing".
+
+<Accordion title="In-app screen sharing" defaultOpen="false">
+If users only share screen and audio within the app, they can call the [startScreenCaptureInApp](@startScreenCaptureInApp) interface to enable screen sharing. You can also call the [broadcastFinished](@broadcastFinished) interface callback to receive screen sharing end notifications. If screen capture fails, you can receive the reason for failure.
+
+```objc
+ZegoScreenCaptureConfig *config = [[ZegoScreenCaptureConfig alloc] init];
+config.captureVideo = true;
+config.captureAudio = true;
+// Optional parameter, set the video capture area, must be within the original video data, unit is pixels (px)
+config.cropRect = CGRectMake(x, y, width, height);
+[ZegoExpressEngine.sharedEngine startScreenCaptureInApp:config];
+```
+</Accordion>
+
+
+<Accordion title="Cross-app screen sharing" defaultOpen="false">
+Cross-app screen sharing is recorded by the iOS system through the Extension process, so you need to additionally create and launch an extension process. For details, please refer to the following implementation steps:
+
+#### 1 Create Broadcast Upload Extension
+
+<Note title="Note">
+
+The memory usage limit for Broadcast Upload Extension is 50 MB. Do not perform additional memory allocation in the screen sharing Extension.
+
+</Note>
+
+
+
+1. Use Xcode to open the project file, and click "File > New > Target..." in the menu bar in sequence.
+
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_extension_ios1.png" /></Frame>
+
+2. In the pop-up window, select "Broadcast Upload Extension" on the iOS page, then click "Next".
+
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_extension_ios.png" /></Frame>
+
+3. In the "Product Name" field of the pop-up dialog box, fill in the name of "Broadcast Upload Extension", for example "ScreenShare". After selecting "Team", "Language" and other information, click "Finish".
+
+<Note title="Note">
+
+    No need to check "Include UI Extension".
+
+</Note>
+
+
+
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_extension_ios3.png" /></Frame>
+
+    After creation is complete, you will see this Extension's folder in the project, the structure is similar to the following, this folder is used to store the implementation code of the screen sharing feature:
+
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_extension_project.png" /></Frame>
+
+#### 2 Set up Extension
+
+1. Ensure that in the Extension's "Info.plist" file, "RPBroadcastProcessMode" is set to "RPBroadcastProcessModeSampleBuffer".
+2. Import ZEGO Express SDK in Extension. For details, please refer to "Import SDK" in [Quick Start - Integration](/real-time-video-ios-oc/quick-start/integrating-sdk#import-sdk).
+
+#### 3 Start screen sharing
+
+If users need to share the entire system's screen and audio, they can call the [startScreenCapture](@startScreenCapture) interface to enable screen sharing.
+
+```objc
+ZegoScreenCaptureConfig *config = [[ZegoScreenCaptureConfig alloc] init];
+config.captureVideo = true;
+config.captureAudio = true;
+// Optional parameter, set the video capture area, must be within the original video data, unit is pixels (px)
+config.cropRect = CGRectMake(x, y, width, height);
+[ZegoExpressEngine.sharedEngine startScreenCapture:config];
+```
+
+##### 3.1 Set or update screen sharing orientation
+
+Screen sharing orientation supports following system orientation and fixed orientation, default is following system orientation. You can set the `orientation` parameter in [ZegoScreenCaptureConfig](@-ZegoScreenCaptureConfig) to set the screen sharing orientation.
+
+|Enumeration|Description|
+|-|-|
+|ZegoScreenCaptureOrientationAuto|Follow system orientation, playing stream end displays screen according to system orientation|
+|ZegoScreenCaptureOrientationLandscape|Fixed landscape, playing stream end always landscape screen|
+|ZegoScreenCaptureOrientationPortrait|Fixed portrait, playing stream end always portrait screen|
+
+```objc
+ZegoScreenCaptureConfig *config = [[ZegoScreenCaptureConfig alloc] init];
+...
+config.orientation = ZegoScreenCaptureOrientationLandscape; // Fixed landscape
+[ZegoExpressEngine.sharedEngine startScreenCapture:config];
+// or Set when updating screen sharing config
+[ZegoExpressEngine.sharedEngine updateScreenCaptureConfig:config];
+```
+
+#### 4 Launch Extension process
+
+There are two launch methods, please choose to implement according to your needs.
+
+<Tabs>
+<Tab title="Method 1">
+You need to long press the screen recording button in the iOS system's Control Center, then select the corresponding Extension to start recording.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_create_trigger.png" /></Frame>
+</Tab>
+<Tab title="Method 2">
+Apple added [RPSystemBroadcastPickerView](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview) in iOS 12.0, which can pop up a launcher from the App application for users to confirm to start screen sharing.
+
+1. Create [RPSystemBroadcastPickerView](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview) system class and bind the Extension's "BundleID".
+2. Traverse the subviews of [RPSystemBroadcastPickerView](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview) to find UIButton and trigger its click event.
+
+```objc
+RPSystemBroadcastPickerView *broadcastPickerView = [[RPSystemBroadcastPickerView alloc] initWithFrame:CGRectMake(0, 0, 44, 44)];
+NSString *bundlePath = [[NSBundle mainBundle] pathForResource:@"ZegoExpressExample-Broadcast" ofType:@"appex" inDirectory:@"PlugIns"];
+if (bundlePath) {
+    NSBundle *bundle = [NSBundle bundleWithPath:bundlePath];
+    if (bundle) {
+        broadcastPickerView.preferredExtension = bundle.bundleIdentifier;
+        for (UIView *subView in broadcastPickerView.subviews) {
+            if ([subView isMemberOfClass:[UIButton class]]) {
+                UIButton *button = (UIButton *)subView;
+                [button sendActionsForControlEvents:UIControlEventAllEvents];
+            }
+        }
+    }
+}
+```
+
+<Warning title="Warning">
+
+- Apple added [RPSystemBroadcastPickerView](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview) in iOS 12.0, which can pop up a launcher from the App application for users to confirm to start screen sharing. However, [RPSystemBroadcastPickerView](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview) does not support custom interface yet, and there is no official launch method.
+- Apple officially does not recommend this solution, and it may become invalid in the next system update, so it is only an optional solution. If you choose this solution, you need to bear the risk yourself.
+</Warning>
+
+
+
+</Tab>
+</Tabs>
+#### 5 Get screen data
+
+<Note title="Note">
+
+
+The implementation of the following system callbacks can be viewed in the "/ZegoExpressExample/Examples/Others/ScreenSharing/ZegoExpressExample-Broadcast/SampleHandler.m" file in [Download Sample Source Code](../quick-start/run-example-code.mdx):
+
+- [broadcastStartedWithSetupInfo](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2143170-broadcaststartedwithsetupinfo?language=objc)
+- [processSampleBuffer](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2123045-processsamplebuffer?language=objc)
+- [broadcastFinished](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2143169-broadcastfinished?language=objc)
+
+</Note>
+
+
+
+1. The system notifies Extension through the [broadcastStartedWithSetupInfo](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2143170-broadcaststartedwithsetupinfo?language=objc) callback that screen recording has started. You need to call the [setupWithDelegate](@setupWithDelegate) interface in the [ZegoReplayKitExt](@-ZegoReplayKitExt) class in this callback to create a data transmission channel:
+
+    ```objc
+    [ZegoReplayKitExt.sharedInstance setupWithDelegate:self];
+    ```
+
+2. In the [processSampleBuffer](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/2123045-processsamplebuffer?language=objc) system callback, send to ZEGO Express SDK through the [sendSampleBuffer](@sendSampleBuffer) interface in the [ZegoReplayKitExt](@-ZegoReplayKitExt) class.
+
+    ```objc
+    [ZegoReplayKitExt.sharedInstance sendSampleBuffer:sampleBuffer withType:sampleBufferType];
+    ```
+
+3. The system notifies Extension through the [broadcastFinished](@broadcastFinished) callback that screen recording has ended. If screen recording fails, you can receive the reason for failure. You can call the [finished](@finished) interface in the [ZegoReplayKitExt](@-ZegoReplayKitExt) class in this callback to stop screen capture and disconnect the data transmission channel:
+
+    ```objc
+    [ZegoReplayKitExt.sharedInstance finished];
+    ```
+
+4. By calling the SDK's [setupWithDelegate](@setupWithDelegate) method above to initialize and set the delegate, you can add the `<ZegoReplayKitExtHandler>` protocol to the current class and implement callbacks to monitor the reason for screen sharing end or failure.
+
+    ```objc
+    - (void)broadcastFinished:(ZegoReplayKitExt *)broadcast reason:(ZegoReplayKitExtReason)reason {
+
+        switch (reason) {
+            case ZegoReplayKitExtReasonHostStop:
+                {
+                    NSDictionary *userInfo = @{NSLocalizedDescriptionKey : @"Host app stop srceen capture"};
+                    NSError *error = [NSError errorWithDomain:NSCocoaErrorDomain code:0 userInfo:userInfo];
+                    [self finishBroadcastWithError:error];
+                }
+                break;
+            case ZegoReplayKitExtReasonConnectFail:
+                {
+                    NSDictionary *userInfo = @{NSLocalizedDescriptionKey : @"Connect host app fail need startScreenCapture in host app"};
+                    NSError *error = [NSError errorWithDomain:NSCocoaErrorDomain code:0 userInfo:userInfo];
+                    [self finishBroadcastWithError:error];
+                }
+                break;
+            case ZegoReplayKitExtReasonDisconnect:
+                {
+                    NSDictionary *userInfo = @{NSLocalizedDescriptionKey : @"disconnect with host app"};
+                    NSError *error = [NSError errorWithDomain:NSCocoaErrorDomain code:0 userInfo:userInfo];
+                    [self finishBroadcastWithError:error];
+                }
+                break;
+        }
+    }
+    ```
+</Accordion>
+
+
+### 3 Login room and publish stream
+
+After completing the above screen sharing source capture process, publish the captured data source [startPublishingStream](@startPublishingStream) to the cloud server. (The channel for publishing data source must be consistent with the channel set for capture source)
+
+```objc
+[ZegoExpressEngine.sharedEngine startPublishingStream:streamID channel:ZegoPublishChannelMain];
+```
+
+
+### 4 Watch remote screen sharing
+
+After completing the above steps, other users can use the [startPlayingStream](@startPlayingStream) interface to play the screen sharing stream.
+
+```objc
+// Play stream, need to pass in the streamID used when the user who initiated screen sharing published the stream
+[[ZegoExpressEngine sharedEngine] startPlayingStream:streamID canvas:[ZegoCanvas canvasWithView:self.playView]];
+```
+
+### 5 Stop screen sharing
+
+Users can call the [stopScreenCapture](@stopScreenCapture) interface to stop sharing.
+
+```objc
+[ZegoExpressEngine.sharedEngine stopScreenCapture];
+```
+
+## FAQ
+
+1. **Does iOS support sharing a specified area?**
+
+    iOS system only supports sharing the entire screen and does not support sharing a specified area.
+
+2. **Why does capture stop when iOS enters the background while using screen sharing?**
+    - Enable audio recording background mode in the application.
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/ShareScreen/share_screen_background_mode.png" /></Frame>
+    - If the main channel uses the screen sharing feature, only when the main channel audio source is set to `Microphone`, the SDK will start internal audio capture to maintain background keep-alive; if set to other audio source types, when the application exits to the background, screen sharing will stop working. It is recommended that users add background keep-alive logic to the application themselves.
+
+3. **How to handle audio playback abnormalities when iOS uses screen sharing?**
+
+    If you use the screen sharing feature to capture and publish audio stream, and also use the playing stream feature on the local device, it will cause the iOS system to repeatedly capture playing stream audio, resulting in audio playback abnormalities. It is recommended to use [muteAllPlayStreamAudio](@muteAllPlayStreamAudio) to prohibit playing all audio streams.

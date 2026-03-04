@@ -1,0 +1,354 @@
+---
+articleID: 1153
+date: "2024-07-27"
+---
+# Media Player
+
+- - -
+
+import Content from '/core_products/real-time-voice-video/en/snippets/media-player-pre.mdx'
+
+<Content />
+
+
+## Example Source Code Download
+
+Please refer to [Download Example Source Code](/real-time-video-android-java/client-sdk/download-demo) to get the source code.
+
+For related source code, please check the files in the "/ZegoExpressExample/Others/src/main/java/im/zego/others/mediaplayer" directory.
+
+## Prerequisites
+
+Before implementing media player functionality, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in your project and implemented basic audio and video publish/play stream functionality. For details, please refer to [Quick Start - Integration](/real-time-video-android-java/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-android-java/quick-start/implementing-video-call).
+
+
+## Usage Steps
+
+### 1 Create Media Player
+
+Call the member method [createMediaPlayer](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#create-media-player) interface of "ZegoExpressEngine" to create a media player instance. One media player instance can only play one audio or video file. The engine supports creating up to 10 player instances at the same time to achieve the effect of playing multiple media resources simultaneously. If there are already 10 player instances, calling the create player interface again will return `null`.
+
+- Call example
+
+    ```java
+    // Create media player instance object, currently supports creating up to 4 instances, will return null if exceeded
+    ZegoMediaPlayer mediaplayer = mEngine.createMediaPlayer();
+    if (mediaplayer != null) {
+        Log.d(TAG, "createMediaPlayer create sucess");
+    } else {
+        Log.d(TAG, "createMediaPlayer create fail");
+    }
+    ```
+
+### 2 (Optional) Set Event Callbacks for Player
+
+<Accordion title="Set event callbacks for player" defaultOpen="false">
+Call the media player's [setEventHandler](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#set-event-handler) interface to set event callbacks for the player to receive notifications such as "player playback state changed", "player network state updated", "player playback progress changed", etc.
+
+
+- Call example
+
+    ```java
+    public class MyIZegoMediaPlayerEventHandler extends IZegoMediaPlayerEventHandler {
+
+        private static final String TAG = "MyIZegoExpressMediaplay";
+
+        @Override
+        public void onMediaPlayerStateUpdate(ZegoMediaPlayer mediaPlayer, ZegoMediaPlayerState state, int errorCode) {
+            // This callback is called on the UI thread, developers can make UI changes here, such as changes to play buttons
+            Log.d(TAG, "onMediaPlayerStateUpdate: state = " + state.value() + ", errorCode = " + errorCode + ", zegoExpressMediaplayer = " + mediaPlayer);
+        }
+
+        @Override
+        public void onMediaPlayerNetworkEvent(ZegoMediaPlayer mediaPlayer, ZegoMediaPlayerNetworkEvent networkEvent) {
+            // This callback is called on the UI thread, developers can make UI changes here, such as friendly prompts for poor network conditions
+            Log.d(TAG, "onMediaPlayerNetworkEvent: networkEvent = " + networkEvent.value() + ", zegoExpressMediaplayer = " + mediaPlayer);
+        }
+
+        @Override
+        public void onMediaPlayerPlayingProgress(ZegoMediaPlayer mediaPlayer, long millisecond) {
+            // This callback is called on the UI thread, developers can make UI changes here, such as progress bar changes
+            Log.d(TAG, "onMediaPlayerPlayingProgress: millisecond = " + millisecond + ", zegoExpressMediaplayer = " + mediaPlayer);
+        }
+    }
+
+    mediaplayer.setEventHandler(new MyIZegoMediaPlayerEventHandler());
+
+    ```
+</Accordion>
+
+
+### 3 Load Media File
+
+Call the media player's [loadResource](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#load-resource) to specify the media resource to play, which can be an absolute path to a local resource or a URL to a network resource, such as `http://your.domain.com/your-movie.mp4`. Users can get the result of loading the file by passing callback parameters.
+
+If users need to load binary audio data, they can call the media player's [loadResourceFromMediaData](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-media-player&jumpType=route#load-resource-from-media-data) to specify the binary audio data to play. Users can get the result of loading the data by passing callback parameters.
+<Warning title="Warning">
+
+
+If the media resource has already been loaded by [loadResource](@loadResource-ZegoMediaPlayer) or is playing, please call the [stop](@stop-ZegoMediaPlayer) interface to stop playing first, then call the [loadResource](@loadResource-ZegoMediaPlayer) interface to load the media resource, otherwise it cannot be loaded successfully.
+</Warning>
+
+- Call example
+
+    ```java
+    /**
+     * Load media resource
+     *
+     * Can pass absolute path to local resource or URL to network resource
+     * @param path Local resource path or URL to network resource
+     * @param callback Notification of resource loading result
+     */
+    zegoMediaplayer.loadResource("sourcePath", new IZegoMediaPlayerLoadResourceCallback() {
+        @Override
+        public void onLoadResourceCallback(int errorcode) {
+            // This callback is called on the UI thread, developers can make UI changes here
+            if(errorcode == 0){
+                Log.d(TAG, "onLoadResourceCallback: success");
+            } else {
+                Log.d(TAG, "onLoadResourceCallback: errorcode = " + errorcode);
+            }
+        }
+    });
+    ```
+    ```java
+    /**
+     * Load binary audio data
+     *
+     * @param mediaData Binary audio data
+     * @param startPosition Specify the progress to start playing, in milliseconds
+     * @param callback Notification of resource loading result
+     */
+    zegoMediaplayer.loadResourceFromMediaData(data, position, new IZegoMediaPlayerLoadResourceCallback() {
+        @Override
+        public void onLoadResourceCallback(int errorcode) {
+            // This callback is called on the UI thread, developers can make UI changes here
+            if(errorcode == 0){
+                Log.d(TAG, "onLoadResourceCallback: success");
+            } else {
+                Log.d(TAG, "onLoadResourceCallback: errorcode = " + errorcode);
+            }
+        }
+    });
+    ```
+
+### 4 Playback Control
+
+#### Playback State Control
+
+```mermaid
+stateDiagram-v2
+    [*] --> NoPlay: loadResource
+    NoPlay --> Playing: play
+    Playing --> Pausing: pause
+    Pausing --> Playing: resume
+    Pausing --> NoPlay: stop
+    Playing --> NoPlay: stop
+    Playing --> PlayEnded
+    PlayEnded --> Playing: enableRepeat
+    PlayEnded --> [*]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/mediaplayer_state_iOS.jpg" /></Frame>
+*/}
+
+Call [start](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#start), [pause](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#pause), [resume](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#resume), [stop](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#stop) to start and stop playback. Once the player's internal state changes, the [onMediaplayerStateUpdate](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-callback-i-zego-media-player-event-handler#on-media-player-state-update) callback will be triggered.
+
+Users can also call [getCurrentState](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#get-current-state) at any time to get the player's current state.
+
+If [enableRepeat](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#enable-repeat) is set to "true", the player will automatically replay after finishing playing the file.
+
+- Call example
+
+    ```java
+    // Set whether to repeat playback
+    mediaplayer.enableRepeat(true);
+    // Start playing, need to load resource before playing
+    mediaplayer.start();
+    // Pause playback
+    mediaplayer.pause();
+    // Resume playback
+    mediaplayer.resume();
+    // Stop playback
+    mediaplayer.stop();
+    ```
+
+#### Playback Progress Control
+
+The progress of playing the file will be called back through the [onMediaPlayerPlayingProgress](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-callback-i-zego-media-player-event-handler#on-media-player-playing-progress) method. The default interval for triggering the callback is 1000 ms, which can be changed by [setProgressInterval](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#set-progress-interval).
+
+Users can also get the current playback progress through [getCurrentProgress](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#get-current-progress).
+
+Adjust progress through the [seekTo](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#seek-to) interface.
+
+- Call example
+
+    ```java
+    // Set playback progress callback interval, in milliseconds, can control the callback frequency of [onMediaPlayerPlayingProgress] through this interface
+    mediaplayer.setProgressInterval(2000);
+    // Get current playback progress
+    long progress = mediaplayer.getCurrentProgress();
+    mediaplayer.seekTo(mediaplayer.getTotalDuration() / 2, new IZegoMediaPlayerSeekToCallback(){
+        @Override
+        public void onSeekToTimeCallback(int errorcode) {
+            // This callback is called on the UI thread, developers can make UI changes here
+            if(errorcode == 0){
+                Log.d(TAG, "onSeekToTimeCallback: success");
+            } else {
+                Log.d(TAG, "onSeekToTimeCallback: errorcode = " + errorcode);
+            }
+        }
+    });
+    ```
+
+#### Playback Speed Control
+
+After loading the resource, users can set the current playback speed through [setPlaySpeed](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-media-player&jumpType=route#set-play-speed).
+
+- Call example
+
+    ```java
+    // Set 2x speed playback, must be called after loading the resource. Playback speed range is 0.3 ~ 4.0, default is 1.0
+    mediaplayer.setPlaySpeed(2.0);
+    ```
+
+#### Player Audio Control
+
+Get and control playback volume through [getPlayVolume](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#get-play-volume) and [setPlayVolume](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#set-play-volume).
+
+Get and control publishing volume through [getPublishVolume](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#get-publish-volume) and [setPublishVolume](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#set-publish-volume).
+
+
+Call [muteLocal](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#mute-local) to control local mute playback.
+
+Call [enableAux](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#enable-aux) to mix the file's sound into the currently publishing stream.
+
+<Note title="Note">
+
+
+If you want to use the audio mixing capability, you must [set microphone permissions](../quick-start/integrating-sdk.mdx#set-permissions). If you don't want to record microphone sound, you can mute the microphone through [muteMicrophone](@muteMicrophone).
+</Note>
+
+```java
+int playVolume = mediaplayer.getPlayVolume();
+mediaplayer.setPlayVolume(playVolume / 2);
+int publishVolume = mediaPlayer.getPublishVolume();
+mediaPlayer.setPublishVolume(publishVolume);
+mediaplayer.muteLocal(true);
+mediaplayer.enableAux(true);
+```
+
+If you want to get the audio data of the file, you can set the audio frame callback through [setAudioHandler](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#set-audio-handler).
+
+- Call example
+
+    ```java
+    // Callback for player to throw audio data, can set this callback to throw the audio data of the media resource file played by the media player
+    mediaplayer.setAudioHandler(new IZegoMediaPlayerAudioHandler() {
+        @Override
+        public void onAudioFrame(ZegoMediaPlayer mediaPlayer, ByteBuffer data, int dataLength, ZegoAudioFrameParam param) {
+            // Developers can process the thrown audio frame data in this callback, such as local storage, sound effect processing, etc.
+            Log.d(TAG, "onAudioFrame: buffer = " + data + ", zegoAudioFrame = " + dataLength);
+        }
+    });
+    ```
+
+#### Player Video Control
+
+When playing video resources, use [setPlayerCanvas](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#set-player-canvas) to set the video display view.
+
+- Call example
+
+    ```java
+    // Set the view for the player to play video
+    // textureView is an android.view.TextureView instance attached to the UI layout
+    mediaplayer.setPlayerCanvas(new ZegoCanvas(textureView));
+    ```
+
+If you want to get the video data of the file, you can set the video frame callback through [setVideoHandler](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#set-video-handler).
+
+- Interface prototype
+
+    ```java
+    /**
+     * Set video callback handler
+     *
+     * Can set this callback to throw the video data of the media resource file played by the media player
+     * @param handler Video event callback object for the media player
+     * @param format Video frame format of the video data
+     */
+    public void setVideoHandler(IZegoMediaPlayerVideoHandler handler, ZegoVideoFrameFormat format);
+    ```
+
+- Call example
+
+    ```java
+    // Callback for player to throw video data, can set this callback to throw the video data of the media resource file played by the media player
+    mediaplayer.setVideoHandler(new IZegoMediaPlayerVideoHandler(){
+        @Override
+        public void onVideoFrame(ZegoMediaPlayer mediaPlayer, ByteBuffer[] data, int[] dataLength, ZegoVideoFrameParam param) {
+            // Developers can process the thrown video frame data in this callback, such as local storage, video layer mixing, etc.
+            Log.d(TAG, "onVideoFrame");
+        }
+    }, ZegoVideoFrameFormat.Unknown);// The second parameter should generally be specified as the platform's default video frame format
+    ```
+
+#### Publish the video played by the player
+
+1. Before publishing the player's video, you need to first set the video frame callback listener through [setVideoHandler](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#set-video-handler) to get the video frame data thrown by [onVideoFrame](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~interface~im-zego-zegoexpress-callback-i-zego-media-player-video-handler#public-func-lists).
+
+2. Use custom method to capture video and mix the obtained video data into the publishing stream data. For detailed operations, please refer to [Custom Video Capture ](/real-time-video-android-java/video/custom-video-capture).
+
+<Note title="Note">
+
+
+When custom capturing data, it is recommended that developers define a "flag" marker:
+
+- When the [onStart](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-callback-i-zego-custom-video-capture-handler#on-start) callback is triggered, set the "flag" marker to "True", indicating that custom captured video data can start being sent to the SDK.
+- When the [onStop](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-callback-i-zego-custom-video-capture-handler#on-stop) callback is triggered, set the "flag" marker to "False", indicating that sending captured video data to the SDK needs to stop.
+</Note>
+
+3. Developers need to add logic to judge the "flag" in [onVideoFrame](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~interface~im-zego-zegoexpress-callback-i-zego-media-player-video-handler#public-func-lists). When the "flag" is set to "True" (i.e., the [onStart ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-callback-i-zego-custom-video-capture-handler#on-start) callback is triggered), call the [sendCustomVideoCaptureRawData](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#send-custom-video-capture-raw-data) method to send the obtained video data to the SDK.
+
+4. Call [startPublishingStream](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#start-publishing-stream) to start publishing. Please refer to "Publish Stream" in [Quick Start - Implementation](/real-time-video-android-java/quick-start/implementing-video-call).
+
+
+#### Voice Changer
+
+To handle scenarios such as pitch shifting accompaniment in KTV, you can call the media player's [enableVoiceChanger](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#enable-voice-changer) interface to implement voice changer functionality. Developers can set the voice changer effect through the pitch parameter "pitch" in the [ZegoVoiceChangerParam](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-entity-zego-voice-changer-param) object. The value range of this parameter is [-12.0, 12.0]. The larger the value, the sharper the voice. Voice changer is disabled by default.
+
+```java
+ZegoVoiceChangerParam param = new ZegoVoiceChangerParam()
+// Male voice to child voice
+param.pitch = 8.0f;
+// Male voice to female voice
+param.pitch = 4.0f;
+// Female voice to child voice
+param.pitch = 6.0f;
+// Female voice to male voice
+param.pitch = -3.0f;
+mediaplayer.enableVoiceChanger(ZegoMediaPlayerAudioChannel.ALL, true, param);
+```
+
+
+### 5 Destroy Media Player
+
+After using the player, you need to call the destroy interface in time to release the occupied resources.
+
+- Call example
+
+    ```java
+    // Destroy media player instance object
+    mEngine.destroyMediaPlayer(mediaplayer);
+    // When calling the interface to destroy, to avoid memory leaks, developers must manually release references held by the business layer
+    mediaplayer = null;
+    ```
+
+## FAQ
+
+1. **How to switch playing resources during playback?**
+
+  First call the player's [stop](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#stop) interface, then call the [loadResource](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-media-player#load-resource) interface again to load the new resource.

@@ -1,0 +1,224 @@
+---
+articleID: 4433
+date: "2024-01-02"
+---
+# Set Video Encoding Method
+
+- - -
+
+## Introduction
+
+When developers publish and play video streams, they can set detailed encoding and decoding, including enabling layered video encoding, enabling video large and small stream encoding, using hardware encoding and decoding, and setting encoding methods.
+
+### Layered Video Encoding
+
+Layered video encoding divides the bitstream into a base layer and an enhancement layer. This encoding method can provide better experience for users with different network states. The base layer ensures the most basic video quality, while the enhancement layer is a supplement to the base layer. For users with better networks, only pulling the enhancement layer can get a better experience. For users with poor network states, only pulling the base layer can ensure basic video quality.
+
+When developers encounter the following situations in co-hosting or stream mixing business, it is recommended to use the layered video encoding function:
+
+- Need to display video streams of different qualities on different terminals.
+- Need to maintain the smoothness of co-hosting in poor network environments.
+- Need to adaptively pull the quality of video streams according to network state.
+
+
+<Note title="Note">
+Layered video encoding uses ZEGO's private protocol. The playing stream end can only pull video streams of different layers from the ZEGO server.
+</Note>
+
+### Video Large and Small Stream Encoding
+
+Video large and small stream encoding works together with layered video encoding to divide the bitstream into large resolution type and small resolution type.
+
+The most significant difference is that layered video encoding uses one encoder to encode base layer and enhancement layer bitstreams, while video large and small stream encoding uses two encoders to encode base layer and enhancement layer bitstreams.
+
+For specific differences, advantages, and disadvantages between the two, please view [Video Large and Small Stream and Layered Encoding](/real-time-video-windows-cpp/video/small-large-video-stream-and-layered-encoding). Developers can choose layered video encoding or video large and small stream encoding by combining their differences and specific business requirements.
+
+<Note title="Note">
+Video large and small stream encoding uses ZEGO's private protocol. The playing stream end can only pull video streams of different layers from the ZEGO server.
+</Note>
+
+### Hardware Encoding and Decoding
+
+Developers can choose to enable hardware encoding and hardware decoding. After enabling hardware encoding and decoding, GPU will be used for encoding and decoding, reducing CPU usage. If certain models have severe device heating when publishing or playing large-resolution audio and video streams, hardware encoding and decoding can be enabled.
+
+### Video Encoding Method
+
+Developers can perform video encoding configuration to align encoding between different ends, thereby achieving multi-end interoperability.
+
+Usage scenarios:
+- Generally, the default encoding can be used.
+- When the bitrate needs to be reduced under the same resolution and frame rate, H.265 can be used.
+- When interoperability with mini-programs is required, H.264 must be used.
+
+## Download Sample Source Code
+
+Please refer to [Download Sample Source Code](/real-time-video-windows-cpp/quick-start/run-example-code) to obtain the source code.
+
+For related source code, please check the files in the "/ZegoExpressExample/Examples/AdvancedVideoProcessing/EncodingAndDecoding" directory.
+
+## Prerequisites
+
+Before implementing video encoding and decoding functions, ensure that:
+
+- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com), and valid AppID and AppSign have been obtained. For details, please refer to [Console - Project Information](/console/project-info).
+- ZEGO Express SDK has been integrated into the project, and basic audio and video streaming functionality has been implemented. For details, please refer to [Quick Start - Integration](/real-time-video-windows-cpp/quick-start/integrating-sdk) and [Quick Start - Implementation Process](/real-time-video-windows-cpp/quick-start/implementing-video-call).
+
+
+
+## Implementation Steps
+
+<a id="LayeredVideoCoding"></a>
+
+### Layered Video Encoding (H.264 SVC)
+
+Using layered video encoding requires the following two steps:
+
+- Enable layered video encoding by specifying a specific encoder before publishing stream.
+- Specify the layered video to be pulled when playing stream.
+
+**Enable Layered Video Encoding**
+
+Before publishing stream ([startPublishingStream](@startPublishingStream)), call the [setVideoConfig](@setVideoConfig) interface to set the parameter "codecID" in the [ZegoVideoConfig](@-ZegoVideoConfig) class to enable/disable layered video encoding function.
+
+- Setting "codecID" to "ZEGO_VIDEO_CODEC_ID_SVC" can enable this function.
+- Setting "codecID" to "ZEGO_VIDEO_CODEC_ID_DEFAULT", "ZEGO_VIDEO_CODEC_ID_VP8", or "ZEGO_VIDEO_CODEC_ID_H265" can disable this function.
+
+```cpp
+ZegoVideoConfig videoConfig;
+videoConfig.codecID = ZEGO_VIDEO_CODEC_ID_SVC;
+engine->setVideoConfig(videoConfig);
+
+std::string streamID = "MultiLayer-1";
+engine->startPublishingStream(streamID);
+```
+
+**Specify the Layered Video to Pull**
+
+After the publishing stream end enables layered video encoding, the playing stream end can call the [setPlayStreamVideoType](@setPlayStreamVideoType) interface before or after playing stream. At this time, the playing stream end will pull appropriate video layers according to the network situation by default, for example, only pulling the base layer in weak networks. Developers can also pass in specific playing stream parameters to pull specific video layers. Currently, the supported video layers are as follows:
+
+|Enumeration Value|Description|
+|-|-|
+|ZEGO_VIDEO_STREAM_TYPE_DEFAULT|Select layers according to network state|
+|ZEGO_VIDEO_STREAM_TYPE_SMALL|Specify pulling base layer (small resolution)|
+|ZEGO_VIDEO_STREAM_TYPE_BIG|Specify pulling enhancement layer (large resolution)|
+
+Taking pulling the enhancement layer as an example:
+
+```cpp
+engine->setPlayStreamVideoType(playStreamID,ZEGO_VIDEO_STREAM_TYPE_BIG);
+```
+
+### Video Large and Small Stream Encoding (H.264 DualStream)
+
+The implementation of video large and small stream encoding (H.264 DualStream) is similar to that of layered video encoding (H.264 SVC), requiring the following two steps:
+
+- Before publishing stream, enable video large and small stream encoding by specifying a specific encoder.
+- When playing stream, specify the video bitstream to be pulled.
+
+**Enable Layered Video Encoding**
+
+Before publishing stream ([startPublishingStream](@startPublishingStream)), call the [setVideoConfig](@setVideoConfig) interface to set the parameter `codecID` in the [ZegoVideoConfig](@-ZegoVideoConfig) class to `ZegoVideoCodecID.H264DualStream` to enable the video large and small stream encoding function.
+
+```cpp
+ZegoVideoConfig videoConfig;
+videoConfig.codecID = ZEGO_VIDEO_CODEC_ID_H264_DUAL_STREAM;
+engine->setVideoConfig(videoConfig);
+
+std::string streamID = "MultiLayer-1";
+engine->startPublishingStream(streamID);
+```
+
+**Specify the Layered Video to Pull**
+
+After the publishing stream end enables video large and small stream encoding, the playing stream end can call the [setPlayStreamVideoType](@setPlayStreamVideoType) interface before or after playing stream. At this time, the playing stream end will pull appropriate video stream layers according to the network situation by default, for example, only pulling the base layer in weak networks. Developers can also pass in specific playing stream parameters to pull specific video layers. Currently, the supported video layers are as follows:
+
+|Enumeration Value|Description|
+|-|-|
+|ZEGO_VIDEO_STREAM_TYPE_DEFAULT|Select layers according to network state|
+|ZEGO_VIDEO_STREAM_TYPE_SMALL|Specify pulling base layer (small resolution)|
+|ZEGO_VIDEO_STREAM_TYPE_BIG|Specify pulling enhancement layer (large resolution)|
+
+Taking pulling the enhancement layer as an example:
+
+```cpp
+engine->setPlayStreamVideoType(playStreamID,ZEGO_VIDEO_STREAM_TYPE_BIG);
+```
+
+### Hardware Encoding and Decoding
+
+Since a small number of device models have poor support for hardware encoding/decoding, the SDK uses software encoding and software decoding by default. If developers have requirements for using hardware encoding, they can refer to this section to set it themselves.
+
+**Enable Hardware Encoding**
+
+<Warning title="Warning">
+This function must be set before publishing stream to take effect. If set after publishing stream, it will take effect only after stopping publishing stream and republishing stream.
+</Warning>
+
+If developers need to enable hardware encoding, they can call the [enableHardwareEncoder](@enableHardwareEncoder) interface.
+
+```cpp
+// Enable hardware encoding
+engine->enableHardwareEncoder(true);
+```
+
+**Enable Hardware Decoding**
+
+<Warning title="Warning">
+This function must be set before playing stream to take effect. If set after playing stream, it will take effect only after stopping playing stream and replaying stream.
+</Warning>
+
+If developers need to enable hardware decoding, they can call the [enableHardwareDecoder](@enableHardwareDecoder) interface.
+
+
+```cpp
+// Enable hardware decoding
+engine->enableHardwareDecoder(true);
+```
+
+### Set Video Encoding Method
+
+Before publishing stream ([startPublishingStream](@startPublishingStream)), call the [setVideoConfig](@setVideoConfig) interface to set the parameter "codecID" under the "ZegoVideoConfig" class to set the video encoding method. Currently, the supported video encoding methods are as follows:
+
+|Enumeration Value|Encoding Method|Usage Scenarios|
+|-|-|-|
+|ZEGO_VIDEO_CODEC_ID_DEFAULT|Default encoding (H.264)|H.264 is a widely used high-precision video recording, compression, and publishing format with good compatibility.|
+|ZEGO_VIDEO_CODEC_ID_SVC|Layered encoding (H.264 SVC)|Scenarios that require using layered encoding.|
+|ZegoVideoCodecIDH264DualStream|Video large and small stream encoding (H.264 DualStream)|Want to divide the bitstream into base layer and enhancement layer, but SVC does not meet business needs (for example: want to use hardware encoding at the same time).|
+|ZEGO_VIDEO_CODEC_ID_VP8|VP8|Often used for Web video, but cannot be used in CDN recording scenarios, otherwise it will cause recording file abnormalities.|
+|ZEGO_VIDEO_CODEC_ID_H265|H.265|Has better compression rate, but compatibility needs to be considered.|
+
+Taking setting the encoding method to H.265 as an example:
+
+```cpp
+ZegoVideoConfig videoConfig;
+videoConfig.codecID = ZEGO_VIDEO_CODEC_ID_H265;
+engine->setVideoConfig(videoConfig);
+
+std::string streamID = "MultiLayer-1";
+engine->startPublishingStream(streamID);
+```
+
+## FAQ
+
+
+1. **When relaying to or directly publishing to CDN, viewers pull streams from CDN. Are layered video encoding and large and small streams effective? What are the bitrate, resolution, and frame rate of streams pulled from CDN?**
+
+    - `Video Layered Encoding` and `Video Large and Small Stream Encoding` use ZEGO's private protocol. The playing stream end can only pull video streams of different layers when pulling RTC streams or L3 streams from the ZEGO server.
+
+    - In the direct publish to CDN scenario, since it does not go through the ZEGO server, the layering of the bitstream is invalid, and the SDK will fall back to H.264 encoding. The resolution and bitrate of streams pulled from CDN are consistent with the resolution and bitrate set by the publishing stream user.
+
+    - In the relay to CDN scenario, since CDN playing stream does not use ZEGO's private protocol, the stream relayed by the ZEGO server to the CDN server does not support layered video encoding and video large and small stream encoding. You can only choose one from relay base layer or relay enhancement layer. The resolution, bitrate, and frame rate when playing stream from CDN depend on whether the relay is base layer or enhancement layer.
+
+        <Warning title="Warning">
+        When relaying to CDN, the enhancement layer is relayed by default. If the business needs to relay the base layer to CDN, please contact ZEGOCLOUD Technical Support for configuration.
+        </Warning>
+
+2. **What is the difference between layered video encoding and large and small stream video encoding?**
+
+    For details, please refer to [Video Large and Small Stream and Layered Encoding](/real-time-video-windows-cpp/video/small-large-video-stream-and-layered-encoding).
+
+
+## Related Documentation
+
+[How to solve video image abnormalities (such as black screen, green screen, mosaic, etc.) when interoperating between Web platform and Native platform?](https://www.zegocloud.com/docs/faq/cross-platform-video-issues)
+

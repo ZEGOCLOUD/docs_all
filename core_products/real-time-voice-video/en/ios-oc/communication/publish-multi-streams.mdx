@@ -1,0 +1,212 @@
+---
+articleID: 3639
+date: "2024-01-02"
+---
+# Publishing Multiple Streams Simultaneously
+
+- - -
+
+## Feature Overview
+
+
+The Express SDK provides the capability to publish multiple streams simultaneously. When the following situations occur in your business, it is recommended to use the SDK's multiple stream publishing feature:
+
+- Game streamers publish camera footage on the main channel and screen capture footage on the second channel.
+- Outdoor streamers publish front camera footage on the main channel and rear camera footage on the second channel.
+
+<Note title="Note">
+
+Currently, the SDK supports a maximum of 4 publishing channels. Before version 2.14.0, the default maximum number of publishing channels is 2. If you need to support more publishing channels, please contact ZEGOCLOUD Technical Support for special packaging.
+</Note>
+
+
+## Example Source Code Download
+
+Please refer to [Download Example Source Code](/real-time-video-ios-oc/quick-start/run-example-code) to get the source code.
+
+For related source code, please check files in the "/ZegoExpressExample/Examples/AdvancedStreaming/PublishingMultipleStreams" directory in the downloaded example source code.
+
+## Prerequisites
+
+Before implementing the multiple stream publishing feature, ensure that:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, see [Console - Project Information](/console/project-info).
+- You have integrated the ZEGO Express SDK into your project and implemented basic audio/video streaming functionality. For details, see [Quick Start - Integration](/real-time-video-ios-oc/quick-start/integrating-sdk) and [Quick Start - Implementation Flow](/real-time-video-ios-oc/quick-start/implementing-video-call).
+
+
+
+## Usage Steps
+
+<Warning title="Caution">
+
+
+- When publishing streams other than the main channel, you cannot directly obtain camera data.
+- By default, other published streams can only publish audio data. If you need to publish audio/video data, you need to enable the custom video capture feature.
+- This document will introduce the implementation method for publishing auxiliary streams. The implementation method for publishing other non-main streams is the same.
+</Warning>
+
+### 1 Create ZegoExpressEngine Engine
+
+Please refer to "Create Engine" in [Quick Start - Implementation Flow](/real-time-video-ios-oc/quick-start/implementing-video-call#1-initialization).
+
+```objc
+ZegoEngineProfile *profile = [[ZegoEngineProfile alloc] init];
+profile.appID = [KeyCenter appID];
+profile.appSign = [KeyCenter appSign];
+profile.scenario = ZegoScenarioDefault;
+[ZegoExpressEngine createEngineWithProfile:profile eventHandler:self];
+```
+
+### 2 (Optional) Set Custom Video Capture Configuration
+
+<Accordion title="Set Custom Video Capture Configuration" defaultOpen="false">
+Call the [ZegoCustomVideoCaptureConfig](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-custom-video-capture-config) interface to create a custom video capture object, set the property [bufferType](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-custom-video-capture-config#buffer-type) to provide the video frame data type to the SDK; call the interface [enableCustomVideoCapture ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine#enable-custom-video-capture-config) to enable the custom video capture feature. For details, please refer to [Custom Video Capture](/real-time-video-ios-oc/video/custom-video-capture).
+
+<Note title="Note">
+
+
+
+- Due to the diversity of iOS capture, the SDK supports multiple video frame data types [bufferType ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-custom-video-capture-config#buffer-type). Developers need to inform the SDK of the data type used.
+- Currently, the SDK only supports CVPixelBuffer type "ZegoVideoBufferTypeCVPixelBuffer" and GLTexture2D type "ZegoVideoBufferTypeGLTexture2D". Setting other enumeration values will not allow providing video frame data to the SDK.
+</Note>
+
+
+
+```objc
+ZegoCustomVideoCaptureConfig *captureConfig = [[ZegoCustomVideoCaptureConfig alloc] init];
+// Select CVPixelBuffer type video frame data
+captureConfig.bufferType = ZegoVideoBufferTypeCVPixelBuffer;
+
+[[ZegoExpressEngine sharedEngine] enableCustomVideoCapture:YES config:captureConfig channel:ZegoPublishChannelAux];
+```
+</Accordion>
+
+
+
+### 3 (Optional) Set Auxiliary Publisher Custom Video Capture Callback
+
+<Accordion title="Set Auxiliary Publisher Custom Video Capture Callback" defaultOpen="false">
+#### Set Custom Video Capture Callback Object
+
+Set "ViewController" as the custom video capture callback object, conforming to the [ZegoCustomVideoCaptureHandler](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~protocol~zego-custom-video-capture-handler) protocol.
+
+```objc
+@interface ViewController () <ZegoEventHandler, ZegoCustomVideoCaptureHandler>
+
+    ......
+
+@end
+```
+
+Call the [setCustomVideoCaptureHandler](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine#set-custom-video-capture-handler) interface to set the custom video capture callback.
+
+```objc
+// Set self as the custom video capture callback object
+[[ZegoExpressEngine sharedEngine] setCustomVideoCaptureHandler:self];
+```
+
+#### Implement Custom Video Capture Callback Methods
+
+Implement the [onStart](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~protocol~zego-custom-video-capture-handler#on-start) and [onStop](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~protocol~zego-custom-video-capture-handler#on-stop) custom capture callback methods.
+
+```objc
+// Note: This callback is not on the main thread. If there are UI operations, please switch to the main thread yourself
+- (void)onStart {
+
+    // After receiving the callback, developers need to execute business logic related to starting capture, such as starting the camera, etc.
+
+    // This example starts a self-implemented video capture device
+    [self.captureDevice startCapture];
+}
+
+// Note: This callback is not on the main thread. If there are UI operations, please switch to the main thread yourself
+- (void)onStop {
+
+    // After receiving the callback, developers need to execute business logic related to stopping capture, such as stopping the camera, etc.
+
+    // This example stops a self-implemented video capture device
+    [self.captureDevice stopCapture];
+}
+```
+</Accordion>
+
+
+
+### 4 Call Auxiliary Publisher Methods to Implement Preview and Publishing
+
+After logging in to the room, call the start preview interface [startPreview](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine#start-preview-channel) or start publishing stream interface [startPublishingStream](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine#start-publishing-stream-channel) to trigger the [onStart](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~protocol~zego-custom-video-capture-handler#on-start) of [3 Set Auxiliary Publisher Custom Video Capture Callback](#3-optional-set-auxiliary-publisher-custom-video-capture-callback). When the [onStart](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~protocol~zego-custom-video-capture-handler#on-start) callback is triggered, developers can start capturing video frame data.
+
+When stopping publishing stream [stopPublishingStream ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine#stop-publishing-stream) and stopping preview [stopPreview ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine#stop-preview), the [onStop ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~protocol~zego-custom-video-capture-handler#on-stop) callback of [3 Set Auxiliary Publisher Custom Video Capture Callback](#3-optional-set-auxiliary-publisher-custom-video-capture-callback) will be triggered. At this time, developers should stop capturing video data.
+
+
+```objc
+[self.engine startPreview:mainPreviewCanvas channel:ZegoPublishChannelAux];
+[self.engine startPublishingStream:self.auxStreamID channel:ZegoPublishChannelAux];
+
+```
+
+
+
+### 5 (Optional) Send Captured Video Frame Data to SDK
+
+<Accordion title="Send Captured Video Frame Data to SDK" defaultOpen="false">
+After the [onStart](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~protocol~zego-custom-video-capture-handler#on-start) callback is triggered, developers can call [sendCustomVideoCaptureTextureData](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine#send-custom-video-capture-texture-data-size-timestamp-channel) or [sendCustomVideoCapturePixelBuffer ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine#send-custom-video-capture-pixel-buffer-timestamp-channel) to send the captured video data to the SDK.
+
+- Call [sendCustomVideoCaptureTextureData](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine#send-custom-video-capture-texture-data-size-timestamp-channel)
+ ```objc
+[self.engine sendCustomVideoCaptureTextureData:textureID size:size timeStamp:timeStamp channel:ZegoPublishChannelAux];
+```
+
+- Call [sendCustomVideoCapturePixelBuffer ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine#send-custom-video-capture-pixel-buffer-timestamp-channel)
+
+```objc
+[self.engine sendCustomVideoCapturePixelBuffer:data timeStamp:timeStamp channel:ZegoPublishChannelAux];
+```
+</Accordion>
+
+
+### 6 Set Non-Main Channel Publishing Event Callbacks
+
+Call the auxiliary publisher's [setEventHandler](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine#set-event-handler) interface to set event callbacks for the auxiliary publisher to receive notifications such as "publishing state change callback", "publishing quality callback", "publishing first frame callback", etc.
+
+
+```objc
+[self.player setEventHandler:self];
+
+- (void)onPublisherStateUpdate:(ZegoPublisherState)state errorCode:(int)errorCode extendedData:(nullable NSDictionary *)extendedData streamID:(NSString *)streamID{
+    // Perform logic for corresponding publishing action results
+        ...
+};
+- (void)onPublisherQualityUpdate:(ZegoPublishStreamQuality *)quality streamID:(NSString *)streamID{
+    // Perform business logic such as displaying stream quality during publishing
+        ...
+};
+- (void)onPublisherCapturedVideoFirstFrame:(ZegoPublishChannel)channel{
+    // Notification that SDK received video data for the first time
+        ...
+};
+- (void)onPublisherVideoSizeChanged:(CGSize)size channel:(ZegoPublishChannel)channel{
+    // Developers can perform logic such as removing UI mask spaces for displaying video in this callback
+};
+- (void)onPublisherRelayCDNStateUpdate:(NSArray<ZegoStreamRelayCDNInfo *> *)infoList streamID:(NSString *)streamID{
+    // Notification that stream is relayed to CDN
+};
+
+// Other overridden callbacks
+...
+
+});
+
+```
+
+
+
+## FAQ
+
+1. **When will [onStart](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~protocol~zego-custom-video-capture-handler#on-start) be called back?**
+
+    When custom video capture is enabled, it will be triggered when the SDK starts publishing stream [startPublishingStream](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine#start-publishing-stream-channel) or starts preview [startPreview ](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine#start-preview-channel).
+
+2. **Does it support publishing more than 4 streams simultaneously?**
+
+    To work with the real-time signaling feature, the SDK currently supports a maximum of 4 publishing channels by default, but before version 2.14.0, the default maximum number of publishing channels is 2. If you need to support more publishing channels, please contact ZEGOCLOUD Technical Support for special packaging.
