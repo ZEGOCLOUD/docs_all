@@ -7,128 +7,170 @@ date: "2025-01-21"
 ---
 
 
+## Introdution
 
-## Overview
+This guide describes how to integrate the SDK and implement a basic one-on-one video call using ZEGOCLOUD's Video Call SDK.
 
-This article will introduce how to quickly implement a simple real-time audio and video call.
-
-Explanation of related concepts:
-
-- ZEGO Express SDK: A real-time audio and video SDK provided by ZEGO, providing developers with convenient access, high definition and smoothness, multi-platform interoperability, low latency, and high concurrency audio and video services.
-- Stream: Refers to a group of audio and video data that is encapsulated in a specified encoding format and continuously sent. A user can publish multiple streams at the same time (for example, one for camera data, one for screen sharing data) and can also play multiple streams at the same time. Each stream is identified by a stream ID (streamID).
-- Publish Stream: The process of pushing packaged audio and video data streams to the ZEGOCLOUD.
-- Play Stream: The process of playing existing audio and video data streams from the ZEGOCLOUD.
-- Room: An audio and video space service provided by ZEGO, used to organize user groups. Users in the same room can send and receive real-time audio and video and messages with each other.
-    1. Users need to log in to a room first before they can publish and play streams.
-    2. Users can only receive relevant messages in their own room (user entry/exit, audio and video stream changes, etc.).
-    3. Each room is identified by a unique roomID within an AppID. All users who log in to the room using the same roomID belong to the same room.
-
-
-
-For more related concepts, please refer to [Term Explanation](/glossary/term-explanation).
 
 ## Prerequisites
 
-Before implementing basic real-time audio and video functionality, ensure:
-
-- You have integrated ZEGO Express SDK in the project and implemented basic real-time audio and video functionality. For details, please refer to [Quick Start - Integration](/real-time-video-rn/quick-start/integrating-sdk).
-- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
-
-<Warning title="Warning">
-
-The SDK also supports Token authentication. If you have higher security requirements for the project, it is recommended to upgrade the authentication method. For details, please refer to [How to Upgrade from AppSign Authentication to Token Authentication](http://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo).
-</Warning>
+Before you begin, make sure you complete the following:
 
 
-## Usage Steps
+* Sign up and create a project in [ZEGOCLOUD Console](https://console.zegocloud.com).
+* React Native 0.60.0 or later
+* An iOS device or iOS Simulator that is running on iOS 9.0 or later and supports audio and video. We recommend you use a real device.
+* An Android device or simulator that is running on Android 4.4 or later and supports audio and video. We recommend you use a real device (remember to enable **USB debugging** for the device).
 
-The basic process for users to conduct video calls through ZEGO Express SDK is:
+## Integrate the SDK
 
-Users A and B join the room. User B previews and pushes the audio and video stream to the ZEGO cloud service (publish stream). After User A receives the notification of User B's pushed audio and video stream, User A plays User B's audio and video stream in the notification (play stream).
+### Optional: Create a new project
 
-```mermaid
-sequenceDiagram
-    participant UserA
-    participant ZEGO Express SDK
-    participant UserB
-    UserA->>ZEGO Express SDK: 1.User A creates engine
-    UserA->>ZEGO Express SDK: 2.User A logs in to room
-    UserB->>ZEGO Express SDK: 3.User B creates engine
-    UserB->>ZEGO Express SDK: 4.User B logs in to room
-    UserB->>ZEGO Express SDK: 5.User B publishes stream
-    ZEGO Express SDK->>UserA: 6.User A receives room stream update notification<br/>(get User B's streamID)
-    UserA->>ZEGO Express SDK: 7.User A passes User B's streamID to play stream
+Skip to this step if a project already exists.
+
+<Accordion title="Create a new React Native project" defaultOpen="false">
+    
+
+After configuring the development environment, run the command `react-native init YourProject`.
+</Accordion>
+
+
+### Import the SDK 
+
+
+1. Enter the root directory of your project, open the `package.json`, and add the `"zego-express-engine-reactnative": "^x.y.z"` to the `dependencies`.
+
+<Note title="Note">
+
+x.y.z is the latest SDK version number, which can be obtained by running an npm command.
+</Note>
+
+2. In the root directory of your project, run the `npm install zego-express-engine-reactnative --save` command or the `yarn add zego-express-engine-reactnative` command to install the SDK.
+
+3. Go to the iOS root directory, run the `pod install` command to install the dependencies.
+
+ 
+Once you've done the operations above, you will be available to use the `zego-express-engine-reactnative SDK` in your project either in JavaScript or TypeScript (TypeScript is recommended).
+
+
+### Add permissions
+
+Permissions can be set as needed.
+
+* **Android**
+
+Open the `app/src/main/AndroidManifest.xml` file, and add the following code: 
+
+```xml
+<!-- Permissions required by the SDK -->
+<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+<uses-permission android:name="android.permission.CAMERA" />
+<uses-permission android:name="android.permission.BLUETOOTH" />
+<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+<!-- Permissions required by the App -->
+<uses-permission android:name="android.permission.READ_PHONE_STATE" />
+<uses-permission android:name="android.permission.WAKE_LOCK" />
+
+<uses-feature
+    android:glEsVersion="0x00020000"
+    android:required="true" />
+
+<uses-feature android:name="android.hardware.camera" />
+<uses-feature android:name="android.hardware.camera.autofocus" />
 ```
-{/*
-<Frame width="512" height="auto" caption="">
-  <img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/common_usage_new.png" />
-</Frame>
-*/}
 
-The API call sequence of the entire publishing/playing process is shown in the following figure:
+<Warning title="Warning">Because Android 6.0 requires dynamic permissions for some important permissions, you will need to apply for dynamic permissions by referring to the following code after applying for static permissions through the `AndroidMainfest.xml` file.</Warning>
 
-```mermaid
-sequenceDiagram
-    participant App
-    participant ZEGO Express SDK
-    App->>ZEGO Express SDK: Create engine <br/> [createEngineWithProfile]
-    App->>ZEGO Express SDK: Login room <br/> [loginRoom]
-    ZEGO Express SDK-->>App: Room/User/Stream state update callbacks <br/> [roomStateUpdate / roomUserUpdate / roomStreamUpdate]
-    App->>ZEGO Express SDK: Preview/Publish stream <br/> [starPreview / startPublishingStream]
-    ZEGO Express SDK-->>App: Publish state update callback <br/> [publisherStateUpdate]
-    App->>ZEGO Express SDK: Play stream <br/> [startPlayingStream]
-    ZEGO Express SDK-->>App: Play state update callback <br/> [playerStateUpdate]
-    App->>ZEGO Express SDK: Stop preview/Publish stream <br/> [stopPreview / stopPublishingStream]
-    ZEGO Express SDK-->>App: Publish state update callback <br/> [publisherStateUpdate]
-    App->>ZEGO Express SDK: Stop playing stream <br/> [stopPlayingStream]
-    ZEGO Express SDK-->>App: Play state update callback <br/> [playerStateUpdate]
-    App->>ZEGO Express SDK: Logout room <br/> [logoutRoom]
-    ZEGO Express SDK-->>App: Room state update callback <br/> [roomStateUpdate]
-    App->>ZEGO Express SDK: Destroy engine <br/> [destroyEngine]
+```javascript
+import {PermissionsAndroid} from 'react-native';
+
+const granted = PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA,
+                                        PermissionsAndroid.RECORD_AUDIO);
+granted
+  .then((data)=>{
+    if(!data) {
+      const permissions = [PermissionsAndroid.PERMISSIONS.RECORD_AUDIO, PermissionsAndroid.PERMISSIONS.CAMERA];
+      PermissionsAndroid.requestMultiple(permissions);
+    }
+  }).catch((err)=>{
+    console.log(err.toString());
+  });
 ```
-{/*
-<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml_RN.png" /></Frame>
-*/}
 
-<a id="CreateEngine"> </a>
 
-### Create Engine
+* **iOS**
 
-**1. Create Interface (Optional)**
+1. In Xcode, select the target project, go to **Info > Custom iOS Target Properties**.
 
-<Accordion title="Add Interface Elements" defaultOpen="false">
-Before creating the engine, ZEGO recommends that developers add the following interface elements to facilitate the implementation of basic real-time audio and video functionality.
+![Add iOS Privacy](https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/Common/privacy-description.png)
 
-- Local preview window
-- Remote video window
-- End button
+2. Add the **+** button to add microphone and camera permissions.
+    
+    - `Privacy - Camera Usage Description`
+    - `Privacy - Microphone Usage Description`
+
+After the permission is added, it will be shown as below:
+
+![Add iOS Privacy Done](https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/Common/privacy-description-done.png)
+
+
+## Implement a basic video call 
+
+#### Understand the tech
+
+The following diagram shows the basic process of User A playing a stream published by User B: 
+
+
+![https://doc-media.zego.im/sdk-doc/Pics/in_app_chat/17395_2.png](https://doc-media.zego.im/sdk-doc/Pics/in_app_chat/17395_2.png)
+
+
+For a better understanding, you can check the **Key concepts** of Video Call SDK:
+
+<Video src="https://www.youtube.com/embed/jV68Rd5RhUc"/>
+
+#### Sample code
+
+Here is the [sample code](../quick-start/run-example-code.mdx) for implementing video call functions. Feel free to refer to it when developing.
+
+
+#### Create a ZegoExpressEngine engine 
+
+<Accordion title="Optional: Create the UI" defaultOpen="false">
+    
+
+Before creating a `ZegoExpressEngine` instance, we recommend you add the following UI elements to implement basic real-time audio and video features:
+
+- A view for local preview
+- A view for remote video
+- A **Stop** button
+
 
 <Frame width="20%" height="auto">
   <img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/UI.jpg" />
 </Frame>
-</Accordion>
 
-**2. Create Engine**
+**Create a ZegoExpressEngine instance** 
 
-Use the [createEngineWithProfile ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#createenginewithprofile) method, pass the applied AppID and AppSign to the parameters "appID" and "appSign", and create an engine singleton object.
-
-<Warning title="Warning">
-The SDK also supports Token authentication. If you have higher security requirements for the project, it is recommended to upgrade the authentication method. For details, please refer to [How to Upgrade from AppSign Authentication to Token Authentication](http://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo).
-</Warning>
-
-<Warning title="Warning">If it is an audio scenario, be sure to call `enableCamera(false)` to turn off the camera to avoid starting video capture and publishing and generating additional video traffic.</Warning>
+Call the [createEngineWithProfile](/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#createenginewithprofile) method and set the `appID` and `appSign` parameters to the applied AppID and AppSign, respectively.
 
 
+To register callbacks, you can implement some methods in [ZegoEventListener](/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html) as required and call the [on](/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#on) method after engine creation to set callbacks.
+
+<Warning title="Warning">The SDK also supports Token-based authentication. If you want to upgrade the authentication mode, see [Guide for upgrading the authentication mode from using the AppSign to Token](https://docs.zegocloud.com/faq/token_upgrade).</Warning>
 
 ```javascript
-// Import ZEGO Express SDK
+// Import
 import ZegoExpressEngine from 'zego-express-engine-reactnative';
 
-// Use general scenario
+// Use the general scenario.
 const profile = {
 appID : xxx,
-// AppSign only meets simple authentication requirements. If you need to upgrade to a more secure authentication method, please refer to [How to Upgrade from AppSign Authentication to Token Authentication](https://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo&platform=all)
-// AppSign can be obtained through [Console](https://console.zegocloud.com/dashboard), format is @"39011cbxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+// The AppSign can only meet simple authentication requirements. If you want to use the Token for authentication, which is securer, see [Guide for upgrading the authentication mode from using the AppSign to Token](https://docs.zegocloud.com/faq/token_upgrade).
+// You can obtain the AppSign in the [ZEGOCLOUD Admin Console](https://console.zego.im/dashboard). The format is similar to @"39011cbxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".
 appSign: '39011cbxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
 scenario : 0
 };
@@ -136,116 +178,93 @@ scenario : 0
 ZegoExpressEngine.createEngineWithProfile(profile)
 ```
 
-**3. Set Callbacks**
+</Accordion>
 
-After creating the engine, you can register callbacks through the engine instance's [on](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#on) method.
+<a id="loginRoom"></a>
 
-<Warning title="Warning">
+#### Log in to a room
 
+**Log in**  
 
-To avoid missing event notifications, it is recommended to register callbacks immediately after creating the engine
+Call the [loginRoom](/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) method to log in to a room. If the room does not exist, calling this method will create and log in to the room.
 
-</Warning>
+The values of the `roomID` and `user` parameters are generated locally, but the following conditions must be met:
 
-
-
-
-
-<a id="loginRoom"> </a>
-
-### Login to Room
-
-**1. Login**
-
-You can call the [loginRoom ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) interface to log in to the room. If the room does not exist, calling this interface will create and log in to this room.
-
-The parameters for roomID and user are generated locally by you, but need to meet the following conditions:
-
-- Within the same AppID, ensure that "roomID" is globally unique.
-- Within the same AppID, ensure that "userID" is globally unique. It is recommended that developers associate "userID" with their own business account system.
+- The value of `roomID` must be globally unique under the same AppID.  
+- The value of `userID` must be globally unique under the same AppID. You are advised to associate `userID` with the account system of your service. 
 
 ```javascript
 let roomConfig = new ZegoRoomConfig();
-// If you use appsign for authentication, you do not need to fill in the token parameter; if you need to use a more secure authentication method: token authentication, please refer to [How to Upgrade from AppSign Authentication to Token Authentication](https://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo&platform=all)
+// If you use the AppSign for authentication, you do not need to set the `token` parameter. If you want to use the Token for authentication, which is securer, see [Guide for upgrading the authentication mode from using the AppSign to Token](https://docs.zegocloud.com/faq/token_upgrade).
 // roomConfig.token = "xxxx";
-// Only by passing in a ZegoRoomConfig with the parameter "isUserStatusNotify" set to "true" can you receive the onRoomUserUpdate callback.
+// The `onRoomUserUpdate` callback can be received only when `ZegoRoomConfig` in which the `isUserStatusNotify` parameter is set to `true` is passed.
 roomConfig.isUserStatusNotify = true;
-// Login to room
-// Start logging in to the room
+// Room login.
+// Log in to a room.
 ZegoExpressEngine.instance().loginRoom('room1', {'userID': 'id1', 'userName': 'user1'}, roomConfig);
 ```
 
-**2. Listen to Event Callbacks After Logging in to Room**
+**Listen for callback events after room login** 
 
-According to actual application needs, listen to the event notifications you want to pay attention to after logging in to the room, such as room status updates, user status updates, stream status updates, etc.
-- [roomStateUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomstateupdate): Room status update callback. After logging in to the room, when the room connection status changes (such as room disconnection, login authentication failure, etc.), the SDK will notify through this callback.
-- [roomUserUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomuserupdate): User status update callback. After logging in to the room, when there are new or deleted users in the room, the SDK will notify through this callback.
+Based on your service requirements, listen for event notifications after room login, such as room connection, user, and stream status updates.
+- [roomStateUpdate](/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomstateupdate): room connection status callback. After a user logs in to a room, when the room connection status changes (for example, the room is disconnected or login authentication fails), the SDK triggers this callback to send a notification.
+- [roomUserUpdate](/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomuserupdate): user status update callback. After a user logs in to a room, when another user joins or leaves the room, the SDK triggers this callback to send a notification.
 
-    Only when logging in to the room by calling the [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) interface and passing in [ZegoRoomConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegoroomconfig.html) configuration, and the parameter "isUserStatusNotify" is set to "true", can users receive the [roomUserUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomuserupdate) callback.
+    The [roomUserUpdate](/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomuserupdate) callback can be received only when [ZegoRoomConfig](/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegoroomconfig.html) in which the `isUserStatusNotify` parameter is set to `true` is passed in the [loginRoom](/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) method.
 
-- [roomStreamUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomstreamupdate): Stream status update callback. After logging in to the room, when users in the room publish or delete audio and video streams, the SDK will notify through this callback.
+- [roomStreamUpdate](/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomstreamupdate): stream status update callback. After a user logs in to a room, when another user in the room publishes or deletes an audio or video stream, the SDK triggers this callback to send a notification.
 
 <Warning title="Warning">
-
-
-- Only when logging in to the room by calling the [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) interface and passing in [ZegoRoomConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegoroomconfig.html) configuration, and the parameter "isUserStatusNotify" is set to "true", can users receive the [roomUserUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomuserupdate) callback.
-- Normally, if a user wants to play videos pushed by other users, they can call the [startPlayingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startplayingstream) interface in the callback of stream status update (addition) to play the audio and video streams pushed by remote users.
-
+- The [roomUserUpdate](/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomuserupdate) callback can be received only when [ZegoRoomConfig](/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegoroomconfig.html) in which the `isUserStatusNotify` parameter is set to `true` is passed in the [loginRoom](/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) method.
+- Generally, if a user wants to play a video published by another user, the user can call the [startPlayingStream](/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startplayingstream) method in the stream status update (stream addition) callback to play the audio and video streams.
 </Warning>
 
-
-
 ```javascript
-// The following are common room-related callbacks
+// Common room-related callbacks
 
 ZegoExpressEngine.instance().on('roomStateUpdate', (roomID, state, errorCode, extendedData) => {
-  // Room status update callback. After logging in to the room, when the room connection status changes (such as room disconnection, login authentication failure, etc.), the SDK will notify through this callback
+  // Room connection status callback. After a user logs in to a room, when the room connection status changes (for example, the room is disconnected or login authentication fails), the SDK triggers this callback to send a notification.
 }); ;
 
 
 ZegoExpressEngine.instance().on('roomUserUpdate', (roomID, updateType, userList) => {
-  // User status update. After logging in to the room, when there are new or deleted users in the room, the SDK will notify through this callback
+  // User status update callback. After a user logs in to a room, when another user joins or leaves the room, the SDK triggers this callback to send a notification.
 });
 
 ZegoExpressEngine.instance().on('roomStreamUpdate', (roomID, updateType, streamList) => {
-  // Stream status update. After logging in to the room, when users in the room publish or delete audio and video streams, the SDK will notify through this callback
+  // Stream status update callback. After a user logs in to a room, when another user in the room publishes or deletes an audio or video stream, the SDK triggers this callback to send a notification.
 });
 ```
 
-<a id="publishingStream"></a>
+<a id="startPublishingStream"></a>
 
-### Publish Stream
+#### Publish streams
 
-**1. Start Publishing Stream**
+**Start to publish streams**
 
-Call the [startPublishingStream ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startpublishingstream) interface, pass in the stream ID parameter "streamID", and send the local audio and video stream to remote users.
+Call the [startPublishingStream](/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startpublishingstream) method and set the `streamID` parameter to publish a local audio and video stream to remote users.
 
-<Warning title="Warning">
-
-
-Within the same AppID, ensure that "streamID" is globally unique. If within the same AppID, different users each publish a stream with the same "streamID", the user who publishes later will fail to publish.
-
-</Warning>
-
-
+<Warning title="Warning">The value of `streamID` must be globally unique under the same AppID. If different streams are published with the same `streamID`, the ones that are published after the first one will fail.</Warning>
 
 ```javascript
-/** Start publishing stream */
+/** Start to publish streams.*/
 ZegoExpressEngine.instance().startPublishingStream("streamID");
 ```
 
-**2. Start Local Preview (Optional)**
+**Optional: Start the local preview**
 
-<Accordion title="Set Preview View and Start Local Preview" defaultOpen="false">
-If you want to see the local screen, you can call the [startPreview ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startpreview) interface to set the preview view and start local preview.
+<Accordion title="Optional: Start the local preview" defaultOpen="false">
+
+
+To view the local videos, call the [startPreview](/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startpreview) method to set the preview view and start the local preview.
 
 ```javascript
 import { findNodeHandle } from 'react-native';
 
-// Get a react ref
+// Obtain `ref` of `zego_play_view`.
 let localViewRef = findNodeHandle(this.refs.zego_preview_view);
 
-// Start local preview
+// Start the local preview.
 ZegoExpressEngine.instance().startPreview({
     'reactTag': localViewRef,
     'viewMode': 0,
@@ -257,52 +276,49 @@ render() {
     return (
         <View>
             <ZegoTextureView ref='zego_preview_view'/>
-        </view>
+        </View>
     )
 }
 ```
 </Accordion>
 
-**3. Listen to Event Callbacks After Publishing Stream**
+**Listen for callback events after stream publishing starts** 
 
-According to actual application needs, listen to the event notifications you want to pay attention to after publishing stream, such as publishing stream status updates, etc.
+Based on your service requirements, listen for event notifications after stream publishing starts, such as stream publishing status updates.
 
-[publisherStateUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#publisherstateupdate): Publishing stream status update callback. After successfully calling the publishing interface, when the publishing stream status changes, such as network interruption causing publishing exceptions, etc., the SDK will notify through this callback while retrying to publish.
+[publisherStateUpdate](/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#publisherstateupdate): stream publishing status update callback. If the stream publishing status changes (for example, a stream publishing exception occurs due to network interruption) after the stream publishing method is successfully called, the SDK triggers this callback to send a notification while retrying to publish the stream.
 
 ```javascript
     ZegoExpressEngine.instance().on("publisherStateUpdate", (streamID, state, errorCode, extendedData) => {
-    // After successfully calling the publishing interface, when the publisher status changes, such as network interruption causing publishing exceptions, etc., the SDK will notify through this callback while retrying to publish
+    // If the stream publishing status changes (for example, a stream publishing exception occurs due to network interruption) after the stream publishing method is successfully called, the SDK triggers this callback to send a notification while retrying to publish the stream
     //....
 });
 ```
 
-<a id="PlayingStream"></a>
 
-### Play Stream
+#### Play streams  
 
-**1. Start Playing Stream**
+**1. Start to play streams**  
 
-Call the [startPlayingStream ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startplayingstream) interface, and play the audio and video stream pushed by remote users according to the passed-in stream ID parameter "streamID".
+Call the [startPlayingStream](/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startplayingstream) method and set the `streamID` parameter to play an audio and video stream published by a remote user.
+
 
 <Note title="Note">
 
 
-- The "streamID" pushed by remote users can be obtained from the [roomStreamUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomstreamupdate) callback.
-- Need to ensure that "streamID" is globally unique.
-
+- You can obtain the value of `streamID` corresponding to the stream that has been published by a remote user from the [roomStreamUpdate](/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomstreamupdate) callback.
+- The value of `streamID` must be globally unique.
 </Note>
-
-
 
 
 
 ```javascript
 import { findNodeHandle } from 'react-native';
 
-// Get a react ref
+// Obtain `ref` of `zego_play_view`.
 let remoteViewRef = findNodeHandle(this.refs.zego_play_view);
 
-// Start playing stream
+// Start to play streams.
 ZegoExpressEngine.instance().startPlayingStream("streamID", {
     'reactTag': remoteViewRef,
     'viewMode': 0,
@@ -319,79 +335,68 @@ render() {
 }
 ```
 
-**2. Listen to Event Callbacks After Playing Stream**
+**Listen for callback events after stream playing starts** 
 
-According to actual application needs, listen to the event notifications you want to pay attention to after playing stream, such as playing stream status updates, etc.
+Based on your service requirements, listen for event notifications after stream playing starts, such as stream playing status updates.
 
-[playerStateUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#playerstateupdate): Playing stream status update callback. After successfully calling the playing interface, when the playing stream status changes, such as network interruption causing publishing exceptions, etc., the SDK will notify through this callback while retrying to play.
+[playerStateUpdate](/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#playerstateupdate): stream playing status update callback. If the stream playing status changes (for example, a stream playing exception occurs due to network interruption) after the stream playing method is successfully called, the SDK triggers this callback to send a notification while retrying to play the stream.
 
 ```javascript
 ZegoExpressEngine.instance().on("playerStateUpdate", (streamID, state, errorCode, extendedData) => {
-    /** After successfully calling the playing interface, when the player status changes, such as network interruption causing publishing exceptions, etc., the SDK will notify through this callback while retrying to play */
+    /** If the stream playing status changes (for example, a stream playing exception occurs due to network interruption) after the stream playing method is successfully called, the SDK triggers this callback to send a notification while retrying to play the stream.*/
     //....
 });
 ```
 
-### Test Publishing and Playing Stream Functionality Online
+#### Test out real-time audio and video features
 
-Run the project on a real device. After running successfully, you can see the local video screen.
+Run your project on a real device. Upon successful running, you can view the local video.
 
-For convenience, ZEGO provides a [Web Debugging Example](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html). On this page, enter the same AppID and RoomID, enter different UserIDs, and the corresponding [Token](/console/development-assistance/temporary-token), to join the same room and communicate with the real device. When the audio and video call starts successfully, you can hear the remote audio and see the remote video screen.
+For your convenience of experience, ZEGOCLOUD provides a [Web platform for debugging](https://zegoim.github.io/express-demo-web/src/Examples/QuickStart/VideoTalk/index.html?lang=en). On the debugging page, you can enter the AppID and room ID of the real device user, and a different user ID to log in to the same room for communicating with the real device user. After a video call starts successfully, you can hear the remote audio and view the remote video.
 
 
 
-<a id="stopPublishingStream"></a>
 
-### Stop Publishing/Playing Stream
+#### Stop publishing or playing streams
 
-**1. Stop Publishing/Preview**
+**Stop the stream publishing and preview**
 
-Call the [stopPublishingStream ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#stoppublishingstream) interface to stop sending local audio and video streams and end the call.
+Call the [stopPublishingStream](/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#stoppublishingstream) method to stop publishing local audio or video streams and end the call.
 
 ```javascript
-/** Stop publishing stream */
+/** Stop publishing streams. */
 ZegoExpressEngine.instance().stopPublishingStream();
 ```
 
-If local preview is enabled, developers can call the [stopPreview ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#stoppreview) interface to stop preview according to business needs after stopping publishing.
+If the local preview is started, call the [stopPreview](/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#stoppreview) method to stop it based on your service requirements after stopping publishing streams.
 
 ```javascript
-// Stop local preview
+// Stop the local preview.
 ZegoExpressEngine.instance().stopPreview();
 ```
 
-**2. Stop Playing Stream**
+**Stop playing streams**
 
-Call the [stopPlayingStream ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#stopplayingstream) interface to stop playing remote audio and video streams.
-
-<Warning title="Warning">
-
-
-If developers receive a notification of "decrease" in audio and video streams through the [roomStreamUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomstreamupdate) callback, please call the [stopPlayingStream ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#stopplayingstream) interface to stop playing in time to avoid playing empty streams and generating additional costs; or, developers can choose an appropriate time according to their own business needs and proactively call the [stopPlayingStream ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#stopplayingstream) interface to stop playing.
-
-</Warning>
-
-
+Call the [stopPlayingStream](/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#stopplayingstream) method to stop playing audio and video streams published by remote users.
 
 ```javascript
-// Stop playing stream
+// Stop playing streams.
 ZegoExpressEngine.instance().stopPlayingStream("streamID");
 ```
 
+**Log out of a room**  
 
-**3. Logout of Room**
-
-Call the [logoutRoom ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#logoutroom) interface to log out of the room. The local end will receive the [roomStateUpdate ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomstateupdate) callback notification of the call result, and stop all its publishing/playing streams and local preview.
+Call the [logoutRoom](/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#logoutroom) method to log out of a room. In this case, you will receive the [roomStateUpdate](/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomstateupdate) callback locally, which carries the result of calling the `logoutRoom` method, and stream publishing, stream playing, and the local preview will all be stopped.
 
 
 ```javascript
-// Logout of room
+// Log out of a room.
 ZegoExpressEngine.instance().logoutRoom('room1');
 ```
 
-### Destroy Engine
+#### Destroy a ZegoExpressEngine instance
 
-Call the [destroyEngine ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#destroyengine) interface to destroy the engine, which is used to release resources used by the SDK.
+Call the [destroyEngine](/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#destroyengine) method to destroy a ZegoExpressEngine instance so that the resources used by the SDK can be released.
 
 
 ```javascript
@@ -400,9 +405,41 @@ ZegoExpressEngine.destroyEngine();
 
 <Note title="Note">
 
-
-According to actual needs, you can use the "await" keyword when destroying the engine to perform asynchronous waiting to ensure that device hardware resources are released.
-
+When destroying a ZegoExpressEngine instance, you can use the `await` keyword as required to wait asynchronously, ensuring that the hardware resources are completely released.   
 </Note>
 
 
+
+### FAQ
+
+**1. Can I integrate the SDK with React Native 0.60.0 or earlier?**
+
+The answer is **No**. The zego-express-engine-reactnative SDK only supports React Native 0.60.0 or later. To integrate the SDK, upgrade the project version first.
+
+**2. After importing the SDK into the project, do I need to manually run the 'react-native link zego-express-engine-reactnative' command to link Native Modules?** 
+
+The answer is **No**. React Native has supported automatic linking to Native Modules starting from version 0.60.0.
+
+
+
+
+
+<Warning title="Warning">
+**Resolution And Pricing Attention!**
+
+Please pay close attention to the relationship between **video resolution and price** when implementing video call, live streaming, and other video scenarios.
+
+
+**When playing multiple video streams in the same room, the billing will be based on the sum of the resolutions, and different resolutions will correspond to different billing tiers.**
+
+
+The video streams that are included in the calculation of the final resolution are as follows:
+
+1. Live streaming video view (such as host view, co-host view, PKBattle view, etc.)
+2. Video call's video view for each person
+3. Screen sharing view
+4. Resolution of the cloud recording service
+5. Resolution of the Live stream creation
+
+Before your app goes live, please **make sure you have reviewed all configurations and confirmed the billing tiers** for your business scenario to avoid unnecessary losses. For more details, please refer to [Pricing](https://www.zegocloud.com/pricing).
+</Warning>
