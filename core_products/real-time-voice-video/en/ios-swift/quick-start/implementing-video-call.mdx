@@ -7,437 +7,601 @@ date: "2025-01-21"
 ---
 
 
-
-## Function Introduction
-
-This article will introduce how to quickly implement a simple real-time audio and video call.
-
-Explanation of related concepts:
-
-- ZEGO Express SDK: A real-time audio and video SDK provided by ZEGO that can provide developers with convenient access, high definition and smoothness, multi-platform interoperability, low latency, and high concurrency audio and video services.
-- Stream: Refers to a group of audio and video data that is continuously being sent and encapsulated in a specified encoding format. A user can publish multiple streams at the same time (for example, one publishes camera data and one publishes screen sharing data) and can also play multiple streams at the same time. Each stream is identified by a stream ID.
-- Publish stream: The process of pushing packaged audio and video data streams to the ZEGOCLOUD.
-- Play stream: The process of pulling and playing existing audio and video data streams from the ZEGOCLOUD.
-- Room: An audio and video space service provided by ZEGO, used to organize user groups. Users in the same Room can send and receive real-time audio, video, and messages to each other.
-    1. Users need to log in to a Room first before they can perform stream publishing and playing operations.
-    2. Users can only receive related messages in the Room they are in (user entry/exit, audio and video stream changes, etc.).
-    3. Each Room is identified by a unique roomID within an AppID. All users who log in to the Room using the same roomID belong to the same Room.
-
-
-
-For more related concepts, please refer to [Term Explanation](/glossary/term-explanation).
+This guide describes how to integrate the SDK and implement a basic one-on-one video call using ZEGOCLOUD's Video Call SDK.
 
 ## Prerequisites
 
-Before implementing basic real-time audio and video functions, please ensure:
+Before you begin, make sure you complete the following:
 
-- ZEGO Express SDK has been integrated into the project to implement basic real-time audio and video functions. For details, please refer to [Quick Start - Integrate SDK](/real-time-video-ios-swift/quick-start/integrating-sdk).
-- A project has been created in [ZEGOCLOUD Console](https://console.zegocloud.com), and a valid AppID and AppSign have been applied for. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
-
-<Warning title="Warning">
-
-The SDK also supports Token authentication. If you have higher requirements for project security, it is recommended to upgrade the authentication method. For details, please refer to [How to upgrade from AppSign authentication to Token authentication](http://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo).
-</Warning>
-
-<a id="process"></a>
-
-## Implementation Process
-
-The basic process for users to conduct video calls through ZEGO Express SDK is as follows:
-
-Users A and B join the Room. User B previews and pushes the audio and video stream to the ZEGO cloud service (publish stream). After User A receives the notification of the audio and video stream pushed by User B, User A plays User B's audio and video stream in the notification (play stream).
-
-```mermaid
-sequenceDiagram
-    participant UserA
-    participant ZEGO Express SDK
-    participant UserB
-    UserA->>ZEGO Express SDK: 1.User A creates engine
-    UserA->>ZEGO Express SDK: 2.User A logs in to room
-    UserB->>ZEGO Express SDK: 3.User B creates engine
-    UserB->>ZEGO Express SDK: 4.User B logs in to room
-    UserB->>ZEGO Express SDK: 5.User B publishes stream
-    ZEGO Express SDK->>UserA: 6.User A receives room stream update notification<br/>(get User B's streamID)
-    UserA->>ZEGO Express SDK: 7.User A passes User B's streamID to play stream
-```
-{/*
-<Frame width="512" height="auto" caption="">
-  <img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/common_usage_new.png" />
-</Frame>
-*/}
-
-<a id="initialization"> </a>
-
-### Initialization
-
-**1. Create Interface**
-
-Create a user interface for video calls in your project according to scenario requirements. We recommend that you add the following elements to your project:
-
-- Local video window
-- Remote video window
-- Call button
-
-<Frame width="512" height="auto" caption="">
-  <img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/express_quickstart_video_call.png" />
-</Frame>
-
-<h1 id="CreateEngine"> </h1>
-
-**2. Create Engine**
-
-Call the create engine interface and pass the applied AppID and AppSign to the parameters "appID" and "appSign".
-
-Select an appropriate scenario based on the actual audio and video business of the App, and pass the selected scenario enumeration to the parameter "scenario".
+- Xcode 13.0 or later.
+- A device running on iOS 9.0 or later.
+- Sign up and create a project in [ZEGOCLOUD Console](https://console.zegocloud.com).
 
 
-<Warning title="Warning">
+## Create an iOS project
+
+Skip this step if a project already exists.
+
+<Accordion title="Create an iOS project" defaultOpen="false">
+    
+
+1. Open Xcode, select **File > New > Project**. In the dialog that appears, select the **iOS** tab, then select **App** in the **Application** section.
+
+    <img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/NewProject_1.png" />
 
 
-The SDK also supports Token authentication. If you have higher requirements for project security, it is recommended to upgrade the authentication method. For details, please refer to [How to upgrade from AppSign authentication to Token authentication](http://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo).
-</Warning>
+2. Fill in items or choose options for the new project, click **Next** after the configuration is completed.
+
+    **Product Name** and **Organization Identifier** are required, which will be used for creating the **App Bundle Identifier**.
+
+    ![set_project_name](https://doc-media.zego.im/sdk-doc/Pics/A_VideoCallSDK/iOS/set_project_name.jpg)
+
+3. Choose a directory to store the project, and click **Create** to create a project.
+
+    <img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/NewProject_3.png" />
+
+</Accordion>
+
+## Import the SDK
+
+Choose either of the following methods to integrate the Video Call SDK into your project.
+<Accordion title="Import the SDK using Swift Package Manager" defaultOpen="false">
+    
+
+1. Open Xcode and select **File > Add Packages...**, and enter the following URL in the search box of **Search or Enter Package URL**:
+
+    ```swift
+    https://github.com/zegolibrary/express-video-ios
+    ```
+
+2. Specify the SDK version you want to integrate into **Dependency Rule** (**Recommended**: use the default rule "Up to Next Major Version"), and then click **Add Package** to import the SDK. For more, refer to [Apple Documentation](https://developer.apple.com/documentation/xcode/adding-package-dependencies-to-your-app).
+</Accordion>
+
+<Accordion title="Import the SDK using CocoaPods" defaultOpen="false">
+    
+
+1. Install CocoaPods. For more details, see [CocoaPods Installation Guide ](https://guides.cocoapods.org/using/getting-started.html#getting-started).
+
+2. Open the Terminal, enter the root directory of the project, and execute the command `pod init` to create a `Podfile`.
+
+3. Open `Podfile`, add `pod 'ZegoExpressEngine'`, and change `MyProject` to your target name.
+
+    ```ruby
+    target 'MyProject' do
+        use_frameworks!
+        pod 'ZegoExpressEngine'
+    end
+    ```
+
+    <Warning title="Warning">Because the SDK is XCFramwork, therefore, you will need to use CocoaPods 1.10.0 or later to integrate the Video Call SDK.</Warning>
+
+    <Warning title="Warning">Since version v3.2.0, the Pod name of the Video Call SDK is changed from `ZegoExpressEngine/Video` to `ZegoExpressEngine`; the Pod name of the Voice Call SDK is changed from `ZegoExpressEngine/Audio` to `ZegoExpressAudio`.</Warning>
+
+
+4. Execute `pod repo update` to update the local index to make sure the latest version of SDK can be installed. For the latest version number, see [ZEGOCLOUD Express-Video iOS SDK Release History](/real-time-voice-video-ios-swift/quick-start/release-notes).
+
+5. Execute `pod install` to install the SDK.
+
+</Accordion>
+
+<Accordion title="Import the SDK manually" defaultOpen="false">
+    
+
+1. Download the latest version of SDK from [SDK downloads](/real-time-voice-video-ios-swift/quick-start/download-sdk). We recommend you use XCFramework, and then extract files from the downloaded SDK package.
+
+2. Copy the SDK dynamic library file `ZegoExpressEngine.xcframework` to the project directory.
+
+     - ios-arm64_armv7: A real device that supports the arm64 or armv7 architectures of the iOS platform.
+     - ios-arm64_x86_64-maccatalyst: supports the arm64, x86_64 architecture of Mac Catalyst mode.
+     - ios-arm64_x86_64-simulator: A simulator that supports the arm64 and x86_64 architectures of the iOS platform.
+
+3. Open Xcode and select **File > Add Files to "xxx"** (xxx is the project name) to add the SDK dynamic library files to the project.
+
+    <img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/Common/add-files.png" />
+
+4. Do the following to add the framework file to the project target.
+
+    1. Select the project target.
+
+    2. Click **General**, then under **Frameworks, Libraries, and Embedded Content**, click the **Add button (+)** below the table.
+
+    3. Add **ZegoExpressEngine.framework** to the target, and set the **Embed** field to **Embed & Sign**.
+
+    ![Dylib embed](https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/Common/embed_sign.png)
+</Accordion>
+
+
+## Add device permissions
+
+Permissions can be set as needed.
+
+1. Open Xcode, select the target object, and then click **Info > Custom iOS Target Properties**.
+
+    ![Add Privacy](https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/Common/privacy-description.png)
+
+2. Click the **Add button (+)** to add camera and microphone permissions.
+
+    - `Privacy - Camera Usage Description`
+
+    - `Privacy - Microphone Usage Description`
+
+    ![Add Privacy Done](https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/Common/privacy-description-done.png)
+
+## Implement video call functions
+
+### Sample code
+
+The following is the sample code for implementing video call functions. Feel free to refer to it when developing.
+<Accordion title="Sample code for implementing video call functions" defaultOpen="false">
+    
 
 ```swift
-let profile = ZegoEngineProfile()
-// Please obtain through official website registration, format: 1234567890
-profile.appID = <#appID#>
-// Please obtain through official website registration, format: @"0123456789012345678901234567890123456789012345678901234567890123" (64 characters in total)
-profile.appSign = <#appSign#>
-// Specify to use live streaming scenario (please fill in the scenario that suits your business according to the actual situation)
-profile.scenario = .broadcast
-// Create engine and register self as eventHandler callback. If you don't need to register a callback, the eventHandler parameter can be nil, and you can call the "setEventHandler:" method later to set the callback
-ZegoExpressEngine.createEngine(with: profile, eventHandler: self)
-```
+//
+//  ViewController.swift
+//
 
-**3. Set Event Handler**
-
-You can listen to and handle event callbacks you care about by implementing the [ZegoEventHandler](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~protocol~ZegoEventHandler) interface class and implementing the required callback methods. Then pass the instantiated object as the `eventHandler` parameter to `createEngine` or pass it to [setEventHandler](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#set-event-handler) to register the callback.
+import UIKit
+import ZegoExpressEngine
 
 
-<Warning title="Warning">
+// Get your AppID and AppSign from ZEGOCLOUD Console
+// [My Projects -> AppID] : https://console.zegocloud.com/project
+let appID : UInt32 = <#YourAppID#>
+let appSign: String = "<#YourAppSign#>"
 
+class ViewController: UIViewController {
+    
+    // The video stream for the local user is displayed here
+    var localView: UIView!
+    // The video stream for the remote user is displayed here
+    var remoteView: UIView!
+    // Click to log in or log out a room
+    var callButton: UIButton!
+    
+    var localUserID = "user_" + String(Int.random(in: 1...100))
 
-It is recommended to register the callback when creating the engine or immediately after creating the engine to avoid missing event notifications due to delayed registration.
-</Warning>
-
-
-<Accordion title="Common Notification Callbacks" defaultOpen="false">
-```swift
-//After locally calling loginRoom to join a Room, you can monitor your connection status in the Room in real time by listening to the onRoomStateChanged callback.
-//For more information, please refer to /real-time-video-ios-oc/room-capability/room-connection-status
-func onRoomStateChanged(_ reason: ZegoRoomStateChangedReason, errorCode: Int32, extendedData: [AnyHashable : Any], roomID: String) {
-    if reason == .logining {
-        // Logging in to the Room. When calling [loginRoom] to log in to the Room or [switchRoom] to switch to the target Room, enter this state, indicating that a request is being made to connect to the server. Usually, the application interface is displayed through this state.
-    } else if reason == .logined {
-        //Logged in to the Room successfully. After successfully logging in to or switching Rooms, enter this state, indicating that logging in to the Room has been successful, and users can normally receive callback notifications for additions and deletions of other users and all stream information in the Room.
-        //Only when the Room status is successfully logged in or successfully reconnected, can publishing streams (startPublishingStream) and playing streams (startPlayingStream) normally send and receive audio and video
-    } else if reason == .loginFailed {
-        //Failed to log in to the Room. After failing to log in to or switch Rooms, enter this state, indicating that logging in to or switching Rooms has failed, such as incorrect AppID or AppSign.
-    } else if reason == .reconnecting {
-        //Room connection temporarily interrupted. If the interruption is caused by poor network quality, the SDK will perform internal retries.
-    } else if reason == .reconnected {
-        //Room reconnection successful. If the interruption is caused by poor network quality, the SDK will perform internal retries. After successful reconnection, enter this state.
-    } else if reason == .reconnectFailed {
-        //Room reconnection failed. If the interruption is caused by poor network quality, the SDK will perform internal retries. After failed reconnection, enter this state.
-    } else if reason == .kickOut {
-        //Kicked out of the Room by the server. For example, if a user with the same username logs in to the Room elsewhere, causing the local end to be kicked out of the Room, this state will be entered.
-    } else if reason == .logout {
-        //Logged out of the Room successfully. Before logging in to the Room, the default is this state. After successfully calling [logoutRoom] to log out of the Room or successfully logging out of the current Room internally during [switchRoom], enter this state.
-    } else if reason == .logoutFailed {
-        //Failed to log out of the Room. After failing to call [logoutRoom] to log out of the Room or failing to log out of the current Room internally during [switchRoom], enter this state.
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        // Do any additional setup after loading the view.
+        createEngine()
+        initViews()
     }
-}
 
-//When other users in the Room publish/stop publishing streams, we will receive notifications of corresponding stream additions and deletions here
-func onRoomStreamUpdate(_ updateType: ZegoUpdateType, streamList: [ZegoStream], extendedData: [AnyHashable: Any]?, roomID: String) {
-    if updateType == .add {
-        //When updateType is ZegoUpdateTypeAdd, it means that a new audio and video stream has been added. At this time, we can call the startPlayingStream interface to play the audio and video stream
-    } else if updateType == .delete {
-        //When updateType is ZegoUpdateTypeDelete, it means that an audio and video stream has been deleted. At this time, we can call the stopPlayingStream interface to stop playing the audio and video stream
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        destroyEngine()
     }
-}
+        
+    private func createEngine() {
+        let profile = ZegoEngineProfile()
+        
+        // Get your AppID and AppSign from ZEGOCLOUD Console
+        //[My Projects -> AppID] : https://console.zegocloud.com/project
+        profile.appID = appID
+        profile.appSign = appSign
+        // Use the default scenario.
+        profile.scenario = .default
+        // Create a ZegoExpressEngine instance and set eventHandler to [self].
+        ZegoExpressEngine.createEngine(with: profile, eventHandler: self)
+    }
 
-//When other users in the same Room enter or leave the Room, you can receive notifications through this callback. When the parameter ZegoUpdateType in the callback is ZegoUpdateTypeAdd, it means a user has entered the Room; when ZegoUpdateType is ZegoUpdateTypeDelete, it means a user has left the Room.
-// Users can receive callbacks of other users in the Room only when the isUserStatusNotify parameter in the ZegoRoomConfig passed when logging in to the Room loginRoom is YES.
-// When the number of people in the Room exceeds 500, the onRoomUserUpdate callback is not guaranteed to be valid. If the business scenario has more than 500 people in the Room, please contact ZEGO Technical Support.
-func onRoomUserUpdate(_ updateType: ZegoUpdateType, userList: [ZegoUser], roomID: String) {
-    if updateType == .add {
-        for user in userList {
-            NSLog("User%@ entered the Room %@", user.userName, roomID)
+    private func destroyEngine() {
+        ZegoExpressEngine.destroy(nil)
+    }
+    
+    private func initViews() {
+        // Initializes the remote video view. This view displays video when a remote host joins the channel.
+        remoteView = UIView()
+        remoteView.frame = self.view.frame
+        self.view.addSubview(remoteView)
+        
+        // Initializes the local video window. This view displays video when the local user is a host.
+        localView = UIView()
+        localView.frame = CGRect(x: 200, y: 80, width: 135, height: 240)
+        self.view.addSubview(localView)
+        
+        //  Button to log in or log out a room
+        callButton = UIButton(type: .system)
+        callButton.frame = CGRect(x: (self.view.frame.width - 80) / 2.0, y: self.view.frame.height - 150, width: 80, height: 80)
+        callButton.setBackgroundImage(UIImage(named: "call_icon"), for: .normal)
+        callButton.setBackgroundImage(UIImage(named: "call_hand_up_icon"), for: .selected)
+
+        callButton.addTarget(self, action: #selector(buttonAction), for: .touchUpInside)
+        self.view.addSubview(callButton)
+    }
+    
+    private func startPreview() {
+        // Set up a view for the local video preview
+        let canvas = ZegoCanvas(view: self.localView)
+        ZegoExpressEngine.shared().startPreview(canvas)
+    }
+
+    private func stopPreview() {
+        ZegoExpressEngine.shared().stopPreview()
+    }
+        
+    private func startPublish() {
+        // After calling the `loginRoom` method, call this method to publish streams.
+        let streamID = "stream_" + localUserID
+        ZegoExpressEngine.shared().startPublishingStream(streamID)
+    }
+
+    private func stopPublish() {
+        ZegoExpressEngine.shared().stopPublishingStream()
+    }
+        
+    private func startPlayStream(streamID: String) {
+        // Start to play streams. Set the view for rendering the remote streams.
+        let canvas = ZegoCanvas(view: self.remoteView)
+        ZegoExpressEngine.shared().startPlayingStream(streamID, canvas: canvas)
+    }
+
+    private func stopPlayStream(streamID: String) {
+        ZegoExpressEngine.shared().stopPlayingStream(streamID)
+    }
+        
+
+    private func loginRoom() {
+        // The value of `userID` is generated locally and must be globally unique.
+        let user = ZegoUser(userID: localUserID)
+        // The value of `roomID` is generated locally and must be globally unique.
+        // Users must log in to the same room to call each other.
+        let roomID = "room_1"
+        let roomConfig = ZegoRoomConfig()
+        // onRoomUserUpdate callback can be received when "isUserStatusNotify" parameter value is "true".
+        roomConfig.isUserStatusNotify = true
+        // log in to a room
+        ZegoExpressEngine.shared().loginRoom(roomID, user: user, config: roomConfig) { errorCode, extendedData in
+            if errorCode == 0 {
+                // Login room successful
+                self.startPreview()
+                self.startPublish()
+            } else {
+                // Login room failed
+            }
         }
-    } else if updateType == .delete {
-        for user in userList {
-            NSLog("User%@ left the Room %@", user.userName, roomID)
+    }
+
+    private func logoutRoom() {
+        ZegoExpressEngine.shared().logoutRoom()
+    }
+
+
+    @objc func buttonAction(sender: UIButton!) {
+        sender.isSelected = !sender.isSelected;
+        if sender.isSelected {
+            loginRoom()
+        } else {
+            logoutRoom()
         }
     }
 }
 
-//Status notification of users publishing audio and video streams
-//When the status of users publishing audio and video streams changes, this callback will be received. If the network interruption causes publishing exceptions, the SDK will also notify status changes while retrying publishing.
-func onPublisherStateUpdate(_ state: ZegoPublisherState, errorCode: Int32, extendedData: [AnyHashable : Any]?, streamID: String) {
-    if errorCode != 0 {
-        NSLog("Publishing stream status error errorCode: %d", errorCode)
-    } else {
-        switch (state) {
-        case .publishing:
-            NSLog("Publishing stream")
-            break
-        case .publishRequesting:
-            NSLog("Requesting to publish stream")
-            break
-        case .noPublish:
-            NSLog("No publishing")
-            break
-    }
-}
-
-//Status notification of users playing audio and video streams
-//When the status of users playing audio and video streams changes, this callback will be received. If the network interruption causes playing exceptions, the SDK will automatically retry.
-func onPlayerStateUpdate(_ state: ZegoPlayerState, errorCode: Int32, extendedData: [AnyHashable : Any]?, streamID: String) {
-    if (errorCode != 0) {
-        NSLog("Playing stream status error streamID: %@, errorCode:%d", streamID, errorCode)
-    } else {
-        switch (state) {
-        case .playing:
-            NSLog("Playing stream")
-            break
-        case .playRequesting:
-            NSLog("Requesting to play stream")
-            break
-        case .noPlay:
-            NSLog("Not playing")
-            break
+extension ViewController : ZegoEventHandler {
+    
+    // Callback for updates on the status of the streams in the room.
+    func onRoomStreamUpdate(_ updateType: ZegoUpdateType, streamList: [ZegoStream], extendedData: [AnyHashable : Any]?, roomID: String) {
+        // If users want to play the streams published by other users in the room, call the startPlayingStream method with the corresponding streamID obtained from the `streamList` parameter where ZegoUpdateType == ZegoUpdateTypeAdd.
+        if updateType == .add {
+            for stream in streamList {
+                startPlayStream(streamID: stream.streamID)
+            }
+        } else {
+            for stream in streamList {
+                stopPlayStream(streamID: stream.streamID)
+            }
         }
     }
-}
+    
+    // Callback for updates on the current user's room connection status.
+    func onRoomStateUpdate(_ state: ZegoRoomState, errorCode: Int32, extendedData: [AnyHashable : Any]?, roomID: String) {
+     }
 
-// You can receive the uplink and downlink network quality of users in the Room (including yourself) by listening to the onNetworkQuality callback. This callback will be received every two seconds. For network quality levels, please refer to ZegoStreamQualityLevel.
-func onNetworkQuality(_ userID: String, upstreamQuality: ZegoStreamQualityLevel, downstreamQuality: ZegoStreamQualityLevel) {
-    if (userID == nil) {
-        // Represents the network quality of the local user (me)
-        // NSLog(@"My uplink network quality is %lu", (unsigned long)upstreamQuality)
-        // NSLog(@"My downlink network quality is %lu", (unsigned long)downstreamQuality)
-    } else {
-        // Represents the network quality of other users in the Room
-        // NSLog(@"The uplink network quality of user %@ is %lu", userID, (unsigned long)upstreamQuality)
-        // NSLog(@"The downlink network quality of user %@ is %lu", userID, (unsigned long)downstreamQuality)
+    // Callback for updates on the status of other users in the room.
+    // Users can only receive callbacks when the isUserStatusNotify property of ZegoRoomConfig is set to `true` when logging in to the room (loginRoom).
+    func onRoomUserUpdate(_ updateType: ZegoUpdateType, userList: [ZegoUser], roomID: String) {
     }
 
-    /*
-     ZegoStreamQualityLevelExcellent: Excellent network quality
-     ZegoStreamQualityLevelGood: Good network quality
-     ZegoStreamQualityLevelMedium: Normal network quality
-     ZegoStreamQualityLevelBad: Poor network quality
-     ZegoStreamQualityLevelDie: Network abnormal
-     ZegoStreamQualityLevelUnknown: Unknown network quality
-     */
 }
+
+
 ```
 </Accordion>
 
-<a id="createroom"></a>
 
-### Login Room
+### Implement the UI
 
-Call the [loginRoom ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#login-room-user) interface to log in to the Room. If the Room does not exist, calling this interface will create and log in to this Room. The parameters roomID and user are generated locally by you, but need to meet the following conditions:
+Create a UI for video calls for your project based on your scenario requirements. We recommend you add the following UI elements to your project:
 
-- Within the same AppID, ensure that "roomID" is globally unique.
-- Within the same AppID, ensure that "userID" is globally unique. It is recommended that developers associate "userID" with their own business account system.
+- A view for local preview
+- A view for remote video
+- A Stop button
+
+<Frame width="20%" height="auto">
+  <img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/UI.jpg" />
+</Frame>
 
 ```swift
-// roomID is generated locally by you. Ensure that "roomID" is globally unique. Different users need to log in to the same Room to make calls
-let roomID = "room1"
+//
+//  ViewController.swift
+//
 
-// Create a user object. The constructor userWithUserID of ZegoUser will set "userName" to be the same as the passed parameter "userID". "userID" cannot be "nil", otherwise logging in to the Room will fail.
-// userID is generated locally by you. Ensure that "userID" is globally unique.
-let user = ZegoUser(userID: "user1")
+import UIKit
 
-let config = ZegoRoomConfig()
+class ViewController: UIViewController {
+    
+    // The video stream for the local user is displayed here
+    var localView: UIView!
+    // The video stream for the remote user is displayed here
+    var remoteView: UIView!
+    // Click to log in or log out of a room
+    var callButton: UIButton!
 
-// Only by passing in a ZegoRoomConfig with the parameter "isUserStatusNotify" set to "true" can you receive the onRoomUserUpdate callback.
-config.isUserStatusNotify = true
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        // Do any additional setup after loading the view.
+        initViews()
+    }
+    
+    
+    private func initViews() {
+        // Initializes the remote video view. This view displays video when a remote host logins the room.
+        remoteView = UIView()
+        remoteView.frame = self.view.frame
+        self.view.addSubview(remoteView)
+        
+        // Initializes the local video window. This view displays video when the local user is a host.
+        localView = UIView()
+        localView.frame = CGRect(x: 200, y: 80, width: 135, height: 240)
+        self.view.addSubview(localView)
+        
+        //  Button to log in or log out of a room
+        callButton = UIButton(type: .system)
+        callButton.frame = CGRect(x: (self.view.frame.width - 80) / 2.0, y: self.view.frame.height - 150, width: 80, height: 80)
+        callButton.setBackgroundImage(UIImage(named: "call_icon"), for: .normal)
+        callButton.setBackgroundImage(UIImage(named: "call_hand_up_icon"), for: .selected)
 
-//If you use the appsign method for authentication, you do not need to fill in the token parameter; if you need to use a more secure authentication method: token authentication, please refer to [How to upgrade from AppSign authentication to Token authentication](https://doc-zh.zego.im/faq/token_upgrade?product=ExpressVideo&platform=all)
-// config.token = "<#token#>"
-
-ZegoExpressEngine.shared().loginRoom(roomID, user: user, config: config) { errorCode, extendedData in
-    // (Optional callback) Result of logging in to the Room. If you only care about the login result, just pay attention to this callback
-    if (errorCode == 0) {
-        NSLog("Room login successful")
-    } else {
-        // Login failed. Please refer to the errorCode description /real-time-video-ios-oc/client-sdk/error-code
-        NSLog("Room login failed")
+        callButton.addTarget(self, action: #selector(buttonAction), for: .touchUpInside)
+        self.view.addSubview(callButton)
     }
 }
 ```
 
-#### Login Status (Room Connection Status) Callback
+### Implement the video calling logic
 
-After calling the login Room interface, you can monitor your connection status in the Room in real time by listening to the [onRoomStateChanged ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~protocol~ZegoEventHandler#on-room-state-changed-error-code-extended-data-room-id) callback.
+#### Understand the tech
 
-<a id="publishingStream"></a>
+The following diagram shows the basic process of User A playing a stream published by User B: 
 
-### Preview Your Own Screen and Push to ZEGO Audio and Video Cloud
 
-**1. (Optional) Preview Your Own Screen**
+![https://doc-media.zego.im/sdk-doc/Pics/in_app_chat/17395_2.png](https://doc-media.zego.im/sdk-doc/Pics/in_app_chat/17395_2.png)
 
-If you want to see the local screen, you can call the [startPreview ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#start-preview) interface to set the preview view and start local preview.
+For a better understanding, you can check the **Key concepts** of Video Call SDK:
 
-**2. Push Your Audio and Video Stream to ZEGO Audio and Video Cloud**
+<Video src="https://www.youtube.com/embed/jV68Rd5RhUc"/>
 
-After the user calls the [loginRoom](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#login-room-user) interface, you can directly call the [startPublishingStream ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#start-publishing-stream) interface and pass in "streamID" to push your audio and video stream to the ZEGO audio and video cloud. You can know whether the stream publishing is successful by listening to the [onPublisherStateUpdate ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~protocol~ZegoEventHandler#on-publisher-state-update-error-code-extended-data-stream-id) callback.
+#### 1. Create & destroy the ZegoExpressEngine instance
 
-"streamID" is generated locally by you, but needs to ensure:
-
-Under the same AppID, "streamID" is globally unique. If under the same AppID, different users each publish a stream with the same "streamID", the user who publishes the stream later will fail to publish.
+First, run the following to import the header file.
 
 ```swift
-// Set local preview view and start preview. The view mode uses the SDK's default mode, scaling proportionally to fill the entire View
-let previewCanvas = ZegoCanvas(view: localUserViewObject.view.view)
-ZegoExpressEngine.shared().startPreview(previewCanvas)
-
-// User calls this interface to publish stream after calling loginRoom
-// Under the same AppID, developers need to ensure that "streamID" is globally unique. If different users each publish a stream with the same "streamID", the user who publishes the stream later will fail to publish.
-ZegoExpressEngine.shared().startPublishingStream(localStreamID)
+// Import the header file ZegoExpressEngine
+import ZegoExpressEngine
 ```
 
-<Note title="Notes">If you need to know about ZEGO Express SDK's camera/video/microphone/audio/speaker related interfaces, please refer to [FAQ - How to implement turning on/off camera/video screen/microphone/audio/speaker?](http://doc-zh.zego.im/faq/How_to_switch_devices).</Note>
+Then, call the [createEngineWithProfile](@createEngineWithProfile) method to initialize the Video Call SDK.  And config the following: 
+- `profile`: the ZegoEngineProfile object, used to config the appID and appSign, as well as the scenario you are applying the SDK to. 
+- `eventHandler`: an event handler object, used to listen for core event callbacks, such as the callback for updates on the room connection stats changes, updates on in-room participants log in or log out, and more. You can call the [setEventHandler](@setEventHandler) method to set up the event handler object. 
 
-<a id="PlayingStream"></a>
+To destroy the SDK and release the resources it occupies, call the [destroy](@destroy) method.
 
-### Play Other Users' Audio and Video
-
-When making video calls, we need to play other users' audio and video.
-
-When other users in the same Room push audio and video streams to the ZEGO audio and video cloud, we will receive notifications of new audio and video streams in the [onRoomStreamUpdate](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~protocol~ZegoEventHandler#on-room-stream-update-stream-list-extended-data-room-id) callback, and can obtain the "streamID" of a certain stream through ZegoStream.
-
-In this callback, we can call [startPlayingStream](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#start-playing-stream-canvas) and pass in "streamID" to play the user's audio and video. You can know whether the audio and video are successfully played by listening to the [onPlayerStateUpdate ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~protocol~ZegoEventHandler#on-player-state-update-error-code-extended-data-stream-id) callback.
 
 ```swift
-// When other users in the Room publish/stop publishing streams, we will receive notifications of corresponding stream additions and deletions here
-func onRoomStreamUpdate(_ updateType: ZegoUpdateType, streamList: [ZegoStream], extendedData: [AnyHashable: Any]?, roomID: String) {
-    //When updateType is ZegoUpdateTypeAdd, it means that a new audio and video stream has been added. At this time, we can call the startPlayingStream interface to play the audio and video stream
-    if updateType == .add {
-        // Start playing stream, set remote playing rendering view. The view mode uses the SDK's default mode, scaling proportionally to fill the entire View
-        // In the following, remoteUserView is the View on the UI interface. Here, to make the example code more concise, we only play the first stream in the newly added audio and video stream list. In actual business, it is recommended that developers loop through streamList to play each audio and video stream
-        let streamID = streamList[0].streamID
-        ZegoExpressEngine.shared().startPlayingStream(streamID, canvas: ZegoCanvas(view: viewObject.view.view))
-    }
+private func createEngine() {
+    let profile = ZegoEngineProfile()
+    
+    // Get your AppID and AppSign from ZEGOCLOUD Console
+    //[My Projects -> AppID] : https://console.zegocloud.com/project
+    profile.appID = appID
+    profile.appSign = appSign
+    // Use the default scenario.
+    profile.scenario = .default
+    // Create a ZegoExpressEngine instance and set eventHandler to [self].
+    ZegoExpressEngine.createEngine(with: profile, eventHandler: self)
+}
+
+private func destroyEngine() {
+    ZegoExpressEngine.destroy(nil)
 }
 ```
 
 
-### Test Publishing and Playing Functions Online
+#### 2. Set up an event handler
 
-Run the project on a real device. After successful operation, you can see the local video screen.
+Implement the `ZegoEventHandler` event handler to listen for event callbacks, such as the event callback on the updates when the in-room streams are added or deleted, the updates when in-room participants log in or log out, the updates when room connection state changes, and more.
 
-For convenience, ZEGO provides a [Web Debugging Example ](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html). On this page, enter the same AppID and RoomID, enter different UserIDs, and the corresponding [Token](/console/development-assistance/temporary-token), you can join the same Room and communicate with the real device. When the audio and video call starts successfully, you can hear the remote audio and see the remote video screen.
+- [onRoomStreamUpdate](@onRoomStreamUpdate): Callback for updates on the status of the streams in the room. When new streams are published to the room or existing streams in the room stop, the SDK sends out the event notification through this callback. You can call `startPlayStream()` and `stopPlayStream()` methods in this callback.
 
-### Stop Audio and Video Call
+- [onRoomStateUpdate](@onRoomStateUpdate): Callback for updates on current room connection status. When the current room connection status changes (for example, when the current user is disconnected from the room or login authentication fails),  the SDK sends out the event notification through this callback.
 
-#### Stop Publishing and Playing Audio and Video Streams
+- [onRoomUserUpdate](@onRoomUserUpdate): Callback for updates on the status of other users in the room. When other users log in or log out of the room, the SDK sends out the event notification through this callback.
+ 
+```swift
+extension ViewController : ZegoEventHandler {
+    
+    // Callback for updates on the status of the streams in the room.
+    func onRoomStreamUpdate(_ updateType: ZegoUpdateType, streamList: [ZegoStream], extendedData: [AnyHashable : Any]?, roomID: String) {
+        // If users want to play the streams published by other users in the room, call the startPlayingStream method with the corresponding streamID obtained from the `streamList` parameter where ZegoUpdateType == ZegoUpdateTypeAdd.
+        if updateType == .add {
+            for stream in streamList {
+                startPlayStream(streamID: stream.streamID)
+            }
+        } else {
+            for stream in streamList {
+                stopPlayStream(streamID: stream.streamID)
+            }
+        }
+    }
+    
+    // Callback for updates on the current user's room connection status.
+    func onRoomStateUpdate(_ state: ZegoRoomState, errorCode: Int32, extendedData: [AnyHashable : Any]?, roomID: String) {
+     }
 
-**1. Stop Publishing Stream, Stop Preview**
+    // Callback for updates on the status of other users in the room.
+    // Users can only receive callbacks when the isUserStatusNotify property of ZegoRoomConfig is set to `true` when logging in to the room (loginRoom).
+    func onRoomUserUpdate(_ updateType: ZegoUpdateType, userList: [ZegoUser], roomID: String) {
+    }
 
-Call the [stopPublishingStream ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#stop-publishing-stream) interface to stop sending the local audio and video stream to remote users.
+}
+```
+
+
+#### 3. Log in & log out 
+
+To log in to a room, you can call the [loginRoom](@loginRoom) method.
+
+To log out, you can call the [logoutRoom](@logoutRoom) method.
 
 ```swift
-// Stop publishing stream
-ZegoExpressEngine.shared().stopPublishingStream()
+private func loginRoom() {
+    // The value of `userID` is generated locally and must be globally unique.
+    let user = ZegoUser(userID: localUserID)
+    // The value of `roomID` is generated locally and must be globally unique.
+    // Users must log in to the same room to call each other.
+    let roomID = "room_1"
+    let roomConfig = ZegoRoomConfig()
+    // onRoomUserUpdate callback can be received when "isUserStatusNotify" parameter value is "true".
+    roomConfig.isUserStatusNotify = true
+    // log in to a room
+    ZegoExpressEngine.shared().loginRoom(roomID, user: user, config: roomConfig) { errorCode, extendedData in
+        if errorCode == 0 {
+            // Login room successful
+            self.startPreview()
+            self.startPublish()
+        } else {
+            // Login room failed
+        }
+    }
+}
+
+private func logoutRoom() {
+    ZegoExpressEngine.shared().logoutRoom()
+}
 ```
 
-If local preview is enabled, call the [stopPreview](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#stop-preview) interface to stop preview.
+
+#### 4. Start & stop the local video preview
+
+To start the local video preview and to render it, call the [startPreview](@startPreview) method.
+
+And you call the [stopPreview](@stopPreview) method to stop the rendering.
 
 ```swift
-// Stop local preview
-ZegoExpressEngine.shared().stopPreview()
+private func startPreview() {
+    // Set up a view for the local video preview
+    let canvas = ZegoCanvas(view: self.localView)
+    ZegoExpressEngine.shared().startPreview(canvas)
+}
+
+private func stopPreview() {
+    ZegoExpressEngine.shared().stopPreview()
+}
 ```
 
-<a id="stopPlaying"></a>
+#### 5. Start & stop publishing streams
 
-**2. Stop Playing Stream**
+To start publishing a local audio or video stream to remote users, call the [startPublishingStream](@startPublishingStream) method. 
 
-Call the [stopPlayingStream ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#stop-playing-stream) interface to stop playing the audio and video stream pushed by the remote end.
+And you can call the [stopPublishingStream](@stopPublishingStream) method to stop the stream publishing.
 
-<Warning title="Warning">
+```swift
+private func startPublish() {
+    // After calling the `loginRoom` method, call this method to publish streams.
+    // The StreamID must be unique in the room.
+    let streamID = "stream_" + localUserID
+    ZegoExpressEngine.shared().startPublishingStream(streamID)
+}
+
+private func stopPublish() {
+    ZegoExpressEngine.shared().stopPublishingStream()
+}
+```
 
 
-If the developer receives a notification of "deletion" of audio and video streams through the [onRoomStreamUpdate](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~protocol~ZegoEventHandler#on-room-stream-update-stream-list-extended-data-room-id) callback, please call the [stopPlayingStream ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#stop-playing-stream) interface in time to stop playing, to avoid playing empty streams and generating additional costs; or, the developer can choose the appropriate timing according to their own business needs and actively call the [stopPlayingStream ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#stop-playing-stream) interface to stop playing.
-</Warning>
+#### 6. Start & stop playing streams
+
+You can call [startPlayingStream](@startPlayingStream) method to start playing a remote video stream.
+
+And to stop the stream playing, call the [stopPlayingStream](@stopPlayingStream) method to stop.
+
+```swift
+private func startPlayStream(streamID: String) {
+    // Start to play streams. Set the view for rendering the remote streams.
+    let canvas = ZegoCanvas(view: self.remoteView)
+    ZegoExpressEngine.shared().startPlayingStream(streamID, canvas: canvas)
+}
+
+private func stopPlayStream(streamID: String) {
+    ZegoExpressEngine.shared().stopPlayingStream(streamID)
+}
+```
+
+### Start and stop your app
+
+
+When your app starts, you need to call the `createEngine` method to initialize the SDK. 
+When your app is about to exit, you can call the `destroyEngine` to release SDK resources.
 
 
 
 ```swift
-// Stop playing stream
-ZegoExpressEngine.shared().stopPlayingStream("stream1")
+override func viewDidLoad() {
+    super.viewDidLoad()
+    // Do any additional setup after loading the view.
+    createEngine()
+    initViews()
+}
+
+override func viewDidDisappear(_ animated: Bool) {
+    super.viewDidDisappear(animated)
+    destroyEngine()
+}
 ```
 
-<a id="logoutRoom"></a>
+## Test your implementation
 
-#### Log Out of Room
+To test your implementation, run your app project on a real device. Upon successful running, you can view the local video.
 
-Call the [logoutRoom ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#logout-room) interface to log out of the Room.
+For your convenience of testing experience, we got you a [Web platform for debugging](https://zegoim.github.io/express-demo-web/src/Examples/QuickStart/VideoTalk/index.html?lang=en). On the debugging page, you can enter the AppID and room ID of the real device user, and a different user ID to log in to the same room for communicating with the real device user. After a video call starts successfully, you can hear the remote audio and view the remote video.
 
-```swift
-// Log out of the Room
-ZegoExpressEngine.shared().logoutRoom()
-```
+## Resource
 
-#### Destroy Engine
+For a detailed demo source code, check it [here](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_ios/tree/master/call/quick_start).
 
-If the user completely does not use audio and video functions, the engine can be destroyed to release resources such as microphones, cameras, memory, and CPU.
-
-- If you need to listen to callbacks to ensure that device hardware resources are released, you can pass in "callback" when destroying the engine. This callback is only used for sending notifications, and developers cannot release engine-related resources in the callback.
-- If you don't need to listen to callbacks, you can pass in "nil".
-
-```objc
-ZegoExpressEngine.destroy(nil)
-```
-
-## Video Call API Call Sequence
-
-```mermaid
-sequenceDiagram
-    participant App
-    participant ZEGO Express SDK
-    App ->> ZEGO Express SDK: Create engine <br/> [createEngineWithProfile]
-    App ->> ZEGO Express SDK: Login room <br/> [loginRoom]
-    ZEGO Express SDK -->> App: Room/User/Stream state update callbacks <br/> [onRoomStateUpdate / onRoomUserUpdate / onRoomStreamUpdate]
-    App ->> ZEGO Express SDK: Preview/Publish stream <br/> [startPreview / startPublishingStream]
-    ZEGO Express SDK -->> App: Publish state update callback <br/> [onPublisherStateUpdate]
-    App ->> ZEGO Express SDK: Play stream <br/> [startPlayingStream]
-    ZEGO Express SDK -->> App: Play state update callback <br/> [onPlayerStateUpdate]
-    App ->> ZEGO Express SDK: Stop preview/Publish stream <br/> [stopPreview / stopPublishingStream]
-    ZEGO Express SDK -->> App: Publish state update callback <br/> [onPublisherStateUpdate]
-    App ->> ZEGO Express SDK: Stop playing stream <br/> [stopPlayingStream]
-    ZEGO Express SDK -->> App: Play state update callback <br/> [onPlayerStateUpdate]
-    App ->> ZEGO Express SDK: Logout room <br/> [logoutRoom]
-    ZEGO Express SDK -->> App: Room state update callback <br/> [onRoomStateUpdate]
-    App ->> ZEGO Express SDK: Destroy engine <br/> [destroyEngine]
-```
-{/*
-<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml_createEngineWithProfile.png" /></Frame>
-*/}
 
 ## FAQ
+1. When running the App, it prompts `Building for iOS Simulator, but the linked and embedded framework'ZegoExpressEngine.framework' was built for iOS + iOS Simulator.`
 
-<Accordion title="Can I kill the process directly when calling logoutRoom to log out of the Room?" defaultOpen="false">
-Calling [logoutRoom](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#logout-room) and then directly killing the process has a certain probability of causing the [logoutRoom](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#logout-room) signaling to not be sent. Then the ZEGO server can only consider that this user has left the Room after the heartbeat times out. To ensure that the [logoutRoom ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#logout-room) signaling is sent, it is recommended to call [destroyEngine ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objective-c_ios~class~ZegoExpressEngine#destroy-engine) again and then kill the process after receiving the callback.
-</Accordion>
+    After Xcode 12.3, the framework with iOS + iOS (Simulator) dual-platform architecture is prohibited by default. It is recommended to replace it with XCFramework recommended by Apple (you can choose to download XCFramework in the drop-down box in [Download SDK Package](#5592)). Or you can select "TARGETS > Build Settings > Validate Workspace" through Xcode and set the value of this parameter to YES to continue using the traditional framework.
 
-<Accordion title="How to troubleshoot errors in video calls?" defaultOpen="false">
-If users encounter related errors during audio and video calls, they can query [Error Codes](/real-time-video-ios-swift/client-sdk/error-code).
 
-</Accordion>
 
-## Related Documentation
-- [Common Error Codes](/real-time-video-ios-swift/client-sdk/error-code)
-- [How to handle Room and user related issues?](https://doc-zh.zego.im/faq/express_room?product=ExpressVideo&platform=all)
-- [How to set and obtain SDK logs and stack information?](https://doc-zh.zego.im/faq/express_sdkLog?product=ExpressVideo&platform=all)
-- [Does the SDK support reconnection after disconnection?](https://doc-zh.zego.im/faq/reconnect?product=ExpressVideo&platform=all)
-- [In live streaming scenarios, how to listen to events of remote audience role users logging in/out of the Room?](https://doc-zh.zego.im/faq/audience_event?product=ExpressVideo&platform=all)
-- [How to adjust the focal length of the camera (zoom function)?](https://doc-zh.zego.im/faq/express_adjust_focal?product=ExpressVideo&platform=all)
+<Warning title="Warning">
+**Resolution And Pricing Attention!**
 
-- [Why can't I turn on the camera?](https://doc-zh.zego.im/faq/camera?product=ExpressVideo&platform=all)
+Please pay close attention to the relationship between **video resolution and price** when implementing video call, live streaming, and other video scenarios.
 
-- [How to ensure smooth audio and video in poor network environments (traffic control function)?](https://doc-zh.zego.im/faq/flowcontrol?product=ExpressVideo&platform=all)
+
+**When playing multiple video streams in the same room, the billing will be based on the sum of the resolutions, and different resolutions will correspond to different billing tiers.**
+
+
+The video streams that are included in the calculation of the final resolution are as follows:
+
+1. Live streaming video view (such as host view, co-host view, PKBattle view, etc.)
+2. Video call's video view for each person
+3. Screen sharing view
+4. Resolution of the cloud recording service
+5. Resolution of the Live stream creation
+
+Before your app goes live, please **make sure you have reviewed all configurations and confirmed the billing tiers** for your business scenario to avoid unnecessary losses. For more details, please refer to [Pricing](https://www.zegocloud.com/pricing).
+</Warning>

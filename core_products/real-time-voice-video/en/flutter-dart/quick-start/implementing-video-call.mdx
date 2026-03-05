@@ -6,450 +6,517 @@ date: "2025-01-21"
 
 ---
 
-
-## Feature Introduction
-
-<Warning title="Warning">
-
-
-This document applies to the following platforms: Android, iOS, Windows, Web, Linux.
-
-</Warning>
-
-
-This document will introduce how to quickly implement a simple real-time audio and video call.
-
-Explanation of related concepts:
-
-- ZEGO Express SDK: A real-time audio and video SDK provided by ZEGO, providing developers with convenient integration, high definition and smoothness, multi-platform interoperability, low latency, and high concurrency audio and video services.
-- Stream: Refers to a group of audio and video data that is continuously being sent, encapsulated in a specified encoding format. A user can publish multiple streams at the same time (for example, one for camera data and one for screen sharing data) and can also play multiple streams at the same time. Each stream is identified by a stream ID (streamID).
-- Publish stream: The process of pushing the packaged audio and video data stream from the capture stage to the ZEGOCLOUD.
-- Play stream: The process of pulling and playing existing audio and video data streams from the ZEGOCLOUD.
-- Room: An audio and video space service provided by ZEGO, used to organize user groups. Users in the same room can send and receive real-time audio and video and messages to each other.
-    1. Users need to login to a room first before they can publish/play streams.
-    2. Users can only receive related messages in the room they are in (user join/leave, audio and video stream changes, etc.).
-    3. Each room is identified by a unique AppID within an AppID. All users who use the same AppID to login to the room belong to the same room.
-
-
-
-For more related concepts, please refer to [Term Explanation](/glossary/term-explanation).
-
+This guide describes how to integrate the SDK and implement a basic one-on-one video call using ZEGOCLOUD's Video Call SDK.
 
 ## Prerequisites
 
-Before implementing basic real-time audio and video functions, please ensure:
+Before you begin, make sure you complete the following:
 
-- ZEGO Express SDK has been integrated into the project to implement basic real-time audio and video functions. For details, please refer to [Quick Start - Integration](/real-time-video-flutter/quick-start/integrating-sdk).
-- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com), and a valid AppID and AppSign have been applied for. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info).
+- Flutter 2.0 or later.
+- Sign up and create a project in [ZEGOCLOUD Console](https://console.zegocloud.com).
+- iOS devices or simulators with iOS 12.0 or above, and support for audio and video (real devices are recommended).
+- Android devices or simulators with Android 4.4 or above, and support for audio and video (real devices are recommended). If using a real device, please enable the "Allow Debugging" option.
+- Windows 8 or above.
+- macOS 10.14 or above.
+- Web: Chrome 58 or above, Firefox 56 or above, Safari 11 or above, Opera 45 or above.
+- The device is connected to the Internet.
 
-<Warning title="Warning">
-
-The SDK also supports Token authentication. If you have higher requirements for project security, it is recommended to upgrade the authentication method. For details, please refer to [How to upgrade from AppSign authentication to Token authentication](https://www.zegocloud.com/docs/faq/express-token-upgrade).
-</Warning>
 
 
-## Usage Steps
+## Integrate the SDK
 
-The basic process for users to make video calls through ZEGO Express SDK is as follows:
+1. Run the following code in your project root directory:
 
-User A and B join the room. User B previews and publishes the audio and video stream to the ZEGO cloud service (Publish stream). After user A receives the notification of user B's published audio and video stream, user A plays user B's audio and video stream in the notification (Play stream).
-
-```mermaid
-sequenceDiagram
-    participant UserA
-    participant ZEGO Express SDK
-    participant UserB
-    UserA->>ZEGO Express SDK: 1.User A creates engine
-    UserA->>ZEGO Express SDK: 2.User A logs in to room
-    UserB->>ZEGO Express SDK: 3.User B creates engine
-    UserB->>ZEGO Express SDK: 4.User B logs in to room
-    UserB->>ZEGO Express SDK: 5.User B publishes stream
-    ZEGO Express SDK->>UserA: 6.User A receives room stream update notification<br/>(get User B's streamID)
-    UserA->>ZEGO Express SDK: 7.User A passes User B's streamID to play stream
+```dart
+flutter pub add zego_express_engine
 ```
-{/*
-<Frame width="512" height="auto" caption="">
-  <img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/common_usage_new.png" />
-</Frame>
-*/}
 
-The API call sequence of the entire publish/play process is as follows:
-
-```mermaid
-sequenceDiagram
-    participant App
-    participant ZEGO Express SDK
-
-    App->>ZEGO Express SDK: Create engine <br/> [new ZegoExpressEngine]
-
-    App->>ZEGO Express SDK: Login room <br/> [loginRoom]
-    ZEGO Express SDK-->>App: Room/User/Stream state update callbacks <br/> [roomStateUpdate / roomUserUpdate / roomStreamUpdate]
-
-    App->>ZEGO Express SDK: Publish stream <br/> [startPublishingStream]
-    ZEGO Express SDK-->>App: Publish state update callback <br/> [publisherStateUpdate]
-
-    App->>ZEGO Express SDK: Play stream <br/> [startPlayingStream]
-    ZEGO Express SDK-->>App: Play state update callback <br/> [playerStateUpdate]
-
-    App->>ZEGO Express SDK: Stop publishing stream <br/> [stopPublishingStream]
-    ZEGO Express SDK-->>App: Publish state update callback <br/> [publisherStateUpdate]
-
-    App->>ZEGO Express SDK: Stop playing stream <br/> [stopPlayingStream]
-    ZEGO Express SDK-->>App: Play state update callback <br/> [playerStateUpdate]
-
-    App->>ZEGO Express SDK: Logout room <br/> [logoutRoom]
-    ZEGO Express SDK-->>App: Room state update callback <br/> [roomStateUpdate]
-```
-{/*
-<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml_createEngineWithProfile_2.png" /></Frame>
-*/}
-
-<a id="CreateEngine"> </a>
-
-### 1 Create Engine
-
-**1. Create Interface (Optional)**
-
-<Accordion title="Add Interface Elements" defaultOpen="false">
-Before starting, it is recommended that developers add the following interface elements to facilitate the implementation of basic real-time audio and video functions.
-
-- Local preview window
-- Remote video window
-- End button
-
-<Frame width="20%" height="auto">
-  <img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/UI.jpg" />
-</Frame>
-</Accordion>
-
-**2. Import SDK**
-
-Import the SDK in the project.
+2. Now in your Dart code, you can import the zego_express_engine.
 
 ```dart
 import 'package:zego_express_engine/zego_express_engine.dart';
 ```
 
-**3. Create Engine**
+## Implement video call functions
 
-Call the [createEngineWithProfile](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/createEngineWithProfile.html) interface and pass the applied AppID and AppSign to the parameters "appID" and "appSign". To prevent "appsign" from being exposed, please do not pass "appsign" on the Web platform.
+### Sample code
 
-<Warning title="Warning">
+Here is a downloadable [demo code](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_flutter/tree/master/call/quick_start) that can be used as a reference when developing your app.
 
 
-The SDK also supports Token authentication. If you have higher requirements for project security, it is recommended to upgrade the authentication method. For details, please refer to [How to upgrade from AppSign authentication to Token authentication](https://www.zegocloud.com/docs/faq/express-token-upgrade).
+### Implement the UI
 
-</Warning>
+Create a UI for video calls for your project based on your scenario requirements. We recommend you add the following UI elements to your project:
 
-<Warning title="Warning">If it is a voice scenario, be sure to call `enableCamera(false)` to turn off the camera to avoid starting video capture and publishing stream, which will generate additional video traffic.</Warning>
+- A view for local preview
+- A view for remote video
+- A Stop button
 
+<Frame width="20%" height="auto">
+  <img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/UI.jpg" />
+</Frame>
 
 ```dart
-ZegoEngineProfile profile = ZegoEngineProfile(
-    appID, // Please obtain through official website registration, format: 1234567890
-    ZegoScenario.General, // General scenario access
-    appSign: appSign, // Please obtain through official website registration, format: '0123456789012345678901234567890123456789012345678901234567890123' (64 characters in total), no need to pass in for Web platform
-    enablePlatformView: true); // Web platform needs to be true
-// Create engine
-ZegoExpressEngine.createEngineWithProfile(profile);
+class CallPage extends StatefulWidget {
+  const CallPage({super.key});
+
+  @override
+  State<CallPage> createState() => _CallPageState();
+}
+
+class _CallPageState extends State<CallPage> {
+  Widget? localView;
+  Widget? remoteView;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Call Page")),
+      body: Stack(
+        children: [
+          localView ?? Container(),
+          Positioned(
+            top: MediaQuery.of(context).size.height / 20,
+            right: MediaQuery.of(context).size.width / 20,
+            child: SizedBox(
+              width: MediaQuery.of(context).size.width / 3,
+              child: AspectRatio(
+                aspectRatio: 9.0 / 16.0,
+                child: remoteView ?? Container(color: Colors.transparent),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: MediaQuery.of(context).size.height / 20,
+            left: 0,
+            right: 0,
+            child: SizedBox(
+              width: MediaQuery.of(context).size.width / 3,
+              height: MediaQuery.of(context).size.width / 3,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(shape: const CircleBorder(), backgroundColor: Colors.red),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Center(child: Icon(Icons.call_end, size: 32)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 ```
 
-**4. Set Callbacks**
+### Implement the video calling logic
 
-After creating the engine, developers can choose to use anonymous functions to implement callback functions as needed, and assign them to the corresponding callback function properties of the engine instance to register callbacks
+#### Understand the tech
 
-<Warning title="Warning">
-
-
-To avoid missing event notifications, it is recommended to register callbacks immediately after creating the engine
-
-</Warning>
+The following diagram shows the basic process of User A playing a stream published by User B: 
 
 
+![https://doc-media.zego.im/sdk-doc/Pics/in_app_chat/17395_2.png](https://doc-media.zego.im/sdk-doc/Pics/in_app_chat/17395_2.png)
 
+For a better understanding, you can check the key concepts of Video Call SDK:
 
-<a id="createroom"></a>
+<Video src="https://www.youtube.com/embed/jV68Rd5RhUc"/>
 
-### 2 Login Room
+#### 1. Create the ZegoExpressEngine instance
 
-**1. Login**
+First, call the [createEngineWithProfile](/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/createEngineWithProfile.html) method to initialize the Video Call SDK.  And config the following: 
+- `profile`: the ZegoEngineProfile object, used to config the appID and appSign, as well as the scenario you are applying the SDK to. 
 
-After creating a ZegoUser user object by passing in the user ID parameter "userID", call the [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) interface, pass in the room ID parameter "roomID" and user parameter "user", and login to the room. If the room does not exist, calling this interface will create and login to this room.
-
-- Within the same AppID, ensure that "roomID" information is globally unique.
-- Within the same AppID, ensure that "userID" is globally unique. It is recommended that developers set it to a meaningful value and associate "userID" with their own business account system.
-- The constructor method of "ZegoUser" [ZegoUser.id](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoUser/ZegoUser.id.html) will set "userName" to be the same as the passed parameter "userID". "userID" cannot be "null", otherwise login to the room will fail.
+To destroy the SDK and release the resources it occupies, call the [destroy](/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/destroyEngine.html) method.
 
 
 ```dart
-// Create user object
-ZegoUser user = ZegoUser.id('user1');
-// Only by passing in a ZegoRoomConfig with the "isUserStatusNotify" parameter set to "true" can you receive the onRoomUserUpdate callback.
-ZegoRoomConfig config = ZegoRoomConfig.defaultConfig();
-config.isUserStatusNotify = true;
-// If you use appsign for authentication, you do not need to fill in the token parameter; if you need to use a more secure authentication method: token authentication, Web platform only supports token authentication, please refer to [How to upgrade from AppSign authentication to Token authentication](https://www.zegocloud.com/docs/faq/express-token-upgrade)
-// config.token = "xxxx";
-// Start logging in to the room
-ZegoExpressEngine.instance.loginRoom('room1', user, config: config);
+Future<void> createEngine() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Get your AppID and AppSign from ZEGOCLOUD Console
+  //[My Projects -> AppID] : https://console.zegocloud.com/project
+  await ZegoExpressEngine.createEngineWithProfile(ZegoEngineProfile(
+    appID,
+    ZegoScenario.Default,
+    appSign: kIsWeb ? null : appSign,
+  ));
+}
 ```
 
-**2. Listen to Event Callbacks After Logging in to the Room**
+#### 2. Set up an event handler
 
+Implement the `ZegoEventHandler` event handler to listen for event callbacks, such as the event callback on the updates when the in-room streams are added or deleted, the updates when in-room participants log in or log out, the updates when room connection state changes, and more.
 
-According to actual application needs, listen to the event notifications you care about after logging in to the room, such as room state updates, user state updates, stream state updates, etc.
+- [onRoomStreamUpdate](/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomStreamUpdate.html): Callback for updates on the status of the streams in the room. When new streams are published to the room or existing streams in the room stop, the SDK sends out the event notification through this callback. You can call `startPlayStream()` and `stopPlayStream()` methods in this callback.
 
-- [onRoomStateUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomStateUpdate.html): Room state update callback. After logging in to the room, when the room connection state changes (such as room disconnection, login authentication failure, etc.), the SDK will notify through this callback.
-- [onRoomUserUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomUserUpdate.html): User state update callback. After logging in to the room, when users are added to or deleted from the room, the SDK will notify through this callback.
+- [onRoomStateUpdate](/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomStateUpdate.html): Callback for updates on current room connection status. When the current room connection status changes (for example, when the current user is disconnected from the room or login authentication fails),  the SDK sends out the event notification through this callback.
 
-    Only when calling the [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) interface to login to the room and passing in the [ZegoRoomConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoRoomConfig-class.html) configuration, and the "isUserStatusNotify" parameter is set to "true", users can receive the [onRoomUserUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomUserUpdate.html) callback.
-
-- [onRoomStreamUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomStreamUpdate.html): Stream state update callback. After logging in to the room, when users in the room newly publish or delete audio and video streams, the SDK will notify through this callback.
-
-<Warning title="Warning">
-
-
-- Only when calling the [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) interface to login to the room and passing in the [ZegoRoomConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoRoomConfig-class.html) configuration, and the "isUserStatusNotify" parameter is set to "true", users can receive the [onRoomUserUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomUserUpdate.html) callback.
-- Normally, if a user wants to play videos published by other users, they can call the [startPlayingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/startPlayingStream.html) interface in the callback of stream state update (addition) to play the audio and video stream published by the remote user.
-
-</Warning>
-
-
-
-
+- [onRoomUserUpdate](/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomUserUpdate.html): Callback for updates on the status of other users in the room. When other users log in or log out of the room, the SDK sends out the event notification through this callback.
+ 
 ```dart
+void startListenEvent() {
+  // Callback for updates on the status of other users in the room.
+  // Users can only receive callbacks when the isUserStatusNotify property of ZegoRoomConfig is set to `true` when logging in to the room (loginRoom).
+  ZegoExpressEngine.onRoomUserUpdate = (roomID, updateType, List<ZegoUser> userList) {
+    debugPrint(
+        'onRoomUserUpdate: roomID: $roomID, updateType: ${updateType.name}, userList: ${userList.map((e) => e.userID)}');
+  };
+  // Callback for updates on the status of the streams in the room.
+  ZegoExpressEngine.onRoomStreamUpdate = (roomID, updateType, List<ZegoStream> streamList, extendedData) {
+    debugPrint(
+        'onRoomStreamUpdate: roomID: $roomID, updateType: $updateType, streamList: ${streamList.map((e) => e.streamID)}, extendedData: $extendedData');
+    if (updateType == ZegoUpdateType.Add) {
+      for (final stream in streamList) {
+        startPlayStream(stream.streamID);
+      }
+    } else {
+      for (final stream in streamList) {
+        stopPlayStream(stream.streamID);
+      }
+    }
+  };
+  // Callback for updates on the current user's room connection status.
+  ZegoExpressEngine.onRoomStateUpdate = (roomID, state, errorCode, extendedData) {
+    debugPrint(
+        'onRoomStateUpdate: roomID: $roomID, state: ${state.name}, errorCode: $errorCode, extendedData: $extendedData');
+  };
 
-// The following are common room-related callbacks
-// Room state update callback
-ZegoExpressEngine.onRoomStateUpdate = (String roomID, ZegoRoomState state, int errorCode, Map<String, dynamic> extendedData) {
-    // Implement event callbacks as needed
-};
+  // Callback for updates on the current user's stream publishing changes.
+  ZegoExpressEngine.onPublisherStateUpdate = (streamID, state, errorCode, extendedData) {
+    debugPrint(
+        'onPublisherStateUpdate: streamID: $streamID, state: ${state.name}, errorCode: $errorCode, extendedData: $extendedData');
+  };
+}
 
-// User state update
-ZegoExpressEngine.onRoomUserUpdate = (String roomID, ZegoUpdateType updateType, List<ZegoUser> userList) {
-    // Implement event callbacks as needed
-};
-
-// Stream state update
-ZegoExpressEngine.onRoomStreamUpdate = (String roomID, ZegoUpdateType updateType, List<ZegoStream> streamList) {
-    // Implement event callbacks as needed
-};
-
+void stopListenEvent() {
+  ZegoExpressEngine.onRoomUserUpdate = null;
+  ZegoExpressEngine.onRoomStreamUpdate = null;
+  ZegoExpressEngine.onRoomStateUpdate = null;
+  ZegoExpressEngine.onPublisherStateUpdate = null;
+}
 ```
 
-<a id="publishingStream"></a>
 
-### 3 Publish Stream
+#### 3. Log in & log out 
 
-**1. Start Publishing Stream**
+To log in to a room, call the [loginRoom](/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/loginRoom.html) method.
 
-Call the [startPublishingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPublishingStream.html) interface and pass in the stream ID parameter "streamID" to send the local audio and video stream to remote users.
-
-<Warning title="Warning">
-
-
-Within the same AppID, ensure that "streamID" is globally unique. If within the same AppID, different users each publish a stream with the same "streamID", it will cause the later publishing user to fail to publish stream.
-
-</Warning>
-
-
+To log out, you can call the [logoutRoom](/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/logoutRoom.html) method.
 
 ```dart
-// Start publishing stream
-ZegoExpressEngine.instance.startPublishingStream("streamID");
+
+Future<ZegoRoomLoginResult> loginRoom() async {
+  // The value of `userID` is generated locally and must be globally unique.
+  final user = ZegoUser(widget.localUserID, widget.localUserName);
+
+  // The value of `roomID` is generated locally and must be globally unique.
+  final roomID = widget.roomID;
+
+  // onRoomUserUpdate callback can be received when "isUserStatusNotify" parameter value is "true".
+  ZegoRoomConfig roomConfig = ZegoRoomConfig.defaultConfig()..isUserStatusNotify = true;
+
+
+  
+  if (kIsWeb) {
+      // ! ** Warning: ZegoTokenUtils is only for use during testing. When your application goes live,
+      // ! ** tokens must be generated by the server side. Please do not generate tokens on the client side!
+    roomConfig.token = ZegoTokenUtils.generateToken(appID, serverSecret, widget.localUserID);
+  }
+  // log in to a room
+  // Users must log in to the same room to call each other.
+  return ZegoExpressEngine.instance.loginRoom(roomID, user, config: roomConfig).then((ZegoRoomLoginResult loginRoomResult) {
+    debugPrint('loginRoom: errorCode:${loginRoomResult.errorCode}, extendedData:${loginRoomResult.extendedData}');
+    if (loginRoomResult.errorCode == 0) {
+      startPreview();
+      startPublish();
+    } else {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('loginRoom failed: ${loginRoomResult.errorCode}')));
+    }
+    return loginRoomResult;
+  });
+}
+
+Future<ZegoRoomLogoutResult> logoutRoom() async {
+  stopPreview();
+  stopPublish();
+  return ZegoExpressEngine.instance.logoutRoom(widget.roomID);
+}
 ```
 
-**2. Enable Local Rendering and Preview (Optional)**
 
-<Accordion title="Start Local Preview After Rendering the Screen" defaultOpen="false">
-Use `createCanvasView` to create a `widget`, add it to the view, return a `viewID` from the `onViewCreated` callback, and call the [startPreview](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPreview.html) interface with `viewID` to start local preview
+#### 4. Start & stop the local video preview
 
-Flutter has two rendering methods: PlatformView and TextureRenderer.
-- Android, iOS, and MacOS can choose to use TextureRenderer or PlatformView by setting the "enablePlatformView" parameter when creating the engine.
-- The Web platform only supports the PlatformView method, and there are no resource and stability issues.
-- Windows and Linux currently only support the TextureRenderer method.
+To start the local video preview and to render it, call the [startPreview](/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPreview.html) method.
 
-<Note title="Note">
-
-Compared with TextureRenderer, PlatformView consumes slightly more resources and has lower stability, but with Flutter version iteration, robustness continues to improve.
-
-</Note>
-
-
-
-
-**createCanvasView Interface Usage Demonstration**
-
-- The interface will automatically choose to use TextureRenderer or PlatformView based on the "enablePlatformView" parameter set when creating the engine and the methods supported by the platform.
-- Android, iOS, and MacOS platforms will choose to use TextureRenderer or PlatformView based on the "enablePlatformView" parameter set when creating the engine.
-- Web, Windows, and Linux will not be affected by the "enablePlatformView" parameter set when creating the engine, only using the supported method.
-
-Get the Widget for preview, then use the viewID to create a ZegoCanvas object and start previewing.
+To stop the local video preview, call the [stopPreview](/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/stopPreview.html) method.
 
 ```dart
-// Add this Widget to the page's rendering tree to display the preview screen
-_previewViewWidget = await ZegoExpressEngine.instance.createCanvasView((viewID) {
-    _previewViewID = viewID;
-
-    // Set the preview canvas
-    ZegoCanvas previewCanvas = ZegoCanvas.view(viewID);
-
-    // Start preview
+Future<void> startPreview() async {
+  await ZegoExpressEngine.instance.createCanvasView((viewID) {
+    localViewID = viewID;
+    ZegoCanvas previewCanvas = ZegoCanvas(viewID, viewMode: ZegoViewMode.AspectFill);
     ZegoExpressEngine.instance.startPreview(canvas: previewCanvas);
-});
+  }).then((canvasViewWidget) {
+    setState(() => localView = canvasViewWidget);
+  });
+}
+
+Future<void> stopPreview() async {
+  ZegoExpressEngine.instance.stopPreview();
+  if (localViewID != null) {
+    await ZegoExpressEngine.instance.destroyCanvasView(localViewID!);
+    setState(() {
+      localViewID = null;
+      localView = null;
+    });
+  }
+}
 ```
+
+#### 5. Start & stop publishing streams
+
+To start publishing a local audio or video stream to remote users, call the [startPublishingStream](/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPublishingStream.html) method. 
+
+To stop the stream publishing, call the [stopPublishingStream](/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/stopPublishingStream.html)
+
+```dart
+Future<void> startPublish() async{
+  // After calling the `loginRoom` method, call this method to publish streams.
+  // The StreamID must be unique in the room.
+  String streamID = '${widget.roomID}_${widget.localUserID}_call';
+  return ZegoExpressEngine.instance.startPublishingStream(streamID);
+}
+
+Future<void> stopPublish() async {
+  return ZegoExpressEngine.instance.stopPublishingStream();
+}
+```
+
+
+#### 6. Start & stop playing streams
+
+To start playing a remote video stream, call [startPlayingStream](/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/startPlayingStream.html) method.
+
+And to stop the stream playing, call the [stopPlayingStream](/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/stopPlayingStream.html) method.
+
+```dart
+Future<void> startPlayStream(String streamID) async {
+  // Start to play streams. Set the view for rendering the remote streams.
+  await ZegoExpressEngine.instance.createCanvasView((viewID) {
+    remoteViewID = viewID;
+    ZegoCanvas canvas = ZegoCanvas(viewID, viewMode: ZegoViewMode.AspectFill);
+    ZegoExpressEngine.instance.startPlayingStream(streamID, canvas: canvas);
+  }).then((canvasViewWidget) {
+    setState(() => remoteView = canvasViewWidget);
+  });
+}
+
+Future<void> stopPlayStream(String streamID) async {
+  ZegoExpressEngine.instance.stopPlayingStream(streamID);
+  if (remoteViewID != null) {
+    ZegoExpressEngine.instance.destroyCanvasView(remoteViewID!);
+    setState(() {
+      remoteViewID = null;
+      remoteView = null;
+    });
+  }
+}
+```
+
+
+### Start your app
+
+
+When your app starts, you need to call the `createEngine` method to initialize the SDK. 
+
+```dart
+void main() {
+  createEngine();
+  runApp(const MyApp());
+}
+```
+
+<Accordion title="If you are developing a Flutter-Web app, take note of this." defaultOpen="false">
+
+
+
+⚠️ Reminder:
+
+The call to `createEngine()` needs to be delayed due to the limitations of Flutter-Web. Typically, it can be triggered by the user clicking the login button. For detailed instructions, refer to the [demo](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_flutter/tree/master/call/quick_start/lib/login_page.dart) attached to this doc.
+
 </Accordion>
 
-**3. Listen to Event Callbacks After Publishing Stream**
+
+## Configure your project
+
+### Android
+
+#### Add permissions for Android devices
+Open the file `your_project/app/src/main/AndroidManifest.xml`, and add the following code:
+
+    ```xml
+    <!-- Permissions required by the SDK -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- Permissions required by the Demo App -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <uses-feature android:glEsVersion="0x00020000" android:required="true" />
+    <uses-feature android:name="android.hardware.camera" />
+    <uses-feature android:name="android.hardware.camera.autofocus" />
+    ```
+
+![https://doc-media.zego.im/sdk-doc/Pics/ZegoUIKit/Flutter/permission_android.png](https://doc-media.zego.im/sdk-doc/Pics/ZegoUIKit/Flutter/permission_android.png)
 
 
-According to actual application needs, listen to the event notifications you care about after publishing stream, such as publishing stream state updates, etc.
 
-[onPublisherStateUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPublisherStateUpdate.html): Publishing stream state update callback. After successfully calling the publishing stream interface, when the publishing stream state changes (such as network interruption causing publishing stream exceptions, etc.), the SDK will notify through this callback while retrying to publish stream.
+Because Android 6.0 requires dynamic permissions to be applied for some more important permissions, you cannot apply for static permissions only through the "AndroidMainfest.xml" file. Please find a third-party flutter plug-in on [pub](http://pub.dev/) to implement by yourself, or refer to the Android native layer and execute the following code, where "requestPermissions" is the method of "Activity".
 
-```dart
-// Common publishing stream related callbacks
-// Publishing stream state update callback
-ZegoExpressEngine.onPublisherStateUpdate = (String streamID, ZegoPublisherState state, int errorCode, Map<String, dynamic> extendedData) {
-    // Implement event callbacks as needed
-};
+```java  
+String[] permissionNeeded = {
+    "android.permission.CAMERA",
+    "android.permission.RECORD_AUDIO"};
+
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+    if (ContextCompat.checkSelfPermission(this, "android.permission.CAMERA") != PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(this, "android.permission.RECORD_AUDIO") != PackageManager.PERMISSION_GRANTED) {
+        requestPermissions(permissionNeeded, 101);
+    }
+}
 ```
 
-<Note title="Note">If you need to know about ZEGO Express SDK's camera/video/microphone/audio/speaker related interfaces, please refer to [FAQ - How to implement switching camera/video screen/microphone/audio/speaker?](https://www.zegocloud.com/docs/faq/device-switching).</Note>
+<Note title="Note">The optional permission `android.permission.READ_PHONE_STATE` is only used to implement the processing of SDK interrupt events, so it only needs to be declared in the AndroidMainfest.xml file, and does not need to be dynamically applied for (you will need to process it separately if you got more needs).</Note>
 
-<a id="PlayingStream"></a>
 
-### 4 Play Stream
 
-Call the [startPlayingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/startPlayingStream.html) interface, based on the passed stream ID parameter "streamID", to play the audio and video stream published by the remote user, and render the playing stream screen as needed.
+#### Prevent code obfuscation for Android devices
 
-- If you only need to play audio stream and do not need to display the playing stream screen, you can directly call the [startPlayingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/startPlayingStream.html) interface.
+To prevent obfuscation of the SDK public class names, do the following:
 
-```dart
-ZegoExpressEngine.instance.startPlayingStream(streamID);
+a. In your project's `your_project > android > app` folder, create a `proguard-rules.pro` file with the following content as shown below:
+    
+```txt
+-keep class **.zego.** { *; }
 ```
 
-- If you need to render the playing stream screen while playing stream, Flutter has two rendering methods: PlatformView and TextureRenderer.
-    - Android and iOS can choose to use TextureRenderer or PlatformView by setting the "enablePlatformView" parameter when creating the engine.
-    - The Web platform only supports the PlatformView method, and there are no resource and stability issues.
-    - Windows and MacOS currently only support the TextureRenderer method.
+b. Add the following config code to the `release` part of the `your_project/android/app/build.gradle` file.
+    
+```gradle
+proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+```
+    
+![Pics/ZegoUIKit/Flutter/android_class_confusion.png](https://doc-media.zego.im/sdk-doc/Pics/ZegoUIKit/Flutter/android_class_confusion.png)
 
-<Note title="Note">
+### iOS
+#### Add permissions for iOS devices
 
-Compared with TextureRenderer, PlatformView consumes slightly more resources and has lower stability, but with Flutter version iteration, robustness continues to improve.
+To add permissions, open `your_project/ios/Runner/Info.plist`, and add the following code to the `dict` part:
 
-</Note>
-
-
-**createCanvasView Interface Usage Demonstration**
-
-- The interface will automatically choose to use TextureRenderer or PlatformView based on the "enablePlatformView" parameter set when creating the engine and the methods supported by the platform.
-- Android, iOS, and MacOS platforms will choose to use TextureRenderer or PlatformView based on the "enablePlatformView" parameter set when creating the engine.
-- Web, Windows, and Linux will not be affected by the "enablePlatformView" parameter set when creating the engine, only using the supported method.
-
-Get the Widget for preview, then use the viewID to create a ZegoCanvas object and start previewing.
-
-```dart
-// Add this Widget to the page's rendering tree to display the preview screen
-_playViewWidget = await ZegoExpressEngine.instance.createCanvasView((viewID) {
-    _playViewID = viewID;
-
-    // Set the playing canvas
-    ZegoCanvas canvas = ZegoCanvas.view(viewID);
-
-    // Start playing
-    ZegoExpressEngine.instance.startPlayingStream(streamID, canvas: canvas);
-});
+```xml
+<key>NSCameraUsageDescription</key>
+<string>We require camera access to connect to a call</string>
+<key>NSMicrophoneUsageDescription</key>
+<string>We require microphone access to connect to a call</string>
 ```
 
-**2. Listen to Event Callbacks After Playing Stream**
+![https://doc-media.zego.im/sdk-doc/Pics/ZegoUIKit/Flutter/permission_ios.png](https://doc-media.zego.im/sdk-doc/Pics/ZegoUIKit/Flutter/permission_ios.png)
 
-According to actual application needs, listen to the event notifications you care about after playing stream, such as playing stream state updates, etc.
+### Web
 
-[onPlayerStateUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPlayerStateUpdate.html): Playing stream state update callback. After successfully calling the playing stream interface, when the playing stream state changes (such as network interruption causing publishing stream exceptions, etc.), the SDK will notify through this callback while retrying to play stream.
+#### Import the SDK for Flutter Web projects
 
-```dart
-// Common playing stream related callbacks
-// Playing stream state related callbacks
-ZegoExpressEngine.onPlayerStateUpdate = (String streamID, ZegoPlayerState state, int errorCode, Map<String, dynamic> extendedData) {
-    // Implement event callbacks as needed
-};
+In index.html, use the \<script> tag to import ZegoExpressWebFlutterWrapper.js from the /assets/packages/zego_express_engine directory in the ZEGO Express SDK for Flutter package.
+
+Sample codes as below:
+
+```html
+<!-- <your-project>/web/index.html -->
+<!DOCTYPE html>
+<html>
+...
+<body>
+  ...
+  <script type="application/javascript" src="assets/packages/zego_express_engine/assets/ZegoExpressWebFlutterWrapper.js"></script>
+  ...
+</body>
+</html>
 ```
 
-### 5 Test Publish and Play Stream Functions Online
+#### General information for Flutter Web Projects
 
-Run the project on a real device. After running successfully, you can see the local video screen.
-
-For convenience, ZEGO provides a [Web Debug Demo](https://zegodev.github.io/zego-express-webrtc-sample/assistDev/index.html). On this page, enter the same AppID and RoomID, enter different UserIDs and corresponding [Token](/console/development-assistance/temporary-token), and you can join the same room to communicate with real device devices. When the audio and video call starts successfully, you can hear the remote audio and see the remote video screen.
-
-
-
-### 6 Stop Publish and Play Stream
-
-<a id="stopPublishingStream"></a>
-
-**1. Stop Publishing Stream/Preview/Rendering**
-
-Call the [stopPublishingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/stopPublishingStream.html) interface to stop sending the local audio and video stream to remote users.
-
-```dart
-// Stop publishing stream
-ZegoExpressEngine.instance.stopPublishingStream();
-```
-
-If local preview is enabled, call the [stopPreview](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/stopPreview.html) interface to stop preview.
-
-```dart
-// Stop preview
-ZegoExpressEngine.instance.stopPreview();
-```
-
-If createCanvasView was used during preview, call the [destroyCanvasView](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressCanvasViewUtils/destroyCanvasView.html) interface to destroy it.
-
-```dart
-// _previewViewID is the viewID obtained when calling [createCanvasView]
-ZegoExpressEngine.instance.destroyCanvasView(_previewViewID);
-```
-
-**2. Stop Playing Stream/Rendering**
-
-Call the [stopPlayingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/stopPlayingStream.html) interface to stop playing the audio and video stream published by remote users.
+For general considerations regarding Flutter Web projects, refer to the [Flutter Web FAQ](https://docs.flutter.dev/development/platform-integration/web/faq).
 
 <Warning title="Warning">
-
-
-If the developer receives a notification of audio and video stream "decrease" through the [onRoomStreamUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onRoomStreamUpdate.html) callback, please call the [stopPlayingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/stopPlayingStream.html) interface in time to stop playing stream, to avoid playing empty streams and generating additional costs; or, developers can choose the appropriate timing according to their own business needs and actively call the [stopPlayingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/stopPlayingStream.html) interface to stop playing stream.
-
+- When logging into a room on the web platform, you must request a **Token** from your app server to ensure security and prevent app ID leakage and theft. For more details, refer to [Use Tokens for authentication](../communication/use-token-authentication.mdx).
+- The demo example uses a client-generated Token to log into a room, but this is only suitable for testing during integration.
 </Warning>
 
 
 
 
-```dart
-// Stop playing stream
-ZegoExpressEngine.instance.stopPlayingStream(streamID);
-```
+### Other
 
-If createCanvasView was used during playing stream, call the [destroyCanvasView](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressCanvasViewUtils/destroyCanvasView.html) interface to destroy it.
 
-```dart
-// _playViewID is the viewID obtained when calling [createCanvasView]
-ZegoExpressEngine.instance.destroyCanvasView(_playViewID);
-```
+To configure your other platform apps, Video Call SDK doesn't require more special configs, while you will need to follow the docs below to set up your Flutter project's basic configs:
 
-### 7 Logout Room
 
-Call the [logoutRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineRoom/logoutRoom.html) interface to logout of the room.
+[Windows](https://docs.flutter.dev/development/platform-integration/windows/building)
+[macOS](https://docs.flutter.dev/development/platform-integration/macos/building)
 
-```dart
-// Logout of room
-ZegoExpressEngine.instance.logoutRoom('room1');
-```
 
-### 8 Destroy Engine
 
-Call the [destroyEngine](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/destroyEngine.html) interface to destroy the engine, used to release resources used by the SDK.
+## Test your implementation
 
-```dart
-// Destroy engine
-ZegoExpressEngine.destroyEngine();
-```
+To test your implementation, run your app project on a real device. Upon successful running, you can view the local video.
+
+For your convenience of testing experience, we got you a [Web platform for debugging](https://zegoim.github.io/express-demo-web/src/Examples/QuickStart/VideoTalk/index.html?lang=en). On the debugging page, you can enter the AppID and room ID of the real device user, and a different user ID to log in to the same room for communicating with the real device user. After a video call starts successfully, you can hear the remote audio and view the remote video.
+
+
+## FAQs
+
+1. How to deal with the error `[!] Unable to install vendored xcframework 'ZegoExpressEngine' for Pod 'zego_express_engine', because it contains both static and dynamic frameworks.` when I build on iOS device？
+
+    1. First, please check the version of your local CocoaPods. If you are using Xcode 14 or later, you must have CocoaPods 1.12.0 or later. If your CocoaPods version is too low, please upgrade to the latest version to resolve this issue.
+
+    2. If the issue still persists, it may be because the unpacking process of the locally dependent SDK package has resulted in the loss of symbolic links in the native iOS xcframework used in the SDK package, causing the symbolic links to become regular files. You can check if the following files in the locally dependent SDK package are symbolic links. If they are not symbolic links, it will cause this issue. In that case, you can try a different method of unpacking the SDK package.
+
+        - ios/libs/ZegoExpressEngine.xcframework/ios-arm64_x86_64-maccatalyst/ZegoExpressEngine.framework/Headers
+        - ios/libs/ZegoExpressEngine.xcframework/ios-arm64_x86_64-maccatalyst/ZegoExpressEngine.framework/Modules
+        - ios/libs/ZegoExpressEngine.xcframework/ios-arm64_x86_64-maccatalyst/ZegoExpressEngine.framework/Resources
+        - ios/libs/ZegoExpressEngine.xcframework/ios-arm64_x86_64-maccatalyst/ZegoExpressEngine.framework/ZegoExpressEngine
+
+
+
+
+<Warning title="Warning">
+**Resolution And Pricing Attention!**
+
+Please pay close attention to the relationship between **video resolution and price** when implementing video call, live streaming, and other video scenarios.
+
+
+**When playing multiple video streams in the same room, the billing will be based on the sum of the resolutions, and different resolutions will correspond to different billing tiers.**
+
+
+The video streams that are included in the calculation of the final resolution are as follows:
+
+1. Live streaming video view (such as host view, co-host view, PKBattle view, etc.)
+2. Video call's video view for each person
+3. Screen sharing view
+4. Resolution of the cloud recording service
+5. Resolution of the Live stream creation
+
+Before your app goes live, please **make sure you have reviewed all configurations and confirmed the billing tiers** for your business scenario to avoid unnecessary losses. For more details, please refer to [Pricing](https://www.zegocloud.com/pricing).
+</Warning>
