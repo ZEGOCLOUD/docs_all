@@ -1,0 +1,204 @@
+# Minimize the live streaming window
+
+- - -
+
+## Introduction
+
+- Apple opened the phone's picture-in-picture support in iOS14, so that videos can still be played when the app exits the foreground.
+- In iOS15 and above, support is available for real-time pull and decode rendering of external data. The current SDK supports the use of backend hardware capabilities.
+
+### Effect Demonstration
+
+|Normal livestream scene|PK battle scene|
+|--|--|
+|<Frame width="256" height="auto" caption=""><img src="https://media-resource.spreading.io/docuo/workspace735/535aa5d0e4329361d2ee094d9a68f56d/084bf344a3.gif" alt="c511b02b9159c161f313 -original-original.gif" width="50%"/></Frame>|<Frame width="340" height="auto" caption="">  <img src="https://media-resource.spreading.io/docuo/workspace735/535aa5d0e4329361d2ee094d9a68f56d/6a94df62d1.gif" width="50%" alt="81037d5472756d68d4f5 -original-original.gif"/></Frame>|
+
+  
+
+
+## Implementation Steps
+
+
+1. Express SDK enables multitasking mode.
+
+   <Warning title="Warning">
+
+   - iOS allows the multitasking mode to be enabled, and the current ability is to allow the SDK to use the hard solution capability in the background when the APP is using the picture in picture.
+   -  Currently limited by Apple's official restrictions, the push terminal temporarily does not support background mode - that is, after backing out of the background, you can not and collect video, only audio can work normally
+   </Warning>
+
+   ```swift
+   func enableMultiTaskForZegoSDK(enable: Bool) {
+        var params: String!
+        if (enable){
+            params = "{\"method\":\"liveroom.video.enable_ios_multitask\",\"params\":{\"enable\":true}}"
+        } else {
+            params = "{\"method\":\"liveroom.video.enable_ios_multitask\",\"params\":{\"enable\":false}}"
+        }
+        ZegoExpressEngine.shared().callExperimentalAPI(params)
+    }
+   ```
+
+2. Check whether the current device supports the picture in picture, and enable related system permissions。
+   ```swift
+      func checkIsPictureInPictureSupported() -> Bool {
+        var supportPip = false
+        if #available(iOS 15.0, *) {
+            supportPip = AVPictureInPictureController.isPictureInPictureSupported()
+        }
+        return supportPip
+      }
+   ```
+
+3. Initialize Express and enable custom video rendering。
+
+   ```swift 
+   let profile = ZegoEngineProfile()
+   profile.appID = kappid
+   profile.appSign = ksign
+   profile.scenario = .default
+   ZegoExpressEngine.createEngine(withProfile: profile, eventHandler: self)
+
+   let renderConfig = ZegoCustomVideoRenderConfig()
+   // Video frame data type
+   renderConfig.bufferType = .cvPixelBuffer
+   // Video frame format RGB
+   renderConfig.frameFormatSeries = .rgb
+   // Enable custom video rendering
+   ZegoExpressEngine.sharedEngine().enableCustomVideoRender(true, config: renderConfig)
+   // Set custom video rendering callback
+   ZegoExpressEngine.sharedEngine().setCustomVideoRenderHandler(self)
+   ```
+
+4. Create a picture-in-picture controller。
+
+   The pipViewController can be initialized in the pull-in controller.
+ 
+   <Warning title="Warning">
+
+   A strong reference is needed to prevent the picture-in-picture controller from being released accidentally.
+   </Warning>
+
+   ```swift
+   import AVKit
+   import AVFoundation
+
+   class ViewController: UIViewController, AVPictureInPictureControllerDelegate, AVPictureInPictureSampleBufferPlaybackDelegate {
+       var pipViewController: AVPictureInPictureController?
+       var displayLayer: AVSampleBufferDisplayLayer?
+
+       func setupPipViewController() {
+           // Create the display layer
+           displayLayer = AVSampleBufferDisplayLayer()
+           displayLayer?.frame = bounds
+           displayLayer?.position = CGPoint(x: bounds.midX, y: bounds.midY)
+           displayLayer?.videoGravity = .resizeAspect
+           displayLayer?.opaque = true
+
+           if #available(iOS 15.0, *) {
+               let contentSource = AVPictureInPictureController.ContentSource(sampleBufferDisplayLayer: displayLayer!, playbackDelegate: self)
+
+               pipViewController = AVPictureInPictureController(contentSource: contentSource)
+               pipViewController?.delegate = self
+               // Whether picture-in-picture should start automatically when transitioning to the background
+               pipViewController?.canStartPictureInPictureAutomaticallyFromInline = true
+           }
+       }
+   }
+   ```
+
+4. Express custom video rendering callbacks, rendering to picture-in-picture。
+
+   ```swift
+   func onRemoteVideoFrameCVPixelBuffer(_ buffer: CVPixelBuffer, param: ZegoVideoFrameParam, streamID: String) {
+           let sampleBuffer: CMSampleBuffer? = createSampleBuffer(pixelBuffer: buffer)
+           if let sampleBuffer = sampleBuffer {
+               self.displayLayer?.enqueue(sampleBuffer)
+               if self.displayLayer?.status == .failed {
+
+               }
+           }
+       }
+    func createSampleBuffer(pixelBuffer: CVPixelBuffer?) -> CMSampleBuffer? {
+           guard let pixelBuffer = pixelBuffer else { return nil }
+
+           // Do not set specific time info
+           var timing = CMSampleTimingInfo(duration: CMTime.invalid, presentationTimeStamp: CMTime.invalid, decodeTimeStamp: CMTime.invalid)
+
+           // Get video info
+           var videoInfo: CMVideoFormatDescription? = nil
+           let result = CMVideoFormatDescriptionCreateForImageBuffer(allocator: kCFAllocatorDefault, imageBuffer: pixelBuffer, formatDescriptionOut: &videoInfo)
+           guard result == noErr, let videoInfo = videoInfo else {
+               assertionFailure("Error occurred: \(result)")
+               return nil
+           }
+
+           var sampleBuffer: CMSampleBuffer? = nil
+           let sampleBufferResult = CMSampleBufferCreateForImageBuffer(allocator: kCFAllocatorDefault, imageBuffer: pixelBuffer, dataReady: true, makeDataReadyCallback: nil, refcon: nil, formatDescription: videoInfo, sampleTiming: &timing, sampleBufferOut: &sampleBuffer)
+
+           guard sampleBufferResult == noErr, let sampleBuffer = sampleBuffer else {
+               assertionFailure("Error occurred: \(sampleBufferResult)")
+               return nil
+           }
+
+           // Attachments settings
+           let attachments: CFArray? = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: true)
+           let dict = unsafeBitCast(CFArrayGetValueAtIndex(attachments, 0), to: CFMutableDictionary.self)
+           CFDictionarySetValue(dict, Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(), Unmanaged.passUnretained(kCFBooleanTrue).toOpaque())
+
+           return sampleBuffer
+       }
+   ```
+6. Draw in the agent callback, developers can handle the relevant business logic according to the callback。
+
+   ```swift
+   extension ZegoMinimizeManager: AVPictureInPictureControllerDelegate {
+       func pictureInPictureControllerWillStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+           enableMultiTaskForZegoSDK(enable: true)
+       }
+       
+       func pictureInPictureControllerDidStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+           debugPrint("pictureInPictureControllerDidStartPictureInPicture")
+       }
+       
+       func pictureInPictureControllerWillStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+           enableMultiTaskForZegoSDK(enable: false)
+           debugPrint("pictureInPictureControllerWillStopPictureInPicture")
+       }
+       
+       func pictureInPictureControllerDidStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+           debugPrint("pictureInPictureControllerDidStopPictureInPicture")
+       }
+       
+       func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, failedToStartPictureInPictureWithError error: Error) {
+           debugPrint("failedToStartPictureInPictureWithError")
+       }
+       
+       func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void) {
+           debugPrint("restoreUserInterfaceForPictureInPictureStopWithCompletionHandler")
+           completionHandler(true)
+       }
+   }
+   
+   extension ZegoMinimizeManager: AVPictureInPictureSampleBufferPlaybackDelegate {
+       func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, skipByInterval skipInterval: CMTime, completion completionHandler: @escaping () -> Void) {
+           
+       }
+       
+       func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, setPlaying playing: Bool) {
+           
+       }
+       
+       func pictureInPictureControllerTimeRangeForPlayback(_ pictureInPictureController: AVPictureInPictureController) -> CMTimeRange {
+           return CMTimeRange(start: .zero, duration: .positiveInfinity)
+       }
+       
+       func pictureInPictureControllerIsPlaybackPaused(_ pictureInPictureController: AVPictureInPictureController) -> Bool {
+           return false
+       }
+       
+       func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, didTransitionToRenderSize newRenderSize: CMVideoDimensions) {
+           
+       }
+   }
+   ```
