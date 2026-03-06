@@ -6,383 +6,342 @@ date: "2024-10-11"
 
 ---
 
-## Overview
+## Introduction
+<Video src="https://www.youtube.com/embed/CuRq8wucobU"/>
 
-<Video src="https://www.youtube.com/embed/CuRq8wucobU"/>  
-Authentication refers to verifying whether users have permission to access the system to avoid security risk issues caused by lack of permission control or improper operation. ZEGO authenticates users through Token (including basic authentication Token and permission authentication Token).
+To avoid unauthorized service access or operations, ZEGOCLOUD uses digital Tokens to verify user identity, control and validate user privileges. You will need to pass a Token when you log in to a room. 
+
+Currently, ZEGOCLOUD supports validating the following: 
+- **User identity**: check users' identity by validating the Token.
+- **User privileges**: 
+    - Room login privilege: check users' privilege to log in to a room by validating the room ID contained in the Token.
+    - Stream publishing privilege: check users' privilege to publish streams in a room by validating the ID of the published stream contained in the Token.
 
 
-|Authentication Method|Description|Application Scenarios|
-|-|-|-|
-|[Basic Authentication Token](/real-time-video-rn/communication/using-token-authentication)|Developers must carry the Token parameter when logging into a room to verify the legitimacy of users.|Basic authentication Token is the basic capability of Token, used for simple permission verification scenarios in business. In most cases, generating this Token is sufficient. |
-|[Permission Authentication Token](/real-time-video-rn/communication/using-token-authentication)|To further improve security, the room ID and publishing stream ID permission bits are opened, which can verify the login room ID and publishing stream ID.|The general usage scenarios for room ID and publishing stream ID permission bits are as follows:<ul><li>There is a distinction between ordinary rooms and member rooms, and it is necessary to control non-member users from logging into member rooms.</li><li>In audio chat rooms or show live streaming, it is necessary to control the consistency between publishing users and users on the mic, to prevent the "ghost mic" phenomenon, that is, hearing the voice of non-mic users in the room.</li><li>In speech games such as Werewolf, it is necessary to prevent the application from being cracked by hackers, who can then use other user IDs to log into the same room, obtain game progress information to cheat, and affect the game experience of normal users.</li></ul>|
+To improve business security, we recommend you enable the room login and stream publishing privilege validation for all scenarios. In particular: 
 
+- In cases where your app provides different types of rooms dedicated to different users, such as general rooms and member-only rooms, it is necessary to validate a user's privilege to enter a room.
+- In a voice chat room, it is necessary to prevent users who are not on the speaker seats from speaking in the room. 
+- In voice games such as Werewolf, it is necessary to prevent the scenario that when the app is hacked, the hacker can use different user IDs to log in to the same room to cheat in the game. 
 
 ## Prerequisites
 
-Basic authentication Token is enabled by default. For permission authentication Token (i.e., room ID and publishing stream ID permission bits), please contact ZEGO technical support to enable.
+
+Before you start to implement user privilege authentication in your app, make sure you complete the following steps:
+
+1. If you need the Room ID and Published stream ID authentication feature, contact ZEGOCLOUD Technical Support to enable it. 
+
+2. Integrate the Video Call SDK and implement the basic video feature. For details, refer to [Quick start\|_blank](!Quick_start_Integrate_Implementation).
+
+
+## Understand the process
+
+
+
+Your app clients request Tokens from your app server and provide the Token for privilege validation when logging in to a room. 
+
+The following diagram shows the process of room login privilege validation:
+
+
+<img src="https://doc-media.zego.im/sdk-doc/doc/video/zegocloud/KeyConceptIntro-Token-flowchart.jpg" />
+
+
+1. Your app client requests a Token from your app server.
+2. Your app server generates a Token and passes it to the client.
+3. Your app client logs in to a room with userID, roomID, and the Token.
+4. The ZEGOCLOUD SDK sends the Token to the ZEGO server for validation.
+5. The ZEGOCLOUD server returns the validation result to the ZEGO Express SDK.
+6. The ZEGOCLOUD SDK returns the validation result to the app client. If the validation passes, the user logs in to the room successfully; otherwise, the login fails.
+
+
+
+## Get the AppID and ServerSecret
+
+Go to [ZEGOCLOUD Admin Console](https://console.zegocloud.com) to get the App ID and ServerSecret of your project. 
+
+
+
+
+## Generate a Token on your app server (recommended)
+
+
+After getting your AppID and ServerSecret, you can define the validation rules on your app server or client based on your business requirements. 
+
+Upon request from your app clients, your app server generates Tokens and sends the Tokens to the corresponding app clients. 
+
+ZEGOCLOUD provides an open-source [Token generator](https://github.com/ZEGOCLOUD/zego_server_assistant) plug-in on GitHub, which you can use to generate Tokens on your app server using different programming languages such as Go, C++, Java, Python, PHP,.NET, and Node.js.
+
+Currently, the Token generator we provided supports generating the following two Tokens:
+
+- **User identity Token**: to check user identity, you can pass null to the `payload` field.
+- **User privilege Token**: to check user privileges by validating the room ID and the ID of the published stream, the `payload` field needs to be generated based on the following validation rules:
+    - Validate room login privilege only: to check users' privilege to log in to a room, but not to check their privilege to publish streams in a room.
+    - Validate stream publishing privilege only: to check users' privilege to publish streams in a room, but not to check their privilege to log in to a room.
+    - Validate both room login and stream publishing privileges: to check users' privilege to log in to a room and also their privilege to publish streams in a room.
 
 <Warning title="Warning">
-- Only ZEGO Express SDK version 0.17.0 and above supports using Token authentication as described in this document.
-- If you have integrated ZEGO Express SDK version before 0.17.0 (using AppSign authentication) and now want to upgrade to version 0.17.0 and use Token authentication, you can refer to the [How to upgrade from AppSign authentication to Token authentication](https://www.zegocloud.com/faq/token_upgrade) document to learn more about AppSign authentication and Token authentication.
+
+- For business security, you must generate Tokens on your app server; Otherwise, there is a risk of ServerSecret being stolen.
+- For the ZEGO Express SDK 2.17.0 or later, use the `token04` of the [Token generator](https://github.com/ZEGOCLOUD/zego_server_assistant) to generate a Token.
 </Warning>
-
-
-
-
-## Process Overview
-
-When using Token authentication, developers need to generate Token first, then carry Token to login room. ZEGO server verifies users carrying Token.
-
-Taking using Token to determine whether a user can login to a room as an example to introduce the usage process, as shown below:
-
-```mermaid
-sequenceDiagram
-    participant DeveloperClient
-    participant DeveloperServer
-    participant ZEGOSDK
-    participant ZEGOServer
-
-    DeveloperClient->>DeveloperServer: 1 Request Token
-    DeveloperServer-->>DeveloperClient: 2 Generate and return Token
-    DeveloperClient->>ZEGOSDK: 3 Login to corresponding room via userID, roomID and Token
-    ZEGOSDK->>ZEGOServer: 4 Verify Token
-    ZEGOServer-->>ZEGOSDK: 5 Verification passed
-    ZEGOSDK-->>DeveloperClient: 6 Successfully logged in to room
-```
-{/*
-<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/token_uml.png" /></Frame>
-*/}
-
-1. The developer client initiates a request to apply for Token.
-2. Generate Token on the developer's server and return it to the developer client.
-3. The developer client carries the applied Token and userID, roomID information to login the corresponding room.
-4. ZEGO SDK will automatically send Token to ZEGO server for verification.
-5. ZEGO server will return the verification result to ZEGO SDK.
-6. ZEGO SDK then directly returns the verification result to the developer client. Clients without permission will fail to login.
-
-
-## Token Generation and Usage
-
-This section will introduce in detail how developers generate Token through the server, how to use Token, and how to handle Token expiration.
-
-### 1 Get AppID and ServerSecret
-
-Generating Token requires the AppID, the unique identifier of the developer project, and the ServerSecret key. Please refer to "Project Information" in [Console - Project Management](/console/project-info) to obtain.
-
-After developers obtain the project's AppID and ServerSecret information, they can generate Token on their own server according to actual business needs. The developer client sends a request to apply for Token to the developer server, and the developer server generates Token and returns it to the corresponding client.
-
-
-
-### 2 Generate Token on Server
-
-import GenerateTemporaryToken from '/snippets/common/en/token/generate-temporary-token.mdx'
-
-<GenerateTemporaryToken />
-
-ZEGO provides an open source zego_server_assistant plugin on GitHub/Gitee. Please use the "token04" version in the plugin to generate Token. The plugin supports Go, C++, Java, Objective-C, Python, PHP, .NET, Node.js languages:
 
 <table>
-
-<tbody><tr>
-<th rowspan="2">Language</th>
-<th rowspan="2">Supported Version</th>
-<th rowspan="2">Key Function</th>
-<th rowspan="2">Plugin Download Address</th>
-<th colspan="2">Usage Examples</th>
-</tr>
-<tr>
-<th>Basic Authentication Token</th>
-<th>Permission Authentication Token</th>
-</tr>
-<tr>
-<td>Go</td>
-<td>Go 1.14.15 or above</td>
-<td>GenerateToken04</td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/tree/release/github/token/go/src/token04">GitHub</a></li></ul></td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/release/github/token/go/sample/token04/sample-base.go">GitHub</a></li></ul></td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/release/github/token/go/sample/token04/sample-for-rtcroom.go">GitHub</a></li></ul></td>
-</tr>
-<tr>
-<td>C++</td>
-<td>C++ 11 or above</td>
-<td>GenerateToken04</td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/release/github/token/c%2B%2B/token04">GitHub</a></li></ul></td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/release/github/token/c%2B%2B/token04/sample/demo/main.cc">GitHub</a></li></ul></td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/release/github/token/c%2B%2B/token04/sample/demo/main.cc">GitHub</a></li></ul></td>
-</tr>
-<tr>
-<td>Java</td>
-<td>Java 1.8 or above</td>
-<td>generateToken04</td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/tree/release/github/token/java/token04">GitHub</a></li></ul></td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/release/github/token/java/token04/src/im/zego/serverassistant/sample/Token04SampleBase.java">GitHub</a></li></ul></td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/release/github/token/java/token04/src/im/zego/serverassistant/sample/Token04SampleForRtcRoom.java">GitHub</a></li></ul></td>
-</tr>
-<tr>
-<td>Python</td>
-<td>Python 3.6.8 or above</td>
-<td>generate_token04</td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/tree/release/github/token/python/token04">GitHub</a></li></ul></td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/release/github/token/python/token04/test/base_sample.py">GitHub</a></li></ul></td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/release/github/token/python/token04/test/rtcroom_sample.py">GitHub</a></li></ul></td>
-</tr>
-<tr>
-<td>PHP</td>
-<td>PHP 5.6 or above</td>
-<td>generateToken04</td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/tree/release/github/token/php/token04">GitHub</a></li></ul></td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant_php/blob/main/test/test.php">GitHub</a></li></ul></td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant_php/blob/main/test/testForRtcRoom.php">GitHub</a></li></ul></td>
-</tr>
-<tr>
-<td>.NET</td>
-<td>.NET Framework 3.5 or above</td>
-<td>GenerateToken04</td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/tree/release/github/token/.net/token04">GitHub</a></li></ul></td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/feature/token04/token/.net/token04/demo/WindowsFormsApp1/Form1.cs">GitHub</a></li></ul></td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/feature/token04/token/.net/token04/demo/WindowsFormsApp1/Form1.cs">GitHub</a></li></ul></td>
-</tr>
-<tr>
-<td>Node.js</td>
-<td>Node.js 8 or above</td>
-<td>generateToken04</td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/tree/release/github/token/nodejs/token04">GitHub</a></li></ul></td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/release/github/token/nodejs/token04/sample/sample-base.js">GitHub</a></li></ul></td>
-<td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/release/github/token/nodejs/token04/sample/sample-rtc-room.js">GitHub</a></li></ul></td>
-</tr>
-</tbody></table>
-
-Taking Go language as an example, developers can refer to the following steps to use zego_server_assistant to generate Token:
-
-1. Use the command `git clone https://github.com/zegoim/zego_server_assistant` to obtain the dependency package.
-2. In your code, introduce the plugin through `import "github.com/zegoim/zego_server_assistant/token/go/src/token04"`.
-3. Call the GenerateToken04 method provided by the plugin to generate Token.
-
-
-<a id="tab_item1"></a>
-<Tabs>
-<Tab title="Generate Basic Authentication Token">
-```go
-package main
-import (
-    "fmt"
-    "github.com/zegoim/zego_server_assistant/token/go/src/token04"
-)
-/*
-Basic authentication token generation example code
-*/
-func main() {
-    var appId uint32 = 1    // Digital ID assigned by Zego, unique identifier for each developer
-    userId := "demo"   // User ID
-    serverSecret := "fa94dd0f974cf2e293728a526b028271"  // Key for AES encryption when obtaining token
-    var effectiveTimeInSeconds int64 = 3600    // Effective duration of token, unit: seconds
-    var payload string = ""   // Token business authentication extension, leave blank here for basic authentication token
-    //Generate token
-    token, err := token04.GenerateToken04(appId, userId, serverSecret, effectiveTimeInSeconds, payload)
-    if err != nil {
-	fmt.Println(err)
-	return
-    }
-    fmt.Println(token)
-}
-```
-</Tab>
-<Tab title="Generate Permission Authentication Token">
-To further improve security, permission authentication Token opens the room ID and publishing stream ID permission bits, which can verify the login room ID and publishing stream ID. At this time, the "payload" field needs to be generated according to rules. The permission bit verification rules are as follows:
-
-- Only verify login permission: Verify permission when logging in, do not verify permission when publishing stream.
-- Only verify publishing permission: Verify permission when publishing stream, do not verify permission when logging in.
-- Verify both login and publishing permissions: Verify permissions when both logging in and publishing stream.
-
-<Warning title="Warning">
-"RoomId" must be passed when generating permission authentication Token.
-</Warning>
-
-```go
-package main
-import (
-    "encoding/json"
-    "fmt"
-    "github.com/zegoim/zego_server_assistant/token/go/src/token04"
-)
-/*
-Permission authentication token generation example code
-*/
-//Token business extension: Permission authentication attributes
-type RtcRoomPayLoad struct {
-    RoomId       string      `json:"room_id"`        //Room id (required); used for strong verification of the room id of the interface
-    Privilege    map[int]int `json:"privilege"`      //Permission bit switch list; used for strong verification of operation permissions of the interface
-    StreamIdList []string    `json:"stream_id_list"` //Stream list; used for strong verification of the stream id of the interface; allowed to be empty, if empty, stream id will not be verified
-}
-func main() {
-    var appId uint32 = 1                               // Digital ID assigned by Zego, unique identifier for each developer
-    roomId := "demo"                                   // Room ID
-    userId := "demo"                                   // User ID
-    serverSecret := "fa94dd0f974cf2e293728a526b028271" // Key for AES encryption when obtaining token
-    var effectiveTimeInSeconds int64 = 3600            // Effective duration of token, unit: seconds
-
-    //Please refer to github.com/zegoim/zego_server_assistant/token/go/src/token04/token04.go definition
-    ////Permission bit definition
-    //const (
-    //	PrivilegeKeyLogin   = 1 // Login permission bit authentication
-    //	PrivilegeKeyPublish = 2 // Publishing stream permission bit authentication
-    //)
-    ////Permission switch definition
-    //const (
-    //	PrivilegeEnable     = 1 // Has permission
-    //	PrivilegeDisable    = 0 // No permission
-    //)
-    //Business permission authentication configuration, can configure multiple permission bits
-    privilege := make(map[int]int)
-    privilege[token04.PrivilegeKeyLogin] = token04.PrivilegeEnable    // Has room login permission
-    privilege[token04.PrivilegeKeyPublish] = token04.PrivilegeDisable // No publishing stream permission
-    //Token business extension configuration
-    payloadData := &RtcRoomPayLoad{
-	RoomId:       roomId,
-	Privilege:    privilege,
-	StreamIdList: nil,
-    }
-    payload, err := json.Marshal(payloadData)
-    if err != nil {
-	fmt.Println(err)
-	return
-    }
-    //Generate token
-    token, err := token04.GenerateToken04(appId, userId, serverSecret, effectiveTimeInSeconds, string(payload))
-    if err != nil {
-	fmt.Println(err)
-	return
-}
-    fmt.Println(token)
-}
-```
-</Tab>
-</Tabs>
-
-<Warning title="Warning">
-
-When running the Java source code to generate Token, if the "java.security.InvalidKeyException:illegal Key Size" exception prompt appears, please refer to the [Related FAQ document](https://www.zegocloud.com/faq/java_illegal_key_size_solution) to solve it.
-</Warning>
-
-### 3 Use Token
-
-Users carry the obtained Token and user, roomID information to login the corresponding room through the [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) interface.
-
-<Warning title="Warning">
-
-
-The userID used when calling the [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) interface to login room must be consistent with the userID used when generating Token in "4.2 Generate Token on Server".
-
-</Warning>
-
-
-
-
-```javascript
-let roomID = "xxx" //Room ID to login
-let user = {userID: "xxxx", userName: "xxxx"};
-let roomConfig = {token: "xxxxxxxxxx"}; // Request from developer server
-ZegoExpressEngine.instance().loginRoom(roomID, user, config);
-```
-
-If developers need to modify permission bits after logging into a room, they can also call the [renewToken](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#renewtoken) interface to update Token. After updating, it will affect the permissions for the next login to certain rooms and publishing certain streams. Previously successful room logins and publishing streams will not be affected.
-
-
-```javascript
-let token = getToken(); // Re-request from developer server to obtain Token;
-ZegoExpressEngine.instance().renewToken(roomID, token);
-```
-
-
-### 4 Handling Token Expiration
-
-<Warning title="Warning">
-
-Token expiration may cause issues such as abnormal publishing and playing streams. Please strictly follow the instructions below to handle expired Tokens in a timely manner.
-</Warning>
-
-30 seconds before Token expires, the SDK will send a notification through the [roomTokenWillExpire](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomtokenwillexpire) callback. When logging into a room after Token expires, the error code `1002078` (Token expired) will be received through `onDebugError` or `onRoomStateChanged`.
-
-After receiving the Token about to expire callback or receiving the Token expired error code, developers need to obtain a new valid Token from their own server and call the [renewToken](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#renewtoken) interface provided by the SDK to update the Token.
-  - Logged in users will not be kicked out of the room.
-  - Currently successful publishing and playing streams will not be affected. However, after stopping publishing stream, you cannot publish stream again unless you update the Token.
-
-<Note title="Note">
-
-
-ZEGO also provides another Token expiration handling method. You can contact ZEGO technical support to configure:
-  - Logged in users will be kicked out of the room, and can only login to the room again after updating the Token.
-  - Currently successful publishing streams will be stopped.
-
-</Note>
-
-
-
-```javascript
-ZegoExpressEngine.instance().on("roomTokenWillExpire", (roomID, remainTimeInSecond)=>{
-    let token = getToken(); // Re-request from developer server to obtain Token;
-    ZegoExpressEngine.instance().renewToken(roomID, token);
-});
-```
-
-## Other
-
-<Accordion title="Client-side Token Generation and Usage (Not Recommended)" defaultOpen="false">
-If you cannot send Token from the server during development, you can first use client-side code to generate Token, and then complete the integration after the server development is completed.
-
-<Warning title="Warning">
-
-- When the App goes online, do not generate Token on the client side, otherwise your ServerSecret will be exposed to risk.
-- To ensure security, it is strongly recommended that you use the server to generate Token, otherwise there is a risk that the ServerSecret will be stolen.
-</Warning>
-
-
-Reference information for each language in the zego_server_assistant plugin for client-side Token generation is as follows:
-
-<table>
-
   <tbody><tr>
-    <th>Language</th>
-    <th>Supported Version</th>
-    <th>Key Function</th>
-    <th>Specific Address</th>
+    <th rowspan="2">Language</th>
+    <th rowspan="2">Supported version</th>
+    <th rowspan="2">Core function</th>
+    <th rowspan="2">Code base</th>
+    <th colspan="2">Sample code</th>
+  </tr>
+  <tr>
+    <th>User identity Token</th>
+    <th>User privilege Token</th>
+  </tr>
+  <tr>
+    <td>Go</td>
+    <td>Go 1.14.15 or later</td>
+    <td>GenerateToken04</td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/go/src/token04">GitHub</a></li></ul></td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/go/sample/sample.go">GitHub</a></li></ul></td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/go/sample/sample-for-rtcroom.go">GitHub</a></li></ul></td>
   </tr>
   <tr>
     <td>C++</td>
-    <td>C++ 11 or above</td>
+    <td>C++ 11&nbsp; or later</td>
     <td>GenerateToken04</td>
-    <td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/blob/release/github/token/c%2B%2B/token04">GitHub</a></li></ul></td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/c%2B%2B">GitHub</a></li></ul></td>
+    <td colspan="2"><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/c%2B%2B/sample/demo/main.cc">GitHub</a></li></ul></td>
   </tr>
   <tr>
     <td>Java</td>
-    <td>Java 1.8 or above</td>
+    <td>Java 1.8&nbsp; or later</td>
     <td>generateToken04</td>
-    <td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/tree/release/github/token/java/token04">GitHub</a></li></ul></td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/java/token04">GitHub</a></li></ul></td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/java/token04/src/im/zego/serverassistant/sample/Token04SampleBase.java">GitHub</a></li></ul></td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/java/token04/src/im/zego/serverassistant/sample/Token04SampleForRtcRoom.java">GitHub</a></li></ul></td>
   </tr>
   <tr>
-    <td>Objective-C</td>
-    <td>-</td>
+    <td>Python</td>
+    <td>Python 3.6.8&nbsp; or later</td>
+    <td>generate_token04</td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/python/token04">GitHub</a></li></ul></td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/python/token04/test/base_sample.py">GitHub</a></li></ul></td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/python/token04/test/rtcroom_sample.py">GitHub</a></li></ul></td>
+  </tr>
+  <tr>
+    <td>PHP</td>
+    <td>PHP 5.6&nbsp; or later</td>
+    <td>generateToken04</td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/php/token04">GitHub</a></li></ul></td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/php/token04/test/test.php">GitHub</a></li></ul></td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/php/token04/test/testForRtcRoom.php">GitHub</a></li></ul></td>
+  </tr>
+  <tr>
+    <td>.NET</td>
+    <td>.NET Framework 3.5&nbsp; or later</td>
     <td>GenerateToken04</td>
-    <td><ul><li><a target="_blank" href="https://github.com/zegoim/zego_server_assistant/tree/release/github/token/oc/token04">GitHub</a></li><ul></ul></ul></td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/.net">GitHub</a></li></ul></td>
+    <td colspan="2"><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/.net/demo/WindowsFormsApp1/Form1.cs">GitHub</a></li></ul></td>
+  </tr>
+  <tr>
+    <td>Node.js</td>
+    <td>Node.js 8&nbsp; or later</td>
+    <td>generateToken04</td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/nodejs">GitHub</a></li></ul></td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/nodejs/sample/sample-base.js">GitHub</a></li></ul></td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/nodejs/sample/sample-rtc-room.js">GitHub</a></li></ul></td>
   </tr>
 </tbody></table>
 
-To use client-side Token generation, please refer to [Use Token](#3-use-token).
-
-If Token expires, please refer to [Handling Token Expiration](#4-handling-token-expiration) for processing.
-</Accordion>
 
 
-## API Reference
+Take Go language as an example, you can do the following steps to generate a Token：
 
-| Method | Description |
-|-------|--------|
-| [loginRoom](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#loginroom) | Login room |
-| [renewToken](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#renewtoken) | Update Token |
-| [onRoomTokenWillExpire](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#roomtokenwillexpire) | Token expiration callback |
+1. go get github.com/ZEGOCLOUD/zego_server_assistant.
+2. **import** `github.com/ZEGOCLOUD/zego_server_assistant/token/go/src/token04`.
+3. Call the `GenerateToken04` method to generate a Token.
+
+The following code shows how to generate a user identity Token:
 
 
-## Related Documents
+```go
+package main
 
-[How to prevent ghost mic or room bombing in audio and video interaction?](https://www.zegocloud.com/faq/bombing)
+import (
+    "fmt"
+    "github.com/ZEGOCLOUD/zego_server_assistant/token/go/src/token04"
+)
+
+/*
+Sample code for generating a user identity Token: 
+*/
+
+func main() {
+    var appId uint32 = 1
+    userId := "demo"
+    serverSecret := "fa94dd0f974cf2e293728a526b028271"
+    var effectiveTimeInSeconds int64 = 3600
+    var payload string = ""
+
+    token, err := token04.GenerateToken04(appId, userId, serverSecret, effectiveTimeInSeconds, payload)
+    if err != nil {
+        fmt.Println(err)
+        return
+    }
+    fmt.Println(token)
+}
+```
+
+The following code shows how to generate a user privilege Token:
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "github.com/ZEGOCLOUD/zego_server_assistant/token/go/src/token04"
+)
+
+/*
+Sample code for generating a user privilege Token:
+ */
+
+
+//Token-based business logic: RTC room-related authentication property 
+type RtcRoomPayLoad struct {
+    RoomId       string      `json:"room_id"`           //Room ID: used to to validate the room.
+    Privilege    map[int]int `json:"privilege"`         //User privilege authentication control list: used to validate user privileges 
+    StreamIdList []string    `json:"stream_id_list"`    //Stream list: used to validate the stream. This value can be null, and no stream will be validated if it is null.
+}
+
+func main() {
+    var appId uint32 = 1
+    roomId := "demo"
+    userId := "demo"
+    serverSecret := "fa94dd0f974cf2e293728a526b028271"
+    var effectiveTimeInSeconds int64 = 3600
+    privilege := make(map[int]int)
+    privilege[token04.PrivilegeKeyLogin] = token04.PrivilegeEnable
+    privilege[token04.PrivilegeKeyPublish] = token04.PrivilegeEnable
+
+    payloadData := &RtcRoomPayLoad{
+        RoomId:       roomId,
+        Privilege:    privilege,
+        StreamIdList: nil,
+    }
+
+    payload, err := json.Marshal(payloadData)
+    if err != nil {
+        fmt.Println(err)
+        return
+    }
+
+    token, err := token04.GenerateToken04(appId, userId, serverSecret, effectiveTimeInSeconds, string(payload))
+    if err != nil {
+        fmt.Println(err)
+        return
+    }
+    fmt.Println(token)
+}
+```
+
+## How to get a temporary Token
+
+To make it easier for you to try and test the user authentication feature, [ZEGOCLOUD Admin Console](https://console.zegocloud.com) provides a tool for generating temporary Tokens, which you can use directly in a testing environment. In production, you must generate Tokens on your app server.
+
+
+
+
+## Generate a Token on the client
+
+If you can't generate the Token on your app server, you can try to generate it on your client. 
+
+
+<Warning title="Warning">
+
+When your app is ready to go live, remember not to generate the Token on your client; Otherwise, there is a risk of the ServerSecret being exposed.
+</Warning>
+
+ZEGOCLOUD provides an open-source [Token generator](https://github.com/ZEGOCLOUD/zego_server_assistant) plug-in on GitHub, which you can use to generate Tokens on your app server using different programming languages such as C++ and Java.
+
+
+<table>
+  <tbody><tr>
+    <th>Language</th>
+    <th>Supported version</th>
+    <th>Core function</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td>C++</td>
+    <td>C++ 11 or later</td>
+    <td>GenerateToken04</td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/c%2B%2B">GitHub</a></li></ul></td>
+  </tr>
+  <tr>
+    <td>Java</td>
+    <td>Java 1.8 or later</td>
+    <td>generateToken04</td>
+    <td><ul><li><a target="_blank" href="https://github.com/ZEGOCLOUD/zego_server_assistant/blob/master/token/java/token04">GitHub</a></li></ul></td>
+  </tr>
+</tbody></table>
+
+
+## Use a Token 
+
+When logging in to a room, you need to pass the Token, user, and roomID to the `loginRoom` method. Otherwise, the login will fail.
+
+<Warning title="Warning">
+
+The userID you used  for room login (`loginRoom`) must be the same with that of you used for generating Tokens. 
+</Warning>
+
+```javascript
+let roomID = "xxx" // roomId to login
+let user = {userID: "xxxx", userName: "xxxx"};
+let roomConfig = {token: "xxxxxxxx"}; // Token from your app server
+ZegoExpressEngine.instance().loginRoom(roomID, user, config);
+```
+
+If you need to modify the stream publishing privilege of a user after the user logged in to a room, call the `renewToken` method to renew the Token. The updated privileges will take effect for the next stream publishing, but will not affect the current streams being published (if any).
+
+```javascript
+let token = getToken(); // Get a new token
+ZegoExpressEngine.instance().renewToken(roomID, token);
+```
+
+## Renew a Token
+
+30 seconds before a Token expires, the SDK sends out a notification through the `onRoomTokenWillExpire` callback.
+
+Upon receiving this callback, you need to get a new Token from your app server first, and then pass the new token to the `renewToken` method. 
+If the Token is not renewed, different SDK versions handle the Token expiration differently:
+
+
+
+- If the version of the ZEGO Express SDK you integrated is **2.8.0 - 2.12.0**, and when your Token is expired: 
+    - Users won't be kicked out of the room.
+    - The streams currently being published will not be affected. However, it will affect the user's next stream publishing operation.
+    
+- If the version of the ZEGO Express SDK you integrated is **2.13.0 or later**, and when your Token is expired: 
+    - When the Token has expired, you can contact Technical Support for configuring additional privilege requirements. After configured:
+        - Users will be kicked out of the room, and can't log in to the room again.
+        - The streams currently being published will be stopped. And the next stream publishing operation can't be started.
+    - When the Token has expired, and you didn't contact Technical Support for configuring additional privilege requirements:
+        - Users won't be kicked out of the room.
+        - The streams currently being published will not be affected. However, it will affect the user's next stream publishing operation.
+
+
+<Note title="Note">
+
+If you enabled the room login privilege authentication (by validating the roomID), you must pass a new Token when logging in to a room. 
+</Note>
+
+
+```javascript
+ZegoExpressEngine.instance().on("roomTokenWillExpire", (roomID, remainTimeInSecond){
+    let token = getToken(); // Get a new token
+    ZegoExpressEngine.instance().renewToken(roomID, token);
+});
+```
