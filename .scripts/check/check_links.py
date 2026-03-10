@@ -37,6 +37,7 @@ import os
 import re
 import json
 import sys
+import argparse
 import urllib.parse
 import requests
 import subprocess
@@ -177,17 +178,17 @@ def load_config(language):
         print(f'{Fore.RED}未找到仓库根目录（包含docuo.config.*.json 的目录）{Style.RESET_ALL}')
         sys.exit(1)
 
-    # 优先尝试 docuo.config.json；若不存在则按语言回退到 docuo.config.{zh|en}.json
-    main_path = os.path.join(repo_root, 'docuo.config.json')
+    # 优先按语言加载 docuo.config.{zh|en}.json；若不存在再回退到 docuo.config.json
     lang_path = os.path.join(repo_root, f'docuo.config.{language}.json')
+    main_path = os.path.join(repo_root, 'docuo.config.json')
 
     config = None
-    if os.path.exists(main_path):
-        config = _load_json_file(main_path)
-    elif os.path.exists(lang_path):
+    if os.path.exists(lang_path):
         config = _load_json_file(lang_path)
+    elif os.path.exists(main_path):
+        config = _load_json_file(main_path)
     else:
-        # 兼容场景：如果只存在 en/zh 两个文件，按语言加载失败后再尝试另一种语言
+        # 兼容场景：如果只存在另一种语言的文件，尝试加载
         alt_lang = 'en' if language == 'zh' else 'zh'
         alt_lang_path = os.path.join(repo_root, f'docuo.config.{alt_lang}.json')
         config = _load_json_file(alt_lang_path)
@@ -371,11 +372,9 @@ def extract_links_from_file(file_path):
     # 2. HTML a标签链接: <a href="url"> 或 <a href='url'>
     html_a_pattern = re.compile(r'<a[^>]*href\s*=\s*[\'"]([^\'"]+)[\'"][^>]*>')
     # 3. 纯文本链接: http://xxx 或 https://xxx
-    url_pattern = re.compile(r'https?://[^\s\'"<>()]+')
-    # 4. MDX导入语句: import xxx from 'path' 或 import xxx from "path" 或 import { xxx } from 'path'
+    url_pattern = re.compile(r'https?://[^\s\'"<>()`]+')
+    # 4. import语句: import xxx from 'path' 或 import { xxx } from 'path'
     mdx_import_pattern = re.compile(r'import\s+(?:{[^}]+}|\w+)\s+from\s+[\'"]([^\'"]+)[\'"]')
-    # 5. 通用import语句: import name from '/path' (以工作区根目录为基准的路径)
-    import_pattern = re.compile(r'import\s+[^\'"\s]+\s+from\s+[\'"]([^\'"]+)[\'"]')
 
     links = []
     in_code_block = False  # 是否在代码块内
@@ -457,17 +456,7 @@ def extract_links_from_file(file_path):
                     'type': 'mdx_import'
                 })
 
-            # 检查通用import语句（以/开头的路径）
-            for match in import_pattern.finditer(line):
-                import_path = match.group(1).strip()
-                # 只检查以/开头的路径（相对于工作区根目录）
-                if import_path.startswith('/'):
-                    links.append({
-                        'url': import_path,
-                        'line': idx,
-                        'line_content': line_content,
-                        'type': 'import'
-                    })
+
 
     return links
 
@@ -677,6 +666,62 @@ def extract_paramfield_anchors(file_path):
     return anchors
 
 
+def _is_heading_title_size(title_size):
+    """判断 titleSize 是否会生成 heading 锚点（h1~h5）"""
+    return bool(re.match(r'^h[1-5]$', title_size, re.IGNORECASE))
+
+
+def extract_steps_anchors(content):
+    """提取 Steps/Step 组件生成的锚点。
+
+    优先级规则：
+    - Step 自己的 titleSize 优先；未设置时继承 Steps 的 titleSize。
+    - 有效值为 h1~h5，才会生成 heading 锚点。
+    - 两者都未设置，或有效值非 h1~h5（如 p），则不生成锚点。
+    """
+    anchors = []
+
+    # 将内容规范化为单行，方便正则跨行匹配
+    normalized = content.replace('\r\n', ' ').replace('\n', ' ')
+
+    # 与 ParamField 使用相同的属性匹配模式：<Tag attrs...>body</Tag>
+    steps_block_pattern = re.compile(
+        r'<Steps\s+((?:[^>"\']+|"[^"]*"|\'[^\']*\')*?)>(.*?)</Steps>'
+    )
+    # Steps 无属性的情况（仅有 > 直接闭合）
+    steps_noattr_pattern = re.compile(
+        r'<Steps\s*>(.*?)</Steps>'
+    )
+    step_pattern = re.compile(
+        r'<Step\s+((?:[^>"\']+|"[^"]*"|\'[^\']*\')*?)(?:/>|>)'
+    )
+
+    def _process_steps_body(steps_title_size, steps_body):
+        for step_match in step_pattern.finditer(steps_body):
+            step_attrs = parse_jsx_attributes(step_match.group(1))
+            # Step 自己的 titleSize 优先，未设置则继承 Steps 的
+            effective = step_attrs.get('titleSize', '') or steps_title_size
+            if not _is_heading_title_size(effective):
+                continue
+            title = step_attrs.get('title', '')
+            if title:
+                anchor = heading_to_anchor(title)
+                if anchor:
+                    anchors.append(anchor)
+                    anchors.append(f"{anchor}-1")
+
+    # 匹配有属性的 <Steps ...>
+    for m in steps_block_pattern.finditer(normalized):
+        steps_attrs = parse_jsx_attributes(m.group(1))
+        _process_steps_body(steps_attrs.get('titleSize', ''), m.group(2))
+
+    # 匹配无属性的 <Steps>（Step 可能有自己的 titleSize）
+    for m in steps_noattr_pattern.finditer(normalized):
+        _process_steps_body('', m.group(1))
+
+    return anchors
+
+
 def extract_headings_from_file(file_path):
     """从mdx文件中提取所有锚点（标题 + ParamField 组件），并转换为锚点格式"""
     headings = []
@@ -739,6 +784,10 @@ def extract_headings_from_file(file_path):
         # 3. 提取 ParamField 组件生成的锚点
         paramfield_anchors = extract_paramfield_anchors(file_path)
         headings.extend(paramfield_anchors)
+
+        # 4. 提取 Steps/Step 组件生成的锚点（当 titleSize 为 h1~h5 时）
+        steps_anchors = extract_steps_anchors(content)
+        headings.extend(steps_anchors)
 
     except Exception:
         pass
@@ -988,7 +1037,7 @@ def check_mdx_import(import_path, base_file_path, repo_root):
         full_path = os.path.join(repo_root, import_path)
 
     # 1) 明确以某个扩展名结尾：要求存在对应文件
-    if import_path.lower().endswith(('.mdx', '.jsx', '.js', '.ts', '.tsx')):
+    if import_path.lower().endswith(('.mdx', '.md', '.jsx', '.js', '.ts', '.tsx')):
         return os.path.isfile(full_path)
 
     # 2) 可能是省略扩展名的文件：尝试多种扩展名
@@ -1008,27 +1057,6 @@ def check_mdx_import(import_path, base_file_path, repo_root):
     # 4) 既不是文件也不是目录
     return False
 
-def check_import_file(import_path, repo_root):
-    """检查import语句中的文件路径是否有效"""
-    # 移除开头的斜杠
-    if import_path.startswith('/'):
-        import_path = import_path[1:]
-
-    # 使用仓库根目录作为根目录
-    full_path = os.path.join(repo_root, import_path)
-
-    # 优先要求是实际文件
-    if os.path.isfile(full_path):
-        return True
-
-    # 若为目录，则仅当包含 index.mdx 时认为有效（与 MDX 目录导入的解析保持一致）
-    if os.path.isdir(full_path):
-        index_file = os.path.join(full_path, 'index.mdx')
-        if os.path.isfile(index_file):
-            return True
-        return False
-
-    return False
 
 def is_old_doc_url_any(url):
     """判断是否为旧文档链接（不区分实例语言）"""
@@ -1070,6 +1098,57 @@ def _load_all_instances_config(repo_root):
             seen.add(key)
             merged['instances'].append(inst)
     return merged
+
+def _collect_results(problems, collected_urls, display_name, structured_results, aggregated_by_url):
+    """将 check_instance_links 的结果归并到 structured_results 和 aggregated_by_url"""
+    if display_name not in structured_results:
+        structured_results[display_name] = {}
+    for ptype, items in problems.items():
+        if ptype not in structured_results[display_name]:
+            structured_results[display_name][ptype] = {}
+        for it in items:
+            abs_file = os.path.abspath(it.get('file', ''))
+            line_num = it.get('line', 0)
+            entry = {
+                'url': it.get('url', ''),
+                'line_content': it.get('line_content', ''),
+                'file_with_line': f"{abs_file}:{line_num}",
+            }
+            if 'error' in it:
+                entry['error'] = it['error']
+
+            if abs_file not in structured_results[display_name][ptype]:
+                structured_results[display_name][ptype][abs_file] = []
+            structured_results[display_name][ptype][abs_file].append(entry)
+
+            url_key = entry.get('url')
+            if url_key:
+                if url_key not in aggregated_by_url:
+                    aggregated_by_url[url_key] = []
+                aggregated_by_url[url_key].append({
+                    'instance': display_name,
+                    'error_type': ptype,
+                    'file_path': abs_file,
+                    'file_with_line': f"{abs_file}:{line_num}",
+                    'line_content': entry.get('line_content', ''),
+                    **({'error': entry['error']} if 'error' in entry else {})
+                })
+
+    for it in collected_urls:
+        abs_file = os.path.abspath(it.get('file', ''))
+        line_num = it.get('line', 0)
+        url_key = it.get('url', '')
+        if url_key:
+            if url_key not in aggregated_by_url:
+                aggregated_by_url[url_key] = []
+            aggregated_by_url[url_key].append({
+                'instance': display_name,
+                'error_type': 'collected',
+                'file_path': abs_file,
+                'file_with_line': f"{abs_file}:{line_num}",
+                'line_content': it.get('line_content', ''),
+            })
+
 
 def check_git_mode():
     """git模式：检查变更文件对应的实例"""
@@ -1139,56 +1218,7 @@ def check_git_mode():
             print(f'实例共有{len(mdx_files)}个mdx文件')
 
             problems, collected_urls = check_instance_links(mdx_files, config, instance, repo_root, check_remote=True)
-
-            # 将问题写入结构化结果（按实例名称、错误类型、link_type 归类）与 URL 汇总
-            if display_name not in structured_results:
-                structured_results[display_name] = {}
-            for ptype, items in problems.items():
-                if ptype not in structured_results[display_name]:
-                    structured_results[display_name][ptype] = {}
-                for it in items:
-                    abs_file = os.path.abspath(it.get('file', ''))
-                    line_num = it.get('line', 0)
-                    # 构造精简条目（不含 file_path/line/link_type）
-                    entry = {
-                        'url': it.get('url', ''),
-                        'line_content': it.get('line_content', ''),
-                        'file_with_line': f"{abs_file}:{line_num}",
-                    }
-                    if 'error' in it:
-                        entry['error'] = it['error']
-
-                    if abs_file not in structured_results[display_name][ptype]:
-                        structured_results[display_name][ptype][abs_file] = []
-                    structured_results[display_name][ptype][abs_file].append(entry)
-
-                    url_key = entry.get('url')
-                    if url_key:
-                        if url_key not in aggregated_by_url:
-                            aggregated_by_url[url_key] = []
-                        aggregated_by_url[url_key].append({
-                            'instance': display_name,
-                            'error_type': ptype,
-                            'file_path': abs_file,
-                            'file_with_line': f"{abs_file}:{line_num}",
-                            'line_content': entry.get('line_content', ''),
-                            **({'error': entry['error']} if 'error' in entry else {})
-                        })
-
-            # 将收集到的 old-doc 等外链（即使不算错误）也纳入 URL 汇总
-            for it in collected_urls:
-                abs_file = os.path.abspath(it.get('file', ''))
-                line_num = it.get('line', 0)
-                url_key = it.get('url', '')
-                if url_key:
-                    if url_key not in aggregated_by_url:
-                        aggregated_by_url[url_key] = []
-                    aggregated_by_url[url_key].append({
-                        'instance': display_name,
-                        'error_type': 'collected',
-                        'file_path': abs_file,
-                        'line_content': it.get('line_content', ''),
-                    })
+            _collect_results(problems, collected_urls, display_name, structured_results, aggregated_by_url)
 
     except Exception as e:
         print(f'{Fore.RED}加载配置失败: {e}{Style.RESET_ALL}')
@@ -1228,24 +1258,11 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
             if is_url_whitelisted(url, whitelist):
                 continue
 
-            # 检查MDX导入
+            # 检查import路径
             if link_type == 'mdx_import':
-                mdx_result = check_mdx_import(url, file_path, repo_root)
-                if mdx_result is False:
-                    problems['MDX导入路径无效'].append({
-                        'file': file_path,
-                        'line': line,
-                        'url': url,
-                        'line_content': line_content,
-                        'link_type': link_type
-                    })
-                continue
-
-            # 检查通用import文件路径
-            if link_type == 'import':
-                import_result = check_import_file(url, repo_root)
+                import_result = check_mdx_import(url, file_path, repo_root)
                 if import_result is False:
-                    problems['Import文件路径无效'].append({
+                    problems['Import路径无效'].append({
                         'file': file_path,
                         'line': line,
                         'url': url,
@@ -1323,7 +1340,7 @@ def check_instance_links(mdx_files, config, instance, repo_root, check_remote=Fa
                 })
                 continue
             if root_result is False:
-                problems['根路径链接无效'].append({
+                problems['internal-link无效'].append({
                     'file': file_path,
                     'line': line,
                     'url': url,
@@ -1381,13 +1398,159 @@ def print_problems_summary(problems, is_warning=False):
             print(f'    {item["line_content"]}')
             print()
 
+def run_non_interactive(args):
+    """CLI 非交互模式"""
+    # 确定语言
+    if args.zh:
+        language = 'zh'
+    elif args.en:
+        language = 'en'
+    else:
+        language = 'zh'  # 默认中文
+
+    check_remote = args.remote
+    config, repo_root = load_config(language)
+
+    structured_results = {}
+    aggregated_by_url = {}
+
+    if args.file:
+        # 单文件模式
+        file_path = args.file
+        if not os.path.isabs(file_path):
+            file_path = os.path.join(repo_root, file_path)
+        file_path = os.path.normpath(file_path)
+
+        if not os.path.isfile(file_path):
+            print(f'{Fore.RED}文件不存在: {file_path}{Style.RESET_ALL}')
+            sys.exit(1)
+
+        # 尝试找到对应实例（用于 locale 等上下文）
+        rel_path = os.path.relpath(file_path, repo_root)
+        instances_map = find_instances_for_files([rel_path], config, repo_root)
+        if instances_map:
+            instance = list(instances_map.values())[0]['instance']
+        else:
+            instance = {'locale': language}
+
+        display_name = f"[文件] {os.path.relpath(file_path, repo_root)}"
+        print(f'\n正在检查文件: {file_path}')
+
+        problems, collected_urls = check_instance_links([file_path], config, instance, repo_root, check_remote)
+        _collect_results(problems, collected_urls, display_name, structured_results, aggregated_by_url)
+
+    elif args.instance:
+        # 实例 ID 模式
+        instances = config.get('instances', [])
+        matched = [i for i in instances if i.get('id') == args.instance]
+        if not matched:
+            print(f'{Fore.RED}未找到实例ID: {args.instance}{Style.RESET_ALL}')
+            avail = ', '.join(i.get('id', '') for i in instances if i.get('id'))
+            print(f'可用实例ID:\n  {avail}')
+            sys.exit(1)
+
+        instance = matched[0]
+        instance_path = instance['path']
+        if not os.path.isabs(instance_path):
+            instance_path = os.path.join(repo_root, instance_path)
+
+        platform = get_instance_platform(instance, config)
+        label = instance.get('label', '未知实例')
+        display_name = f"{label} ({platform})" if platform else label
+
+        print(f'\n正在检查实例: {display_name} ({instance_path})')
+
+        if instance_path.startswith('http'):
+            print(f'跳过外部链接实例: {instance_path}')
+            sys.exit(0)
+
+        mdx_files = find_mdx_files(instance_path)
+        print(f'共找到{len(mdx_files)}个mdx文件。')
+
+        problems, collected_urls = check_instance_links(mdx_files, config, instance, repo_root, check_remote)
+        _collect_results(problems, collected_urls, display_name, structured_results, aggregated_by_url)
+
+    elif args.instance_path:
+        # 实例路径模式：直接指定实例目录，从配置中匹配对应实例
+        inst_path = args.instance_path
+        if not os.path.isabs(inst_path):
+            inst_path = os.path.join(repo_root, inst_path)
+        inst_path = os.path.normpath(inst_path)
+
+        if not os.path.isdir(inst_path):
+            print(f'{Fore.RED}路径不存在或不是目录: {inst_path}{Style.RESET_ALL}')
+            sys.exit(1)
+
+        # 从配置中找到 path 匹配的实例（用于上下文信息）
+        instances = config.get('instances', [])
+        instance = None
+        for inst in instances:
+            p = inst.get('path', '')
+            if not os.path.isabs(p):
+                p = os.path.normpath(os.path.join(repo_root, p))
+            if p == inst_path:
+                instance = inst
+                break
+
+        if instance:
+            platform = get_instance_platform(instance, config)
+            label = instance.get('label', '未知实例')
+            display_name = f"{label} ({platform})" if platform else label
+        else:
+            display_name = os.path.basename(inst_path)
+
+        print(f'\n正在检查实例路径: {inst_path}')
+
+        mdx_files = find_mdx_files(inst_path)
+        print(f'共找到{len(mdx_files)}个mdx文件。')
+
+        problems, collected_urls = check_instance_links(mdx_files, config, instance, repo_root, check_remote)
+        _collect_results(problems, collected_urls, display_name, structured_results, aggregated_by_url)
+
+    else:
+        print(f'{Fore.RED}请指定 --file <路径>、--instance <ID> 或 --instance-path <目录路径>{Style.RESET_ALL}')
+        sys.exit(1)
+
+    write_result_files(mode='cli', structured_results=structured_results, language=language,
+                       check_remote=check_remote, aggregated_by_url=aggregated_by_url)
+
+
 def main():
-    # 检查是否是git模式
+    # git 模式
     if len(sys.argv) > 1 and sys.argv[1] == 'git':
-        # git模式：检查变更文件对应的实例
         return check_git_mode()
 
-    # 交互模式
+    # 解析 CLI 参数
+    parser = argparse.ArgumentParser(
+        description='检查文档链接有效性',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''\
+示例:
+  # 检查单个文件（相对根目录路径）
+  python check_links.py --zh --file core_products/rtc/zh/android-java/intro.mdx
+  # 检查单个文件（绝对路径）
+  python check_links.py --file /abs/path/to/file.mdx
+  # 检查整个实例
+  python check_links.py --zh --instance rtc-android-java
+  # 同时检查外链
+  python check_links.py --zh --instance rtc-android-java --remote
+  # 无参数进入交互模式
+  python check_links.py
+''')
+    lang_group = parser.add_mutually_exclusive_group()
+    lang_group.add_argument('--zh', action='store_true', help='使用中文配置（默认）')
+    lang_group.add_argument('--en', action='store_true', help='使用英文配置')
+    parser.add_argument('--instance', metavar='ID', help='要检查的实例ID')
+    parser.add_argument('--instance-path', metavar='DIR', dest='instance_path', help='要检查的实例目录路径（相对根目录或绝对路径）')
+    parser.add_argument('--file', metavar='PATH', help='要检查的单个文件路径（相对根目录或绝对路径）')
+    parser.add_argument('--remote', action='store_true', help='同时检查外链（耗时较长）')
+
+    # 有参数时进入非交互模式
+    if len(sys.argv) > 1:
+        args = parser.parse_args()
+        return run_non_interactive(args)
+
+    # 无参数：交互模式
     language = choose_language()
     check_remote = choose_check_remote()
     config, repo_root = load_config(language)
@@ -1397,26 +1560,18 @@ def main():
         sys.exit(1)
     selected_instances = choose_instance(instances, config)
 
-    # 结构化结果：按实例名称 -> 错误类型 -> link_type -> 列表
     structured_results = {}
-    # 额外聚合：按 URL 汇总
     aggregated_by_url = {}
 
-    # 处理选中的实例列表
     for instance in selected_instances:
         instance_path = instance['path']
-        # 确保实例路径是绝对路径
         if not os.path.isabs(instance_path):
             instance_path = os.path.join(repo_root, instance_path)
         instance_label = instance.get("label", "未知实例")
         platform = get_instance_platform(instance, config)
-        if platform:
-            display_name = f"{instance_label} ({platform})"
-        else:
-            display_name = instance_label
+        display_name = f"{instance_label} ({platform})" if platform else instance_label
         print(f'\n正在检查实例: {display_name} ({instance_path})')
 
-        # 跳过外部链接实例
         if instance_path.startswith('http'):
             print(f'跳过外部链接实例: {instance_path}')
             continue
@@ -1425,60 +1580,10 @@ def main():
         print(f'共找到{len(mdx_files)}个mdx文件。')
 
         problems, collected_urls = check_instance_links(mdx_files, config, instance, repo_root, check_remote)
+        _collect_results(problems, collected_urls, display_name, structured_results, aggregated_by_url)
 
-        # 将问题写入结构化结果（按实例名称、错误类型、link_type 归类）与 URL 汇总
-        if display_name not in structured_results:
-            structured_results[display_name] = {}
-        for ptype, items in problems.items():
-            if ptype not in structured_results[display_name]:
-                structured_results[display_name][ptype] = {}
-            for it in items:
-                abs_file = os.path.abspath(it.get('file', ''))
-                line_num = it.get('line', 0)
-                # 构造精简条目（不含 file_path/line/link_type）
-                entry = {
-                    'url': it.get('url', ''),
-                    'line_content': it.get('line_content', ''),
-                    'file_with_line': f"{abs_file}:{line_num}",
-                }
-                if 'error' in it:
-                    entry['error'] = it['error']
-
-                if abs_file not in structured_results[display_name][ptype]:
-                    structured_results[display_name][ptype][abs_file] = []
-                structured_results[display_name][ptype][abs_file].append(entry)
-
-                url_key = entry.get('url')
-                if url_key:
-                    if url_key not in aggregated_by_url:
-                        aggregated_by_url[url_key] = []
-                    aggregated_by_url[url_key].append({
-                        'instance': display_name,
-                        'error_type': ptype,
-                        'file_path': abs_file,
-                        'file_with_line': f"{abs_file}:{line_num}",
-                        'line_content': entry.get('line_content', ''),
-                        **({'error': entry['error']} if 'error' in entry else {})
-                    })
-
-        # 将收集到的 old-doc 等外链（即使不算错误）也纳入 URL 汇总
-        for it in collected_urls:
-            abs_file = os.path.abspath(it.get('file', ''))
-            line_num = it.get('line', 0)
-            url_key = it.get('url', '')
-            if url_key:
-                if url_key not in aggregated_by_url:
-                    aggregated_by_url[url_key] = []
-                aggregated_by_url[url_key].append({
-                    'instance': display_name,
-                    'error_type': 'collected',
-                    'file_path': abs_file,
-                    'file_with_line': f"{abs_file}:{line_num}",
-                    'line_content': it.get('line_content', ''),
-                })
-
-    # 写入结构化结果到 JSON 和 Markdown 文件
-    write_result_files(mode='interactive', structured_results=structured_results, language=language, check_remote=check_remote, aggregated_by_url=aggregated_by_url)
+    write_result_files(mode='interactive', structured_results=structured_results, language=language,
+                       check_remote=check_remote, aggregated_by_url=aggregated_by_url)
 
 def write_result_files(mode, structured_results, language=None, check_remote=None, aggregated_by_url=None):
     """将结果分别写入 JSON 和 Markdown 文件"""
@@ -1521,9 +1626,7 @@ def write_result_files(mode, structured_results, language=None, check_remote=Non
     }
     for url_key, occurrences in aggregated_by_url.items():
         # 检查是否为 import 类型的 URL
-        is_import = any(occ.get('error_type') == 'Import文件路径无效' or
-                       'import' in occ.get('error_type', '').lower()
-                       for occ in occurrences)
+        is_import = any(occ.get('error_type') == 'Import路径无效' for occ in occurrences)
 
         category = categorize_url(url_key)
         is_old_doc = (category == 'external' and is_old_doc_url_any(url_key))
