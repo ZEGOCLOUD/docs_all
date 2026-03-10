@@ -1,0 +1,118 @@
+---
+articleID: 6889
+date: "2024-02-27"
+---
+# Custom Audio Capture and Rendering
+- - -
+
+## Feature Overview
+
+### Custom Audio Capture
+
+It is recommended to use the custom audio capture function in the following situations:
+
+1. Customers need to obtain captured input from existing audio streams, audio files, or customized collection systems, and hand it over to the SDK for transmission.
+2. Customers have their own requirements for special sound effect processing on PCM input sources, and input after sound effect processing for SDK transmission.
+
+### Custom Audio Rendering
+
+When customers have their own rendering requirements, such as special applications or processing on the captured raw PCM data before rendering, it is recommended to use the SDK's custom audio rendering function.
+
+<Warning title="Warning">
+
+
+Audio capture and rendering are divided into 3 situations:
+
+- Internal capture, internal rendering
+- Custom capture, custom rendering
+- Custom capture, internal rendering
+
+When developing on the Linux platform, you must have audio capture and rendering devices (sound cards) to use the SDK's internal capture and internal rendering functions; otherwise, you can only use custom capture and custom rendering. Developers should choose appropriate audio capture and rendering methods according to their own business scenarios.
+
+
+</Warning>
+
+
+
+
+## Usage Steps
+
+The following figure shows the API interface call sequence diagram:
+
+```mermaid
+sequenceDiagram
+    participant ClientApp
+    participant ZEGO Express SDK
+
+    ClientApp->>ZEGO Express SDK: Create engine <br/> [createEngineWithProfile]
+
+    ClientApp->>ZEGO Express SDK: Enable custom audio capture and render <br/> [enableCustomAudioIO]
+
+    ClientApp->>ZEGO Express SDK: Login room <br/> [loginRoom]
+
+    ClientApp->>ZEGO Express SDK: Start publishing stream <br/> [startPublishingStream]
+
+    ClientApp->>ZEGO Express SDK: Capture audio data <br/> [sendCustomAudioCaptureAACData, sendCustomAudioCapturePCMData]
+
+    ClientApp->>ZEGO Express SDK: Start playing stream <br/> [startPlayingStream]
+
+    ClientApp->>ZEGO Express SDK: Render audio data <br/> [fetchCustomAudioRenderPCMData]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/custom_audio_capture_render_android.png" /></Frame>
+*/}
+
+### 1 Initialize SDK
+
+Please refer to "Create Engine" in [Quick Start - Implementation Flow](/real-time-video-linux-cpp/quick-start/implementing-video-call).
+
+### 2 Enable Custom Audio Capture and Rendering
+
+<Warning title="Warning">
+
+
+[enableCustomAudioIO](@enableCustomAudioIO) needs to be called before [startPublishingStream](@startPublishingStream), [startPlayingStream](@startPlayingStream), [startPreview](@startPreview), [createMediaPlayer](@createMediaPlayer), [createAudioEffectPlayer](@createAudioEffectPlayer), and [createRealTimeSequentialDataManager](@createRealTimeSequentialDataManager) to take effect.
+
+
+</Warning>
+
+
+
+You can call [ZegoCustomAudioConfig](@-ZegoCustomAudioConfig) to set `sourceType = ZEGO_AUDIO_SOURCE_TYPE_CUSTOM`, then call the [enableCustomAudioIO](@enableCustomAudioIO) interface to enable custom audio IO function.
+
+Call example:
+
+```cpp
+// Set audio source to custom capture and rendering
+ZegoCustomAudioConfig audioConfig;
+audioConfig.sourceType = ZEGO_AUDIO_SOURCE_TYPE_CUSTOM;
+engine->enableCustomAudioIO(true, &audioConfig);
+```
+
+### 3 Login Room and Publish/Play Stream
+
+Please refer to "Login Room", "Publish Stream", and "Play Stream" in [Quick Start - Implementation Flow](/real-time-video-linux-cpp/quick-start/implementing-video-call).
+
+### 4 Capture Audio Data
+
+Pass the captured audio data to the engine through [sendCustomAudioCaptureAACData](@sendCustomAudioCaptureAACData) or [sendCustomAudioCapturePCMData](@sendCustomAudioCapturePCMData).
+
+### 5 Render Audio Data
+
+Use [fetchCustomAudioRenderPCMData](@fetchCustomAudioRenderPCMData) to obtain audio data from the engine, and then play it through the rendering device after obtaining the audio data.
+
+## FAQ
+
+1. **When to call custom audio capture and rendering related interfaces?**
+
+    - [enableCustomAudioIO](@enableCustomAudioIO): Should be called before the engine starts, that is, before starting preview, publishing and playing streams.
+    - [sendCustomAudioCaptureAACData](@sendCustomAudioCaptureAACData)/[sendCustomAudioCapturePCMData](@sendCustomAudioCapturePCMData): Should be called after starting preview and publishing stream. If called before starting preview and publishing stream, the SDK will directly discard the received data.
+    - [fetchCustomAudioRenderPCMData](@fetchCustomAudioRenderPCMData): Should be called after starting playing stream. Data obtained before starting playing stream is invalid mute data.
+
+2. **Frequency of calling custom audio capture and rendering related interfaces?**
+
+    The optimal way is to drive according to the clock of the physical audio device, calling [sendCustomAudioCaptureAACData](@sendCustomAudioCaptureAACData) and [sendCustomAudioCapturePCMData](@sendCustomAudioCapturePCMData) when the physical capture device captures data; calling [fetchCustomAudioRenderPCMData](@fetchCustomAudioRenderPCMData) when the physical rendering device needs data. If there is no specific physical device to drive in the actual scenario, it is recommended to call the above interfaces once every 10 ~ 20 ms.
+
+3. **When calling [fetchCustomAudioRenderPCMData](@fetchCustomAudioRenderPCMData), if the data inside the SDK is less than `dataLength`, how does the SDK handle it?**
+
+    Under the condition that `param` is filled normally, when the data inside the SDK is less than `dataLength`, the remaining insufficient length will be filled with mute data.

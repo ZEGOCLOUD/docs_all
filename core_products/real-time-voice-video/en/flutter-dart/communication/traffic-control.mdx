@@ -1,0 +1,62 @@
+# Traffic Control
+
+---
+
+## Overview
+
+Traffic control refers to the SDK dynamically adjusting the bitrate, frame rate, and resolution of video streams, as well as audio bitrate, based on the current network status of the local and remote ends, to automatically adapt to the current network environment and fluctuations, thereby ensuring smooth audio and video publishing.
+
+The principle of traffic control is to model the user's network environment based on current network conditions and estimate the uplink bandwidth. If the current uplink bandwidth is less than the set publishing bitrate, the SDK will progressively reduce the video bitrate, resolution, frame rate, and audio bitrate through configured options to reduce the final uplink bitrate of the published stream, ensuring smooth live streaming. When the network environment returns to normal, the uplink bitrate will also recover to the initial set value.
+
+Only in 1v1 streaming scenarios, the SDK will automatically enable downlink traffic control. The playing end notifies the publishing end of its network status, and the publishing end estimates its own uplink bandwidth and the playing end's downlink bandwidth, adjusting its own uplink bitrate by taking the minimum value of the uplink and downlink bandwidth estimates to ensure smooth co-hosting.
+
+
+
+## Prerequisites
+
+Before implementing traffic control, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and obtained a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated the ZEGO Express SDK into your project and implemented basic audio and video publishing and playing functions. For details, please refer to [Quick Start - Integration](/real-time-video-flutter/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-flutter/quick-start/implementing-video-call).
+
+
+## Usage Steps
+
+### 1 Enable traffic control
+
+Before publishing stream, call the [enableTrafficControl](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/enableTrafficControl.html) interface, enable traffic control through the `enable` parameter, and set adjustable traffic control properties (bitrate, frame rate, resolution) through the `property` parameter. Multiple options are supported. The default value is `AdaptiveFPS`, which means adaptive (reducing) video frame rate.
+
+<Warning title="Caution">
+
+- When uplink bandwidth is insufficient, the SDK will automatically adjust the set properties to adapt to the uplink bandwidth based on the current network environment.
+* Usage limitation: Only supports RTC publishing.
+* When traffic control is disabled, the set traffic control properties `property` will also become invalid.
+* When the traffic control properties include adaptive (reducing) video resolution `AdaptiveResolution`, only initial resolutions with "16:9" or "4:3" aspect ratios are supported. If the initial resolution is other values, adaptive (reducing) video resolution will not take effect, and the SDK will directly reduce the encoding bitrate. If local media recording is required during traffic control, adaptive (reducing) video resolution will affect "MP4" format file recording. In this case, the format needs to be changed to "FLV". For details, please refer to [Audio and Video Recording](/real-time-video-flutter/other/local-media-recording).
+
+</Warning>
+
+
+
+In different scenarios, traffic control property settings are different. The SDK will automatically set traffic control properties suitable for the scenario based on the scenario selected by the developer. For example, show live streaming scenarios need to ensure video smoothness, so adaptive (reducing) video resolution is recommended; education scenarios need to ensure clarity, so adaptive (reducing) video frame rate is recommended. For details, please refer to the [Scenario-based Audio and Video Configuration](/real-time-video-flutter/quick-start/scenario-based-audio-video-configuration) document.
+
+```dart
+// Enable traffic control and enable both adaptive (reducing) video resolution and adaptive (reducing) video frame rate
+ZegoExpressEngine.instance.enableTrafficControl(true, ZegoTrafficControlProperty.AdaptiveResolution | ZegoTrafficControlProperty.AdaptiveFPS);
+```
+
+### 3 Set minimum video bitrate for traffic control (can be skipped for audio-only scenarios)
+
+After enabling traffic control, call the [setMinVideoBitrateForTrafficControl](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/setMinVideoBitrateForTrafficControl.html) method to set the minimum video bitrate (default value is "0"). This allows the SDK to adopt the video sending mode set by this method (not sending video or sending at an extremely low frame rate) when the network does not reach the minimum bitrate for sending video.
+
+<Warning title="Caution">
+
+You can call [setMinVideoBitrateForTrafficControl](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/setMinVideoBitrateForTrafficControl.html) at any time after initializing the SDK and before starting to publish stream [startPublishingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPublishingStream.html), but this setting will only take effect after traffic control is enabled.
+
+</Warning>
+
+
+
+```dart
+// After enabling traffic control, when the uplink/downlink bandwidth is lower than 200 kbps, continue sending video data at an extremely low frame rate
+ZegoExpressEngine.instance.setMinVideoBitrateForTrafficControl(200, ZegoTrafficControlMinVideoBitrateMode.UltraLowFPS);
+```

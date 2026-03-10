@@ -1,0 +1,455 @@
+---
+articleID: 10910
+date: '2026-03-05'
+---
+# Stream Quality Monitoring
+
+- - -
+
+## Overview
+
+When using ZEGOCLOUD Express SDK for calls, users may experience poor network conditions. You can use the relevant callbacks to understand the current network quality and audio/video information changes during the call.
+
+For example, in multi-person audio/video calls or multi-person singing scenarios, you may need to display user network quality in real-time. You can refer to this document to implement the corresponding functionality.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Call_quality_monitoring.png" /></Frame>
+
+
+
+## Sample Source Code
+
+Please refer to [Download Sample Source Code](/real-time-video-flutter/quick-start/run-example-code) to get the source code.
+
+For related source code, please check files in the "lib\topics\StreamAdvanced\stream_monitoring" directory.
+
+## Prerequisites
+
+Before monitoring call quality, make sure:
+
+- ZEGOCLOUD Express SDK has been integrated in your project, and basic real-time audio/video functionality has been implemented. For details, please refer to [Quick Start - Integration](/real-time-video-flutter/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-flutter/quick-start/implementing-video-call).
+- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com), and valid AppID and AppSign have been obtained. For details, please refer to [Console - Project Information](/console/project-info).
+
+## Basic Network Quality Report
+
+You can monitor the [onNetworkQuality](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onNetworkQuality.html) callback to receive the upstream and downstream network quality of users in the room (including yourself). This callback is received every two seconds. For network quality levels, please refer to [ZegoStreamQualityLevel](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoStreamQualityLevel.html).
+
+The callback logic varies by version:
+
+<table>
+
+<tbody><tr>
+<th>Version</th>
+<th>Callback Logic</th>
+</tr>
+<tr>
+<td>2.22.0 and above</td>
+<td>Based on the onNetworkQuality callback logic from version 2.14.0 to 2.21.1, it can also predict the network conditions of remote publishing users. If a remote publishing user's heartbeat is lost once, their network quality callback will be "unknown"; if the heartbeat is lost 3 times, their network quality callback will be "die".</td>
+</tr>
+<tr>
+<td>2.14.0 to 2.21.1</td>
+<td>
+* You will receive your own network quality callback as long as you publish or play a stream.
+* You will receive other users' network quality callbacks only when you are playing their audio/video streams and they are in your room.
+* When "userID" is "" (empty string), it represents your own network quality; when "userID" is not "" (empty string), it represents other users in the room.
+</td>
+</tr>
+<tr>
+<td>2.10.0 to 2.13.1</td>
+<td>
+* You must both publish and play streams to receive your own network quality callback.
+* When you play a stream, the user publishing that stream must be in the same room and also playing a stream for you to receive that user's network quality callback.
+* When "userID" is "" (empty string), it represents your own network quality; when "userID" is not "" (empty string), it represents other users in the room.
+</td>
+</tr>
+</tbody></table>
+
+<Warning title="Warning">
+
+
+
+* [onNetworkQuality](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onNetworkQuality.html) is not applicable for live streaming with CDN. You can refer to [Advanced Quality Report - Publish Stream Quality Report](/real-time-video-flutter/communication/monitor-stream-quality) to monitor CDN publishing quality.
+* Web does not currently support the [onNetworkQuality](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onNetworkQuality.html) interface.
+
+</Warning>
+
+
+
+
+```dart
+ZegoExpressEngine.onNetworkQuality = (String userID, ZegoStreamQualityLevel upstreamQuality, ZegoStreamQualityLevel downstreamQuality) {
+    if (userID.isEmpty) {
+        // Represents local user's (local side) network quality
+        // ("My upstream network quality is $upstreamQuality");
+        // ("My downstream network quality is $downstreamQuality");
+    } else {
+        // Represents other users' network quality in the room
+        //("User $userID's upstream network quality is $upstreamQuality");
+        //("User $userID's downstream network quality is $downstreamQuality");
+    }
+
+    /*
+    ZegoStreamQualityLevel.Excellent, Excellent network quality
+    ZegoStreamQualityLevel.Good, Good network quality
+    ZegoStreamQualityLevel.Medium, Medium network quality
+    ZegoStreamQualityLevel.Bad, Poor network quality
+    ZegoStreamQualityLevel.Die, Network abnormal
+    ZegoStreamQualityLevel.Unknown, Unknown network quality
+    */
+};
+```
+
+
+## Advanced Quality Report
+
+If the above basic network quality report cannot meet your needs, ZEGOCLOUD also provides more detailed publishing stream quality reports, playing stream quality reports, and other related information for your reference.
+
+### Publishing Stream Quality Report
+
+The publishing stream quality report describes the quality of the process where users push audio/video to the ZEGOCLOUD server, including the frame rate of the audio/video stream during the capture and encoding stages, and the frame rate, bitrate, latency, and packet loss rate during transmission (sending).
+
+You can register for [onPublisherQualityUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPublisherQualityUpdate.html) to receive publishing stream quality callbacks. After successfully publishing a stream, this callback will be received every three seconds. You can use the quality parameter ([ZegoPublishStreamQuality](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoPublishStreamQuality-class.html)) to understand the health status of the published audio/video stream in real-time.
+
+- In most cases, you only need to pay attention to the "level" parameter of "quality" and use the "level" enumeration value to determine the overall quality of the published stream. For details, please refer to [ZegoStreamQualityLevel](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoStreamQualityLevel.html).
+- If you want to pay attention to more detailed publishing stream quality parameters, please refer to [ZegoPublishStreamQuality](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoPublishStreamQuality-class.html).
+
+
+```dart
+// Developers can monitor specific quality in this callback and report to the business server for monitoring, or monitor specific fields of the quality object to provide user-friendly prompts
+ZegoExpressEngine.onPublisherQualityUpdate = (String streamID, ZegoPublishStreamQuality quality) {
+    String networkQuality = "";
+    // level represents the comprehensive score of publishing stream quality. In most cases, developers can refer to this score to display upstream network quality
+
+    switch (quality.level) {
+        case ZegoStreamQualityLevel.Excellent:
+           networkQuality = "Excellent";
+           break;
+        case ZegoStreamQualityLevel.Good:
+           networkQuality = "Good";
+           break;
+        case ZegoStreamQualityLevel.Medium:
+           networkQuality = "Medium";
+           break;
+        case ZegoStreamQualityLevel.Bad:
+           networkQuality = "Poor";
+           break;
+        case ZegoStreamQualityLevel.Die:
+           networkQuality = "Failed";
+           break;
+        case ZegoStreamQualityLevel.Unknown:
+           networkQuality = "Unknown";
+           break;
+        default:
+           break;
+    }
+    //("Network quality is: $networkQuality");
+};
+```
+
+### Playing Stream Quality Report
+
+The playing stream quality report describes the quality of the process where users play audio/video streams, including the frame rate, bitrate, latency, and packet loss rate of the received audio/video stream, the frame rate during the decoding stage, and the frame rate, freeze rate, and overall audio/video quality during the rendering stage.
+
+You can register for [onPlayerQualityUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPlayerQualityUpdate.html) to receive playing stream quality callbacks. After successfully playing a stream, this callback will be received every three seconds. You can use the quality parameter ([ZegoPlayStreamQuality](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoPlayStreamQuality-class.html)) to understand the health status of the played audio/video stream in real-time.
+
+- In most cases, you only need to pay attention to the "level" parameter of "quality" and use the "level" enumeration value to determine the overall quality of the played stream. For details, please refer to [ZegoStreamQualityLevel](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoStreamQualityLevel.html).
+- If you want to pay attention to more detailed playing stream quality parameters, please refer to [ZegoPlayStreamQuality](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoPlayStreamQuality-class.html).
+
+
+```java
+// Developers can monitor specific quality in this callback and report to the business server for monitoring, or monitor specific fields of the quality object to provide user-friendly prompts
+ZegoExpressEngine.onPlayerQualityUpdate = (String streamID, ZegoPlayStreamQuality quality) {
+    String networkQuality = "";
+    // level represents the comprehensive score of playing stream quality. In most cases, developers can refer to this score to display downstream network quality
+
+    switch (quality.level) {
+        case ZegoStreamQualityLevel.Excellent:
+           networkQuality = "Excellent";
+           break;
+        case ZegoStreamQualityLevel.Good:
+           networkQuality = "Good";
+           break;
+        case ZegoStreamQualityLevel.Medium:
+           networkQuality = "Medium";
+           break;
+        case ZegoStreamQualityLevel.Bad:
+           networkQuality = "Poor";
+           break;
+        case ZegoStreamQualityLevel.Die:
+           networkQuality = "Failed";
+           break;
+        case ZegoStreamQualityLevel.Unknown:
+           networkQuality = "Unknown";
+           break;
+        default:
+           break;
+    }
+    //("Network quality is: %s", networkQuality);
+};
+```
+
+## MOS Audio Quality Score
+
+Starting from ZEGOCLOUD Express SDK version 2.16.0, the playing stream quality callback [onPlayerQualityUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPlayerQualityUpdate.html) includes a new "mos" field, representing the score of the played stream's audio quality. Developers who are concerned about audio quality can use this field to understand the current audio quality status.
+
+The "mos" field value ranges from [-1, 5], where -1 means unknown (for example, when scoring is not possible due to abnormal stream playing), and [0, 5] represents the normal scoring range. The subjective audio quality perception corresponding to real-time audio MOS scoring is as follows:
+
+<table>
+
+<tbody><tr>
+<th>MOS Value</th>
+<th>Evaluation Criteria</th>
+</tr>
+<tr>
+<td>4.0 - 5.0</td>
+<td>Excellent audio quality, clear and smooth, easy to hear.</td>
+</tr>
+<tr>
+<td>3.5 - 4.0</td>
+<td>Good audio quality, occasional audio quality damage, but still clear and smooth, easy to hear.</td>
+</tr>
+<tr>
+<td>3.0 - 3.5</td>
+<td>Fair audio quality, occasional freezes, requires some attention to hear clearly.</td>
+</tr>
+<tr>
+<td>2.5 - 3.0</td>
+<td>Poor audio quality, frequent freezes, requires focused attention to hear clearly.</td>
+</tr>
+<tr>
+<td>2.0 - 2.5</td>
+<td>Very poor audio quality, some semantic loss, difficult to communicate.</td>
+</tr>
+<tr>
+<td>0 - 2.0</td>
+<td>Extremely poor audio quality, massive semantic loss, unable to communicate.</td>
+</tr>
+<tr>
+<td>-1</td>
+<td>Unknown.</td>
+</tr>
+</tbody></table>
+
+
+## Other Information Monitoring
+
+### Publish/Play Stream Status Change Notification
+
+**Publishing Stream Status Callback**
+
+After successfully publishing a stream, you can use [onPublisherStateUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPublisherStateUpdate.html) to receive notifications of publishing stream status changes.
+
+```dart
+ZegoExpressEngine.onPublisherStateUpdate = (String streamID, ZegoPublisherState state, int errorCode, Map<String, dynamic> extendedData) {
+    // When state is ZegoPublisherState.NoPublish and errorCode is non-zero, it indicates publishing stream failure, and no more retries will be made. At this point, you can display a publishing stream failure prompt on the interface
+    // When state is ZegoPublisherState.PublishRequesting and errorCode is non-zero, it indicates retrying to publish stream. If the stream is not successfully published within the retry time, a publishing stream failure notification will be thrown
+};
+```
+
+You can roughly judge the user's publishing network situation based on whether the "state" parameter in the callback is in "requesting publish stream status". The values of the "state" parameter correspond to the user's publishing stream status as follows:
+
+<table>
+
+<tbody><tr>
+<th>Enumeration Value</th>
+<th>Description</th>
+</tr>
+<tr>
+<td>ZegoPublisherState.NoPublish</td>
+<td>Not publishing stream status, in this state before publishing stream. If a steady-state abnormality occurs during the publishing process, such as incorrect AppID, AppSign, or Token, or another user is already publishing a stream with the same stream ID, the publishing will fail and enter the not publishing stream status.</td>
+</tr>
+<tr>
+<td>ZegoPublisherState.PublishRequesting</td>
+<td>Requesting publish stream status. After the publish stream operation is successfully executed, it will enter the requesting publish stream status, usually this status is used for UI interface display. If an interruption occurs due to poor network quality, the SDK will perform internal retries and return to the requesting publish stream status.</td>
+</tr>
+<tr>
+<td>ZegoPublisherState.Publishing</td>
+<td>Publishing stream status. Entering this status indicates that the stream has been successfully published and users can communicate normally.</td>
+</tr>
+</tbody></table>
+
+The parameter "extendedData" is the extended information attached to the status update. If using ZEGOCLOUD's CDN content distribution network, after successfully publishing the stream, the content of this parameter includes keys "flv_url_list", "rtmp_url_list", "hls_url_list", corresponding to the playing URLs for FLV, RTMP, and HLS protocols respectively.
+
+**Playing Stream Status Change Callback**
+
+After successfully playing a stream, developers can use [onPlayerStateUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPlayerStateUpdate.html) to receive notifications of playing stream status changes.
+
+```dart
+ZegoExpressEngine.onPlayerStateUpdate = (String streamID, ZegoPlayerState state, int errorCode, Map<String, dynamic>extendedData) {
+    // When state is ZegoPlayerState.NoPlay and errorCode is non-zero, it indicates playing stream failure, and no more retries will be made. At this point, you can display a playing stream failure prompt on the interface
+    // When state is ZegoPlayerState.PlayRequesting and errorCode is non-zero, it indicates retrying to play stream. If the stream is not successfully played within the retry time, a playing stream failure notification will be thrown
+};
+```
+
+Developers can roughly judge the user's playing network situation based on whether the "state" parameter is in "requesting play stream status". The values of the "state" parameter correspond to the user's playing stream status as follows:
+
+<table>
+
+<tbody><tr>
+<th>Enumeration Value</th>
+<th>Description</th>
+</tr>
+<tr>
+<td>ZegoPlayerState.NoPlay</td>
+<td>Not playing stream status, in this state before playing stream. If a steady-state abnormality occurs during the playing process, such as incorrect AppID, AppSign, or Token, it will enter the not playing stream status.</td>
+</tr>
+<tr>
+<td>ZegoPlayerState.PlayRequesting</td>
+<td>Requesting play stream status. After the play stream operation is successfully executed, it will enter the requesting play stream status, usually this status is used for application interface display. If an interruption occurs due to poor network quality, the SDK will perform internal retries and return to the requesting play stream status.</td>
+</tr>
+<tr>
+<td>ZegoPlayerState.Playing</td>
+<td>Playing stream status. Entering this status indicates that the stream has been successfully played and users can communicate normally.</td>
+</tr>
+</tbody></table>
+
+### Notification of Receiving Audio/Video First Frame
+
+**Publishing Side Audio Capture First Frame Callback**
+
+You can register for [onPublisherCapturedAudioFirstFrame](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPublisherCapturedAudioFirstFrame.html) to receive the audio first frame callback. After successfully calling the publish stream interface, this callback will be received when the SDK captures the first frame of audio data.
+
+<Note title="Note">
+
+
+- When not publishing or previewing, on first publish or first preview (when the SDK's internal audio/video module engine starts), the SDK will capture the local device's audio data, and this callback will be received. Developers can use this callback to determine whether the SDK has actually captured audio data. If this callback is not received, it means the audio capture device is occupied or abnormal.
+- Web does not currently support the `onPublisherCapturedAudioFirstFrame` interface.
+
+</Note>
+
+
+
+```dart
+ZegoExpressEngine.onPublisherCapturedAudioFirstFrame = () {
+};
+```
+
+**Publishing Side Video Capture First Frame Callback**
+
+You can register for [onPublisherCapturedVideoFirstFrame](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPublisherCapturedVideoFirstFrame.html) to receive the video first frame callback. After successfully calling the publish stream interface, this callback will be received when the SDK captures the first frame of video data.
+
+<Note title="Note">
+
+
+- If the published stream only has audio data, this callback will not be received.
+- When not publishing or previewing, on first publish or first preview (when the SDK's internal audio/video module engine starts), the SDK will capture the local device's video data, and this callback will be received. You can use this callback to determine whether the SDK has actually captured video data. If this callback is not received, it means the video capture device is occupied or abnormal.
+- Web does not currently support the `onPublisherCapturedAudioFirstFrame` interface.
+
+</Note>
+
+
+
+
+```dart
+ZegoExpressEngine.onPublisherCapturedVideoFirstFrame = (ZegoPublishChannel channel) {
+};
+```
+
+**Playing Side Audio Receive First Frame Callback**
+
+Developers can register for [onPlayerRecvAudioFirstFrame](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPlayerRecvAudioFirstFrame.html) to monitor the playing side's audio receive first frame callback. After successfully calling the play stream interface, this callback will be received when the SDK plays the first frame of audio data.
+
+<Warning title="Warning">
+
+- Web does not currently support the `onPlayerRecvAudioFirstFrame` interface.
+
+</Warning>
+
+
+
+```dart
+ZegoExpressEngine.onPlayerRecvAudioFirstFrame = (String streamID) {
+    print("onPlayerRecvAudioFirstFrame streamID:$streamID");
+};
+```
+
+**Playing Side Video Receive First Frame Callback**
+
+You can register for [onPlayerRecvVideoFirstFrame](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPlayerRecvVideoFirstFrame.html) to monitor the playing side's video receive first frame callback. After successfully calling the play stream interface, this callback will be received when the SDK plays the first frame of video data.
+
+<Note title="Note">
+
+
+
+- If the played stream only has audio data, this callback will not be received.
+- Web does not currently support the `onPlayerRecvVideoFirstFrame` interface.
+
+</Note>
+
+
+
+
+
+```dart
+ZegoExpressEngine.onPlayerRecvVideoFirstFrame = (String streamID) {
+};
+```
+
+**Playing Side Rendered Video First Frame Callback**
+
+You can register for [onPlayerRenderVideoFirstFrame](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPlayerRenderVideoFirstFrame.html) to monitor the playing side's rendered video first frame callback. After successfully calling the play stream interface, this callback will be received when the SDK plays and renders the first frame of video data.
+
+<Note title="Note">
+
+
+- If the played stream only has audio data, this callback will not be received.
+- You can use this callback to track first frame rendering time or update the playing stream's UI components.
+- Web does not currently support the `onPlayerRenderVideoFirstFrame` interface.
+
+
+</Note>
+
+
+
+```dart
+ZegoExpressEngine.onPlayerRenderVideoFirstFrame = (String streamID) {
+};
+```
+
+### Video Resolution Change Callback
+
+**Capture Video Resolution Change Callback**
+
+You can register for [onPublisherVideoSizeChanged](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPublisherVideoSizeChanged.html) to monitor the capture video size change callback. After successfully publishing a stream, if the video capture resolution changes during publishing, this callback will be received.
+
+<Note title="Note">
+
+
+- If the published stream only has audio data, this callback will not be received.
+- When not publishing or previewing, on first publish or first preview (when the SDK's internal audio/video module engine starts), the SDK will capture the local device's video data, at which point the capture resolution will change.
+- You can use this callback to remove UI overlay masks for local preview, or dynamically adjust preview view proportions based on the callback's resolution.
+
+</Note>
+
+
+
+```dart
+ZegoExpressEngine.onPublisherVideoSizeChanged = (int width, int height, ZegoPublishChannel channel) {
+};
+```
+
+**Playing Resolution Change Notification**
+
+You can register for [onPlayerVideoSizeChanged](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onPlayerVideoSizeChanged.html) to receive playing resolution change notifications. After successfully playing a stream, if the video resolution changes during playing, this callback will be received. Users can adjust the display based on the stream's final resolution.
+
+<Note title="Note">
+
+
+- If the played stream only has audio data, this callback will not be received.
+- If the publishing side triggers the SDK's internal traffic control due to network issues, it may dynamically reduce the encoding resolution of the publishing side, in which case this callback will also be received.
+- This callback is triggered when the played audio/video stream is actually rendered to the set UI playing interface. Developers can use this callback notification to update or switch the UI components that actually play the stream.
+</Note>
+
+
+
+
+```dart
+ZegoExpressEngine.onPlayerVideoSizeChanged = (String streamID, int width, int height) {
+};
+```
+
+
+## Related Documentation
+
+- [How to handle video freezing issues?](/faq/video-freeze-issue)
+- [How to handle audio freezing issues?](/faq/audio-stutter)
+- [How to understand and use SEI (Supplemental Enhancement Information)?](/faq/media-sei-usage?product=ExpressVideo&platform=all)

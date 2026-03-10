@@ -1,0 +1,280 @@
+---
+articleID: 8851
+date: "2025-05-07"
+---
+
+# Multi-Stream Mixing
+
+
+## Overview
+
+Stream mixing is a technology that mixes multiple audio and video streams into a single stream from the cloud.
+
+### Advantages of Stream Mixing
+
+- Reduces development complexity. For example, when N hosts conduct co-hosting, if stream mixing is used, the audience side does not need to play N video streams at the same time, saving the steps of playing N streams and layout in development implementation.
+- Lowers device performance requirements, reducing device performance overhead and network bandwidth burden. For example, when there are too many co-hosting parties, the audience side needs to play N video streams, requiring device hardware to support playing N streams simultaneously.
+- Simple to implement relay to multiple CDNs, just need to add output streams as needed when configuring stream mixing.
+- When the audience side needs to replay multi-host co-hosting videos, only need to enable recording configuration on the CDN.
+- For content moderation, only need to observe one screen, no need to view multiple screens at the same time.
+
+### Common Use Scenarios for Stream Mixing
+
+- Use stream mixing when the device does not support playing N streams simultaneously.
+- Use stream mixing when multiple video screens need to be synthesized into one video, such as education scenarios, live streaming of teacher and student screens.
+
+### Stream Mixing Usage Instructions
+
+The SDK supports both audio and video stream mixing and pure audio stream mixing.
+
+Developers start stream mixing after successfully playing/publishing streams. For example, after Host A and Audience B successfully co-host and Host A successfully plays Audience B's screen, Host A's stream and Audience B's stream are mixed. You can also perform stream mixing at other appropriate times according to requirements.
+
+### Stream Mixing System Architecture Diagram
+
+When using the stream mixing function, the SDK pushes streams to the ZEGO server, and the ZEGO server mixes the specified streams into one stream and then pushes it to the CDN. The audience plays the mixed stream from the CDN.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/Mixer/mixer-structure.png" /></Frame>
+
+## Prerequisites
+
+Before stream mixing, ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK into the project and implemented basic audio and video streaming functionality. For details, please refer to [Quick Start - Integration](/real-time-video-rn/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-rn/quick-start/implementing-video-call).
+
+<Warning title="Warning">
+The stream mixing function is not enabled by default. Please enable it yourself in the [ZEGOCLOUD Console](https://console.zegocloud.com) before use (for enabling steps, please refer to "Stream Mixing" in [Project Management - Service Configuration](/console/service-configuration/enable-stream-mixing-service)), or contact ZEGOCLOUD Technical Support to enable it.
+</Warning>
+
+
+
+## Usage Steps
+
+<Warning title="Warning">
+There must be existing streams in the room before stream mixing.
+The device initiating stream mixing can mix streams pushed by other existing devices in the room without pushing streams itself, or can push streams itself and then mix its own pushed streams.
+</Warning>
+
+
+
+### Set Stream Mixing Configuration
+
+[ZegoMixerTask](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegomixertask.html) is a stream mixing task configuration object defined in the SDK, which contains information such as input stream layout and output stream.
+
+- Stream mixing configuration class prototype:
+
+    ```javascript
+    export class ZegoMixerTask {
+        // Stream mixing task ID
+        taskID: string
+        // Input stream list of the stream mixing task object (required)
+        inputList: ZegoMixerInput[]
+        // Output list of the stream mixing task object (required)
+        outputList: ZegoMixerOutput[]
+        // Video configuration of the stream mixing task object (optional, if there are requirements for video screen layout, must explicitly fill in the output resolution)
+        videoConfig: ZegoMixerVideoConfig
+        // Audio configuration of the stream mixing task object (optional)
+        audioConfig: ZegoMixerAudioConfig
+        // Whether to enable sound level information of each input stream carried in the stream mixing
+        enableSoundLevel: boolean
+
+        // Construct a stream mixing task object through TaskID
+        constructor(taskID: string) {
+            this.taskID = taskID
+            this.inputList = []
+            this.outputList = []
+            this.audioConfig = {bitrate: 48, channel: ZegoAudioChannel.Mono, codecID: ZegoAudioCodecID.Normal}
+            this.videoConfig = {width: 360, height: 640, fps: 15, bitrate: 600}
+            this.enableSoundLevel = false
+        }
+    }
+    ```
+
+#### Create Stream Mixing Task Object
+
+Create a new stream mixing task object [ZegoMixerTask](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegomixertask.html), and then set input, output and other parameters respectively.
+
+```javascript
+const task = new ZegoMixerTask("MY_TASK_ID");
+```
+
+#### (Optional) Set Stream Mixing Video Configuration
+
+<Note title="Note">
+The operations in this section only apply to audio and video scenarios. No need to set in pure audio scenarios.
+</Note>
+
+
+
+Developers can call the [ZegoMixerVideoConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegomixervideoconfig.html) method to configure the video parameters (frame rate, bitrate, resolution) of the stream mixing task.
+
+The default configurations for video frame rate, bitrate, and resolution are 15 fps, 600 kbps, and 360p respectively.
+
+```javascript
+task.videoConfig = {width: 360, height: 640, fps: 15, bitrate: 600}
+```
+
+#### (Optional) Set Stream Mixing Audio Configuration
+
+Developers can call the [ZegoMixerAudioConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegomixeraudioconfig.html) method to configure the audio bitrate, number of audio channels, and audio encoding of the stream mixing task.
+
+The default value for audio bitrate is 48 kbps.
+
+```javascript
+task.audioConfig = {bitrate: 48, channel: ZegoAudioChannel.Mono, codecID: ZegoAudioCodecID.Normal}
+```
+
+#### Set Stream Mixing Input Streams
+
+Supports up to 9 input streams by default. If you need to input more streams, please contact ZEGOCLOUD Technical Support to confirm and configure.
+
+<Warning title="Warning">
+When the mixed stream is an audio stream (that is, the "contentType" parameter is set to audio mixing type), the SDK does not process the layout field internally. At this time, there is no need to pay attention to the "layout" parameter.
+</Warning>
+
+
+
+The following code takes mixing two streams with top-bottom layout as an example:
+
+```javascript
+
+task.inputList.push({"streamID": "stream-1", "contentType": ZegoMixerInputContentType.Video, "layout": {"x": 0, "y": 0, "width": task.videoConfig.width, "height": task.videoConfig.height/2}})
+
+task.inputList.push({"streamID": "stream-2", "contentType": ZegoMixerInputContentType.Video, "layout": {"x": 0, "y": task.videoConfig.height / 2, "width": task.videoConfig.width, "height": task.videoConfig.height/2}})
+
+```
+
+#### Set Stream Mixing Output
+
+Up to 3 stream mixing outputs can be set. When the output target is in URL format, currently only RTMP URL format is supported: rtmp://xxxxxxxx, and two identical stream mixing output addresses cannot be passed in.
+
+The following code takes output to ZEGO server with stream name "output-stream" as an example:
+
+```javascript
+task.outputList = [{"target": "output-stream"}]
+```
+
+### Start Stream Mixing Task
+
+After completing the configuration of the [ZegoMixerTask](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegomixertask.html) stream mixing task object, call the [startMixerTask](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startmixertask) interface to start this stream mixing task, and handle the logic of failing to start the stream mixing task in the asynchronous result return.
+
+<Warning title="Warning">
+If you need to play stream mixing CDN resources on the Web, when using CDN recording, please select AAC-LC for audio encoding. Since some browsers (such as Google Chrome and Microsoft Edge) are incompatible with HE-AAC audio encoding format, it will cause the recorded file to be unable to play.
+</Warning>
+
+
+
+
+- Interface prototype:
+
+    ```javascript
+    // Start stream mixing task
+    // @param task Task with configured stream mixing parameters
+    startMixerTask(task: ZegoMixerTask): Promise<ZegoMixerStartResult>;
+    ```
+
+- Call example:
+
+    ```javascript
+    ZegoExpressEngine.instance().startMixerTask(task).then((result) => {
+        if (result.errorCode == 0) {
+            console.log("Start mixer task success");
+        } else {
+            console.log("Start mixer task fail");
+        }
+    }];
+    ```
+
+### Update Stream Mixing Task Configuration
+
+When stream mixing information changes (for example, the input stream list of stream mixing increases or decreases, adjust stream mixing video output bitrate, etc., modify the parameters of this stream mixing task object), and then call the [startMixerTask ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startmixertask) interface once again to update the configuration.
+
+<Warning title="Warning">
+When updating stream mixing task configuration, "taskID" cannot be changed.
+</Warning>
+
+The following code takes adding an input stream during stream mixing task with top-middle-bottom layout as an example:
+
+```javascript
+
+// First clear the original input stream array
+task.inputList = []
+
+// Reset the input stream list of the previously saved stream mixing object
+task.inputList.push({"streamID": "stream-1", "contentType": ZegoMixerInputContentType.Video, "layout": {"x": 0, "y": 0, "width": task.videoConfig.width, "height": task.videoConfig.height/3}})
+
+task.inputList.push({"streamID": "stream-2", "contentType": ZegoMixerInputContentType.Video, "layout": {"x": 0, "y": task.videoConfig.height / 3, "width": task.videoConfig.width, "height": task.videoConfig.height/3}})
+
+task.inputList.push({"streamID": "stream-3", "contentType": ZegoMixerInputContentType.Video, "layout": {"x": 0, "y": task.videoConfig.height * (2/3), "width": task.videoConfig.width, "height": task.videoConfig.height/3}})
+
+
+// Call the start stream mixing task interface once again to update stream mixing configuration
+ZegoExpressEngine.instance().startMixerTask(task).then((result) => {
+    if (result.errorCode == 0) {
+        console.log("Start mixer task success");
+    } else {
+        console.log("Start mixer task fail");
+    }
+}];
+```
+
+### Stop Stream Mixing
+
+Call the [stopMixerTask ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#stopmixertask) interface to stop stream mixing.
+
+- Interface prototype:
+
+    ```javascript
+    // Stop stream mixing task
+    // @param task Saved stream mixing task
+    stopMixerTask(task: ZegoMixerTask): Promise<ZegoMixerStopResult>;
+    ```
+
+- Call example:
+
+    ```objc
+    // Pass in the task that is mixing to stop this stream mixing task
+    ZegoExpressEngine.instance().stopMixerTask(task);
+    ```
+
+
+## FAQ
+
+**1. Can I push the mixed stream to a third-party CDN? How to relay to multiple CDNs?**
+
+If you need to push the mixed stream to a third-party CDN, you can fill in the CDN URL in the "target" parameter of [ZegoMixerOutput ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegomixeroutput.html). The filled URL format needs to be RTMP format, such as "rtmp://xxxxxxxx".
+
+To relay to multiple CDNs, create N output stream objects [ZegoMixerOutput ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/modules/_index_.html#zegomixeroutput) and put them in the "outputList" output list in "ZegoMixerTask".
+
+**2. How to set the layout of each stream in stream mixing?**
+
+Usage example of the "layout" parameter of [ZegoMixerInput ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegomixerinput.html):
+
+1. Assume that the top-left corner coordinates of a certain stream are specified as (50, 300) and the bottom-right corner coordinates are (200, 450), that is, the "layout" parameter is `{"x": 50, "y": 300, "width": 200 - 50, "height": 450 - 300}`.
+2. Assume that the resolution "width" and "height" in the "videoConfig" parameter of ZegoMixerTask are (375, 667) respectively.
+
+Then the position of this stream in the final output mixed stream is as follows:
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/iOS/ZegoExpressEngine/Mixer/mixer-layout.png" /></Frame>
+
+**3. When the aspect ratio of the "ZegoRect" layout of the stream mixing input object [ZegoMixerInput ](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegomixerinput.html) does not match the resolution of the stream itself, how will the picture be cropped?**
+
+The SDK will perform proportional scaling. Assume that the resolution of an input stream is "720x1280", that is, the aspect ratio is "9:16", and the "layout" parameter of the "ZegoMixerInput" of this stream is `{"x": 0, "y": 0, "width": 100, "height": 100}`, that is, the aspect ratio is "1:1", the picture will display the middle part of this stream, that is, the upper and lower parts will be cropped off.
+
+**4. Hosts participating in co-hosting want their respective audiences to see their video in a large window in the mixed screen layout. How to mix streams?**
+
+Each host layouts their own and then initiates stream mixing respectively.
+
+For example: Host A sets the width and height of their own published stream A screen layout to be larger than the layout width and height of Host B's played stream B, and then initiates a stream mixing task to output a stream "A_Mix". Host B sets the width and height of their own published stream B screen layout to be larger than the layout width and height of Host A's played stream A, and then initiates stream mixing to output a stream "B_Mix".
+
+That is, a total of two stream mixing tasks need to be initiated.
+
+**5. What is the difference between the two stream mixing methods of "start stream mixing immediately after a single host starts live streaming" and "start stream mixing only when the second host joins co-hosting"? What are the pros and cons?**
+
+Starting stream mixing from the beginning of a single host's live streaming has the advantage of simple implementation, but the disadvantage is that there will be some additional CDN cost overhead for mixing single stream time.
+
+Starting to only publish streams from the beginning of a single host's live streaming, and waiting for the second host to join co-hosting before starting stream mixing has the advantage of saving costs, but the disadvantage is that development implementation is somewhat more complex. The audience side needs to play the single host stream first. After the hosts start co-hosting and enable stream mixing, they need to stop playing the single host stream and then change to playing the mixed stream. However, the method of starting stream mixing from a single host does not require the audience side to switch from playing the single host stream to playing the mixed stream.
+
+**6. Does stream mixing support circular or square screens?**
+
+Circular shapes are not supported, square shapes can be achieved through layout.

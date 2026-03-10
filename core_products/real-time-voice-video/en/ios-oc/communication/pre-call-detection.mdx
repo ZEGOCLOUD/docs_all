@@ -1,0 +1,228 @@
+---
+articleID: 12053
+date: "2024-01-02"
+---
+# Pre-call Detection
+
+---
+
+## Feature Overview
+
+To ensure a real-time call experience, you can perform network and device detection before the call to identify and resolve issues in advance.
+
+- **Network detection**: Detects the network environment to determine or predict whether it is suitable for publishing/playing streams at a specified bitrate.
+- **Device detection**: Detects whether the local microphone, camera, and speaker are functioning properly.
+
+This document describes how to use ZEGOCLOUD SDK interfaces to implement the above two aspects of detection.
+
+
+## Prerequisites
+
+Before implementing pre-call network/device detection, ensure that:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, see [Console - Project Information](/console/project-info).
+- You have integrated the ZEGO Express SDK into your project and implemented basic audio/video streaming functionality. For details, see [Quick Start - Integration](/real-time-video-ios-oc/quick-start/integrating-sdk) and [Quick Start - Implementation Flow](/real-time-video-ios-oc/quick-start/implementing-video-call).
+
+## Network Detection
+
+Please refer to [Network and Performance](/real-time-video-ios-oc/communication/testing-network) for operations.
+
+
+## Device Detection
+
+
+### Microphone Detection
+
+#### Detection Logic
+
+The microphone device detection flow is shown below:
+
+```mermaid
+graph TD
+    A[Start microphone detection] --> B[Start microphone]
+    B --> C{Check microphone permission}
+    C -->|No| D{Agree to authorize}
+    C -->|Yes| E{Check if microphone is available}
+    D -->|Agree| E
+    D -->|Disagree| F[Device error]
+    E -->|No| F
+    E -->|Yes| G{Check microphone audio data}
+    G -->|Data abnormal| F
+    G -->|Data normal| H[Device normal]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Microphone_detection.png" /></Frame>
+*/}
+
+
+#### Corresponding Interfaces
+
+**1. Start Microphone**
+
+Call the [startPreview](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine&jumpType=route#start-preview) interface to start audio capture without streaming.
+
+```objc
+[[ZegoExpressEngine sharedEngine] startPreview:nil];
+```
+
+**2. Check Microphone Permission**
+
+ZEGOCLOUD SDK automatically checks microphone permission. If the user has not authorized, it will request user consent; if the user refuses, the user needs to manually enable permission in system settings.
+
+
+**3. Check if Microphone is Available**
+
+Detect device exceptions through the following callbacks. If no exception feedback is detected (you can start "4. Check Microphone Audio Data" synchronously), and the microphone audio data detection is normal, the microphone device is available.
+
+- Version 2.15.0 and later: Listen to the [onLocalDeviceExceptionOccurred](@onLocalDeviceExceptionOccurred) callback to detect device exceptions.
+- Before version 2.15.0: Listen to the `onDeviceError` callback to detect device exceptions.
+
+<CodeGroup>
+  ```objc title="Version 2.15.0 and later"
+// Local device exception notification.
+//
+// Supported versions: 2.15.0 and later.
+// Description: Local device exception.
+// Trigger timing: This callback is triggered when local audio or video device functions encounter exceptions.
+//
+// @param exceptionType Device exception type.
+// @param deviceType The device type where the exception occurred.
+// @param deviceID Device ID. Currently only supports desktop devices for identifying specific devices; for mobile devices, this parameter returns an empty string.
+- (void)onLocalDeviceExceptionOccurred:(ZegoDeviceExceptionType)exceptionType deviceType:(ZegoDeviceType)deviceType deviceID:(NSString *)deviceID;
+  ```
+
+  ```objc title="Before version 2.15.0"
+// Device exception notification.
+// @param errorCode Error code. For common error codes, see: /real-time-video-ios-oc/client-sdk/error-code.
+// @param deviceName Device type name.
+- (void)onDeviceError:(int)errorCode deviceName:(NSString *)deviceName;
+```
+</CodeGroup>
+
+**4. Check Microphone Audio Data**
+
+Call the [startSoundLevelMonitor](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine&jumpType=route#start-sound-level-monitor) interface to obtain the energy value of sound captured by the microphone. If the data is normal, the microphone is functioning properly and can be used for calls.
+
+```objc
+[[ZegoExpressEngine sharedEngine] startSoundLevelMonitor];
+```
+
+### Camera Detection
+
+#### Detection Logic
+
+The camera device detection flow is shown below:
+
+```mermaid
+graph TD
+    A[Start camera detection] --> B[Start camera]
+    B --> C{Check camera permission}
+    C -- No --> D{Agree to authorize}
+    C -- Yes --> E{Check if camera is available}
+    D -- Agree --> E
+    D -- Disagree --> F[Device error]
+    E -- No --> F
+    E -- Yes --> G{Check if image is normal}
+    G -- Image abnormal --> F
+    G -- Image normal --> H[Device normal]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Camera_detection.png" /></Frame>
+*/}
+
+#### Corresponding Interfaces
+
+**1. Start Camera**
+
+Call the [startPreview](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-express-engine&jumpType=route#start-preview) interface to bind the view for camera preview, start video capture and preview without streaming.
+
+```objc
+ZegoCanvas *previewCanvas = [ZegoCanvas canvasWithView:self.previewView];
+[[ZegoExpressEngine sharedEngine] startPreview:previewCanvas];
+```
+
+**2. Check Camera Permission**
+
+ZEGOCLOUD SDK automatically checks camera permission. If the user has not authorized, it will request user consent; if the user refuses, the user needs to manually enable permission in system settings.
+
+
+**3. Check if Camera is Available**
+
+
+Detect device exceptions through the following callbacks. If no exception feedback is detected (you can start "4. Check if Display is Normal" synchronously), and the display is normal, the device is available.
+
+- Version 2.15.0 and later: Listen to the [onLocalDeviceExceptionOccurred](@onLocalDeviceExceptionOccurred) callback to detect device exceptions.
+- Before version 2.15.0: Listen to the `onDeviceError` callback to detect device exceptions.
+
+<CodeGroup>
+  ```objc title="Version 2.15.0 and later"
+// Local device exception notification.
+//
+// Supported versions: 2.15.0 and later.
+// Description: Local device exception.
+// Trigger timing: This callback is triggered when local audio or video device functions encounter exceptions.
+//
+// @param exceptionType Device exception type.
+// @param deviceType The device type where the exception occurred.
+// @param deviceID Device ID. Currently only supports desktop devices for identifying specific devices; for mobile devices, this parameter returns an empty string.
+- (void)onLocalDeviceExceptionOccurred:(ZegoDeviceExceptionType)exceptionType deviceType:(ZegoDeviceType)deviceType deviceID:(NSString *)deviceID;
+  ```
+
+  ```objc
+// Device exception notification.
+// @param errorCode Error code. For common error codes, see: /real-time-video-ios-oc/client-sdk/error-code.
+// @param deviceName Device type name.
+- (void)onDeviceError:(int)errorCode deviceName:(NSString *)deviceName;
+```
+</CodeGroup>
+
+**4. Check if Display is Normal**
+
+If the display is normal at this time, the camera is functioning properly and can be used for calls.
+
+### Speaker Detection
+
+#### Detection Logic
+
+The playback device detection flow is shown below:
+
+```mermaid
+graph TD
+    A[Start speaker detection] --> B[Use media player to play audio file]
+    B --> C{Can you hear sound}
+    C -->|Yes| D[Device normal]
+    C -->|No| E[Device error]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Playback_device_detection.png" /></Frame>
+*/}
+
+#### Corresponding Interfaces
+
+**1. Use Media Player to Play Audio File**
+
+Call the [ZegoMediaPlayer](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC_ios~class~zego-media-player&jumpType=route) interface to play your audio file for testing.
+
+```objc
+// 1. Create media player.
+ZegoMediaPlayer *mediaPlayer = [[ZegoExpressEngine sharedEngine] createMediaPlayer];
+// 2. Load media resource.
+NSString *resourcePath = "xxx";
+[mediaPlayer loadResource: resourcePath callback:^(int errorCode) {
+    NSLog(@"Media Player load resource. errorCode: %d", errorCode);
+}];
+// 3. Start playing media.
+[mediaPlayer start];
+```
+
+**2. Check if Sound is Heard**
+
+If you can hear the corresponding audio, the playback device is functioning properly and can be used for calls. Call the [mediaPlayer:stateUpdate:errorCode:](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~ObjectiveC~protocol~zego-media-player-event-handler#media-player-state-update-error-code) callback to check the media player status:
+
+```objc
+// Player playback status callback.
+// @param mediaPlayer The callback player instance.
+// @param state Player status.
+// @param errorCode Error code. For details, see common error codes: /real-time-video-ios-oc/client-sdk/error-code.
+- (void)mediaPlayer:(ZegoMediaPlayer *)mediaPlayer stateUpdate:(ZegoMediaPlayerState)state errorCode:(int)errorCode;
+```

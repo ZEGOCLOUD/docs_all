@@ -1,0 +1,304 @@
+---
+articleID: 10448
+date: '2026-03-05'
+---
+# Multi-room Login
+
+---
+
+## Function Overview
+
+The same user can join multiple rooms simultaneously, and publish streams, play streams, send real-time messages, and receive message callbacks in multiple rooms at the same time.
+
+<Note title="Note">
+
+
+- This feature is not enabled by default. To use it, please contact ZEGOCLOUD Technical Support to enable the relevant permissions.
+- After this feature is enabled, it supports joining up to 5 rooms simultaneously by default. If you have more requirements, please contact ZEGOCLOUD Technical Support for assistance.
+
+</Note>
+
+
+
+
+### Application Scenarios
+
+This feature can isolate messages and callbacks from multiple rooms, enabling more flexible co-hosting services. ZEGO recommends using it for cross-room co-hosting and online education super small class scenarios.
+
+- Cross-room co-hosting
+
+Host A and Host B perform cross-room co-hosting. Host A can notify all viewers in Room A to login to Host B's room for stream playing, and Host B can similarly notify all viewers in Room B to login to Host A's room for stream playing.
+
+
+- Super small class
+
+The teacher enters the large class room to publish streams, and all students login to the large class room to play streams, while also logging into group rooms to discuss and co-host with students in the same group. The teaching assistant logs into group rooms to maintain classroom order or answer student questions.
+
+
+## Prerequisites
+
+Before implementing multi-room functionality, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and Server address. For details, please refer to [Console - Project Management](/console/project-info).
+- You have integrated the ZEGO Express SDK (version 2.9.0 or above) in your project and implemented basic audio and video publish and play functionality. For details, please refer to [Quick Start - Integration](/real-time-video-web/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-web/quick-start/implementing-video-call).
+- You have contacted ZEGOCLOUD Technical Support to enable the multi-room feature.
+
+
+## Usage Steps
+
+Taking the example of the same user joining two rooms, the overall implementation process is as follows:
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant ZEGO Express SDK
+
+    Client ->> ZEGO Express SDK: Set multi-room mode <br/> [setRoomMode]
+
+    Client ->> ZEGO Express SDK: Initialize Express SDK <br/> [createEngine]
+
+
+    critical Call loginRoom multiple times with different roomID and same userID to login to multiple rooms simultaneously.
+        Client ->> ZEGO Express SDK: Login room <br/> [loginRoom]
+
+        Client ->> ZEGO Express SDK: Publish stream, play stream <br/> [startPublishingStream, startPlayingStream]
+
+        Client ->> ZEGO Express SDK: Send real-time message <br/> [sendCustomCommand]
+
+        ZEGO Express SDK -->> Client: Receive related room callbacks <br/> [onRoomStreamUpdate / onIMRecvCustomCommand]
+
+        Client ->> ZEGO Express SDK: Logout room <br/> [logoutRoom]
+    end
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/MultiRoom/MultiRoom_Web_new.png" /></Frame>
+*/}
+
+1. Initialize the SDK, then set the room mode to multi-room.
+2. Join the first room. After successful login, you can publish streams, play streams, send and receive real-time messages in that room.
+3. Join the second room. After successful login, you can publish streams, play streams, send and receive real-time messages in that room.
+4. Leave the first and second rooms. There is no timing restriction for leaving rooms.
+
+The implementation of specific functions is as follows:
+
+### 1 Initialize SDK
+
+Please refer to [Quick Start - Implementation](/real-time-video-web/quick-start/implementing-video-call) section "Create engine" to initialize the SDK.
+
+### 2 Set Multi-room Mode
+
+Must be called after SDK initialization and before login room. Call [enableMultiRoom](@enableMultiRoom) and set to true to enable multi-room
+
+
+``` javascript
+// Initialize SDK
+const zg = new ZegoExpressEngine(appID, server);
+// Set room mode to multi-room mode
+zg.enableMultiRoom(true);
+// Login room
+zg.loginRoom()
+```
+
+<Note title="Note">
+
+
+If you set multi-room mode without enabling the multi-room feature, login room will fail with an error code "1100001016".
+
+</Note>
+
+
+
+
+### 3 Login to Multiple Rooms
+
+After successfully logging in to the first room through the [loginRoom](@loginRoom) interface, call the [loginRoom](@loginRoom) interface again to log in to the second room.
+
+```javascript
+// Login to the first room first
+zg.loginRoom('first', token, {userID: 'zegoUser'});
+
+// Login to the second room later
+zg.loginRoom('second', token, {userID: 'zegoUser'});
+```
+
+After logging in to the first room, you can also switch to another room through the [switchRoom](@switchRoom) interface.
+```javascript
+// Login to the first room first
+zg.loginRoom('first', token, {userID: 'zegoUser'});
+
+// Login to the second room later
+zg.switchRoom('first', 'second', {token: token});
+```
+
+
+### 4 Publish Stream
+
+Pass in parameters such as Room ID and call the [startPublishingStream](@startPublishingStream) interface to publish stream in the specified room.
+
+```javascript
+const localStream = zg.createZegoStream();
+zg.startPublishingStream(userID, localStream, { roomID: roomID });
+```
+
+### 5 Play Stream
+
+The playing end can play the corresponding stream based on the Stream ID. There is no difference in the stream playing method between multi-room mode and normal single-room mode.
+
+Pass in the Stream ID and call the [startPlayingStream](@startPlayingStream) interface to play the stream.
+
+```javascript
+const remoteStream = await zg.startPlayingStream(streamID);
+
+// remoteVideo is a local <video> or <audio> object
+remoteVideo.srcObject = remoteStream;
+```
+
+### 6 Send and Receive Real-time Messages
+
+- Broadcast message
+
+Call the [sendBroadcastMessage](@sendBroadcastMessage) interface to send broadcast messages. Other users in the room receive messages through the [IMRecvBroadcastMessage](@IMRecvBroadcastMessage)
+callback, and can distinguish which room sent the message by Room ID.
+
+```javascript
+// Others in the room receive the message, distinguish which room sent it by room ID
+zg.on(
+    'IMRecvBroadcastMessage',
+    (
+        roomID: string,
+        chatData: Array<{
+            fromUser: ZegoUser;
+            message: string;
+            sendTime: number;
+            messageID: number;
+        }>,
+    ) => {
+        console.log('IMRecvBroadcastMessage', roomID, chatData);
+    },
+);
+
+// Send room message
+zg.sendBroadcastMessage(
+        roomID,
+        JSON.stringify({
+            text: 'rtc.sendBroadcastMessage test',
+        }),
+    );
+});
+```
+
+- Barrage message
+
+Barrage messages are mainly used for high-concurrency scenarios to send some non-essential messages.
+
+Call the [sendBarrageMessage](@sendBarrageMessage) interface to send barrage messages. Other users in the room receive messages through the [IMRecvBarrageMessage](@IMRecvBarrageMessage)
+callback, and can distinguish which room sent the message by Room ID.
+
+```javascript
+// Others in the room receive the message, distinguish which room sent it by room ID
+zg.on(
+    'IMRecvBarrageMessage',
+    (
+        roomID: string,
+        chatData: Array<{
+            fromUser: ZegoUser;
+            message: string;
+            sendTime: number;
+            messageID: string;
+        }>,
+    ) => {
+        console.log('IMRecvBarrageMessage', roomID, chatData);
+    },
+);
+
+// Send
+zg.sendBarrageMessage(
+    roomID,
+    JSON.stringify({
+        text: 'rtc.sendBarrageMessage test',
+    }),
+);
+```
+
+- Custom signaling
+
+Custom signaling allows you to send specific messages to specified users in a room (can specify multiple users).
+
+Call the [sendCustomCommand](@sendCustomCommand) interface to send custom signaling. Other users in the room receive messages through the [IMRecvCustomCommand](@IMRecvCustomCommand)
+callback, and can distinguish which room sent the message by Room ID.
+
+```javascript
+// Send
+zg.sendCustomCommand(
+    roomID,
+    // JSON.stringify(
+    // @ts-ignore
+    {
+        text: 'rtc.sendCustomCommand test',
+    },
+    // )
+    [],
+);
+
+// Receive custom signaling
+zg.on('IMRecvCustomCommand', (roomID: string, fromUser: ZegoUser, command: string) => {
+    console.log('IMRecvCustomCommand', roomID, fromUser, command);
+});
+```
+
+- Room extra info
+
+Call the [setRoomExtraInfo](@setRoomExtraInfo) interface to send room extra info. Other users in the room receive messages through the [roomExtraInfoUpdate](@roomExtraInfoUpdate)
+callback, and can distinguish which room sent the message by Room ID.
+
+```javascript
+// Send, only 1 key is allowed in a room
+zg.setRoomExtraInfo(
+    roomID,
+    '2',
+    JSON.stringify({
+        text: 'rtc.setRoomExtraInfo test',
+    }),
+);
+
+// Receive, through setRoomExtraInfoCallback
+zg.on('roomExtraInfoUpdate', (roomID: string, data: any) =>{
+    console.log('roomExtraInfoUpdate', roomID, data);
+});
+```
+
+<Note title="Note">
+
+For size and frequency limitations of sending real-time messages, please refer to [Restrictions](/real-time-video-web/best-practice/restrictions).
+
+</Note>
+
+
+
+### 7 Logout Room
+
+Pass in the Room ID and call the [logoutRoom](@logoutRoom) interface to leave the room.
+
+- In single-room mode, leaving the room will stop all publishing and playing streams.
+- In multi-room mode, if only the Room ID is passed in, only the specified room will be left, and the publishing and playing streams of that room will be stopped. If no parameters are passed, all rooms will be left and all publishing and playing streams will be stopped.
+
+```javascript
+zg.logoutRoom("roomid");
+```
+
+
+## FAQ
+
+<Accordion title="What is the reason when calling enableMultiRoom interface returns false and fails?" defaultOpen="false">
+- Whether the enableMultiRoom interface is called after initializing the SDK and before login room.
+- Whether it is called repeatedly. This interface is only allowed to be called once in a complete lifecycle.
+- Whether the correct parameters are passed.
+</Accordion>
+
+<Accordion title="What is the reason when calling loginRoom fails with error code '1100001016'?" defaultOpen="false">
+If you set multi-room mode without enabling the multi-room feature, login room will fail with error code 1100001016.
+</Accordion>
+
+<Accordion title="What is the reason when calling loginRoom fails with error code '1000005022'?" defaultOpen="false">
+When the number of rooms logged in at the same time exceeds the maximum number of rooms, error code 1000005022 will be returned. Currently, the default is to join up to 5 rooms at the same time. For more requirements, please contact ZEGOCLOUD Technical Support for extended capabilities.
+</Accordion>

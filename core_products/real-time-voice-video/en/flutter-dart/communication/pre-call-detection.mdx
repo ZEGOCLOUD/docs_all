@@ -1,0 +1,311 @@
+---
+articleID: 15473
+date: "2024-01-02"
+---
+# Pre-call Detection
+
+---
+
+## Feature Overview
+
+To ensure a real-time communication experience, network and device detection can be performed before the call to identify and troubleshoot issues in advance.
+
+- Network detection: Detects the network environment to determine or predict whether it is suitable for publishing/playing streams with specified bitrates.
+- Device detection: Detects whether the local microphone, camera, and speaker are working properly.
+
+This document will introduce how to use the ZEGOCLOUD SDK interfaces to implement the above two types of detection.
+
+
+## Prerequisites
+
+Before implementing pre-call network/device detection, ensure that:
+
+- The ZEGO Express SDK has been integrated into your project and basic real-time audio and video functions have been implemented. For details, please refer to [Quick Start - Integration](/real-time-video-flutter/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-flutter/quick-start/implementing-video-call).
+- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com), and a valid AppID and AppSign have been obtained. For details, please refer to [Console - Project Information](/console/project-info).
+
+## Network Detection
+
+Please refer to [Network Testing](/real-time-video-flutter/communication/testing-network) for instructions.
+
+## Device Detection
+
+### Microphone Detection
+
+**Detection Logic**
+
+The microphone device detection process is shown in the following figure:
+
+```mermaid
+graph TD
+    A[Start microphone detection] --> B[Start microphone]
+    B --> C{Check microphone permission}
+    C -->|No| D{Agree to authorize}
+    C -->|Yes| E{Check if microphone is available}
+    D -->|Agree| E
+    D -->|Disagree| F[Device error]
+    E -->|No| F
+    E -->|Yes| G{Check microphone audio data}
+    G -->|Data abnormal| F
+    G -->|Data normal| H[Device normal]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Microphone_detection.png" /></Frame>
+*/}
+
+
+**Corresponding Interfaces**
+
+**1. Start Microphone**
+
+Call the [startPreview](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPreview.html) interface to start audio capturing without publishing streams.
+
+```dart
+ZegoExpressEngine.instance.startPreview();
+```
+
+**2. Check Microphone Permissions**
+
+The ZEGO Express SDK automatically checks microphone permissions.
+
+<Warning title="Warning">
+
+
+You need to first refer to [Quick Start - Integration](/real-time-video-flutter/quick-start/integrating-sdk) to set up permissions.
+
+Android 6.0 requires dynamic permission requests for some important permissions. Static permissions cannot be requested only through the "AndroidMainfest.xml" file. Therefore, you also need to refer to the following code. The following method requires the Flutter project to install the permission_handler plugin.
+
+</Warning>
+
+
+
+```dart
+Permission.microphone.request();
+```
+
+**3. Check if Microphone is Available**
+
+
+Detect device exceptions through the following callback. If no exception feedback is detected (you can start "4. Check Microphone Recording Data" synchronously, and the microphone recording data detection is normal), the microphone device is available.
+
+- Version 2.15.0 and later: Listen to the [onLocalDeviceExceptionOccurred](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onLocalDeviceExceptionOccurred.html) callback to detect device exceptions.
+- Versions before 2.15.0: Listen to the `onDeviceError` callback to detect device exceptions.
+
+<CodeGroup>
+  ```dart title="Version 2.15.0 and later"
+  class ZegoExpressEngine {
+
+  ...
+
+  /**
+   * Local device exception notification.
+   *
+   * Supported versions: 2.15.0 and later.
+   * Description: Local device exception.
+   * Notification timing: This callback is triggered when local audio or video device functions malfunction.
+   *
+   * @param exceptionType Device exception type.
+   * @param deviceType The type of device where the exception occurred.
+   * @param deviceID Device ID. Currently only supports desktop devices, used to identify specific devices; for mobile devices, this parameter will return an empty string.
+   */
+  static void Function(ZegoDeviceExceptionType exceptionType, ZegoDeviceType deviceType, String deviceID)? onLocalDeviceExceptionOccurred;
+
+  ...
+
+  }
+  ```
+
+  ```dart title="Versions before 2.15.0"
+  class ZegoExpressEngine {
+
+  ...
+
+  /**
+   * Audio and video device error notification.
+   * @param errorCode Error code, please refer to common error codes: /real-time-video-flutter/error-code#7.
+   * @param deviceName Device type name.
+   */
+  static void Function(int errorCode, String deviceName)? onDeviceError;
+
+  }
+  ```
+</CodeGroup>
+
+**4. Check Microphone Recording Data**
+
+Call the [startSoundLevelMonitor](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineDevice/startSoundLevelMonitor.html) interface to obtain the energy value of the sound captured by the microphone. If the data is normal, the microphone is working properly and can be used for calls.
+
+```dart
+ZegoExpressEngine.instance.startSoundLevelMonitor();
+```
+
+
+### Camera Detection
+
+<Warning title="Warning">
+
+
+When only integrating the real-time voice SDK or in pure audio scenarios, camera detection is not required and this section can be ignored.
+
+</Warning>
+
+
+
+**Detection Logic**
+
+The camera device detection process is shown in the following figure:
+
+```mermaid
+graph TD
+    A[Start camera detection] --> B[Start camera]
+    B --> C{Check camera permission}
+    C -- No --> D{Agree to authorize}
+    C -- Yes --> E{Check if camera is available}
+    D -- Agree --> E
+    D -- Disagree --> F[Device error]
+    E -- No --> F
+    E -- Yes --> G{Check if image is normal}
+    G -- Image abnormal --> F
+    G -- Image normal --> H[Device normal]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Camera_detection.png" /></Frame>
+*/}
+
+
+**Corresponding Interfaces**
+
+**1. Start Camera**
+
+Call the [startPreview](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPreview.html) interface to bind the view for camera preview, start video capture and preview without publishing streams.
+
+```java
+ZegoExpressEngine.instance.startPreview();
+```
+
+**2. Check Camera Permissions**
+
+The ZEGO SDK will automatically check camera permissions.
+
+<Warning title="Warning">
+
+
+You need to first refer to [Quick Start - Integration](/real-time-video-flutter/quick-start/integrating-sdk) to set up permissions.
+
+Because Android 6.0 requires dynamic permission requests for some important permissions. Static permissions cannot be requested only through the "AndroidMainfest.xml" file. Therefore, you also need to refer to the following code. The following method requires the Flutter project to install the permission_handler plugin.
+
+</Warning>
+
+
+
+```dart
+Permission.camera.request();
+```
+
+**3. Check if Camera is Available**
+
+
+Detect device exceptions through the following callback. If no exception feedback is detected (you can start "4. Check if Display is Normal" synchronously), and the display is normal, the device is available.
+
+- Version 2.15.0 and later: Listen to the [onLocalDeviceExceptionOccurred](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onLocalDeviceExceptionOccurred.html) callback to detect device exceptions.
+- Versions before 2.15.0: Listen to the `onDeviceError` callback to detect device exceptions.
+
+<CodeGroup>
+  ```dart title="Version 2.15.0 and later"
+  class ZegoExpressEngine {
+
+  ...
+
+  /**
+   * Local device exception notification.
+   *
+   * Supported versions: 2.15.0 and later.
+   * Description: Local device exception.
+   * Notification timing: This callback is triggered when local audio or video device functions malfunction.
+   *
+   * @param exceptionType Device exception type.
+   * @param deviceType The type of device where the exception occurred.
+   * @param deviceID Device ID. Currently only supports desktop devices, used to identify specific devices; for mobile devices, this parameter will return an empty string.
+   */
+  static void Function(ZegoDeviceExceptionType exceptionType, ZegoDeviceType deviceType, String deviceID)? onLocalDeviceExceptionOccurred;
+
+  ...
+
+  }
+  ```
+
+  ```dart title="Versions before 2.15.0"
+  class ZegoExpressEngine {
+
+  ...
+
+  /**
+   * Audio and video device error notification.
+   * @param errorCode Error code, please refer to common error codes: /real-time-video-flutter/error-code#7.
+   * @param deviceName Device type name.
+   */
+  static void Function(int errorCode, String deviceName)? onDeviceError;
+
+  }
+  ```
+</CodeGroup>
+
+**4. Check if Display is Normal**
+
+If the display is normal at this time, the camera is working properly and can be used for calls.
+
+
+### Speaker Detection
+
+**Detection Logic**
+
+The playback device detection process is shown in the following figure:
+
+```mermaid
+graph TD
+    A[Start speaker detection] --> B[Use media player to play audio file]
+    B --> C{Can you hear sound}
+    C -->|Yes| D[Device normal]
+    C -->|No| E[Device error]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Playback_device_detection.png" /></Frame>
+*/}
+
+
+**Corresponding Interfaces**
+
+**1. Use Media Player to Play Audio Files**
+
+Call the [ZegoMediaPlayer](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoMediaPlayer-class.html) interface to play the audio file you use for testing.
+
+```dart
+// 1. Create a player object.
+var mediaPlayer = await ZegoExpressEngine.instance.createMediaPlayer();
+// 2. Load resources.
+String resourcePath = "xxx";
+await mediaPlayer?.loadResource(resourcePath);
+// 3. Play resources.
+mediaPlayer?.start();
+```
+
+**2. Check if Sound is Heard**
+
+If you can hear the corresponding audio, the playback device is working properly and can be used for calls. Call the [onMediaPlayerStateUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onMediaPlayerStateUpdate.html) callback to check the player status:
+
+```dart
+class ZegoExpressEngine {
+
+...
+
+/**
+ * Player playback status callback.
+ * @param mediaPlayer The callback player instance.
+ * @param state Player status.
+ * @param errorCode Error code, please refer to common error codes: /real-time-video-flutter/error-code#7.
+ */
+static void Function(ZegoMediaPlayer mediaPlayer, ZegoMediaPlayerState state, int errorCode)? onMediaPlayerStateUpdate;
+
+...
+
+}
+```

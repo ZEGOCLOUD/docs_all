@@ -1,0 +1,298 @@
+---
+articleID: 20705
+date: "2025-01-20"
+---
+# Custom Video Capture
+
+- - -
+
+## Overview
+
+Custom video capture refers to the function where developers collect video data themselves and provide it to ZEGO Express SDK for encoding and publishing. When users enable the custom video capture function, by default, ZEGO Express SDK will render the local preview image on the publishing side, and users do not need to perform rendering themselves.
+
+When the following situations occur in the developer's business, it is recommended to use the SDK's custom video capture function:
+
+- The developer's App uses the beauty SDK from a third-party beauty vendor, which can directly interface with the custom video capture function of ZEGO Express SDK. That is, the third-party beauty SDK is responsible for video data collection and pre-processing, while ZEGO Express SDK is responsible for video data encoding and publishing audio and video streams to ZEGO audio and video cloud.
+- During live streaming, the developer needs to use additional functions completed by the camera, which conflicts with ZEGO Express SDK's default video capture logic, causing the camera to be unable to work normally. For example, during live streaming, short videos need to be recorded halfway.
+- Live streaming of data not captured by the camera. For example, local video file playback, screen sharing, game live streaming, etc.
+
+## Prerequisites
+
+Before performing custom video capture, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK into the project and implemented basic audio and video streaming functionality. For details, please refer to [Quick Start - Integration](/real-time-video-rn/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-rn/quick-start/implementing-video-call).
+
+
+## Technical Principles
+
+This section will briefly describe the general technical principles of the native layer and JavaScript layer when implementing custom video capture. For specific implementation methods, please refer to [Implementation Process](#implementation-process).
+
+According to the characteristics of the ReactNative framework, it needs to use JavaScript to access the mobile platform's API and describe the appearance and behavior of the UI through React components. Therefore, when video data is transmitted at high frequency between JavaScript and the native layer, it will be subject to performance limitations. Therefore, the general processing methods for implementing custom video capture for the ReactNative framework include the following two aspects:
+- **Native layer (intermediate layer/bridge layer)**: Implement video data interfacing, that is, the main steps for implementing custom capture, including listening to custom capture start callbacks, implementing data capture, and sending the captured data to the SDK through the native layer interface.
+- **JavaScript layer**: Call interfaces to control the startup and shutdown of custom capture functions, including creating engine, logging into room, preview, publishing and playing streams, etc.
+
+
+
+## Implementation Process
+
+The specific implementation steps for custom video capture are as follows:
+
+<Note title="Note">
+
+
+The native interfaces appearing in this article can be found in the [SDK source code](https://www.npmjs.com/package/zego-express-engine-reactnative?activeTab=code)
+- android > src/main > java/im/zego/reactnative > ZegoCustomVideoCaptureManager.java
+- ios > src > ZegoCustomVideoCaptureManager.h
+
+</Note>
+
+
+
+### Enable Custom Video Capture in JavaScript Layer
+
+1. After initializing the SDK, create a custom video capture object [ZegoCustomVideoCaptureConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegocustomvideocaptureconfig.html), and set the [bufferType](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegocustomvideocaptureconfig.html#buffertype) attribute to provide the video frame data type to the SDK.
+2. Call the [enableCustomVideoCapture](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#enablecustomvideocapture) interface and keep the default configuration "True" (otherwise there will be no video data in the publishing stream) to enable the custom video capture function.
+
+<Note title="Note">
+
+
+Due to the diversity of video capture, the SDK supports multiple video frame data types [bufferType](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegocustomvideocaptureconfig.html#buffertype). Developers need to inform the SDK of the data type used. Currently, the following video frame data types are supported. If set to other enumeration values, **video frame data cannot be provided to the SDK**.
+- iOS platform supports the following video frame data types:
+    - CVPixelBuffer: Supports multiple video data formats, such as RGBA32, I420, NV12, etc.
+    - GLTexture2D: OpenGL Texture 2D type.
+    - EncodedData: Encoded type.
+- Android platform supports the following video frame data types:
+    - RawData: Raw data type.
+    - GLTexture2D: OpenGL Texture 2D type.
+    - EncodedData: Encoded type.
+
+</Note>
+
+
+
+```javascript
+var captureConfig = new ZegoCustomVideoCaptureConfig(ZegoVideoBufferType.CVPixelBuffer);
+// Select CVPixelBuffer type video frame data
+ZegoExpressEngine.instance().enableCustomVideoCapture(true, captureConfig);
+```
+
+### Set Custom Video Capture Callback in Native Layer
+
+<Note title="Note">
+
+
+The native interfaces appearing in this article can be found in the [SDK source code](https://www.npmjs.com/package/zego-express-engine-reactnative?activeTab=code)
+- android > src/main > java/im/zego/reactnative > ZegoCustomVideoCaptureManager.java
+- ios > src > ZegoCustomVideoCaptureManager.h
+
+</Note>
+
+
+
+#### Set Custom Video Capture Callback Object
+
+Take `CustomVideoCapture` (developer-defined) as the custom video capture callback object and follow the video callback protocol.
+
+<CodeGroup>
+```objc title="iOS"
+#import <ZegoCustomVideoCaptureManager.h>
+
+@interface CustomVideoCapture () <ZegoReactNativeCustomVideoCaptureHandler>
+
+    ......
+
+@end
+```
+
+```java title="Android"
+import im.zego.reactnative.IZegoReactNativeCustomVideoCaptureHandler;
+
+public class CustomVideoCapture implements IZegoReactNativeCustomVideoCaptureHandler {
+
+    ......
+
+}
+```
+</CodeGroup>
+
+Call the `setCustomVideoCaptureHandler` interface to set the custom video capture callback.
+<CodeGroup>
+```objc title="iOS"
+#import "CustomVideoCapture.h"
+
+- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
+{
+  ...
+   [[ZegoCustomVideoCaptureManager sharedInstance] setCustomVideoCaptureHandler:[CustomVideoCapture sharedInstance]];
+}
+```
+```java title="Android"
+import im.zego.reactnative.ZegoCustomVideoCaptureManager;
+
+public class MainActivity extends ReactActivity {
+  @Override
+  public void onCreate(@Nullable Bundle savedInstanceState, @Nullable PersistableBundle persistentState) {
+    super.onCreate(savedInstanceState, persistentState);
+  ...
+    ZegoCustomVideoCaptureManager.getInstance().setCustomVideoCaptureHandler(CustomVideoCapture.sharedInstance);
+  }
+}
+```
+</CodeGroup>
+
+#### Implement Custom Video Capture Callback Methods
+
+Implement the `onStart` and `onStop` custom capture callback methods.
+
+<Note title="Note">
+
+
+When capturing multiple streams with custom capture, you need to specify the publishing channel in the `onStart` and `onStop` callbacks, otherwise only the main channel notification will be called back by default.
+
+</Note>
+
+
+<CodeGroup>
+```objc title="iOS"
+@implementation CustomVideoCapture
+...
+// Note: This callback is not on the main thread. If there are UI operations, please switch to the main thread by yourself
+- (void)onStart {
+
+    // After receiving the callback, the developer needs to execute business logic related to starting capture, such as turning on the camera, etc.
+
+    // This example starts a video capture device implemented by yourself
+    [self.captureDevice startCapture];
+}
+
+// Note: This callback is not on the main thread. If there are UI operations, please switch to the main thread by yourself
+- (void)onStop {
+
+    // After receiving the callback, the developer needs to execute business logic related to stopping capture, such as turning off the camera, etc.
+
+    // This example stops a video capture device implemented by yourself
+    [self.captureDevice stopCapture];
+}
+...
+@end
+```
+```java title="Android"
+public class CustomVideoCapture implements IZegoReactNativeCustomVideoCaptureHandler {
+...
+// Note: This callback is not on the main thread. If there are UI operations, please switch to the main thread by yourself
+@Override
+public void onStart(int channel) {
+    // After receiving the callback, the developer needs to execute business logic related to starting capture, such as turning on the camera, etc.
+
+    // This example starts a video capture device implemented by yourself
+    this.captureDevice.startCapture();
+}
+
+// Note: This callback is not on the main thread. If there are UI operations, please switch to the main thread by yourself
+@Override
+public void onStop(int channel) {
+    // After receiving the callback, the developer needs to execute business logic related to stopping capture, such as turning off the camera, etc.
+
+    // This example stops a video capture device implemented by yourself
+    this.captureDevice.stopCapture();
+}
+...
+}
+```
+</CodeGroup>
+
+### Send Video Frame Data to SDK
+
+- In JavaScript layer: After calling the start preview interface [startPreview](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startpreview) or the start publishing stream interface [startPublishingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startpublishingstream), the `onStart` callback will be triggered.
+- In native layer: After the developer starts the capture-related business logic, call the send custom captured video frame data interface to send video frame data to the SDK. The custom captured video frame data interface corresponds one-to-one with the video frame data type [bufferType](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegocustomvideocaptureconfig.html#buffertype) provided to the SDK in [1 Enable Custom Video Capture](/real-time-video-rn/video/custom-video-capture):
+
+    | Video Frame Type | bufferType | Send Video Frame Data Interface |
+    |---|---|---|
+    |CVPixelBuffer type| CVPixelBuffer |`sendCVPixelBuffer`|
+    |OpenGL Texture 2D type| GLTexture2D |`sendGLTextureData` |
+    |Encoded type| EncodedData |`sendEncodedData` |
+
+<Warning title="Warning">
+When performing external capture, if the data sent to the SDK through the `sendEncodedData` interface is encoded video frame data, the SDK will not be able to preview, and developers need to preview by themselves.
+</Warning>
+
+
+Taking calling the interface to send video frame data to the SDK after receiving the camera video frame callback as an example:
+
+<CodeGroup>
+```objc title="iOS"
+@implementation CustomVideoCapture
+...
+#pragma mark - AVCaptureVideoDataOutputSampleBufferDelegate
+
+- (void)captureOutput:(AVCaptureOutput *)captureOutput didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
+    CVPixelBufferRef buffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+    CMTime timeStamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer);
+
+    // Send custom captured video frame CVPixelBuffer data to SDK
+    [[ZegoCustomVideoCaptureManager sharedInstance] sendCVPixelBuffer:buffer timestamp:timeStamp channel:self.publishChannel];
+}
+...
+@end
+```
+```java title="Android"
+public class CustomVideoCapture implements IZegoReactNativeCustomVideoCaptureHandler {
+...
+public void didOutputTextureData(int textureID, int width, int height, long referenceTimeMillisecond) {
+    // Send custom captured video frame GLTextureData data to SDK
+    ZegoCustomVideoCaptureManager.sharedInstance().sendGLTextureData(textureID, width, height, referenceTimeMillisecond, this.publishChannel);
+}
+...
+}
+@end
+```
+</CodeGroup>
+
+### Stop Custom Video Capture in JavaScript Layer
+
+After stopping publishing stream or preview, when logging out of the room or destroying the engine, the `onStop` callback will be triggered, and developers can stop capture-related business logic, such as turning off the camera, etc.
+
+
+## FAQ
+
+1. **How to use the "GLTexture2D" method to pass capture data?**
+
+    1. Set [bufferType](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegocustomvideocaptureconfig.html#buffertype) of [ZegoCustomVideoCaptureConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegocustomvideocaptureconfig.html) to `GLTexture2D` in the JavaScript layer.
+    2. Call the `sendGLTextureData` interface in the native layer to send video frame data to the SDK.
+
+2. **When using custom video capture, the local preview image is normal, but the image seen by the audience after publishing stream is distorted. How to handle this?**
+
+    This problem is caused by the inconsistency between the image ratio captured by custom video and the default resolution ratio of the SDK. For example, the video frame image ratio captured by custom video is 4:3, while the default publishing stream image resolution ratio of the SDK is 16:9.
+
+    There are the following solutions:
+
+    - Solution 1: Developers manually modify the custom video capture video resolution ratio to 16:9.
+    - Solution 2: Developers call the [setVideoConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#setvideoconfig) interface in the JavaScript layer to customize the SDK's publishing stream resolution ratio to 4:3.
+
+
+3. **After enabling custom video capture, the captured frame rate is inconsistent with the playing stream frame rate. How to handle this?**
+
+    You can handle it in the following ways:
+
+    - When sending `CVPixelBuffer` type video frame data to the SDK, the frame rate set by the [setVideoConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#setvideoconfig) interface needs to be consistent with the frame rate of the video data provided by the custom capture `sendCVPixelBuffer` interface.
+    - When sending `GLTexture2D` type video frame data to the SDK, the frame rate set by the [setVideoConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#setvideoconfig) interface needs to be consistent with the frame rate of the video data provided by the custom capture `sendGLTextureData` interface.
+
+
+4. **Does the SDK's method for receiving video frame data process the passed data synchronously or asynchronously?**
+
+    After receiving video frame data, the SDK will first synchronously copy the data, and then asynchronously perform encoding and other operations, so the data can be released immediately after being passed to the SDK.
+
+
+5. **How to implement video rotation during custom video capture?**
+
+    You can refer to the following two methods to implement landscape and portrait screen switching:
+
+    - Process video frame data yourself: In the device direction change callback, perform rotation processing on the captured video frame data, and then send the processed data to the SDK through the `sendCVPixelBuffer` interface.
+    - Process video frame data through the SDK: In the device direction change callback, if using EncodeData type to capture data, set "rotation" in `ZegoVideoEncodedFrameParam` according to the actual orientation before sending the captured video frame data to the SDK, and call the `sendEncodedData` interface to pass in the video frame data and orientation setting parameters to send the data to the SDK.
+
+
+## Related Documents
+
+- [How to handle video pixelation or green screen issues?](https://www.zegocloud.com/faq/pixelated_green)
+- [How to handle audio and video out of sync issues?](https://www.zegocloud.com/faq/unsynchronized)

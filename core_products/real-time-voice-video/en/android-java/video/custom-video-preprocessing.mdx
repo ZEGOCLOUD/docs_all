@@ -1,0 +1,177 @@
+---
+articleID: 7656
+date: "2024-07-11"
+---
+
+
+
+# Custom Video Preprocessing
+
+- - -
+
+## Feature Overview
+
+Video preprocessing is a process between capture and encoding. Developers capture video data themselves. After obtaining the video data captured by the SDK, they can perform video preprocessing through the SDK's built-in basic beauty effects and watermark features. If the SDK cannot meet developers' needs (for example, the beauty effects cannot achieve the expected results), they can also combine with ZEGO Effects SDK to perform special processing on the video, such as beauty effects, adding accessories, etc. This process is custom video preprocessing.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/video_pre_processing_en.png" /></Frame>
+
+Compared with custom video capture, custom video preprocessing has the advantage that developers do not need to manage device input sources, they only need to operate on the raw data provided by ZEGO Express SDK, and then send it back to ZEGO Express SDK.
+
+<Note title="Note">
+For more complex scenarios, such as wanting to perform layer mixing through camera images, it is recommended that developers use the [Custom Video Capture](/real-time-video-android-java/video/custom-video-capture) feature to implement it, as this method has greater room for performance optimization.
+</Note>
+
+## Example Source Code Download
+
+ZEGO provides example source code for implementing beauty effects through the Effects SDK. Please refer to [Using Real-Time Video and AI Beauty Effects Together](/real-time-video-android-java/best-practice/integration-with-zego-effects-sdk).
+
+
+## Prerequisites
+
+Before performing custom video preprocessing, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in your project and implemented basic audio and video streaming functionality. For details, please refer to [Quick Start - Integration](/real-time-video-android-java/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-android-java/quick-start/implementing-video-call).
+
+
+## Usage Steps
+
+The flow and interface calls for custom video preprocessing are as follows:
+
+```mermaid
+sequenceDiagram
+    participant A as Client App
+    participant B as ZEGO Express SDK
+
+    A->>B: Create engine <br/> [createEngine]
+    A->>B: Login room <br/> [loginRoom]
+
+    critical Critical steps
+        A->>B: Enable custom video preprocessing <br/> [enableCustomVideoProcessing]
+        A->>B: Set custom video preprocessing callback <br/> [setCustomVideoProcessingHandler]
+        A->>B: Start preview, publish stream <br/> [startPreview, startPublishingStream]
+        B-->>A: Notify custom video preprocessing started,<br>can initialize third-party effects library <br/> [onStart]
+        B-->>A: Get raw video data,<br>perform video preprocessing <br/> [onCapturedUnprocessedTextureData]
+        A->>B: Send processed image to Express <br/> [sendCustomVideoProcessedTextureData]
+    end
+
+    A->>B: Play processed video data <br/> [startPlayingStream]
+    A->>B: Stop preview, publish stream <br/> [stopPreview, stopPublishingStream]
+    A->>B: Logout room <br/> [logoutRoom]
+    B-->>A: Notify custom video preprocessing ended,<br>can deinitialize third-party effects library <br/> [onStop]
+    A->>B: Destroy ZEGO Express SDK <br/> [destroyEngine]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/custom_video_process_Android_2025.png" /></Frame>
+*/}
+
+<Steps>
+<Step>
+Initialize Express SDK and login to Room.
+</Step>
+<Step>
+Call the [enableCustomVideoProcessing](@enableCustomVideoProcessing) interface to [enable custom video preprocessing](#1-enable-custom-video-preprocessing) feature.
+</Step>
+<Step>
+[Get raw video data and perform video preprocessing](#2-get-raw-video-data-and-perform-video-preprocessing).
+<Steps>
+<Step >
+Call the [setCustomVideoProcessHandler](@setCustomVideoProcessHandler) interface to register custom video preprocessing callbacks and implement callback methods such as [onCapturedUnprocessedTextureData](@onCapturedUnprocessedTextureData).
+</Step>
+<Step >
+Start preview and publish stream.
+</Step>
+<Step>
+Through the [onStart](@onStart-IZegoCustomVideoProcessHandler) callback, notify that custom video preprocessing has started. If developers use third-party beauty libraries or pre-allocate memory, they can initialize tools and allocate memory at this time.
+</Step>
+<Step>
+Through the [onCapturedUnprocessedTextureData](@onCapturedUnprocessedTextureData) callback interface, get raw video data. Developers can perform related processing according to business needs: they can process through Express SDK's built-in basic beauty effects, watermarks and other features; they can also combine with Effects SDK to achieve more processing effects.
+</Step>
+<Step>
+After video data processing is completed, in the [onCapturedUnprocessedTextureData](@onCapturedUnprocessedTextureData) callback, call the [sendCustomVideoProcessedTextureData](@sendCustomVideoProcessedTextureData) interface to send the processed video frame data to Express SDK.
+</Step>
+</Steps>
+</Step>
+<Step>
+Other clients can play the processed video stream.
+</Step>
+<Step>
+Stop preview and publishing stream.
+</Step>
+<Step>
+Logout from Room.
+</Step>
+<Step>
+Through the [onStop](@onStop-IZegoCustomVideoProcessHandler) callback, notify that custom video preprocessing has ended. If developers use third-party beauty libraries or pre-allocate memory, they can deinitialize tools and release memory at this time.
+</Step>
+<Step>
+Destroy Engine and release resources.
+</Step>
+</Steps>
+### 1 Enable Custom Video Preprocessing
+
+Create a custom video preprocessing [ZegoCustomVideoProcessConfig](@-ZegoCustomVideoProcessConfig) object and set the [bufferType ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-entity-zego-custom-video-process-config#buffer-type) property to provide the video frame data type to Express SDK.
+
+Currently Android SDK supports the following 3 types of [bufferType ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-entity-zego-custom-video-process-config#buffer-type) data types. Setting other enumeration values will not work properly:
+
+| Buffer Type | Enumeration Value | Description |
+|-----|------|------|
+| GLTexture2D | ZegoVideoBufferType.GL_TEXTURE_2D  | Indicates raw video data of Texture texture type. |
+| SurfaceTexture | ZegoVideoBufferType.SURFACE_TEXTURE | Indicates raw video data of SurfaceTexture type. |
+| GLTexture2DAndRawData | ZegoVideoBufferType.GL_TEXTURE_2D_AND_RAW_DATA | Indicates OpenGL Texture 2D type video frame and raw data type video frame. |
+
+Before starting preview and starting to publish stream, call the [enableCustomVideoProcessing ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#enable-custom-video-processing) interface to enable the custom video preprocessing feature.
+
+The following takes "ZegoVideoBufferType.GL_TEXTURE_2D" as an example to demonstrate the usage of custom video preprocessing.
+
+```java
+ZegoCustomVideoProcessConfig config = new ZegoCustomVideoProcessConfig();
+// Select GL_TEXTURE_2D type video frame data
+config.bufferType = ZegoVideoBufferType.GL_TEXTURE_2D;
+
+// Enable custom preprocessing
+express.enableCustomVideoProcessing(true, config, ZegoPublishChannel.MAIN);
+```
+
+### 2 Get Raw Video Data and Perform Video Preprocessing
+
+1. Call the [setCustomVideoProcessHandler](@setCustomVideoProcessHandler) interface to register custom video preprocessing callbacks and implement callback methods such as [onCapturedUnprocessedTextureData](@onCapturedUnprocessedTextureData).
+
+2. When the SDK obtains raw video data, it will notify the developer through the [onCapturedUnprocessedTextureData](@onCapturedUnprocessedTextureData) method.
+
+3. Developers can use Express SDK's built-in basic beauty effects, watermarks and other features to process video data. For details, please refer to [Publish Stream Video Enhancement](/real-time-video-android-java/video/publish-video-enhancement); they can also combine with Effects SDK to achieve more processing effects. For details, please refer to [Using Real-Time Video and AI Beauty Effects Together](/real-time-video-android-java/best-practice/integration-with-zego-effects-sdk).
+    <Warning title="Warning">
+
+
+    If developers use third-party beauty libraries or pre-allocate memory, please:
+    - Initialize tools and allocate memory when custom video preprocessing starts ([onStart](@onStart-IZegoCustomVideoProcessHandler)).
+    - Deinitialize tools and release memory when custom video preprocessing ends ([onStop](@onStop-IZegoCustomVideoProcessHandler)).
+    </Warning>
+
+
+4. After processing is completed, call the [sendCustomVideoProcessedTextureData](@sendCustomVideoProcessedTextureData) interface to send the processed video frame data to Express SDK, which will be published to the stream, and other clients can play the processed video stream.
+
+```java
+// Callback method to get raw data
+// Callback processing
+express.setCustomVideoProcessHandler(new IZegoCustomVideoProcessHandler() {
+    ...
+
+    // Receive Texture from ZegoExpressEngine engine
+    @Override
+    public void onCapturedUnprocessedTextureData(int textureID, int width, int height, long referenceTimeMillisecond, ZegoPublishChannel channel) {
+
+
+        ZegoEffectsVideoFrameParam param = new ZegoEffectsVideoFrameParam();
+        param.format = ZegoEffectsVideoFrameFormat.BGRA32;
+        param.width = width;
+        param.height = height;
+
+        // Custom preprocessing: Use Effects SDK for video processing here
+        int processedTextureID = effects.processTexture(textureID, param);
+
+        // Send the processed buffer back to Express SDK
+        express.sendCustomVideoProcessedTextureData(processedTextureID, width, height, referenceTimeMillisecond);
+    }
+}
+```

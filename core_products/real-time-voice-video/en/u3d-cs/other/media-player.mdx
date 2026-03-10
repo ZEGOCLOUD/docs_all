@@ -1,0 +1,330 @@
+---
+articleID: 15969
+date: "2024-07-27"
+---
+# Media Player
+
+- - -
+
+import Content from '/core_products/real-time-voice-video/en/snippets/media-player-pre.mdx'
+
+<Content />
+
+## Download Example Source Code
+
+Please refer to [Download Example Source Code](/real-time-video-u3d-cs/quick-start/run-example-code) to get the source code.
+
+For related source code, please view files in the "/ZegoExpressExample/Examples/Others/MediaPlayer" directory.
+
+## Prerequisites
+
+Before implementing the media player function, please ensure:
+
+- You have created a project in [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in the project and implemented basic audio and video streaming functions. For details, please refer to [Quick Start - Integration](/real-time-video-u3d-cs/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-u3d-cs/quick-start/implementing-video-call).
+
+
+
+## Usage Steps
+
+### 1 Create media player
+
+Call the [CreateMediaPlayer](@CreateMediaPlayer) interface, a member method of `ZegoExpressEngine`, to create a media player instance. One media player instance can only play one audio or video file. The engine supports creating up to 10 player instances at the same time to achieve the effect of playing multiple media resources simultaneously. If there are already 10 player instances, calling the create player interface again will return `null`.
+
+- Call example
+
+    ```csharp
+    //Create media player instance object, currently supports creating up to 4 instances, will return null if exceeded
+    ZegoMediaPlayer mediaplayer = mEngine.CreateMediaPlayer();
+    if (mediaplayer != null) {
+    // sucess
+    } else {
+    // fail
+    }
+    ```
+
+### 2 (Optional) Set event callbacks for player
+
+<Accordion title="Player event callback settings" defaultOpen="false">
+You can set media player callback event delegates to receive notifications such as "player playback state change", "player network state update", "player playback progress change", etc.
+
+
+- Call example
+
+    ```csharp
+    void OnMediaPlayerStateUpdate(ZegoMediaPlayer mediaPlayer, ZegoMediaPlayerState state, int errorCode)
+    {
+        // This callback is called on the UI thread, developers can make UI changes here, such as play button changes
+    }
+
+    void OnMediaPlayerNetworkEvent(ZegoMediaPlayer mediaPlayer, ZegoMediaPlayerNetworkEvent networkEvent)
+    {
+        // This callback is called on the UI thread, developers can make UI changes here, such as friendly prompts for poor network conditions
+    }
+
+    void OnMediaPlayerPlayingProgress(ZegoMediaPlayer mediaPlayer, ulong millisecond)
+    {
+        // This callback is called on the UI thread, developers can make UI changes here, such as progress bar changes
+    }
+
+    mediaplayer.OnMediaPlayerPlayingProgress = OnMediaPlayerStateUpdate;
+    mediaplayer.OnMediaPlayerPlayingProgress = OnMediaPlayerNetworkEvent ;
+    mediaplayer.OnMediaPlayerPlayingProgress = OnMediaPlayerPlayingProgress;
+    ```
+</Accordion>
+
+
+### 3 Load media file
+
+<Warning title="Warning">
+
+
+If the media resource has already been [LoadResource](@LoadResource-ZegoMediaPlayer) loaded or is playing, please call the [Stop](@Stop-ZegoMediaPlayer) interface to stop playback first, and then call the [LoadResource](@LoadResource-ZegoMediaPlayer) interface to load the media resource, otherwise the loading will not succeed.
+
+</Warning>
+
+
+
+Call the media player's [LoadResource](@LoadResource-ZegoMediaPlayer) to specify the media resource to play. The resource path can be the absolute path of a local resource or the URL of a network resource, such as `http://your.domain.com/your-movie.mp4`. Users can get the result of loading the file by passing in callback parameters.
+
+If users need to load binary audio data, they can call the media player's [LoadResourceFromMediaData](@LoadResourceFromMediaData-ZegoMediaPlayer) to specify the binary audio data to play. Users can get the result of loading the data by passing in callback parameters.
+
+
+- Call example
+
+    ```csharp
+    /**
+    * Load media resource
+    *
+    * Can pass the absolute path of local resources or the URL of network resources
+    * @param path Local resource path or network resource URL
+    * @param callback Notification of resource loading result
+    */
+    mediaplayer.LoadResource("sourcePath", (int errorcode)=>{
+        // This callback is called on the main thread, developers can make UI changes here
+    });
+
+    /**
+    * Load binary audio data
+    *
+    * @param mediaData Binary audio data
+    * @param startPosition Specify the progress to start playing, in milliseconds
+    * @param callback Notification of resource loading result
+    */
+    mediaplayer.LoadResourceFromMediaData(data, position, (int errorcode)=>{
+        // This callback is called on the UI thread, developers can make UI changes here
+    });
+    ```
+
+### 4 Playback control
+
+#### Playback state control
+
+```mermaid
+stateDiagram-v2
+    [*] --> NoPlay: loadResource
+    NoPlay --> Playing: play
+    Playing --> Pausing: pause
+    Pausing --> Playing: resume
+    Pausing --> NoPlay: stop
+    Playing --> NoPlay: stop
+    Playing --> PlayEnded
+    PlayEnded --> Playing: enableRepeat
+    PlayEnded --> [*]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/mediaplayer_state_flutter.jpg" /></Frame>
+*/}
+
+- **Play start/stop**: After successfully calling [loadResource](@loadResource-ZegoMediaPlayer) to load the file, you can call [Start](@Start-ZegoMediaPlayer), [Pause](@Pause-ZegoMediaPlayer), [Resume](@Resume-ZegoMediaPlayer), [Stop](@Stop-ZegoMediaPlayer) to start/stop playback. Once the player's internal state changes, the [onMediaplayerStateUpdate](@onMediaplayerStateUpdate-IZegoMediaPlayerHandler) callback will be triggered.
+- **Get current playback state**: Users can call [GetCurrentState](@GetCurrentState-ZegoMediaPlayer) at any time to get the current state of the player.
+- **Whether to repeat playback**: If [EnableRepeat](@EnableRepeat-ZegoMediaPlayer) is set to `true`, the player will automatically replay after finishing playing the file.
+
+- Call example
+
+    ```csharp
+    // Set whether to repeat playback
+    mediaplayer.EnableRepeat(true);
+    // Start playback, need to load resource first before playing
+    mediaplayer.Start();
+    // Pause playback
+    mediaplayer.Pause();
+    // Resume playback
+    mediaplayer.Resume();
+    // Stop playback
+    mediaplayer.Stop();
+    ```
+
+#### Playback progress control
+
+- **Player playback progress callback**: The progress of playing the file will be called back through the [OnMediaPlayerPlayingProgress](@OnMediaPlayerPlayingProgress-IZegoMediaPlayerHandler) method. The default interval for triggering the callback is 1000 ms. You can change this interval through [SetProgressInterval](@SetProgressInterval-ZegoMediaPlayer).
+- **Get current playback progress**: Users can get the current playback progress through [GetCurrentProgress](@GetCurrentProgress-ZegoMediaPlayer).
+- **Adjust playback progress**: Adjust the progress through the [SeekTo](@SeekTo-ZegoMediaPlayer) interface.
+
+- Call example
+
+    ```csharp
+    // Set playback progress callback interval, in milliseconds, can control the callback frequency of [OnMediaPlayerPlayingProgress] through this interface
+    mediaplayer.SetProgressInterval(2000);
+    // Get current playback progress
+    ulong progress = mediaplayer.GetCurrentProgress();
+    mediaplayer.SeekTo(mediaplayer.GetTotalDuration() / 2, (int errorcode)=>{
+        // This callback is called on the UI thread, developers can make UI changes here
+    });
+    ```
+
+#### Playback speed control
+
+**Set current playback speed**: After loading the resource, users can set the current playback speed through [SetPlaySpeed](@SetPlaySpeed-ZegoMediaPlayer).
+
+- Call example
+
+    ```csharp
+    // Set 2x playback speed, must be called after loading the resource is completed, playback speed range is 0.5 ~ 4.0, default is 1.0
+    mediaplayer.SetPlaySpeed(2.0);
+    ```
+
+#### Player audio control
+
+- **Get and control playback volume**: Get and control playback volume through [GetPlayVolume](@GetPlayVolume-ZegoMediaPlayer) and [SetPlayVolume](@SetPlayVolume-ZegoMediaPlayer).
+- **Get and control publishing volume**: Get and control publishing volume through [GetPublishVolume](@GetPublishVolume-ZegoMediaPlayer) and [SetPublishVolume](@SetPublishVolume-ZegoMediaPlayer).
+- **Mute local playback**: Control local mute playback by calling [MuteLocal](@MuteLocal-ZegoMediaPlayer).
+- **Mix the player's sound into the main channel being published**: Mix the file's sound into the stream being published by calling [EnableAux](@EnableAux-ZegoMediaPlayer).
+
+<Note title="Note">
+
+
+To use the mixing capability, you must [set microphone permissions](/real-time-video-u3d-cs/quick-start/integrating-sdk). If you don't want to record the microphone sound, you can mute the microphone through [MuteMicrophone](@MuteMicrophone-ZegoExpressEngine).
+
+
+</Note>
+
+
+
+- Call example
+
+    ```csharp
+    int playVolume = mediaplayer.GetPlayVolume();
+    // Set player volume to half of the original
+    mediaplayer.SetPlayVolume(playVolume / 2);
+    // Enable mixing the resource's sound into the stream being published
+    mediaplayer.EnableAux(true);
+    // Enable local mute playback
+    mediaplayer.MuteLocal(true);
+    ```
+
+- **Get audio data of file**: If you want to get the audio data of the file, you can set the audio frame callback through [SetAudioHandler](@SetAudioHandler-ZegoMediaPlayer).
+
+- Call example
+
+    ```csharp
+    // Callback for player to throw out audio data, you can set this callback to throw out the audio data of the media resource file played by the media player
+    mediaplayer.SetAudioHandler((ZegoMediaPlayer mediaPlayer, System.IntPtr data, uint dataLength, ZegoAudioFrameParam param) =>{
+        // Developers can process the thrown audio frame data in this callback, such as local storage, sound effect processing, etc.
+    });
+    ```
+
+#### Player video control
+
+If you want to get the video data of the file, you can set the video frame callback through [SetVideoHandler](@SetVideoHandler-ZegoMediaPlayer).
+
+- Call example
+
+    ```csharp
+    // Callback for player to throw out video data, you can set this callback to throw out the video data of the media resource file played by the media player
+    mediaPlayer.SetVideoHandler((ZegoMediaPlayer mediaPlayer, System.IntPtr[] data, uint[] dataLength, ZegoVideoFrameParam param, string extraInfo)=>{
+        // Developers can process the thrown video frame data in this callback, such as local storage, video layer mixing
+    }, ZegoVideoFrameFormat.ARGB32);// The second parameter should generally be specified as the platform's default video frame format
+    ```
+
+#### Publish the video played by the player
+
+1. Before publishing the player's video, you need to first set the video frame callback listener through [SetVideoHandler](@SetVideoHandler-ZegoMediaPlayer) to get the video frame data thrown by [OnVideoFrame](@OnVideoFrame-IZegoMediaPlayerHandler).
+
+2. Use custom method to capture video and mix the obtained video data into the publishing data. For detailed operations, please refer to [Custom Video Capture](/real-time-video-u3d-cs/video/custom-video-capture).
+
+<Note title="Note">
+
+
+When capturing custom data, it is recommended that developers define a "flag" marker:
+
+- When the [OnCustomVideoCaptureStart](@OnCustomVideoCaptureStart-IZegoEventHandler) callback is triggered, set the "flag" marker to "True", indicating that custom captured video data can start being sent to the SDK.
+- When the [OnCustomVideoCaptureStop](@OnCustomVideoCaptureStop-IZegoEventHandler) callback is triggered, set the "flag" marker to "False", indicating that sending captured video data to the SDK needs to stop.
+
+
+</Note>
+
+
+
+3. Developers need to add judgment logic for "flag" in [OnVideoFrame](@OnVideoFrame-IZegoMediaPlayerHandler). When "flag" is set to "True" (i.e., the [OnCustomVideoCaptureStart ](@OnCustomVideoCaptureStart-IZegoEventHandler) callback is triggered), call the [SendCustomVideoCaptureRawData](@SendCustomVideoCaptureRawData) method to send the obtained video data to the SDK.
+
+4. Call [StartPublishingStream](@StartPublishingStream) to start publishing stream. Please refer to "Publish stream" in [Quick Start - Implementation](/real-time-video-u3d-cs/quick-start/implementing-video-call).
+
+
+#### Voice changer
+
+When handling scenarios similar to accompaniment pitch shifting in KTV, you can call the media player's [SetVoiceChangerParam](@SetVoiceChangerParam) interface to implement the voice changer function. Developers can set the voice changer effect through the pitch parameter `pitch` in the [ZegoVoiceChangerParam](@ZegoVoiceChangerParam) object. The value range of this parameter is [-12.0, 12.0]. The larger the value, the sharper the sound. The default value is "0.0" (i.e., voice changer is disabled).
+
+- Call example
+
+    ```csharp
+    ZegoVoiceChangerParam param = new ZegoVoiceChangerParam()
+    param.pitch = 8.0f;     // Male voice to child voice
+    param.pitch = 4.0f;     // Male voice to female voice
+    param.pitch = 6.0f;     // Female voice to child voice
+    param.pitch = -3.0f;    // Female voice to male voice
+    mediaplayer.SetVoiceChangerParam(ZegoMediaPlayerAudioChannel.All, voiceChangerParam);
+    ```
+
+#### Render video picture
+
+When the player plays video, you need to play the video picture through custom rendering. Refer to the following example code:
+
+- Call example
+
+    ```csharp
+    //Use RawImage to render
+    RawImageCustomVideoSurface rawImageVideoSurface;
+    //Use Renderer to render
+    RendererCustomVideoSurface rendererVideoSurface;
+
+    rawImageVideoSurface = GameObject.Find("RawImage_MediaPlayer").AddComponent<RawImageCustomVideoSurface>();
+    rendererVideoSurface = GameObject.Find("Plane_MediaPlayer").AddComponent<RendererCustomVideoSurface>();
+    // Rotate to the appropriate angle
+    rendererVideoSurface.transform.Rotate(90.0f, -180.0f, 0.0f);
+    rendererVideoSurface.transform.localScale = new Vector3(10f, 10f, 10f);
+
+    // Listen to video frame data
+    mediaPlayer.SetVideoHandler((ZegoMediaPlayer mediaPlayer, System.IntPtr[] data, uint[] dataLength, ZegoVideoFrameParam param, string extraInfo) =>
+    {
+        // Use custom rendering to load original video data
+        if(rawImageVideoSurface)
+        {
+            rawImageVideoSurface.LoadNativeVideoRawData(data[0], param.width, param.height, param.strides, param.format);
+        }
+
+        //if(rendererVideoSurface)
+        //{
+        //    rendererVideoSurface.LoadNativeVideoRawData(data[0], param.width, param.height, param.strides, param.format);
+        //}
+    }, ZegoVideoFrameFormat.RGBA32);
+    ```
+
+### 5 Destroy media player
+
+After using the player, you need to call the [DestroyMediaPlayer](@DestroyMediaPlayer) interface in time to release the occupied resources.
+
+- Call example
+
+    ```csharp
+    // Destroy media player instance object
+    mEngine.DestroyMediaPlayer(mediaplayer);
+    // When calling the interface to destroy, to avoid memory leaks, developers must manually release the references held by the business layer
+    mediaplayer = null;
+    ```
+
+## FAQ
+
+**How to switch playback resources during playback?**
+
+  First call the player's [Stop](@Stop-ZegoMediaPlayer) interface to stop playback, then call the [LoadResource](@LoadResource-ZegoMediaPlayer) interface again to load the new resource.

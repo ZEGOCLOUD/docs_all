@@ -1,0 +1,136 @@
+---
+articleID: 16835
+---
+# RTMP Push Stream to ZEGO Server
+
+- - -
+
+## Feature Introduction
+
+In live streaming scenarios, hosts can push audio and video streams to ZEGO servers via RTMP push streaming tools to achieve low latency. Viewers can use ZEGO Express SDK to play streams.
+
+RTMP push streaming tools refer to third-party tools that push streams via RTMP addresses, mainly including hardware push streaming devices, software OBS, etc.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/RtmpToZego/rtmptozego.png" /></Frame>
+
+
+## Prerequisites
+
+- Contacted ZEGOCLOUD Technical Support to enable permissions for RTMP tools to push streams to ZEGO servers.
+- Prepared RTMP push streaming tools, such as OBS.
+
+## Usage Steps
+
+### Get RTMP Push Stream Address
+
+Please contact ZEGOCLOUD Technical Support to enable the service and obtain the RTMP push stream address through the [RTMP Push Stream Dispatch](/real-time-video-server/api-reference/media-service/rtpm-dispatch) server-side interface.
+
+### Use RTMP Tool to Push Stream
+
+The following uses OBS as an example to introduce RTMP tool push streaming operations.
+
+#### Set Push Stream Address
+
+1. Open the OBS tool, click "Settings" in the "Controls" tab at the bottom toolbar to enter the settings interface.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/RtmpToZego/obs1.png" /></Frame>
+
+2. Click "Stream" to enter the stream settings tab, select the service type as "Custom Streaming Server".
+
+3. Fill in the obtained RTMP push stream address in the "Server" and "Stream Key" fields.
+
+- Server: Corresponds to the RTMP push stream address, i.e., `rtmp://hosts/AppName/`
+
+    **Please note that the RTMP push stream address URL is different from the push stream address URL in [CDN Stream Publishing Authentication](/real-time-video-web/live-streaming/cdn-stream-publishing-authentication). Do not mix them up. Please distinguish them when using.**
+
+- Stream Key: Corresponds to the RTMP push stream name, i.e., "streamID".
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/RtmpToZego/obs2.png" /></Frame>
+
+
+4. Click "OK" to save the above settings information.
+
+#### Set Push Stream Guide
+
+1. In the "Source" tab at the bottom toolbar, click the "+" button.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/RtmpToZego/obs3.png" /></Frame>
+
+2. Select an input source as needed, such as "Display Capture".
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/RtmpToZego/obs4.png" /></Frame>
+
+#### Use OBS to Push Stream
+
+
+1. In the "Controls" tab at the bottom toolbar, click "Start Streaming" to push the audio and video stream to the set push stream address. A green light appears at the bottom, indicating successful push streaming.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/RtmpToZego/obs6.png" /></Frame>
+
+2. To stop pushing streams, click "Stop Streaming" in the "Controls" tab.
+
+<Warning title="Warning">
+
+
+After using the RTMP tool to push streams, users cannot receive notifications of audio and video stream additions or deletions through the [RoomStreamUpdate](@RoomStreamUpdate) callback. They can obtain notifications through the following two ways:
+- After using the RTMP tool to push streams, the business server sends the third-party push "streamID" to other users in the room through business signaling, notifying other users in the room that there is a stream addition or deletion.
+- You can use ZEGO server-side [Add Room Stream](/real-time-video-server/api-reference/room/add-stream) and [Delete Room Stream](/real-time-video-server/api-reference/room/delete-stream) interfaces to add or delete stream information to a specified room, and send the "streamID" information to other users in the room. At this time, other users can receive notifications of audio and video stream additions or deletions through the [RoomStreamUpdate](@RoomStreamUpdate) callback.
+
+</Warning>
+
+
+
+### Use SDK to Play/Stop Playing Stream
+
+Call the [startPlayingStream](@startPlayingStream) interface and pass in the "streamID" of the RTMP push (i.e., the "Stream Key" set when setting the push stream address) to play the stream. The following takes Live Streaming as an example. For other play methods, please refer to [Implementing Live Streaming](/live-streaming-web/quick-start/implementing-live-streaming).
+
+```javascript
+// Stream status update callback
+zg.on('roomStreamUpdate', async (roomID, updateType, streamList, extendedData) => {
+    // When updateType is ADD, it means there is a new audio and video stream. At this time, you can call the startPlayingStream interface to play this audio and video stream
+    if (updateType == 'ADD') {
+        // Stream added, start playing
+        // To make the example code more concise, we only play the first stream in the newly added audio and video stream list. In actual business, it is recommended for developers to loop through streamList and play each audio and video stream
+
+        let playOption = {};
+        let video = document.create
+        playOption.resourceMode = 2;
+
+         const remoteStream = await zg.startPlayingStream(streamID);
+
+        // Create a media stream playback component object for playing remote media streams.
+        const remoteView = zg.createRemoteStreamView(remoteStream);
+        // Mount the playback component to the page, "remote-video" is the id of the component container DOM element.
+        remoteView.play("remote-video");
+
+    } else if (updateType == 'DELETE') {
+        // Stream deleted, stop playing
+    }
+});
+```
+
+
+Call the [stopPlayingStream](@stopPlayingStream) interface and pass in the "streamID" of the RTMP push (i.e., the "Stream Key" set when setting the push stream address) to stop playing the audio and video stream pushed by the remote end.
+
+```javascript
+// Stream status update callback
+zg.on('roomStreamUpdate', async (roomID, updateType, streamList, extendedData) => {
+    if (updateType == 'ADD') {
+        // Stream added, start playing
+    } else if (updateType == 'DELETE') {
+        // Stream deleted, stop playing streams through the streamID of each stream in the stream deletion list.
+        const streamID = streamList[0].streamID;
+        zg.stopPlayingStream(streamID)
+    }
+});
+```
+
+
+
+
+
+## FAQ
+
+**1. How does the business server know whether the RTMP push tool has started or stopped pushing streams?**
+
+ZEGO provides `publish_start` start push stream and `publish_stop` stop push stream callback notifications. For needs, please contact ZEGOCLOUD Technical Support for configuration.

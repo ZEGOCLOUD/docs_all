@@ -1,0 +1,285 @@
+---
+date: '2026-01-29'
+---
+
+# 视频画中画方案
+
+- - -
+
+## 功能简介
+
+画中画（Picture-in-Picture）功能允许您在浏览其他网页或使用其他应用时，继续观看视频通话内容。启用画中画后，通话界面将以独立的小窗口形式悬浮显示在屏幕最顶层。即使您切换到其他浏览器标签页或应用程序，仍可实时查看通话画面，有效提升多任务处理的效率。
+
+{/* <Frame width="auto" height="auto" >
+  <img src="" />
+</Frame> */}
+
+本文主要介绍如何结合 ZEGO Express SDK 与 Web 画中画 API（[Document Picture-in-Picture API](https://developer.mozilla.org/zh-CN/docs/Web/API/Document_Picture-in-Picture_API)），实现基础的 Web 画中画音视频通话功能。
+
+## 前提条件
+
+在实现 Web 画中画音视频通话功能之前，请确保：
+
+- 已实现基本的实时音视频功能，详情请参考 [快速开始](/real-time-video-web/quick-start/implementing-video-call)。
+- 已在项目中集成 ZEGO Express SDK，并实现了基本的音视频推拉流功能，详情请参考 [快速开始 - 集成](/real-time-video-web/quick-start/integrating-sdk) 和 [快速开始 - 实现流程](/real-time-video-web/quick-start/implementing-video-call)。
+- 浏览器支持 [Document Picture-in-Picture API](https://developer.mozilla.org/zh-CN/docs/Web/API/Document_Picture-in-Picture_API)，建议使用 Chrome 120 或更高版本。
+
+## 实现流程
+
+<Note title="说明">
+若需要在切换标签页时自动触发该功能，请执行以下操作：
+1. 在通话页面中，请点击浏览器地址栏左侧的"查看网站信息"图标。
+2. 请点击"网站设置"，找到"自动进入画中画模式"选项并将其开启。
+</Note>
+
+### 1 兼容性判断
+
+在使用画中画功能前，需要先判断当前浏览器环境是否支持 [Document Picture-in-Picture API](https://developer.mozilla.org/zh-CN/docs/Web/API/Document_Picture-in-Picture_API)。
+
+```javascript
+if ("documentPictureInPicture" in window) {
+  // 支持画中画功能
+  console.log("当前浏览器支持 Document Picture-in-Picture API");
+} else {
+  console.error("当前浏览器不支持 Document Picture-in-Picture API");
+}
+```
+
+### 2 打开画中画窗口
+
+调用 `window.documentPictureInPicture.requestWindow()` 方法打开画中画窗口，可指定窗口的宽度和高度。
+
+```javascript
+let pipWin = null;
+
+async function openPictureInPicture() {
+  try {
+    // 打开画中画窗口，并设置窗口尺寸
+    pipWin = await window.documentPictureInPicture.requestWindow({
+      width: 360,
+      height: 500,
+    });
+    console.log("画中画窗口已打开", pipWin);
+    // 继续执行后续步骤
+  } catch (error) {
+    console.error("打开画中画窗口失败", error);
+  }
+}
+```
+
+### 3 设置画中画窗口内容
+
+画中画窗口打开后，需要设置其 HTML 结构和样式。可以通过操作 `pipWin.document` 来设置窗口的头部（head）和主体（body）内容。
+
+```javascript
+function setupPipWindow() {
+  // 设置样式
+  pipWin.document.head.innerHTML = `
+    <style>
+      * {margin:0;padding:0;box-sizing: border-box; overflow: hidden;}
+      body { width: 100vw; height: 100vh }
+      .pip-container {
+          width: 100%;
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          background: #f5f5f5;
+      }
+      .video-wrap { flex: 1; display: flex; flex-direction: column; padding: 5px; }
+      .pip-video { flex: 1; margin: 5px 0; background: #000; }
+      .pip-controls {
+          padding: 10px;
+          display: flex;
+          justify-content: space-around;
+          background: #fff;
+      }
+      .pip-controls button {
+          padding: 8px 16px;
+          cursor: pointer;
+      }
+    </style>
+  `;
+
+  // 设置页面结构
+  pipWin.document.body.innerHTML = `
+    <div class="pip-container">
+      <div class="video-wrap">
+        <div class="pip-video" id="local-video"></div>
+        <div class="pip-video" id="remote-video"></div>
+        <div class="pip-video" id="screen-video"></div>
+      </div>
+      <div class="pip-controls">
+          <button id="toggle-mic">切换麦克风</button>
+          <button id="toggle-camera">切换摄像头</button>
+          <button id="hang-up">挂断</button>
+      </div>
+    </div>
+  `;
+}
+```
+
+### 4 在画中画窗口中渲染视频流
+
+使用 ZEGO Express SDK 创建流后，可以通过 [playVideo](@playvideo) 方法将视频渲染到画中画窗口中的指定元素。
+
+<Steps titleSize="p">
+<Step title="创建并渲染本地流">
+
+```javascript
+// 创建本地摄像头流
+localStream = await zg.createZegoStream({
+  camera: { video: { quality: 1 }, audio: true },
+});
+
+// 将本地流渲染到画中画窗口
+const pipLocalVideo = pipWin.document.getElementById("local-video");
+localStream.playVideo(pipLocalVideo);
+```
+</Step>
+<Step title="拉取并渲染远端流">
+
+```javascript
+// 拉取远端流
+remoteStream = await zg.startPlayingStream(remoteStreamID);
+remoteView = zg.createRemoteStreamView(remoteStream);
+
+// 将远端流渲染到画中画窗口
+const pipRemoteVideo = pipWin.document.getElementById("remote-video");
+remoteView.play(pipRemoteVideo);
+```
+</Step>
+<Step title="创建并渲染屏幕共享流">
+
+```javascript
+// 创建屏幕共享流
+screenStream = await zg.createZegoStream({
+  screen: { video: true, audio: true },
+});
+
+// 获取屏幕共享内容类型（应用窗口、浏览器标签页或整个屏幕）
+screenShareType = screenStream.getScreenDisplaySurface();
+
+// 将屏幕共享流渲染到画中画窗口
+const pipScreenVideo = pipWin.document.getElementById("screen-video");
+screenStream.playVideo(pipScreenVideo);
+```
+</Step>
+</Steps>
+
+### 5 添加画中画窗口事件监听
+
+为画中画窗口中的控制按钮添加事件监听，实现麦克风、摄像头切换等功能。
+
+```javascript
+function setupPipEventListeners() {
+  // 为切换麦克风按钮添加点击事件
+  pipWin.document.getElementById("toggle-mic").addEventListener("click", () => {
+    // ...
+  });
+
+  // 为切换摄像头按钮添加点击事件
+  pipWin.document.getElementById("toggle-camera").addEventListener("click", () => {
+    // ...
+  });
+
+  // 为挂断通话按钮添加点击事件
+  pipWin.document.getElementById("hang-up").addEventListener("click", () => {
+    // ...
+  });
+}
+```
+
+### 6 监听画中画窗口关闭事件
+
+当用户手动关闭画中画窗口时，需要监听 `pagehide` 事件并进行相应处理，例如将视频渲染回主页面窗口。
+
+```javascript
+pipWin.addEventListener("pagehide", () => {
+  console.log("画中画窗口已关闭");
+  pipWin = null;
+  // 将视频流重新渲染回主页面
+  // renderMainVideo();
+});
+```
+
+### 7 主动关闭画中画窗口
+
+如需在代码中主动关闭画中画窗口，可调用以下方法：
+
+
+<CodeGroup>
+
+```javascript title="方式一：通过窗口实例关闭"
+if (pipWin) {
+  pipWin.close();
+  pipWin = null;
+}
+```
+```javascript title="方式二：通过 API 关闭"
+if (documentPictureInPicture.window) {
+  documentPictureInPicture.window.close();
+}
+```
+</CodeGroup>
+
+### 8 同步主页面与画中画窗口状态
+
+主页面的状态变化（如麦克风、摄像头开关）不会自动同步到画中画窗口，您需要手动同步状态。
+
+```javascript
+function updateCameraState(isVideoOff) {
+  const cameraText = isVideoOff ? "打开摄像头" : "关闭摄像头";
+
+  // 同步更新主页面按钮状态
+  const mainCameraButton = document.getElementById("toggle-camera");
+  if (mainCameraButton) {
+    mainCameraButton.textContent = cameraText;
+  }
+
+  // 同步更新画中画窗口按钮状态
+  if (pipWin) {
+    const pipCameraButton = pipWin.document.getElementById("toggle-camera");
+    if (pipCameraButton) {
+      pipCameraButton.textContent = cameraText;
+    }
+  }
+}
+```
+
+## 使用示例
+
+完整的使用流程如下：
+
+```javascript
+// 1. 判断浏览器是否支持画中画功能
+if ("documentPictureInPicture" in window) {
+  // 2. 打开画中画窗口
+  pipWin = await window.documentPictureInPicture.requestWindow({
+    width: 360,
+    height: 500,
+  });
+
+  // 3. 设置窗口的 HTML 结构和 CSS 样式
+  setupPipWindow();
+
+  // 4. 将视频流渲染到画中画窗口中
+  const pipLocalVideo = pipWin.document.getElementById("local-video");
+  localStream.playVideo(pipLocalVideo);
+
+  const pipRemoteVideo = pipWin.document.getElementById("remote-video");
+  remoteView.play(pipRemoteVideo);
+
+  // 5. 为画中画窗口中的按钮添加事件监听
+  setupPipEventListeners();
+
+  // 6. 监听画中画窗口关闭事件
+  pipWin.addEventListener("pagehide", () => {
+    pipWin = null;
+    
+    // renderMainVideo();
+  });
+}
+```
+
+
+

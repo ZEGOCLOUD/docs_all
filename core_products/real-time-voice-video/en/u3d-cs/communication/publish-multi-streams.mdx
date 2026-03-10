@@ -1,0 +1,197 @@
+# Publishing Multiple Streams Simultaneously
+
+- - -
+
+## Function Overview
+
+The Express SDK provides the ability to publish multiple streams simultaneously. When the following situations occur in the developer's business, it is recommended to use the SDK's multi-stream publishing function:
+
+- Game streamer publishes camera footage on the main channel stream and screen capture footage on the second channel stream.
+- Outdoor streamer publishes front camera footage on the main channel stream and rear camera footage on the second channel stream.
+
+<Note title="Note">
+
+Currently the SDK supports a maximum of 4 publishing stream channels. Versions before 2.14.0 have a default maximum of 2 publishing stream channels. If you need to support more publishing channels, please contact ZEGOCLOUD Technical Support for a special build.
+</Note>
+
+## Example Source Code Download
+
+Please refer to [Download Example Source Code](/real-time-video-u3d-cs/quick-start/run-example-code) to get the source code.
+
+For related source code, please see files in the "/ZegoExpressExample/AdvancedStreaming/src/main/java/im/zego/publishingmultiplestreams" directory in the downloaded example source code.
+
+
+## Prerequisites
+
+Before implementing the multi-stream publishing function, please ensure:
+
+- You have created a project in [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in the project and implemented basic audio and video streaming functions. For details, please refer to [Quick Start - Integration](/real-time-video-u3d-cs/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-u3d-cs/quick-start/implementing-video-call).
+
+
+
+## Usage Steps
+
+<Warning title="Warning">
+
+
+- Publishing streams other than the main channel stream cannot directly obtain camera data.
+- By default, non-main channel streams can only publish audio data. If you need to publish audio and video data, you need to enable the custom video capture function.
+- This article will introduce the implementation method of publishing auxiliary channel streams. The implementation of publishing other non-main channel streams is the same.
+
+</Warning>
+
+
+
+### 1 Create ZegoExpressEngine engine
+
+Please refer to "3.1 Create Engine" in [Quick Start - Implementing Video Call]().
+
+```java
+ZegoEngineProfile profile = new ZegoEngineProfile();
+profile.appID = appID;
+profile.appSign = appSign;
+profile.scenario = ZegoScenario.DEFAULT;
+profile.application = getApplication();
+engine = ZegoExpressEngine.createEngine(profile, null);
+```
+
+### 2 (Optional) Set custom video capture configuration
+
+<Accordion title="Custom video capture configuration settings" defaultOpen="false">
+Call the [ZegoCustomVideoCaptureConfig ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-entity-zego-custom-video-capture-config) interface to create a custom video capture object, set the attribute [bufferType ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-entity-zego-custom-video-capture-config#buffer-type), and provide the video frame data type to the SDK; call the interface [enableCustomVideoCapture ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#enable-custom-video-capture-1) to enable the custom video capture function. For details, please refer to [Custom Video Capture](/real-time-video-u3d-cs/video/custom-video-capture).
+
+<Note title="Note">
+
+
+
+Due to the diversity of Android capture, the SDK supports multiple video frame data types [bufferType ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-entity-zego-custom-video-capture-config#buffer-type). Developers need to inform the SDK of the data type used.
+
+</Note>
+
+
+
+
+
+```java
+ZegoCustomVideoCaptureConfig videoCaptureConfig = new ZegoCustomVideoCaptureConfig();
+// Select RAW_DATA type video frame data
+videoCaptureConfig.bufferType = ZegoVideoBufferType.RAW_DATA;
+engine.enableCustomVideoCapture(true, videoCaptureConfig, ZegoPublishChannel.AUX);
+```
+</Accordion>
+
+
+### 3 (Optional) Set auxiliary publisher custom video capture callback
+
+<Accordion title="Auxiliary publisher custom video capture callback settings" defaultOpen="false">
+Call [setCustomVideoCaptureHandler](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#set-custom-video-capture-handler) to set the notification callback for custom video capture, and implement [onStart](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-custom-video-capture-handler#on-start) and [onStop](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-custom-video-capture-handler#on-stop) custom capture callback methods.
+
+```java
+// Set itself as the custom video capture callback object
+sdk.setCustomVideoCaptureHandler(new IZegoCustomVideoCaptureHandler() {
+    @Override
+    public void onStart(ZegoPublishChannel channel) {
+        // After receiving the callback, the developer needs to execute business logic related to starting video capture, such as turning on the camera, etc.
+        ...
+    }
+    @Override
+    public void onStop(ZegoPublishChannel channel) {
+        // After receiving the callback, the developer needs to execute business logic related to stopping video capture, such as turning off the camera, etc.
+        ...
+    }
+});
+```
+</Accordion>
+
+
+### 4 Call auxiliary publisher methods to implement preview and publishing stream
+
+After logging in to the room, call the start preview interface [startPreview ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#start-preview) or start publishing stream interface [startPublishingStream ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#start-publishing-stream) to trigger the [onStart](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-callback-i-zego-custom-video-capture-handler#on-start) of [3 Set Auxiliary Publisher Custom Video Capture Callback](#3optional-set-auxiliary-publisher-custom-video-capture-callback). When the [onStart ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-custom-video-capture-handler#on-start) callback is triggered, developers can start capturing video frame data.
+
+
+When stopping publishing stream [stopPublishingStream](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#stop-publishing-stream) and stopping preview [stopPreview ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java~class~im-zego-zegoexpress-zego-express-engine#stop-preview), the [onStop ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-custom-video-capture-handler#on-stop) callback of [3 Set Auxiliary Publisher Custom Video Capture Callback](#3optional-set-auxiliary-publisher-custom-video-capture-callback) will be triggered. At this time, developers should stop capturing video data.
+
+```java
+/**
+*  Start preview, set local preview view, view mode uses SDK default mode, proportional scaling to fill the entire View
+*  The following preview_view is a SurfaceView/TextureView/SurfaceTexture object on the UI interface
+*/
+engine.startPreview(new ZegoCanvas(preview_view), ZegoPublishChannel.AUX);
+
+/** Start publishing stream */
+engine.startPublishingStream("stream1", ZegoPublishChannel.AUX);
+```
+
+### 5 (Optional) Send captured video frame data to SDK
+
+
+<Accordion title="Send captured video frame data to SDK" defaultOpen="false">
+When the [onStart ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-custom-video-capture-handler#on-start) callback is triggered, developers can call [sendCustomVideoCaptureRawData ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#send-custom-video-capture-raw-data) or [sendCustomVideoCaptureTextureData ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#send-custom-video-capture-texture-data) to send the captured video data to the SDK.
+
+- Call [sendCustomVideoCaptureRawData ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#send-custom-video-capture-raw-data)
+
+    ```java
+    engine.sendCustomVideoCaptureRawData(buffer, data.length, param, System.currentTimeMillis(), ZegoPublishChannel.AUX);
+    ```
+
+- Call [sendCustomVideoCaptureTextureData ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#send-custom-video-capture-texture-data)
+
+    ```java
+    engine.sendCustomVideoCaptureTextureData(textureID, width, height, System.currentTimeMillis(), ZegoPublishChannel.AUX);
+    ```
+</Accordion>
+
+
+### 6 Set auxiliary publisher event callback
+
+Call the auxiliary publisher's [setEventHandler](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#set-event-handler) interface to set event callbacks for the auxiliary publisher to receive notifications such as "publishing stream state change callback", "publishing stream quality callback", "publishing stream first frame callback", etc.
+
+```java
+engine.setEventHandler(new IZegoEventHandler(){
+
+    // Other overridden callbacks
+    ...
+
+    @Override
+    public void onPublisherStateUpdate(String streamID, ZegoPublisherState state, int errorCode, JSONObject extendedData){
+        // Logic for the corresponding publishing action result
+        ...
+    }
+    @Override
+    public void onPublisherQualityUpdate(String streamID, ZegoPublishStreamQuality quality){
+        // Logic for corresponding publishing stream quality related display, etc.
+        ...
+    }
+    @Override
+    public void onPublisherCapturedVideoFirstFrame(ZegoPublishChannel channel){
+        // Notification that SDK received video data for the first time
+        ...
+    }
+    @Override
+    public void onPublisherVideoSizeChanged(int width, int height, ZegoPublishChannel channel){
+        // Developers can remove logic such as UI mask space for displaying video in this callback
+    }
+    @Override
+    public void onPublisherRelayCDNStateUpdate(String streamID, ArrayList<ZegoStreamRelayCDNInfo> infoList){
+        // Notification that stream is relayed to CDN
+    }
+
+    // Other overridden callbacks
+    ...
+
+});
+
+
+```
+
+
+## FAQ
+
+1. **When will [onStart](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-custom-video-capture-handler#on-start) be called back?**
+
+    When custom video capture is enabled, it will be triggered when the SDK starts publishing stream [startPublishingStream ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#start-publishing-stream) or starts preview [startPreview ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine#start-preview).
+
+2. **Is publishing more than 4 streams simultaneously supported?**
+
+    To cooperate with the real-time signaling function, the current SDK default maximum number of publishing stream channels is 4, but versions before 2.14.0 have a default maximum of 2 publishing stream channels. If you need to support more publishing channels, please contact ZEGOCLOUD Technical Support for a special build.

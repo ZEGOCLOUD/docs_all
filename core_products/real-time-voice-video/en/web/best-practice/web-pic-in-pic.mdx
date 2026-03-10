@@ -1,0 +1,281 @@
+---
+date: '2026-03-06'
+---
+# Video Picture-in-Picture Solution
+
+---
+
+## Feature Overview
+
+The Picture-in-Picture (PiP) feature allows you to continue watching video call content while browsing other web pages or using other applications. When Picture-in-Picture is enabled, the call interface will be displayed as a standalone floating window on top of the screen. Even when you switch to other browser tabs or applications, you can still view the call screen in real-time, effectively improving multitasking efficiency.
+
+This document mainly introduces how to implement basic Web Picture-in-Picture audio and video call functionality by combining ZEGO Express SDK with the Web Picture-in-Picture API ([Document Picture-in-Picture API](https://developer.mozilla.org/en-US/docs/Web/API/Document_Picture-in-Picture_API)).
+
+## Prerequisites
+
+Before implementing Web Picture-in-Picture audio and video call functionality, ensure that:
+
+- You have implemented basic real-time audio and video functionality. For details, please refer to [Implement a basic video call](https://www.zegocloud.com/docs/video-call/implement-basic-videocall?platform=web&language=javascript).
+- The browser supports the [Document Picture-in-Picture API](https://developer.mozilla.org/en-US/docs/Web/API/Document_Picture-in-Picture_API). Chrome 120 or higher is recommended.
+
+## Implementation Process
+
+<Note title="Note">
+
+If you need to automatically trigger this feature when switching tabs, please perform the following operations:
+
+
+1. In the call page, click the "View site information" icon on the left side of the browser address bar.
+2. Click "Site settings", find the "Auto Picture-in-Picture" option, and enable it.
+</Note>
+
+### 1 Compatibility Check
+
+Before using the Picture-in-Picture feature, you need to check whether the current browser environment supports the [Document Picture-in-Picture API](https://developer.mozilla.org/en-US/docs/Web/API/Document_Picture-in-Picture_API).
+
+```javascript
+if ("documentPictureInPicture" in window) {
+  // Supports Picture-in-Picture feature
+  console.log("Current browser supports Document Picture-in-Picture API");
+} else {
+  console.error("Current browser does not support Document Picture-in-Picture API");
+}
+```
+
+### 2 Open Picture-in-Picture Window
+
+Call the `window.documentPictureInPicture.requestWindow()` method to open a Picture-in-Picture window, specifying the window's width and height.
+
+```javascript
+let pipWin = null;
+
+async function openPictureInPicture() {
+  try {
+    // Open Picture-in-Picture window and set window size
+    pipWin = await window.documentPictureInPicture.requestWindow({
+      width: 360,
+      height: 500,
+    });
+    console.log("Picture-in-Picture window opened", pipWin);
+    // Continue with subsequent steps
+  } catch (error) {
+    console.error("Failed to open Picture-in-Picture window", error);
+  }
+}
+```
+
+### 3 Set Picture-in-Picture Window Content
+
+After opening the Picture-in-Picture window, you need to set its HTML structure and styles. You can set the window's head and body content by manipulating `pipWin.document`.
+
+```javascript
+function setupPipWindow() {
+  // Set styles
+  pipWin.document.head.innerHTML = `
+    <style>
+      * {margin:0;padding:0;box-sizing: border-box; overflow: hidden;}
+      body { width: 100vw; height: 100vh }
+      .pip-container {
+          width: 100%;
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          background: #f5f5f5;
+      }
+      .video-wrap { flex: 1; display: flex; flex-direction: column; padding: 5px; }
+      .pip-video { flex: 1; margin: 5px 0; background: #000; }
+      .pip-controls {
+          padding: 10px;
+          display: flex;
+          justify-content: space-around;
+          background: #fff;
+      }
+      .pip-controls button {
+          padding: 8px 16px;
+          cursor: pointer;
+      }
+    </style>
+  `;
+
+  // Set page structure
+  pipWin.document.body.innerHTML = `
+    <div class="pip-container">
+      <div class="video-wrap">
+        <div class="pip-video" id="local-video"></div>
+        <div class="pip-video" id="remote-video"></div>
+        <div class="pip-video" id="screen-video"></div>
+      </div>
+      <div class="pip-controls">
+          <button id="toggle-mic">Toggle Mic</button>
+          <button id="toggle-camera">Toggle Camera</button>
+          <button id="hang-up">Hang Up</button>
+      </div>
+    </div>
+  `;
+}
+```
+
+### 4 Render Video Streams in Picture-in-Picture Window
+
+After creating streams with ZEGO Express SDK, you can render videos to specified elements in the Picture-in-Picture window using the [playVideo](@playvideo) method.
+
+<Steps titleSize="p">
+<Step title="Create and render local stream">
+
+```javascript
+// Create local camera stream
+localStream = await zg.createZegoStream({
+  camera: { video: { quality: 1 }, audio: true },
+});
+
+// Render local stream to Picture-in-Picture window
+const pipLocalVideo = pipWin.document.getElementById("local-video");
+localStream.playVideo(pipLocalVideo);
+```
+</Step>
+<Step title="Pull and render remote stream">
+
+```javascript
+// Pull remote stream
+remoteStream = await zg.startPlayingStream(remoteStreamID);
+remoteView = zg.createRemoteStreamView(remoteStream);
+
+// Render remote stream to Picture-in-Picture window
+const pipRemoteVideo = pipWin.document.getElementById("remote-video");
+remoteView.play(pipRemoteVideo);
+```
+</Step>
+<Step title="Create and render screen sharing stream">
+
+```javascript
+// Create screen sharing stream
+screenStream = await zg.createZegoStream({
+  screen: { video: true, audio: true },
+});
+
+// Get screen sharing content type (application window, browser tab, or entire screen)
+screenShareType = screenStream.getScreenDisplaySurface();
+
+// Render screen sharing stream to Picture-in-Picture window
+const pipScreenVideo = pipWin.document.getElementById("screen-video");
+screenStream.playVideo(pipScreenVideo);
+```
+</Step>
+</Steps>
+
+### 5 Add Picture-in-Picture Window Event Listeners
+
+Add event listeners to control buttons in the Picture-in-Picture window to implement microphone, camera toggle, and other functions.
+
+```javascript
+function setupPipEventListeners() {
+  // Add click event for toggle microphone button
+  pipWin.document.getElementById("toggle-mic").addEventListener("click", () => {
+    // ...
+  });
+
+  // Add click event for toggle camera button
+  pipWin.document.getElementById("toggle-camera").addEventListener("click", () => {
+    // ...
+  });
+
+  // Add click event for hang up button
+  pipWin.document.getElementById("hang-up").addEventListener("click", () => {
+    // ...
+  });
+}
+```
+
+### 6 Listen for Picture-in-Picture Window Close Event
+
+When users manually close the Picture-in-Picture window, you need to listen to the `pagehide` event and handle it accordingly, such as rendering the video back to the main page window.
+
+```javascript
+pipWin.addEventListener("pagehide", () => {
+  console.log("Picture-in-Picture window closed");
+  pipWin = null;
+  // Render video streams back to main page
+  // renderMainVideo();
+});
+```
+
+### 7 Programmatically Close Picture-in-Picture Window
+
+If you need to programmatically close the Picture-in-Picture window in code, you can call the following methods:
+
+**Method 1: Close via window instance**
+
+```javascript
+if (pipWin) {
+  pipWin.close();
+  pipWin = null;
+}
+```
+
+**Method 2: Close via API**
+
+```javascript
+if (documentPictureInPicture.window) {
+  documentPictureInPicture.window.close();
+}
+```
+
+
+### 8 Synchronize Main Page and Picture-in-Picture Window States
+
+State changes on the main page (such as microphone and camera toggles) are not automatically synchronized to the Picture-in-Picture window. You need to manually synchronize the states.
+
+```javascript
+function updateCameraState(isVideoOff) {
+  const cameraText = isVideoOff ? "Turn on Camera" : "Turn off Camera";
+
+  // Synchronously update main page button state
+  const mainCameraButton = document.getElementById("toggle-camera");
+  if (mainCameraButton) {
+    mainCameraButton.textContent = cameraText;
+  }
+
+  // Synchronously update Picture-in-Picture window button state
+  if (pipWin) {
+    const pipCameraButton = pipWin.document.getElementById("toggle-camera");
+    if (pipCameraButton) {
+      pipCameraButton.textContent = cameraText;
+    }
+  }
+}
+```
+
+## Usage Example
+
+The complete usage flow is as follows:
+
+```javascript
+// 1. Check if browser supports Picture-in-Picture feature
+if ("documentPictureInPicture" in window) {
+  // 2. Open Picture-in-Picture window
+  pipWin = await window.documentPictureInPicture.requestWindow({
+    width: 360,
+    height: 500,
+  });
+
+  // 3. Set window HTML structure and CSS styles
+  setupPipWindow();
+
+  // 4. Render video streams to Picture-in-Picture window
+  const pipLocalVideo = pipWin.document.getElementById("local-video");
+  localStream.playVideo(pipLocalVideo);
+
+  const pipRemoteVideo = pipWin.document.getElementById("remote-video");
+  remoteView.play(pipRemoteVideo);
+
+  // 5. Add event listeners for buttons in Picture-in-Picture window
+  setupPipEventListeners();
+
+  // 6. Listen for Picture-in-Picture window close event
+  pipWin.addEventListener("pagehide", () => {
+    pipWin = null;
+
+    // renderMainVideo();
+  });
+}
+```

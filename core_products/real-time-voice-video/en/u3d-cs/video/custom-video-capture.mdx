@@ -1,0 +1,229 @@
+---
+articleID: 19233
+date: "2024-12-09"
+---
+# Custom Video Capture
+
+- - -
+
+## Function Overview
+
+Custom video capture means that developers capture video themselves, provide video data to ZEGO Express SDK, and ZEGO Express SDK encodes and publishes stream. When users enable the custom video capture function, by default, ZEGO Express SDK will render the local preview screen at the publishing end, and users do not need to render it themselves.
+
+When the following situations occur in the developer's business, it is recommended to use the SDK's custom video capture function:
+
+- The developer's App uses the AI Effects SDK from third-party AI Effects vendors, which can directly interface with ZEGO Express SDK's custom video capture function. That is, the AI Effects SDK from third-party AI Effects vendors is responsible for video data capture and pre-processing, and ZEGO Express SDK is responsible for video data encoding and pushing audio and video streams to ZEGO audio and video cloud.
+- During live streaming, the developer needs to use additional functions completed by the camera, which conflicts with ZEGO Express SDK's default video capture logic, causing the camera to be unusable. For example, in the middle of live streaming, short videos need to be recorded.
+- Live streaming data not captured by the camera. For example, local video file playback, screen sharing, game live streaming, etc.
+
+## Example Source Code Download
+
+Please refer to [Download Example Source Code](/real-time-video-u3d-cs/quick-start/run-example-code) to get the source code.
+
+For related source code, please see files in the "/Assets/ZegoExpressExample/Examples/AdvancedVideoProcessing/CustomVideoCapture.cs" directory.
+
+## Prerequisites
+
+Before performing custom video capture, please ensure:
+
+- You have created a project in [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in the project and implemented basic audio and video streaming functions. For details, please refer to [Quick Start - Integration](/real-time-video-u3d-cs/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-u3d-cs/quick-start/implementing-video-call).
+
+
+
+## Usage Steps
+
+The usage flow of custom video capture is as follows:
+
+1. Create ZegoExpressEngine engine.
+2. Call the [EnableCustomVideoCapture](@EnableCustomVideoCapture) interface to enable the custom video capture function.
+3. Set the custom video capture callback object and implement the [OnCustomVideoCaptureStart](@OnCustomVideoCaptureStart-IZegoEventHandler) and [OnCustomVideoCaptureStop](@OnCustomVideoCaptureStop-IZegoEventHandler) methods to receive notifications of custom video capture start and end, respectively.
+4. After logging in to the room and starting preview and publishing stream, the [OnCustomVideoCaptureStart](@OnCustomVideoCaptureStart-IZegoEventHandler) custom video capture start callback notification will be triggered.
+5. Call [SendCustomVideoCaptureRawData](@SendCustomVideoCaptureRawData) to provide video frame data to the SDK.
+6. When ending publishing stream, you will receive the [OnCustomVideoCaptureStop](@OnCustomVideoCaptureStop-IZegoEventHandler) custom video capture callback notification to stop capture.
+
+The API interface call sequence diagram is as follows:
+```mermaid
+sequenceDiagram
+    participant App as Client App
+    participant SDK as ZEGO Express SDK
+
+    App->>SDK: Create engine <br/> [createEngineWithProfile]
+
+    App->>SDK: Create range scene module <br/> [createRangeScene]
+
+    App->>SDK: Listen to range scene event callbacks <br/> [setEventHandler]
+
+    critical Critical steps
+        App->>SDK: Set range scene stream management parameters <br/> [setReceiveRange / enableRangeSpatializer]
+
+        App->>SDK: Login scene <br/> [loginScene]
+
+        App->>SDK: Publish stream to scene <br/> [startPublishingStreamInScene]
+
+        App->>SDK: Update user position <br/> [updateUserPosition]
+
+        App->>SDK: Logout scene <br/> [logoutScene]
+    end
+
+    App->>SDK: Destroy range scene module <br/> [destroyRangeScene]
+
+    App->>SDK: Destroy engine <br/> [destroyEngine]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/custom_video_capture_uml_u3d.png" /></Frame>
+*/}
+
+<Warning title="Warning">
+
+
+When enabling the custom video capture function, it is necessary to keep the [EnableCamera](@EnableCamera) interface in the default configuration "True", otherwise there will be no video data for publishing stream.
+
+</Warning>
+
+
+
+### 1 Enable Custom Video Capture Function
+
+Create a custom video capture object through [ZegoCustomVideoCaptureConfig](@-ZegoCustomVideoCaptureConfig), set the attribute [bufferType](@bufferType-ZegoCustomVideoCaptureConfig), and provide the video frame data type to the SDK; call the [EnableCustomVideoCapture](@EnableCustomVideoCapture) interface to enable the custom video capture function.
+
+The SDK supports multiple video frame data types [bufferType](@bufferType-ZegoCustomVideoCaptureConfig). Developers need to inform the SDK of the data type used. Currently, Unity3D SDK supports the raw data type `RawData`. Setting other enumeration values will not allow providing video frame data to the SDK.
+
+
+```csharp
+ZegoCustomVideoCaptureConfig videoCaptureConfig = new ZegoCustomVideoCaptureConfig();
+// Select RawData type video frame data
+videoCaptureConfig.bufferType = ZegoVideoBufferType.RawData;
+
+engine.enableCustomVideoCapture(true, videoCaptureConfig, ZegoPublishChannel.MAIN);
+```
+
+### 2 Set Custom Video Capture Callback
+
+Set the callback delegate for custom video capture and implement the [OnCustomVideoCaptureStart](@OnCustomVideoCaptureStart-IZegoEventHandler) and [OnCustomVideoCaptureStop](@OnCustomVideoCaptureStop-IZegoEventHandler) custom capture callback methods.
+
+<Note title="Note">
+
+
+When custom capturing multiple streams, it is necessary to specify the publishing channel in the [OnCustomVideoCaptureStart](@OnCustomVideoCaptureStart-IZegoEventHandler) and [OnCustomVideoCaptureStop](@OnCustomVideoCaptureStop-IZegoEventHandler) callbacks, otherwise only the main channel notification will be called back by default.
+
+</Note>
+
+
+
+```csharp
+// Set custom capture start callback
+engine.OnCustomVideoCaptureStart = (channel) =>
+{
+    // SDK notifies that video frame capture is about to start. After receiving this callback, the video frame data sent to the SDK is valid
+    // Notify to start video capture
+};
+// Set custom capture stop callback
+engine.OnCustomVideoCaptureStop = (channel) =>
+{
+    // SDK notifies that video frame capture is about to stop
+    // Stop video capture
+};
+```
+
+### 3 Send Video Frame Data to SDK
+
+In Unity3D, support capturing cameras in the scene or local camera screens. For example, you can use `WebCamTexture` in Unity3D to control the local camera, or capture the camera in the game through `RenderTexture` as the video capture source.
+
+After calling the start preview interface [StartPreview](@StartPreview) or start publishing stream interface [StartPublishingStream](@StartPublishingStream), you will receive the [OnCustomVideoCaptureStart](@OnCustomVideoCaptureStart-IZegoEventHandler) callback; after the developer starts the capture-related business logic, call the send custom capture video frame data interface to send video frame data to the SDK. The custom capture video frame data interface corresponds one-to-one with the video frame data type [bufferType](@bufferType-ZegoCustomVideoCaptureConfig) provided to the SDK in [1 Enable Custom Video Capture Function](/real-time-video-u3d-cs/video/custom-video-capture):
+
+|Video Frame Type|bufferType|Send Video Frame Data Interface|
+|-|-|-|
+|Raw Data Type|RawData|[SendCustomVideoCaptureRawData ](@SendCustomVideoCaptureRawData)|
+
+
+The following code calls the [SendCustomVideoCaptureRawData](@SendCustomVideoCaptureRawData) interface to send video frame data to the SDK at the default 15 FPS frame rate.
+
+```csharp
+// Call in Unity's Update interface
+void Update(){
+    //Custom code
+    ...
+
+    PushExternalVideoDataIfNeeded();
+
+    //Custom code
+    ...
+}
+
+public void PushExternalVideoDataIfNeeded()
+{
+    //Custom code
+    ...
+
+    ulong curTimeStamp = GetTimeStamp();
+    // 1000/15 = 66.6, input one frame of data to the SDK every 60 milliseconds, frame rate fps = about 15 frames
+    if (curTimeStamp - lastTimeStamp > 60)
+    {
+        lastTimeStamp = curTimeStamp;
+
+        ZegoVideoFrameParam videoFrameParam = new ZegoVideoFrameParam();
+
+        //Custom code
+        ...
+
+        // Set the image format of external capture to BGRA, corresponding to RGBA32 in Unity
+        videoFrameParam.format = ZegoVideoFrameFormat.BGRA32;
+        // Width
+        videoFrameParam.width = w;
+        // Height
+        videoFrameParam.height = h;
+        // Rotation angle
+        videoFrameParam.rotation = getRealRotation();
+        videoFrameParam.strides = new int[4];
+        // Set stride, for rgba format, only need to fill in strides[0], rgba stride is width*4
+        videoFrameParam.strides[0] = stride;
+        UnityEngine.Debug.Log(String.Format("SendCustomVideoCaptureRawData, w:{0}, h:{1},", w, h));
+        // Send video frame data to SDK
+        engine.SendCustomVideoCaptureRawData(
+            Marshal.UnsafeAddrOfPinnedArrayElement(imgData, 0),
+            (uint)(w * h * 4),
+            videoFrameParam,
+            curTimeStamp
+        );
+    }
+}
+```
+
+After stopping publishing stream or preview, when exiting the room or destroying the engine, you will receive the [OnCustomVideoCaptureStop](@OnCustomVideoCaptureStop-IZegoEventHandler) callback, and developers can stop capture-related business logic, such as turning off the camera, etc.
+
+
+## FAQ
+
+1. **Using custom video capture, the local preview screen is normal, but the screen seen by the audience at the publishing end is distorted?**
+
+    The image ratio of the custom video capture is inconsistent with the ratio of the resolution set by the SDK by default (for example, the custom video capture video frame screen ratio is 4:3, while the SDK default publishing stream screen resolution ratio is 16:9). Solution:
+
+    - Solution 1: Developers modify the custom video capture video resolution ratio to 16:9 themselves.
+
+    - Solution 2: Developers call [SetVideoConfig](@SetVideoConfig) to customize the SDK's publishing stream resolution ratio to 4:3.
+
+3. **After enabling custom video capture, the capture frame rate and the playing stream playback frame rate are inconsistent?**
+
+    When the custom capture frame rate and the playing stream playback frame rate are inconsistent, it can be handled as follows:
+    - When providing "RAW_DATA" type video frame data to the SDK, set the frame rate of the [SetVideoConfig](@SetVideoConfig) interface to be consistent with the frame rate of the video data provided by the custom capture [SendCustomVideoCaptureRawData](@SendCustomVideoCaptureRawData) interface.
+
+4. **Does the SDK process the passed data synchronously or asynchronously internally in the method of receiving video frame data?**
+
+    After receiving video frame data, the SDK will first synchronously copy the data, and then asynchronously perform operations such as encoding, so the data can be released immediately after being passed to the SDK.
+
+
+4. **How to implement video rotation during custom video capture?**
+
+    When developers use custom video capture, after listening to device orientation changes, they can refer to the following two ways to implement landscape/portrait switching:
+
+    - Process video frame data by yourself: In the callback of device orientation change, perform rotation processing on the captured video frame data, and then pass the processed data to the SDK through the [SendCustomVideoCaptureRawData](@SendCustomVideoCaptureRawData) interface.
+    - Process video frame data through the SDK: In the callback of device orientation change, before passing the captured video frame data to the SDK, set "rotation" in [ZegoVideoFrameParam](@-ZegoVideoFrameParam) according to the actual orientation, call the [SendCustomVideoCaptureRawData](@SendCustomVideoCaptureRawData) interface to pass in the video frame data and set orientation parameters, and pass the data to the SDK.
+
+
+
+
+## Related Documentation
+
+- [How to handle video pixelation or green screen issues?](https://www.zegocloud.com/docs/faq/video-artifacts)
+- [How to handle audio and video out of sync issues?](https://www.zegocloud.com/docs/faq/av-sync-issue)

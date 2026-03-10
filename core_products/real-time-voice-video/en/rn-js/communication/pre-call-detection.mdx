@@ -1,0 +1,247 @@
+---
+articleID: 15161
+date: "2024-01-02"
+---
+# Pre-call Detection
+
+---
+
+## Overview
+
+To ensure a real-time call experience, network and device detection can be performed before the call to identify and troubleshoot problems in advance.
+
+- Network detection: Detect the network environment, which can be used to determine or predict whether the network environment is suitable for publishing/playing streams of a specified bitrate.
+- Device detection: Detect whether the local microphone, camera, and speaker can work properly.
+
+This document will introduce how to use ZEGO Express SDK interfaces to implement the above two types of detection.
+
+
+## Network Detection
+
+Please refer to [Network Speed Test](/real-time-video-rn/communication/testing-network) for operations.
+
+
+## Device Detection
+
+### Microphone Detection
+
+#### Detection Logic
+
+The microphone device detection process is shown in the following figure:
+
+```mermaid
+graph TD
+    A[Start microphone detection] --> B[Start microphone]
+    B --> C{Check microphone permission}
+    C -->|No| D{Agree to authorize}
+    C -->|Yes| E{Check if microphone is available}
+    D -->|Agree| E
+    D -->|Disagree| F[Device error]
+    E -->|No| F
+    E -->|Yes| G{Check microphone audio data}
+    G -->|Data abnormal| F
+    G -->|Data normal| H[Device normal]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Microphone_detection.png" /></Frame>
+*/}
+
+
+#### Related Interfaces
+
+**1. Start Microphone**
+
+Call the [startPreview](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startpreview) interface to start audio capture without publishing stream.
+
+```javascript
+ZegoExpressEngine.instance().startPreview();
+```
+
+**2. Check Microphone Permission**
+
+ZEGO SDK automatically checks microphone permissions.
+
+<Warning title="Warning">
+Because Android 6.0 requires dynamic permissions to be requested for some important permissions, static permissions cannot be requested only through the "AndroidMainfest.xml" file. Therefore, you also need to refer to the following code, where "requestPermissions" is a method of "Activity".
+</Warning>
+
+
+
+```javascript
+import {PermissionsAndroid} from 'react-native';
+
+const granted = PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA,
+                                        PermissionsAndroid.RECORD_AUDIO);
+granted.then((data)=>{
+
+        if(!data) {
+            const permissions = [PermissionsAndroid.PERMISSIONS.RECORD_AUDIO, PermissionsAndroid.PERMISSIONS.CAMERA];
+            PermissionsAndroid.requestMultiple(permissions);
+        }
+    }).catch((err)=>{
+    console.log(err.toString());
+    })
+}
+```
+
+**3. Check if Microphone is Available**
+
+Call the [deviceError](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#deviceerror) interface to detect whether the device is abnormal. If no abnormal feedback is detected (can start "4. Check Microphone Sound Data" synchronously), and the microphone sound data detection is normal, the microphone device is available.
+
+```javascript
+/**
+ * Audio/video device error notification
+ * @param deviceName Device type name.
+ * @param errorCode Error code, please refer to common error codes: /real-time-video-rn/error-code#7.
+ */
+deviceError: (errorCode: number, deviceName: string) => void;
+```
+
+
+**4. Check Microphone Sound Data**
+
+Call the [startSoundLevelMonitor](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startsoundlevelmonitor) interface to obtain the energy value of the sound captured by the microphone. If the data is not abnormal, the microphone is normal and can be used for calls.
+
+```java
+ZegoExpressEngine.instance().startSoundLevelMonitor();
+```
+
+
+### Camera Detection
+
+#### Detection Logic
+
+The camera device detection process is shown in the following figure:
+
+```mermaid
+graph TD
+    A[Start camera detection] --> B[Start camera]
+    B --> C{Check camera permission}
+    C -- No --> D{Agree to authorize}
+    C -- Yes --> E{Check if camera is available}
+    D -- Agree --> E
+    D -- Disagree --> F[Device error]
+    E -- No --> F
+    E -- Yes --> G{Check if image is normal}
+    G -- Image abnormal --> F
+    G -- Image normal --> H[Device normal]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Camera_detection.png" /></Frame>
+*/}
+
+
+#### Related Interfaces
+
+**1. Start Camera**
+
+Call the [startPreview](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressengine_.zegoexpressengine.html#startpreview) interface to bind the view for camera preview, start video capture and preview without publishing stream.
+
+```javascript
+render() {
+    return (
+    ...
+    <ZegoTextureView ref='zego_preview_view' style={{height: 200}} />
+    ...
+    );
+}
+
+componentDidMount() {
+    ...
+    ZegoExpressEngine.instance().startPreview({"reactTag": findNodeHandle(this.refs.zego_preview_view), "viewMode": ZegoViewMode.AspectFit, "backgroundColor": 0});
+    ...
+}
+```
+
+**2. Check Camera Permission**
+
+ZEGO SDK will automatically check camera permissions.
+
+<Warning title="Warning">
+Because Android 6.0 requires dynamic permissions to be requested for some important permissions, static permissions cannot be requested only through the "AndroidMainfest.xml" file. Therefore, you also need to refer to the following code, where "requestPermissions" is a method of "Activity".
+</Warning>
+
+
+
+```javascript
+import {PermissionsAndroid} from 'react-native';
+
+const granted = PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA,
+                                        PermissionsAndroid.RECORD_AUDIO);
+granted.then((data)=>{
+
+        if(!data) {
+            const permissions = [PermissionsAndroid.PERMISSIONS.RECORD_AUDIO, PermissionsAndroid.PERMISSIONS.CAMERA];
+            PermissionsAndroid.requestMultiple(permissions);
+        }
+    }).catch((err)=>{
+    console.log(err.toString());
+    })
+}
+```
+
+**3. Check if Camera is Available**
+
+Call the [deviceError](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegoeventlistener.html#deviceerror) interface to detect whether the device is abnormal. If no abnormal feedback is detected (can start "Check if Picture is Normal" synchronously), and the picture displays normally, the device is available.
+
+```javascript
+/**
+ * Audio/video device error notification
+ * @param deviceName Device type name
+ * @param errorCode Error code, please refer to common error codes: /real-time-video-rn/error-code#7
+ */
+deviceError: (errorCode: number, deviceName: string) => void;
+```
+
+**4. Check if Picture is Normal**
+
+If the picture displays normally at this time, the camera is normal and can be used for calls.
+
+
+### Speaker Detection
+
+#### Detection Logic
+
+The playback device detection process is shown in the following figure:
+
+```mermaid
+graph TD
+    A[Start speaker detection] --> B[Use media player to play audio file]
+    B --> C{Can you hear sound}
+    C -->|Yes| D[Device normal]
+    C -->|No| E[Device error]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Playback_device_detection.png" /></Frame>
+*/}
+
+
+#### Related Interfaces
+
+**1. Use Media Player to Play Audio File**
+
+Call the [ZegoMediaPlayer](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/classes/_zegoexpressdefines_.zegomediaplayer.html) interface to play the audio file you use for testing.
+
+```java
+// 1. Create player object
+let mediaPlayer = ZegoExpressEngine.instance().createMediaPlayer();
+// 2. Load resource
+let resourcePath = "xxx";
+mediaPlayer.loadResource(resourcePath);
+// 3. Play resource
+mediaPlayer.start();
+```
+
+**2. Check if Sound is Heard**
+
+If the corresponding audio can be heard, the playback device is normal and can be used for calls. Call the [mediaPlayerStateUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/javascript_react-native/interfaces/_zegoexpresseventhandler_.zegomediaplayerlistener.html#mediaplayerstateupdate) callback to view the player status:
+
+```javascript
+/**
+ * Player playback status callback
+ * @param mediaPlayer Player instance of the callback
+ * @param state Player status
+ * @param errorCode Error code, for details please refer to the common error codes document https://doc-en.zego.im/en/308.html
+ */
+mediaPlayerStateUpdate: (mediaPlayer: ZegoMediaPlayer, state: ZegoMediaPlayerState, errorCode: number) => void;
+```

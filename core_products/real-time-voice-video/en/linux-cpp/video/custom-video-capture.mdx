@@ -1,0 +1,182 @@
+---
+articleID: 6874
+date: "2025-11-18"
+---
+# Custom Video Capture
+
+- - -
+
+## Feature Overview
+
+Custom video capture refers to the feature where developers capture video themselves, provide video data to ZEGO Express SDK, and ZEGO Express SDK performs encoding and publishing. When users enable custom video capture, by default, ZEGO Express SDK will render the local preview on the publishing end, and users do not need to perform rendering themselves.
+
+When the following situations occur in the developer's business, it is recommended to use the SDK's custom video capture feature:
+
+- The developer's App uses a third-party beauty vendor's beauty SDK, which can directly interface with ZEGO Express SDK's custom video capture feature. That is, the third-party beauty vendor's beauty SDK is responsible for video data capture and pre-processing, while ZEGO Express SDK is responsible for video data encoding and pushing audio/video streams to the ZEGO audio/video cloud.
+- During live streaming, the developer needs to use additional functions completed by the camera that conflict with ZEGO Express SDK's default video capture logic, causing the camera to not work properly. For example, recording short videos in the middle of live streaming.
+- Live streaming non-camera captured data. For example, local video file playback, screen sharing, game live streaming, etc.
+
+## Download Example Source Code
+
+Please refer to the [Example Source Code Documentation](/real-time-video-windows-cpp/quick-start/run-example-code) for desktop cross C++ platform to get the source code.
+
+For related source code, please check files in the "/ZegoExpressExample/Examples/AdvancedVideoProcessing/CustomVideoCapture" directory.
+
+## Prerequisites
+
+Before performing custom video capture, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in the project and implemented basic audio and video publishing and playing functions. For details, please refer to [Quick Start - Integration](/real-time-video-linux-cpp/quick-start/integrating-sdk) and [Quick Start - Implementation Flow](/real-time-video-linux-cpp/quick-start/implementing-video-call).
+
+
+## Usage Steps
+
+The sequence diagram of API interface calls is as follows:
+
+```mermaid
+sequenceDiagram
+    participant ClientApp as Client App
+    participant ZEGO as ZEGO Express SDK
+
+    ClientApp ->> ZEGO: Create engine <br/> [createEngine]
+    ClientApp ->> ZEGO: Enable custom video capture <br/> [enableCustomVideoCapture]
+    ClientApp ->> ZEGO: Set capture callback handler, implement callback methods <br/> [setCustomVideoCaptureHandler]
+    ClientApp ->> ZEGO: Login room <br/> [loginRoom]
+    ClientApp ->> ZEGO: Start preview, publish stream <br/> [startPreview, startPublishingStream]
+    ZEGO -->> ClientApp: Custom video capture start notification <br/> [onStart]
+    ClientApp ->> ZEGO: Send video frame data <br/> [sendCustomVideoCaptureRawData]
+    ClientApp ->> ZEGO: Stop preview, publish stream <br/> [stopPreview, stopPublishingStream]
+    ZEGO -->> ClientApp: Custom video capture stop notification <br/> [onStop]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/custom_video_capture_uml_android_new.png" /></Frame>
+*/}
+
+1. Create ZegoExpressEngine engine.
+2. Call the [enableCustomVideoCapture](@enableCustomVideoCapture) interface to enable custom video capture.
+3. Call the [setCustomVideoCaptureHandler](@setCustomVideoCaptureHandler) interface to set the custom video capture callback object; and implement the corresponding [onStart](@onStart-IZegoCustomVideoCaptureHandler) and [onStop](@onStop-IZegoCustomVideoCaptureHandler) callback methods to receive notifications of custom video capture start and end respectively.
+4. After logging in the room and starting preview and publishing stream, the [onStart](@onStart-IZegoCustomVideoCaptureHandler) custom video capture start callback will be triggered.
+5. Start capturing video. Developers need to implement video capture related business logic themselves, such as enabling camera, etc.
+6. Call interfaces such as [sendCustomVideoCaptureRawData](@sendCustomVideoCaptureRawData) to send video frame data to the SDK.
+7. Finally, stopping preview and publishing stream will trigger the [onStop](@onStop-IZegoCustomVideoCaptureHandler) custom video capture end callback notification.
+8. Stop capturing video.
+
+<Warning title="Warning">
+
+
+When enabling custom video capture, you need to keep the [enableCamera](@enableCamera) interface at its default setting "True", otherwise there will be no video data for stream publishing.
+
+
+</Warning>
+
+
+
+### 1 Enable Custom Video Capture
+
+1. After initializing the SDK, create a custom video capture object [ZegoCustomVideoCaptureConfig](@-ZegoCustomVideoCaptureConfig) and set the property [bufferType](@bufferType-ZegoCustomVideoCaptureConfig) to provide the video frame data type to the SDK.
+2. Call the [enableCustomVideoCapture](@enableCustomVideoCapture) interface to enable custom video capture.
+
+<Note title="Note">
+
+
+The SDK supports multiple video frame data types [bufferType](@bufferType-ZegoCustomVideoCaptureConfig), and developers need to inform the SDK of the data type used. Currently, the Linux SDK supports the following video frame data types:
+
+- ZEGO_VIDEO_BUFFER_TYPE_RAW_DATA: Raw data type.
+- ZEGO_VIDEO_BUFFER_TYPE_ENCODED_DATA: Encoded type.
+
+Setting it to other enumeration values will make it impossible to provide video frame data to the SDK.
+
+</Note>
+
+
+
+```cpp
+ZegoCustomVideoCaptureConfig captureConfig;
+captureConfig.bufferType = ZEGO_VIDEO_BUFFER_TYPE_RAW_DATA;
+
+engine->enableCustomVideoCapture(true, &captureConfig);
+```
+
+### 2 Set Custom Video Capture Callback
+
+Call [setCustomVideoCaptureHandler ](@setCustomVideoCaptureHandler) to set the custom video capture callback and implement the [onStart](@onStart-IZegoCustomVideoCaptureHandler) and [onStop](@onStop-IZegoCustomVideoCaptureHandler) custom capture callback methods.
+
+<Note title="Note">
+
+
+When custom capturing multiple streams, you need to specify the publishing channel in the [onStart](@onStart-IZegoCustomVideoCaptureHandler) and [onStop](@onStop-IZegoCustomVideoCaptureHandler) callbacks, otherwise only the main channel notifications will be called back by default.
+
+</Note>
+
+
+
+```cpp
+// Inherit from IZegoCustomVideoCaptureHandler, implement custom rendering callback
+// Please note, do not call any SDK interfaces in the SDK callback thread, you need to manually switch to another thread, otherwise a deadlock will occur
+class MyZegoCustomVideoCaptureHandler: public IZegoCustomVideoCaptureHandler{
+
+    // SDK notifies that video frame capture is about to start, video frame data sent to the SDK after receiving this callback is valid
+    // @param channel Publishing channel
+    void onStart(ZegoPublishChannel channel) override{
+
+    }
+
+    // SDK notifies that video frame capture is about to stop
+    // @param channel Publishing channel
+    void onStop(ZegoPublishChannel channel) override{
+
+    }
+}
+
+// Set custom capture callback for the engine
+engine->setCustomVideoCaptureHandler(std::make_shared<MyZegoCustomVideoCaptureHandler>());
+```
+
+### 3 Send Video Frame Data to SDK
+
+After calling the start preview interface [startPreview](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#start-preview) or start publishing stream interface [startPublishingStream](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#start-publishing-stream), the [onStart](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-custom-video-capture-handler#on-start) callback will be triggered; after stopping publishing/preview, exiting the room, or destroying the engine, the [onStop](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-custom-video-capture-handler#on-stop) callback will be triggered.
+
+The SDK will only accept video data passed by users after [onStart ](@onStart-IZegoCustomVideoCaptureHandler) is triggered and before [onStop ](@onStop-IZegoCustomVideoCaptureHandler) is triggered. Call the custom captured video frame data interface to send video frame data to the SDK. The custom captured video frame data interfaces correspond one-to-one with the video frame data types [bufferType ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~struct~zego-express-zego-custom-video-capture-config#buffer-type) provided to the SDK in [1 Enable Custom Video Capture](/real-time-video-linux-cpp/video/custom-video-capture):
+
+|Video Frame Type|bufferType|Send Video Frame Data Interface|
+|-|-|-|
+|Raw data type|ZEGO_VIDEO_BUFFER_TYPE_RAW_DATA|[sendCustomVideoCaptureRawData](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#send-custom-video-capture-raw-data) |
+|Encoded type| ZEGO_VIDEO_BUFFER_TYPE_ENCODED_DATA|[sendCustomVideoCaptureEncodedData](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#send-custom-video-capture-encoded-data) |
+
+<Warning title="Warning">
+
+
+When performing external capture, if the data sent to the SDK through the [sendCustomVideoCaptureEncodedData](@sendCustomVideoCaptureEncodedData) interface is video frame encoded data, the SDK is only responsible for transmitting data and cannot preview. Developers need to preview themselves, and pre-processing effects like watermarks will not take effect.
+
+</Warning>
+
+
+
+Taking calling the [sendCustomVideoCaptureRawData ](@sendCustomVideoCaptureRawData) interface to send video frame data to the SDK after receiving the camera video frame callback as an example:
+
+```cpp
+ZegoExpressSDK::getEngine()->sendCustomVideoCaptureRawData(videoFrame->data.get(), videoFrame->dataLength, videoFrame->param, videoFrame->referenceTimeMillsecond);
+```
+
+## FAQ
+
+1. **When using custom video capture, the local preview screen is normal, but the screen seen by the audience after publishing stream is distorted. How should I handle it?**
+
+    This problem is caused by the inconsistency between the image ratio of custom video capture and the SDK's default resolution ratio. For example, the video frame screen ratio of custom video capture is 4:3, while the SDK's default publishing screen resolution ratio is 16:9.
+
+    There are the following solutions:
+
+    - Solution 1: Developers manually modify the video resolution ratio of custom video capture to 16:9.
+
+    - Solution 2: Developers call the [setVideoConfig](@setVideoConfig) interface to customize the SDK's publishing resolution ratio to 4:3.
+
+    - Solution 3: Developers call the [setCustomVideoCaptureFillMode](@setCustomVideoCaptureFillMode) interface to set the video capture screen scaling fill mode to "ZEGO_VIEW_MODE_ASPECT_FIT" (aspect ratio scaling, may have black borders) or "ZEGO_VIEW_MODE_ASPECT_FILL" (aspect ratio fill, may have some screen content cropped).
+
+2. **After enabling custom video capture, the captured frame rate and the playing stream frame rate are inconsistent?**
+
+    When providing `ZEGO_VIDEO_BUFFER_TYPE_RAW_DATA` type video frame data to the SDK, the frame rate set by the [setVideoConfig ](@setVideoConfig) interface needs to be consistent with the frame rate of the video data provided by the custom capture [sendCustomVideoCaptureRawData ](@sendCustomVideoCaptureRawData) interface.
+
+3. **Does the SDK process the passed data synchronously or asynchronously internally in the method of receiving video frame data?**
+
+    After receiving video frame data, the SDK will first synchronously copy the data, and then asynchronously perform operations such as encoding, so the data can be released immediately after being passed to the SDK.

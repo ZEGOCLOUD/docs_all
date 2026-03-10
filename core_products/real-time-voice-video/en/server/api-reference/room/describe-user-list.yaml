@@ -1,0 +1,157 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: Real-time Voice/Video API Support
+    email: support@zegocloud.com
+
+tags:
+  - name: room
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+paths:
+  /:
+    get:
+      tags:
+        - room
+      summary: DescribeUserList
+      description: |
+        Call this interface to get the list of users in the Room.
+
+        <Note title="Rate Limit">All rooms under the same AppID: 200 times/second; Single room: 1 time/1 second</Note>
+
+      operationId: describe-user-list
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > API prototype parameter
+            >
+            > https://rtc-api.zego.im?Action=DescribeUserList
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [DescribeUserList]
+          style: form
+          explode: true
+        # Public parameters
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        # Business parameters
+        - name: RoomId
+          in: query
+          description: Room ID. An empty list is returned if the Room does not exist.
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+        - name: Mode
+          in: query
+          description: |
+            Time order of users logging into the Room, default value is 0. 0: ascending order by time; 1: descending order by time
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 0
+            enum: [0, 1]
+        - name: Limit
+          in: query
+          description: |
+            The number of users returned in a single request, with a value range of 0-200, which means calling this interface returns a maximum of 200 users at a time. When the number of users in the Room exceeds 200, you need to use the Marker value (user starting position identifier) returned in the previous call's result to call this interface again to query the remaining users.
+
+            For example, if there are 450 users in the Room, when calling this interface to query the user list:
+            - (1) First call: pass an empty value for the Marker parameter to query users 1-200; assume the Marker value in the returned result is "marker1".
+            - (2) Second call: set the Marker parameter value to "marker1" to query users 201-400; assume the Marker value in the returned result is "marker2".
+            - (3) Third call: set the Marker parameter value to "marker2" to query users 401-450; the query is complete, and the Marker in the returned result is empty.
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+            maximum: 200
+            default: 200
+        - name: Marker
+          in: query
+          description: Query user starting position identifier, returned in the response of each request. When empty, user information is returned from the beginning.
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Operation successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DescribeUserListResponse'
+              example:
+                Code: 0
+                Message: success
+                RequestId: TestRequestId1635940600561291000
+                Data:
+                  Marker: 1635940599950-user2
+                  UserList:
+                    - UserId: user1
+                      UserName: user1
+                      UserRole: 1
+                    - UserId: user2
+                      UserName: user2
+                      UserRole: 2
+
+components:
+  schemas:
+    DescribeUserListResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int32
+          description: Return code. Please refer to [Global Return Codes](/real-time-video-server/api-reference/return-codes).
+        Message:
+          type: string
+          description: Description of the operation result.
+          example: success
+        RequestId:
+          type: string
+          description: Request ID.
+          example: TestRequestId1635940600561291000
+        Data:
+          type: object
+          properties:
+            Marker:
+              type: string
+              description: User starting position identifier.
+              example: 1635940599950-user2
+            UserList:
+              type: array
+              description: User list.
+              items:
+                type: object
+                properties:
+                  UserId:
+                    type: string
+                    description: User name.
+                    example: user1
+                  UserName:
+                    type: string
+                    description: User nickname.
+                    example: User1
+                  UserRole:
+                    type: integer
+                    format: uint32
+                    example: 2
+                    description: |
+                      User role.
+                      - 1: Host.
+                      - 2: Audience.
+                      - 4: Administrator, this type of user mainly exists in scenarios such as cloud recording and audio/video Stream review. Client SDK user-related interfaces will filter out this type of user.
+
+                      **This return parameter is only meaningful when accessing the LiveRoom service. Please ignore this parameter when accessing the Express service.**
+

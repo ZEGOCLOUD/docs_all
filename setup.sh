@@ -13,11 +13,11 @@ echo -e "${BLUE}========================================${NC}"
 echo ""
 
 # 解析参数
-WITH_HOOK=false
+DEV_MODE=false
 for arg in "$@"; do
 	case "$arg" in
-		--with-hook)
-			WITH_HOOK=true
+		--dev)
+			DEV_MODE=true
 			;;
 		*)
 			;;
@@ -100,13 +100,28 @@ fi
 
 echo ""
 
-# 2. 安装 Docuo CLI
-echo -e "${YELLOW}2. 安装 Docuo CLI...${NC}"
+# 2. 安装/升级 Docuo CLI
+NPM_REGISTRY="--registry=https://registry.npmmirror.com"
+echo -e "${YELLOW}2. 检查 Docuo CLI...${NC}"
 if command -v docuo &> /dev/null; then
-    echo -e "${GREEN}✓ Docuo CLI 已安装${NC}"
+    CURRENT_DOCUO_VERSION=$(npm list -g @spreading/docuo --depth=0 2>/dev/null | grep @spreading/docuo | sed 's/.*@spreading\/docuo@//')
+    LATEST_DOCUO_VERSION=$(npm view @spreading/docuo version $NPM_REGISTRY 2>/dev/null)
+    echo -e "当前 Docuo CLI 版本: ${GREEN}${CURRENT_DOCUO_VERSION}${NC}"
+    echo -e "最新 Docuo CLI 版本: ${GREEN}${LATEST_DOCUO_VERSION}${NC}"
+
+    if [ "$CURRENT_DOCUO_VERSION" = "$LATEST_DOCUO_VERSION" ]; then
+        echo -e "${GREEN}✓ Docuo CLI 已是最新版本，无需升级${NC}"
+    else
+        echo -e "${YELLOW}正在清理旧缓存内容...${NC}"
+        docuo clear
+        echo -e "${GREEN}✓ 旧缓存已清理${NC}"
+        echo -e "${YELLOW}正在升级 Docuo CLI: ${CURRENT_DOCUO_VERSION} -> ${LATEST_DOCUO_VERSION}...${NC}"
+        npm install -g @spreading/docuo@latest $NPM_REGISTRY
+        echo -e "${GREEN}✓ Docuo CLI 已升级到 ${LATEST_DOCUO_VERSION}${NC}"
+    fi
 else
     echo -e "${YELLOW}正在安装 Docuo CLI...${NC}"
-    npm install -g @spreading/docuo
+    npm install -g @spreading/docuo@latest $NPM_REGISTRY
 
     if command -v docuo &> /dev/null; then
         echo -e "${GREEN}✓ Docuo CLI 安装成功${NC}"
@@ -118,42 +133,32 @@ fi
 
 echo ""
 
-# 3. 将.hooks下的脚本在需要时复制到.git/hooks下
-if [ "$WITH_HOOK" = true ]; then
+# 以下步骤仅在 --dev 模式下执行
+if [ "$DEV_MODE" = true ]; then
+	# 3. 复制 Git Hooks
 	echo -e "${YELLOW}3. 复制 Git Hooks...${NC}"
 	cp -f .hooks/* .git/hooks/
 	echo -e "${GREEN}✓ Git Hooks 复制成功${NC}"
-else
-	echo -e "${YELLOW}3. 跳过 Git Hooks 复制（未使用 --with-hook）${NC}"
+	echo ""
+
+	# 4. 提醒安装 VS Code 插件
+	echo -e "${YELLOW}4. 推荐的 VS Code 插件:${NC}"
+	echo -e "${BLUE}请安装以下插件以获得更好的开发体验:${NC}"
+	echo ""
+	echo -e "${GREEN}• Docuo:${NC} https://marketplace.visualstudio.com/items?itemName=spreading-docuo.docuo"
+	echo -e "${GREEN}• Markdown Table:${NC} https://marketplace.visualstudio.com/items?itemName=TakumiI.markdowntable"
+	echo -e "${GREEN}• GitLens:${NC} https://marketplace.visualstudio.com/items?itemName=eamodio.gitlens"
+	echo -e "${GREEN}• MDX:${NC} https://marketplace.visualstudio.com/items?itemName=unifiedjs.vscode-mdx"
+	echo -e "${GREEN}• GitHub Pull Request:${NC} https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-pull-request-github"
+	echo ""
+
+	# 5. 提醒查看详细使用说明
+	echo -e "${YELLOW}5. 详细使用说明:${NC}"
+	echo -e "${BLUE}请查看详细的使用指南:${NC}"
+	echo -e "${GREEN}https://zegocloud.feishu.cn/wiki/G3stwqUPYinrVEkkWkFctzdTnwb${NC}"
+	echo ""
 fi
-echo ""
 
-# 4. 提醒安装 VS Code 插件
-echo -e "${YELLOW}4. 推荐的 VS Code 插件:${NC}"
-echo -e "${BLUE}请安装以下插件以获得更好的开发体验:${NC}"
-echo ""
-echo -e "${GREEN}• Docuo:${NC} https://marketplace.visualstudio.com/items?itemName=spreading-docuo.docuo"
-echo -e "${GREEN}• Markdown Table:${NC} https://marketplace.visualstudio.com/items?itemName=TakumiI.markdowntable"
-echo -e "${GREEN}• GitLens:${NC} https://marketplace.visualstudio.com/items?itemName=eamodio.gitlens"
-echo -e "${GREEN}• MDX:${NC} https://marketplace.visualstudio.com/items?itemName=unifiedjs.vscode-mdx"
-echo -e "${GREEN}• GitHub Pull Request:${NC} https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-pull-request-github"
-echo ""
-
-# 5. 提醒查看详细使用说明
-echo -e "${YELLOW}5. 详细使用说明:${NC}"
-echo -e "${BLUE}请查看详细的使用指南:${NC}"
-echo -e "${GREEN}https://zegocloud.feishu.cn/wiki/G3stwqUPYinrVEkkWkFctzdTnwb${NC}"
-echo ""
-
-# 6. 启动开发服务器
-echo -e "${YELLOW}6. 启动开发服务器${NC}"
-echo -e "${BLUE}环境设置完成！现在可以启动开发服务器:${NC}"
-echo -e "${GREEN}docuo dev${NC}"
-echo ""
-echo -e "${YELLOW}提示:${NC}"
-echo -e "• 如果遇到问题，可以运行: ${GREEN}docuo clear && docuo dev${NC}"
-echo -e "• 如需拷贝 Git Hooks，请使用: ${GREEN}./setup.sh --with-hook${NC}"
-echo ""
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}    环境设置完成！${NC}"
 echo -e "${BLUE}========================================${NC}"

@@ -1,0 +1,194 @@
+---
+articleID: 5669
+date: "2025-06-23"
+---
+# Audio Effect Player
+
+- - -
+
+## Feature Introduction
+
+Audio effects mainly refer to short effect sounds played to enhance realism or set the atmosphere of a scene. For example: during live streaming, there are often scenarios for playing sound effects, such as applause, gift sound effects, prompt tones, etc. In games, it is sometimes necessary to play sounds such as gunshots, collision impacts, etc.
+
+The audio effect player (ZegoAudioEffectPlayer) provided by ZEGO Express SDK uniformly manages audio effects, supporting audio effect playback (multiple audio effects can be played simultaneously), playback control (such as pause playback, volume adjustment, set playback progress), audio effect preloading, and other functions.
+
+import Content from '/core_products/real-time-voice-video/en/snippets/audio-effect-player-pre.mdx'
+
+<Content />
+## Sample Source Code Download
+
+Please refer to [Download Sample Source Code](/real-time-video-ios-oc/quick-start/run-example-code) to get the source code.
+
+For related source code, please check the files in the "/ZegoExpressExample/Examples/AdvancedAudioProcessing/AudioEffectPlayer" directory.
+
+## Prerequisites
+
+Before implementing the audio effect player feature, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in the project and implemented basic audio and video publishing and playing functions. For details, please refer to [Quick Start - Integration](/real-time-video-ios-oc/quick-start/integrating-sdk) and [Quick Start - Implementation Flow](/real-time-video-ios-oc/quick-start/implementing-video-call).
+
+
+## Usage Steps
+
+### 1 Create audio effect player
+
+Call the [createAudioEffectPlayer](@createAudioEffectPlayer) method of [ZegoExpressEngine](@-ZegoExpressEngine) to create an audio effect player instance.
+
+<Warning title="Warning">
+
+
+The engine currently only supports creating one instance at the same time. Beyond that, it will return `nil`.
+</Warning>
+
+```objc
+@property (nonatomic, strong) ZegoAudioEffectPlayer *audioEffectPlayer;
+```
+
+```objc
+self.audioEffectPlayer = [[ZegoExpressEngine sharedEngine] createAudioEffectPlayer];
+if (!self.audioEffectPlayer) {
+    NSLog(@"Failed to create audio effect player");
+}
+```
+
+### 2 (Optional) Preload resources
+
+<Accordion title="Preload resources" defaultOpen="false">
+In scenarios where the same audio effect is played frequently, to optimize the performance of repeatedly reading and decoding files, the SDK provides the function of preloading audio effect files into memory.
+
+Call the [loadResource](@loadResource-ZegoAudioEffectPlayer) method to load audio effect resources. You can listen to the loading result through the "callback" parameter. The audio effect can be played only after the loading is successful. It supports preloading up to 15 local audio effect files at the same time (network resources are not supported), and the duration of a single audio effect file cannot exceed 30s, otherwise the loading will report an error.
+
+When the loaded audio effect is no longer needed, you can call the [unloadResource](@unloadResource) interface to unload it to release related resources. Otherwise, the SDK will automatically unload loaded audio effects when the [ZegoAudioEffectPlayer](@-ZegoAudioEffectPlayer) instance is released.
+
+<Note title="Note">
+
+
+Preloading is not a required operation. It is recommended when you need to improve performance or need to repeatedly play a specific audio effect.
+</Note>
+
+
+```objc
+// This example gets the test.wav resource already stored in the App Bundle
+NSString *filePath = [[NSBundle mainBundle] pathForResource:@"test" ofType:@"wav"];
+
+[self.audioEffectPlayer loadResource:filePath audioEffectID:0 callback:^(int errorCode) {
+    NSLog(@"loadResource result, errorCode: %d", errorCode);
+}];
+```
+</Accordion>
+
+### 3 Playback control
+
+#### (Optional) Set event callback for audio effect player
+
+<Accordion title="Set audio effect player event callback" defaultOpen="false">
+As needed, you can call the [setEventHandler](@setEventHandler-ZegoAudioEffectPlayer) method of the audio effect player to set event callbacks for the player, used to listen to notifications such as "audio effect playback status change".
+
+```objc
+[self.audioEffectPlayer setEventHandler:self];
+```
+
+```objc
+- (void)audioEffectPlayer:(ZegoAudioEffectPlayer *)audioEffectPlayer audioEffectID:(unsigned int)audioEffectID playStateUpdate:(ZegoAudioEffectPlayState)state errorCode:(int)errorCode {
+    NSLog(@"Play state update. ID:%d, state:%lu, err:%d", audioEffectID, (unsigned long)state, (int)errorCode);
+}
+```
+</Accordion>
+
+
+#### Start playback
+
+Call the [start ](@start-ZegoAudioEffectPlayer) method to play audio effects. Currently only supports playing 12 audio effects at the same time, and can only be local files, does not support playing network resources. The "audioEffectID" needs to be globally unique.
+
+* If the audio effect has been preloaded through the [loadResource](@loadResource-ZegoAudioEffectPlayer) method, you only need to pass in the "audioEffectID" during preloading, and the "path" (path of the audio effect resource) field can be passed as empty.
+* If you need to repeat playback, you can configure the number of repetitions through "playCount" in [ZegoAudioEffectPlayConfig](@-ZegoAudioEffectPlayConfig). If set to "0", it means infinite repeat playback until the user manually calls [stop](@stop-ZegoAudioEffectPlayer) to stop.
+
+```objc
+// This example gets the test.wav resource already stored in the App Bundle
+NSString *filePath = [[NSBundle mainBundle] pathForResource:@"test" ofType:@"wav"];
+
+ZegoAudioEffectPlayConfig *config = [[ZegoAudioEffectPlayConfig alloc] init];
+// Play once
+config.playCount = 1;
+// Mix into stream publishing
+config.isPublishOut = YES;
+
+// Use 0 as the audioEffectID for this time
+[self.audioEffectPlayer start:0 path:filePath config:config];
+```
+
+#### Pause/Resume/Stop playback
+
+1. Call the [pause](@pause-ZegoAudioEffectPlayer) method to pause the audio effect specified by "audioEffectID". Call the [pauseAll](@pauseAll) method to pause all audio effects that are playing.
+2. After the audio effect is paused, call the [resume](@resume-ZegoAudioEffectPlayer) method to resume the audio effect specified by "audioEffectID". Call the [resumeAll](@resumeAll) method to resume all paused audio effects.
+3. Call the [stop](@stop-ZegoAudioEffectPlayer) method to stop the audio effect specified by "audioEffectID". Call the [stopAll](@stopAll) method to stop playing all audio effects.
+
+```objc
+// Pause playback of audioEffectID No. 0
+[self.audioEffectPlayer pause:0];
+
+// Resume playback of audioEffectID No. 0
+[self.audioEffectPlayer resume:0];
+
+// Stop playback of audioEffectID No. 0
+[self.audioEffectPlayer stop:0];
+
+// Pause playback of all resources
+[self.audioEffectPlayer pauseAll];
+
+// Resume playback of all resources
+[self.audioEffectPlayer resumeAll];
+
+// Stop playback of all resources
+[self.audioEffectPlayer stopAll];
+```
+
+#### Adjust volume
+
+1. Call the [setVolume](@setVolume-ZegoAudioEffectPlayer) method to set the volume of the audio effect specified by "audioEffectID". The value range is [0, 200], and the default value is "100".
+2. Call the [setVolumeAll](@setVolumeAll) method to set the volume of all audio effects at the same time. The value range is [0, 200], and the default value is "100".
+
+```objc
+// Set the volume of audioEffectID No. 0 to 100
+[self.audioEffectPlayer setVolume:100 audioEffectID:0];
+
+// Set the volume of all resources to 100
+[self.audioEffectPlayer setVolumeAll:100];
+```
+
+#### Playback progress control
+
+1. Call the [getTotalDuration](@getTotalDuration) method to get the total duration of a single audio effect.
+2. Call the [getCurrentProgress](@getCurrentProgress) method to get the current playback progress of the audio effect.
+3. Call the [seekTo](@seekTo-ZegoAudioEffectPlayer) method to set the playback progress as needed.
+
+```objc
+// Get the total duration of audioEffectID No. 0
+unsigned long long totalDuration = [self.audioEffectPlayer getTotalDuration:0];
+
+// Get the current playback progress of audioEffectID No. 0
+unsigned long long currentProgress = [self.audioEffectPlayer getCurrentProgress:0];
+
+// Set the playback progress of audioEffectID No. 0 to half of the total progress
+[self.audioEffectPlayer seekTo:(unsigned long long)(totalDuration / 2) audioEffectID:0 callback:^(int errorCode) {
+    NSLog(@"seekTo result: %d", errorCode);
+}];
+```
+
+### 4 Destroy audio effect player
+
+After using the audio effect player, you need to call the [destroyAudioEffectPlayer](@destroyAudioEffectPlayer) method in time to destroy it and release the resources occupied by the player.
+
+```objc
+[[ZegoExpressEngine sharedEngine] destroyAudioEffectPlayer:self.audioEffectPlayer];
+```
+
+## FAQ
+
+1. **What is the difference between audio effect player and media player?**
+
+| Player Type   | Difference |
+| -------- | ------------------------------------------------------------ |
+| Media Player | Mainly used for playing videos and longer music, supports playing network resources. At the same time, it supports creating up to 4 player instances, and one instance can only play one audio or video. |
+| Audio Effect Player | Mainly used for playing shorter audio effects, does not support playing network resources. At the same time, it only supports creating one audio effect player instance. The audio effect player supports multiple audio effects playing concurrently, and one instance can play up to 12 audio effects at the same time. |

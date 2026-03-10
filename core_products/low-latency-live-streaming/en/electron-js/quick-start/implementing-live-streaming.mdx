@@ -1,0 +1,275 @@
+---
+date: '2026-03-05'
+---
+
+# Implementing Live Streaming
+
+- - -
+
+
+## Introduction
+
+This guide describes how to implement basic audio and video functions with the ZEGO Express SDK.
+
+Basic concepts:
+
+- ZEGO Express SDK: The real-time audio and video SDK developed by ZEGOCLOUD to help you quickly build high-quality, low-latency, and smooth real-time audio and video communications into your apps across different platforms, with support for massive concurrency.
+- Stream publishing: The process of the client app capturing and transmitting audio and video streams to the ZEGOCLOUD Real-Time Audio and Video Cloud.
+- Stream playing: The process of the client app receiving and playing audio and video streams from the ZEGOCLOUD Real-Time Audio and Video Cloud.
+- Room: The service for organizing groups of users, allowing users in the same room to send and receive real-time audio, video, and messages to each other.
+
+    1. Logging in to a room is required to perform stream publishing and playing.
+    2. Users can only receive notifications about changes in the room they are in (such as new users joining the room, existing users leaving the room, new audio and video streams being published, etc.).
+
+
+## Prerequisites
+
+Before you begin, make sure you complete the following steps:
+
+1. Create a project in [ZEGOCLOUD Admin Console](https://console.zegocloud.com), and get the AppID of your project. Then contact us to get the AppSign.
+2. Integrate the ZEGO Express SDK into your project. For more details, see [integrating the SDK](/live-streaming-electron/quick-start/integrating-sdk).
+
+## Implementation steps
+
+The following diagram shows the basic process of User A playing a stream published by User B: 
+
+![https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/implementation_overall.png](https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/implementation_overall.png)
+
+The following diagram shows the API call sequence of the stream publishing and playing process: 
+![https://doc-media.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml_en_detail.png](https://doc-media.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml_en_detail.png)
+
+The following sections explain each step of this process in more detail.
+
+## Create a ZegoExpressEngine instance
+
+
+To initialize the `ZegoExpressEngine`, call the [createEngine](@createEngine) method with the **AppID** and **AppSign** of your project.
+
+
+```js
+// Import the ZegoExpressEngine
+const zgEngine = window.require('zego-express-engine-electron/ZegoExpressEngine');
+const zgDefines = window.require('zego-express-engine-electron/ZegoExpressDefines');
+
+// Use the AppID and AppSign assigned by ZEGO when you create your project in the ZEGO Admin Console. For system security, we recommend you store your ZEGO AppSign in your app server and get it from your app server when needed.
+// Use the settings for the General scenario.
+const profile = {
+  appID : xxx,
+  appSign : "xxx",
+  scenario : 0
+};
+
+zgEngine.createEngine(profile)
+  .then(() => {
+    console.log("init succeed")
+  }).catch((e) => {
+    console.log("init failed", e)
+  });
+```
+
+
+## Log in to a room
+
+**1. Log in**
+
+To log in to a room, do the following:
+
+1. Create a `ZegoUser` with a unique user ID.
+2. Call the [loginRoom](@loginRoom) method with the following parameters:
+    - A unique room ID as the `roomID` parameter
+    - The `ZegoUser` object created in the previous step as the `user` parameter.
+
+<Warning title="Warning">   
+
+- Each `roomID` must be globally unique within the scope of the AppID.  
+- Each `userID` must be globally unique within the scope of the AppID. We recommend you set the `userID` to a meaningful value. You can associate `userID` with the account system of your application.
+- The `userID` and `userName` properties cannot be `null`. Otherwise, the room login will fail.
+</Warning>
+
+
+```java
+zgEngine.loginRoom("TheRoomID",  { userID: "TheUserID", userName: "TheUserName"});
+```
+
+**2. Listen for and handle the event callbacks related to room users and streams**
+
+To listen for and handle various events that may happen after logging in to a room, you can implement the corresponding event callback methods of the event handler as needed. The following are some common event callbacks related to room users and streams:
+
+- [onRoomStateUpdate](@onRoomStateUpdate): Callback for updates on current user's room connection status. When the current user's room connection status changes (for example, when the current user is disconnected from the room or login authentication fails),  the SDK sends out the event notification through this callback.
+
+- [onRoomUserUpdate](@onRoomUserUpdate): Callback for updates on the status of other users in the room. When other users join or leave the room, the SDK sends out the event notification through this callback.
+
+
+- [onRoomStreamUpdate](@onRoomStreamUpdate): Callback for updates on the status of the streams in the room. When new streams are published to the room or existing streams in the room stop, the SDK sends out the event notification through this callback.
+
+<Warning title="Warning">
+
+- To receive the [onRoomUserUpdate](@onRoomUserUpdate) callback, you must set the `isUserStatusNotify` property of the room configuration parameter [ZegoRoomConfig](@-ZegoRoomConfig) to `true` when you call the [loginRoom](@loginRoom) method to log in to a room.
+- To play streams published by other users in the room: you can listen for the [onRoomStreamUpdate](@onRoomStreamUpdate) callback, and when there is a stream added, call the [startPlayingStream](@startPlayingStream) method to start receiving and playing the newly added stream.
+</Warning>
+
+```js
+// Common event callbacks related to room users and streams.
+// Callback for updates on the current user's room connection status.
+zgEngine.on("onRoomStateUpdate", (param)=>{
+    // Implement the callback handling logic as needed. 
+});
+
+// Callback for updates on the status of other users in the room.
+zgEngine.on("onRoomUserUpdate", (param)=>{
+    // Implement the callback handling logic as needed. 
+});
+
+// Callback for updates on the status of the streams in the room.
+zgEngine.on("onRoomStreamUpdate", (param)=>{
+    // Implement the callback handling logic as needed. 
+});
+```
+
+## Publish streams
+
+**1. Start publishing a stream**
+
+To start publishing a local audio or video stream to remote users, call the [startPublishingStream](@startPublishingStream) method with the corresponding Stream ID passed to the `streamID` parameter.     
+
+<Warning title="Warning">
+
+`streamID` must be globally unique within the scope of the AppID. If different streams are published with the same `streamID`, the ones that are published after the first one will fail.
+
+</Warning>
+
+```js
+// Start publishing a stream
+zgEngine.startPublishingStream("streamID");
+```
+
+**2. Optional: Start the local video preview**  
+
+<Accordion title="Start the local video preview" defaultOpen="false">
+
+To start the local video preview, call the [startPreview](@startPreview) method with the view for rendering the local video passed to the `canvas` parameter.
+
+
+```js
+// Obtain a canvas element
+let localCanvas = document.getElementById("localCanvas");
+
+// Start the local video preview
+zgEngine.startPreview({
+    canvas: localCanvas,
+});
+```
+</Accordion>     
+     
+
+**3. Listen for and handle the event callbacks related to stream publishing**
+
+To listen for and handle various events that may happen after stream publishing starts, you can implement the corresponding event callback methods of the event handler as needed. The following is a common event callback related to stream publishing:
+
+- [`onPublisherStateUpdate`](!setting_callback#onPublisherStateUpdate): Callback for updates on stream publishing status. After stream publishing starts, if the status changes, (for example, when the stream publishing is interrupted due to network issues and the SDK retries to start publishing the stream again), the SDK sends out the event notification through this callback.
+
+```js
+// Common event callbacks related to stream publishing.
+// Callback for updates on stream publishing status.  
+zgEngine.on("onPublisherStateUpdate", (param)=>{
+    // Implement the callback handling logic as needed. 
+});
+```
+
+
+## Play streams
+
+**1. Start playing a stream**
+
+To start playing a remote audio or video stream, call the [startPlayingStream ](https://doc-en-api.zego.im/Electron/ZegoExpressEngine.html#startPlayingStream) method with the corresponding Stream ID passed to the `streamID` parameter and the view for rendering the video passed to the `canvas` parameter.
+
+
+```js
+// Obtain a canvas element
+let remoteCanvas = document.getElementById("remoteCanvas");
+// Start playing a stream
+zgEngine.startPlayingStream("streamID", {
+    canvas: remoteCanvas,
+});
+```
+
+**2. Listen for and handle the event callbacks related to stream playing**     
+
+To listen for and handle various events that may happen after stream playing starts, you can implement the corresponding event callback methods of the event handler as needed. The following is a common event callback related to stream playing:
+
+- [`onPlayerStateUpdate`](!setting_callback#onPlayerStateUpdate): Callback for updates on stream playing status. After stream playing starts, if the status changes (for example, when the stream playing is interrupted due to network issues and the SDK retries to start playing the stream again), the SDK sends out the event notification through this callback.
+
+```js
+// Common event callbacks related to stream playing.
+// Callback for updates on stream playing status. 
+zgEngine.on("onPlayerStateUpdate", (param)=>{
+    // Implement the callback handling logic as needed. 
+});
+```
+
+## Test out the live streaming
+
+Run your project on a real device. Upon successful running, you can view the local video.
+
+For your convenience of experience, ZEGOCLOUD provides a [Web Debug Example](https://zegoim.github.io/express-demo-web/src/Examples/QuickStart/VideoTalk/index.html?lang=en). On the debugging page, you can enter the AppID and room ID of the real device user, and a different user ID to log in to the same room for communicating with the real device user. After a video call starts successfully, you can hear the remote audio and view the remote video.
+
+## Stop publishing and playing streams
+
+**1. Stop publishing a stream**
+
+To stop publishing a local audio or video stream to remote users, call the [stopPublishingStream](@stopPublishingStream) method.
+
+
+```js
+// Stop publishing a stream
+zgEngine.stopPublishingStream();
+```
+
+**2. Stop the local video preview**
+
+If local video preview is started, call the [stopPreview](@stopPreview) method to stop it as needed.
+
+
+```js
+// Stop local video preview
+zgEngine.stopPreview();
+```
+
+**3. Stop playing a stream**
+
+To stop playing a remote audio or video stream, call the [stopPlayingStream](@stopPlayingStream) method with the corresponding stream ID passed to the `streamID` parameter.
+
+
+```js
+// Stop playing a stream
+zgEngine.stopPlayingStream("streamID");
+```
+
+## Log out of a room
+
+To log out from a room, call the [logoutRoom](@logoutRoom) method.
+
+
+```js
+// Log out of a room  
+zgEngine.logoutRoom("TheRoomID");   
+```
+
+## Uninitialize the `ZegoExpressEngine` instance 
+
+To uninitialize the `ZegoExpressEngine` instance and release the resources it occupies, call the [uninit](@uninit) method.
+
+```js
+// Uninitialize the ZegoExpressEngine
+zgEngine.uninit();
+```
+
+
+## FAQ
+
+**1. The latest version of Google's core graphics card rendering acceleration integrated by Electron makes it impossible to see the local preview and streaming screen, but the cdn streaming screen is normal. How to solve it?**    
+
+Currently there are two main solutions to this problem:    
+
+- Disable graphics card acceleration: By disabling the graphics card acceleration and not using the Google kernel graphics card rendering acceleration function, you can watch the local preview and streaming screen normally.      
+- Replace the old version of Electron: Upgrade the version of Electron to adapt to the latest version of Google's kernel graphics card rendering acceleration function.

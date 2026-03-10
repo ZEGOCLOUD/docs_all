@@ -1,0 +1,191 @@
+---
+date: '2026-03-06'
+---
+# Minimize the live streaming window
+
+- - -
+
+## Introduction
+
+
+Starting in Android 8.0 (API level 26), Android allows activities to launch in picture-in-picture (PiP) mode. PiP is a special type of multi-window mode mostly used for video playback. It lets the user watch a video in a small window pinned to a corner of the screen while navigating between apps or browsing content on the main screen.
+
+### Effect Demonstration
+
+|Normal livestream scene|PK battle scene|
+|--|--|
+|<Frame width="256" height="auto" caption=""><img src="/Pics/A_LiveStreamingSDK/Minimize_android_2.gif" width="50%" alt="c511b02b9159c161f313 -original-original.gif"/></Frame>|<Frame width="340" height="auto" caption="">  <img src="/Pics/A_LiveStreamingSDK/Minimize_android_1.gif" width="50%" alt="81037d5472756d68d4f5 -original-original.gif"/></Frame>|
+
+## Declare PiP support
+
+By default, the system does not automatically support PiP for apps. If you want support PiP in your app, register your video activity in your manifest by setting `android:supportsPictureInPicture` to true. Also, specify that your activity handles layout configuration changes so that your activity doesn't relaunch when layout changes occur during PiP mode transitions.
+
+```xml
+<activity 
+    android:name=".activity.livestreaming.LiveStreamAudienceActivity"
+    android:supportsPictureInPicture="true"
+    android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+    ...
+/>
+```
+
+## Switch your activity to PiP
+
+Starting with Android 12, you can switch your activity to PiP mode by setting the `setAutoEnterEnabled` flag to true. With this setting, an activity automatically switches to PiP mode as needed without having to explicitly call `enterPictureInPictureMode()` in `onUserLeaveHint`. And this has the added benefit of providing much smoother transitions. You can see the code in [LiveStreamAudienceActivity.java](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_android/blob/master/best_practice/app/src/main/java/com/zegocloud/demo/bestpractice/activity/livestreaming/LiveStreamAudienceActivity.java)
+
+```java
+@Override
+protected void onCreate(Bundle savedInstanceState) {
+   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        PictureInPictureParams pipParams = new PictureInPictureParams.Builder().setAspectRatio(new Rational(9, 16))
+        .setAutoEnterEnabled(pipAutoEnterEnabled).build();
+        setPictureInPictureParams(pipParams);
+    }
+    //...
+}
+```
+
+If you're targeting Android 11 or lower, an activity must call 'enterPictureInPictureMode()' to switch to PiP mode. For example, the following code switches an activity to PiP mode when press back button of Android:
+
+```java
+
+@Override
+public void onBackPressed() {
+    minimize();
+}
+
+void minimize() {
+    ViewGroup viewGroup = getCurrentRoomView();
+    if (viewGroup == null) {
+        return;
+    }
+    Rational aspectRatio = new Rational(viewGroup.getWidth(), viewGroup.getHeight());
+    PictureInPictureParams pipParams = new PictureInPictureParams.Builder().setAspectRatio(aspectRatio).build();
+    enterPictureInPictureMode(pipParams);
+}
+```
+
+You might want to include logic that switches an activity into PiP mode instead of going into the background. For example, Google Maps switches to PiP mode if the user presses the home or recents button while the app is navigating. You can catch this case by overriding `onUserLeaveHint()`:
+
+```java
+@Override
+public void onUserLeaveHint () {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && pipAutoEnterEnabled) {
+        minimize();
+    }
+}
+```
+
+## Handle UI during PiP
+
+When the activity enters or exits Picture-in-Picture (PiP) mode, the system calls `Activity.onPictureInPictureModeChanged()` or `Fragment.onPictureInPictureModeChanged()`.
+
+Developers use the `onPictureInPictureModeChanged()` callback to define logic that toggles the visibility of the overlaid UI elements. This callback is triggered when the PiP enter or exit animation is completed.
+
+```java
+@Override
+public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, @NonNull Configuration newConfig) {
+    super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+ 
+    if (isInPictureInPictureMode) {
+        findViewById(R.id.minimize).setVisibility(View.GONE);
+        findViewById(R.id.leave_live).setVisibility(View.GONE);
+
+        ViewGroup viewGroup = getCurrentRoomView();
+        if (viewGroup == null) {
+            return;
+        }
+        viewGroup.findViewById(R.id.live_controls).setVisibility(View.GONE);
+    } else {
+        findViewById(R.id.minimize).setVisibility(View.VISIBLE);
+        findViewById(R.id.leave_live).setVisibility(View.VISIBLE);
+        ViewGroup viewGroup = getCurrentRoomView();
+        if (viewGroup == null) {
+            return;
+        }
+        viewGroup.findViewById(R.id.live_controls).setVisibility(View.VISIBLE);
+        ...
+    }
+}
+```
+
+## Best practices
+
+### Handle user click 'X' Button on pictureInPicture window
+
+when user click 'X' Button on pictureInPicture window,the activity will exit pip mode but not destroyed,to handle this,we need to finish the activity when user clicks 'X' button 。
+
+```java
+    private boolean stoppedInPictureInPictureMode;
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (isInPictureInPictureMode()) {
+            // means clicked X in pip window,make onStop be called,and will exit pip mode and invoke
+            // 'onPictureInPictureModeChanged' in the sequence
+            stoppedInPictureInPictureMode = true;
+        }
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        stoppedInPictureInPictureMode = false;
+    }
+
+    @Override
+    public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, @NonNull Configuration newConfig) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        
+        if (isInPictureInPictureMode) {
+            //...
+        } else {
+            //...
+            if (stoppedInPictureInPictureMode) {
+                finish();
+            }
+        }
+    }
+```
+
+### Handle user click another pip window when in pip mode:
+
+when user was in pip mode, and clicks to start another activity that can support pip mode,we need to finish the previous pip window to avoid conflict ,You can see the code in [LiveStreamEntryActivity.java](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_android/blob/master/best_practice/app/src/main/java/com/zegocloud/demo/bestpractice/activity/livestreaming/LiveStreamEntryActivity.java)。
+
+```java
+private List<Activity> audienceActivityList = new ArrayList<>();
+
+@Override
+protected void onCreate(Bundle savedInstanceState) {
+    super.onCreate(savedInstanceState);
+    getApplication().registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
+        @Override
+        public void onActivityCreated(@NonNull Activity activity, @Nullable Bundle savedInstanceState) {
+            if (activity instanceof LiveStreamAudienceActivity) {
+                audienceActivityList.add(activity);
+            }
+        }
+        
+        //...
+
+        @Override
+        public void onActivityDestroyed(@NonNull Activity activity) {
+            if (audienceActivityList.contains(activity)) {
+                audienceActivityList.remove(activity);
+            }
+        }
+    });
+
+    button.setOnClickListener(v -> {
+        String liveID = binding.liveIdStreaming.getEditText().getText().toString();
+        if(!audienceActivityList.isEmpty()){
+            audienceActivityList.forEach(Activity::finish);
+            audienceActivityList.clear();
+        }
+        Intent intent = new Intent(LiveStreamEntryActivity.this, LiveStreamAudienceActivity.class);
+        intent.putExtra("liveID", liveID);
+        startActivity(intent);
+    });
+}
+```

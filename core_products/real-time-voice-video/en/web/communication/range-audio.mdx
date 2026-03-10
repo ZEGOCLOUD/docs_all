@@ -1,0 +1,710 @@
+---
+articleID: 12045
+date: "2024-09-27"
+---
+# Range Audio
+
+- - -
+
+## Function Overview
+
+### Concept Explanation
+
+- Range: The range within which a listener receives audio.
+- Orientation: Refers to the listener's position and facing direction in the game world coordinates. For details, refer to `5 Set the listener's current position`.
+- Listener: A user in the room who receives audio.
+- Speaker: A user in the room who sends audio.
+
+### Function Description
+
+Since version **2.11.0**, ZEGO Express SDK has added a game voice module, mainly including: range audio, 3D audio effects, and team voice.
+
+<table>
+
+<tbody><tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+<tr>
+<td>
+Range Audio
+</td>
+<td>
+<p>Listeners in the room have a range limit for receiving audio. If a speaker is beyond this range from the listener, they cannot hear the sound. To ensure voice clarity, when more than 20 people nearby are speaking, only the sounds of the 20 speakers closest to the listener can be heard.</p>
+<p>If the maximum range for audio reception is set to R, and the distance between the speaker and the listener is r, then:</p>
+<ul><li>When r &lt; R, it means the speaker is within the normal range, and the listener can hear the sound.</li><li>When r ≥ R, it means the speaker is beyond the maximum range, and the listener cannot hear the sound.</li></ul>
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/AudioRange_en.jpeg" /></Frame>
+<p>The above diagram only shows the example when the range audio mode is "World". For more sound reachability under different mode combinations, please refer to <a href="#set-range-audio-mode">Set Common Voice Mode</a>.</p>
+</td>
+</tr>
+<tr>
+<td>3D Audio Effects</td>
+<td>Sound has 3D spatial perception and attenuates with distance.</td>
+</tr>
+<tr>
+<td>
+Common Voice Mode
+</td>
+<td>
+<p>Players can choose to join a team and freely switch between "World", "Team Only", and "Secret Team" voice modes in the room.</p>
+<ul><li>World: Players can talk with other players in the world range, and can also talk with teammates.</li><li>Team Only: Players can only talk with teammates.</li><li>Secret Team: Players can talk with teammates and can only hear voices from other players in the world range.</li></ul>
+<Note title="Note">
+<ul><li>Communication between teammates is not affected by "range" and "3D audio effects". For details, please refer to <a href="#set-range-audio-mode">Set Common Voice Mode</a>.</li><li>If you want to customize voice send/receive capabilities, please refer to <a href="#set-custom-voice-mode">Set Custom Voice Mode</a>.</li></ul>
+</Note>
+</td>
+</tr>
+</tbody></table>
+
+### Applicable Scenarios
+
+The game voice feature is suitable for battle royale games and metaverse scenarios.
+
+In battle royale games, team voice provides team formation functionality. Teams can be changed before and after the game starts. Developers don't need to worry about stream grouping and stream publishing/playing implementation, and can directly implement team voice functionality.
+
+In battle royale games and metaverse scenarios, 3D audio effects capability is provided. When listening to speaker audio effects, there is a sense of direction and distance, making the scene feel more realistic.
+
+## Download Sample Source Code
+
+Please refer to [Download Sample Source Code](/real-time-video-web/quick-start/run-example-code) to get the source code.
+
+For related source code, please check the files in the "src/Examples/Others/RangeAudio" directory.
+
+## Prerequisites
+
+Before implementing range audio, ensure that:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and Server address. For details, refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK into your project and implemented basic audio/video stream publishing and playing functionality. For details, refer to [Quick Start - Integration](/real-time-video-web/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-web/quick-start/implementing-video-call).
+
+And ensure the development environment meets the following requirements:
+
+- Prepare a Windows or macOS computer connected to the internet.
+- Chrome browser version 56 or above is recommended. For browser compatibility information, please refer to [7 Browser Compatibility](/real-time-video-web/communication/range-audio).
+
+## Important Notes
+
+<Warning title="Warning">
+When using the range audio feature, please pay attention to the following important notes to avoid integration issues.
+</Warning>
+
+
+
+If you are already using the real-time audio/video features of ZEGO Express SDK, please note the following:
+
+- Since the range audio module is implemented based on the stream publishing and playing interfaces of ZegoExpressEngine, you don't need to focus on the concept of stream publishing and playing when using it. In range audio scenarios, the concept of publishing audio stream changes to "enable microphone", and the concept of playing audio stream changes to "enable speaker". It's recommended not to use the [startPublishingStream](@startPublishingStream) and [startPlayingStream](@startPlayingStream) interfaces for stream publishing and playing operations while integrating the range audio feature, to avoid effect conflicts.
+- Related callbacks for stream publishing and playing in the range audio module ([publisherStateUpdate](@publisherStateUpdate) and [playerStateUpdate](@playerStateUpdate)) will no longer take effect.
+- After calling ZegoExpressEngine's [on](@on) interface in the range audio module to register [roomStreamUpdate](@roomStreamUpdate) and [streamExtraInfoUpdate](@streamExtraInfoUpdate) event callbacks, please do not call ZegoExpressEngine's [off](@off) interface to unregister all event callbacks when integrating the range audio feature.
+
+## Usage Steps
+
+```mermaid
+sequenceDiagram
+    participant A as Client App
+    participant Z as ZEGO Express SDK
+
+    A->>Z: Create engine <br/> [new ZegoExpressEngine]
+    A->>Z: Create range audio instance object <br/> [createRangeAudioInstance]
+    A->>Z: Listen to range audio event callbacks <br/> [on('microphoneStateUpdate')]
+    A->>Z: Enable internal AudioContext object <br/> [resumeAudioContext]
+    A->>Z: Login room <br/> [loginRoom]
+    critical Critical steps
+        A->>Z: Set listener's current position <br/> [updateSelfPosition]
+        A->>Z: Add/Update audio source position info <br/> [updateAudioSource]
+        A->>Z: Enable microphone, speaker <br/> [enableMicrophone / enableSpeaker]
+        Z-->>A: Callback microphone usage status <br/> [microphoneStateUpdate]
+    end
+    A->>Z: Logout room <br/> [logoutRoom]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/RangeVoice_web.png" /></Frame>
+*/}
+
+The above diagram only shows the core steps and interfaces for implementing game voice functionality. Developers can refer to the detailed introduction in the following documentation to implement other related interfaces as needed.
+
+### 1 Import SDK
+
+1. Run the `npm i zego-express-engine-webrtc` command to install dependencies.
+
+<Note title="Note">
+npm downloaded package supports TypeScript language (recommended).
+</Note>
+
+
+
+2. Import the SDK in the "index.js" file.
+
+```javascript
+import { ZegoExpressEngine } from 'zego-express-engine-webrtc'
+```
+
+### 2 Create Engine
+
+**1. Create engine**
+
+Create a [ZegoExpressEngine ](@-ZegoExpressEngine) engine instance, pass the applied AppID to the `appID` parameter, and pass the access server address to the `server` parameter.
+
+<Note title="Note">
+- "server" is the access server address. For how to obtain it, please refer to [Console - Project Information](/console/project-info).
+- For SDK version 3.6.0 and above, server can be set to an empty string, null, undefined, or any string, but cannot be left empty.
+</Note>
+
+Initialize the ZegoExpressEngine instance zg and the range audio feature instance rangeAudio.
+
+```javascript
+const zg = new ZegoExpressEngine(appID, server);
+const rangeAudio = zg.createRangeAudioInstance();
+```
+
+**2. Listen to range audio event callbacks**
+
+If you need to register callbacks, developers can implement certain methods in [ZegoRangeAudioEvent](@-ZegoRangeAudioEvent) as needed, and call the [on](@on-ZegoExpressRangeAudio) interface through the range audio instance rangeAudio to set callbacks.
+
+```javascript
+rangeAudio.on("microphoneStateUpdate", (state, errorCode, extendedData) => {
+  if (state === 0) {
+    // Microphone sound off
+  } else if(state === 1) {
+    // Enabling microphone
+  } else if(state === 2) {
+    // Microphone on and sending sound
+  }
+})
+```
+
+### 3 Support browsers that don't allow autoplay sound
+
+Use the [isAudioContextRunning](@isAudioContextRunning) interface to check if the browser supports autoplay sound. If `isSupport` is `false`, you can guide the user to click a DOM element on the interface to trigger a click event, and call the [resumeAudioContext](@resumeAudioContext) interface in the click event to start autoplay.
+
+```html
+<button onclick="enableAutoPlay()">Click me</button>
+```
+
+```javascript
+const isSupport = rangeAudio.isAudioContextRunning();
+
+async function enableAutoPlay() {
+    // result indicates whether enable was successful
+    const result = await rangeAudio.resumeAudioContext();
+}
+```
+
+### 4 Login Room
+
+**1. Get Login Token**
+
+Logging into a room requires a Token for identity verification. For how to obtain it, please refer to [User Permission Control](/real-time-video-web/communication/using-token-authentication). For quick debugging, you can use the console to generate a temporary Token.
+
+**2. Login Room**
+
+Call the [loginRoom ](@loginRoom) interface through the ZegoExpressEngine instance zg, pass in the room ID parameter `roomID`, `token`, and user parameter `user`, and pass in the `config` parameter as needed to login to the room.
+
+<Warning title="Warning">
+
+
+- Before logging into the room, please register all callbacks that need to be monitored after logging into the room. After successfully logging into the room, you can receive relevant callbacks.
+- The values of `roomID`, `userID`, and `userName` parameters are all custom. `userName` is not required.
+- Both `roomID` and `userID` must be unique. It's recommended that developers set `userID` to a meaningful value and associate it with their own business account system.
+
+</Warning>
+
+
+
+```javascript
+// Login room, returns true if successful
+const result = await zg.loginRoom(roomID, token, {userID, userName});
+```
+
+### 5 Set the listener's current position
+
+Call the [updateSelfPosition](@updateSelfPosition) interface to add your own orientation, or update your position and facing direction in the world coordinate system when your orientation changes.
+
+<Note title="Note">
+
+
+- If you don't call this interface to set position information before calling [enableSpeaker](@enableSpeaker) to enable the speaker, you won't be able to hear sounds from anyone other than your team.
+- The coordinate values of the three axes of your own coordinate system can be obtained through the rotation angle conversion matrix of a third-party 3D engine.
+
+</Note>
+
+
+
+<table>
+
+  <tbody><tr>
+    <td>Parameter Name</td>
+    <td>Description</td>
+  </tr>
+  <tr>
+    <td>position</td>
+    <td>Your coordinates in the world coordinate system. The parameter is a number array of length 3, with the three values representing the coordinate values of forward, right, and up respectively.</td>
+  </tr>
+  <tr>
+    <td>axisForward</td>
+    <td>The unit vector of the forward axis of your own coordinate system. The parameter is a number array of length 3, with the three values representing the coordinate values of forward, right, and up respectively.</td>
+  </tr>
+  <tr>
+    <td>axisRight</td>
+    <td>The unit vector of the right axis of your own coordinate system. The parameter is a number array of length 3, with the three values representing the coordinate values of forward, right, and up respectively.</td>
+  </tr>
+  <tr>
+    <td>axisUp</td>
+    <td>The unit vector of the up axis of your own coordinate system. The parameter is a number array of length 3, with the three values representing the coordinate values of forward, right, and up respectively.</td>
+  </tr>
+</tbody></table>
+
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/Coordinate_System_en.jpeg" /></Frame>
+
+```javascript
+const position = [0,0,0];
+const axisForward = [1,0,0];
+const axisRight = [0,1,0];
+const axisUp = [0,0,1];
+
+rangeAudio.updateSelfPosition(position, axisForward, axisRight, axisUp);
+```
+
+### 6 Add or update speaker position information
+
+After successfully logging into the room, call the [updateAudioSource](@updateAudioSource) interface to update the speaker position.
+
+<Warning title="Warning">
+
+
+- In World mode: Need to update the positions of the listener and all speakers in the room. If the speaker position is not set or the speaker is beyond the listener's range, there will be situations where sound cannot be heard.
+- Here, speaker refers to other people in the room, and listener refers to yourself.
+
+</Warning>
+
+
+
+- userID: The ID of another speaking user in the room.
+- position: The speaker's coordinates in the world coordinate system. The parameter is a number array of length 3, with the three values representing the coordinate values of forward, right, and up respectively.
+
+```javascript
+const userID = "other";
+const position = [1,0,0];
+rangeAudio.updateAudioSource(userID, position);
+```
+
+### 7 (Optional) Set audio receive range
+
+<Accordion title="Please choose whether to set the audio receive range according to your business needs. If not set, it means you can hear all voices in the room by default." defaultOpen="false">
+Call the [setAudioReceiveRange](@setAudioReceiveRange) interface to set the maximum range for the listener to receive audio, that is, starting from yourself, a 3D space with the set distance as the volume in 3D space. After setting this range, when 3D audio effects are enabled, sound will attenuate with increasing distance until it exceeds the set range, after which there will be no more sound. Team voice will not be restricted by this value and will not have 3D audio effects.
+
+<Note title="Note">
+If not set, it means there is no distance limit for receiving audio, and you can hear the voices of all people in the room.
+</Note>
+
+
+
+```javascript
+rangeAudio.setAudioReceiveRange(100);
+```
+</Accordion>
+
+
+### 8 (Optional) Implement 3D audio effects
+
+<Accordion title="Please choose whether to enable 3D audio effects according to your business needs." defaultOpen="false">
+Call the [enableSpatializer](@enableSpatializer) interface to set 3D audio effects. When `enable` is `true`, it means 3D audio effects are enabled. At this time, the audio of non-team members in the room will produce spatial perception changes as the speaker's distance and direction from yourself change. When it's `false`, it means 3D audio effects are disabled. (Can be enabled or disabled at any time)
+
+<Warning title="Warning">
+This feature only affects people outside the team.
+</Warning>
+
+
+
+```javascript
+// enable is true to enable, false to disable. Default is disabled.
+rangeAudio.enableSpatializer(true);
+```
+</Accordion>
+
+
+### 9 Enable microphone and speaker
+
+After successfully logging into the room:
+
+- Call the [enableMicrophone](@enableMicrophone) interface to set whether to enable the microphone. When `enable` is `true`, it means enabled; when it's `false`, it means disabled. (Can be enabled or disabled at any time)
+
+    Developers can listen to the [microphoneStateUpdate](@microphoneStateUpdate) event callback to get the updated microphone status.
+
+- Call the [enableSpeaker](@enableSpeaker) interface to set whether to enable the speaker. When `enable` is `true`, it means starting to play stream and play audio; when it's "false", it means stopping playing stream and playing audio. (Can be enabled or disabled at any time)
+
+<Warning title="Warning">
+
+
+After calling the [enableSpeaker](@enableSpeaker) interface, when the maximum playing stream limit is exceeded (currently 20 streams), it will prioritize playing team member audio streams (team mode needs to be set), then play audio streams closest to itself in the world range.
+
+</Warning>
+
+
+
+
+```javascript
+rangeAudio.on("microphoneStateUpdate", (state, errorCode, extendedData) => {
+  if (state === 0) {
+    // Microphone sound off
+  } else if(state === 1) {
+    // Enabling microphone
+  } else if(state === 2) {
+    // Microphone on and sending sound
+  }
+})
+// Enable microphone, enable is true to enable, false to disable.
+rangeAudio.enableMicrophone(enable);
+
+// Enable speaker, enable is true to enable, false to disable.
+rangeAudio.enableSpeaker(enable);
+```
+
+### 10 (Optional) Join team, set voice mode
+
+<Accordion title="Please choose whether to implement game team, team voice and other features according to your business needs." defaultOpen="false">
+#### Join Team
+
+Call the [setTeamID](@setTeamID) interface to set the team ID you want to join as needed (ID can be changed at any time). After setting the ID, you can directly join. After joining a team, communication with team members in the same team is not limited by range audio and 3D audio effects.
+
+<p id="setRangeAudioMode"></p>
+
+```javascript
+// Parameter teamID passed as a string means joining the team of the corresponding teamID.
+rangeAudio.setTeamID("teamID");
+// Parameter teamID not passed or passed as undefined means leaving the team.
+rangeAudio.setTeamID();
+```
+
+#### Set Common Voice Mode
+
+Call the [setRangeAudioMode](@setRangeAudioMode) interface to set the range audio mode. When the `mode` parameter is `0`, it means you can hear everyone's voice; when it's `1`, it means you can only hear voices of other members in the same team.
+
+<table>
+
+<tbody><tr>
+<th>Voice Mode</th>
+<th>Parameter Value</th>
+<th>Function Description</th>
+</tr>
+<tr>
+<td>World</td>
+<td>0</td>
+<td>After setting this mode, this user can talk with team members and talk with other people in World mode within range.</td>
+</tr>
+<tr>
+<td>Team Only</td>
+<td>1</td>
+<td>After setting this mode, this user can only talk with team members.</td>
+</tr>
+</tbody></table>
+
+```javascript
+// Parameter mode can be 0 or 1.
+// 0 is World mode, can communicate with everyone logged into the room.
+// 1 is Team Only mode, only communicate with team members.
+rangeAudio.setRangeAudioMode(1);
+```
+
+Under different range audio modes, the receivability of speaker voices varies.
+
+- Assuming user A's mode is "World", the receivability of user B's voice under different range audio modes is as follows:
+
+<table>
+
+<tbody><tr>
+<th>Same Team</th>
+<th>Within Max Range</th>
+<th>Range Audio Mode</th>
+<th>Can A hear B's voice</th>
+<th>Can B hear A's voice</th>
+</tr>
+<tr>
+<td rowspan="4">Yes</td>
+<td rowspan="2">Yes</td>
+<td>World</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Team Only</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td rowspan="2">No</td>
+<td>World</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Team Only</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td rowspan="4">No</td>
+<td rowspan="2">Yes</td>
+<td>World</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Team Only</td>
+<td>No</td>
+<td>No</td>
+</tr>
+<tr>
+<td rowspan="2">No</td>
+<td>World</td>
+<td>No</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Team Only</td>
+<td>No</td>
+<td>No</td>
+</tr>
+</tbody></table>
+
+- Assuming user A's mode is "Team Only", the receivability of user B's voice under different range audio modes is as follows:
+
+<table>
+
+<tbody><tr>
+<th>Same Team</th>
+<th>Within Max Range</th>
+<th>Range Audio Mode</th>
+<th>Can A hear B's voice</th>
+<th>Can B hear A's voice</th>
+</tr>
+<tr>
+<td rowspan="4">Yes</td>
+<td rowspan="2">Yes</td>
+<td>World</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Team Only</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td rowspan="2">No</td>
+<td>World</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Team Only</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td rowspan="4">No</td>
+<td rowspan="2">Yes</td>
+<td>World</td>
+<td>No</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Team Only</td>
+<td>No</td>
+<td>No</td>
+</tr>
+<tr>
+<td rowspan="2">No</td>
+<td>World</td>
+<td>No</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Team Only</td>
+<td>No</td>
+<td>No</td>
+</tr>
+</tbody></table>
+
+#### Set Custom Voice Mode
+
+<Warning title="Warning">
+
+
+- Custom voice mode and common voice mode cannot be used at the same time.
+- If you need to use custom voice mode, please ensure all users in game voice have an online SDK version of 2.24.0 or above.
+
+</Warning>
+
+
+
+With custom voice mode, you can freely control audio send/receive logic to complete various audio interactions. For example:
+    Assuming A, B, C are members of the same team, and C is within A's reception range, you can achieve the expected audio experience through the configuration in the table.
+
+
+<table>
+
+<tbody><tr>
+<th>User</th>
+<th>Speaking Expectation</th>
+<th>Listening Expectation</th>
+<th>Speaking Mode Configuration</th>
+<th>Listening Mode Configuration</th>
+<th>Remarks</th>
+</tr>
+<tr>
+<td>&nbsp;A</td>
+<td>Send audio to team members and other users within range</td>
+<td>Listen to audio from team members and other users within range</td>
+<td>All</td>
+<td>All</td>
+<td>A can communicate with both B and C</td>
+</tr>
+<tr>
+<td>B</td>
+<td>Only send audio to team members</td>
+<td>Only listen to audio from team members</td>
+<td>Team</td>
+<td>Team</td>
+<td>B can only communicate with A</td>
+</tr>
+<tr>
+<td>C</td>
+<td>Only send audio to users within range</td>
+<td>Only listen to audio from users within range</td>
+<td>World</td>
+<td>World</td>
+<td>C can only communicate with A</td>
+</tr>
+</tbody></table>
+
+<table>
+
+<tbody><tr>
+<th colspan="2">Voice Mode</th>
+<th>Parameter Value</th>
+<th>Function Description</th>
+</tr>
+<tr>
+<td rowspan="3">Speaking Mode</td>
+<td>All Mode</td>
+<td>0</td>
+<td>Speak to All mode, everyone in the room can hear the speaker's voice.</td>
+</tr>
+<tr>
+<td>World Mode</td>
+<td>1</td>
+<td>Speak to World mode, only people within range can hear the speaker's voice.</td>
+</tr>
+<tr>
+<td>Team Mode</td>
+<td>2</td>
+<td>Speak to Team mode, only team members can hear the speaker's voice (not limited by range).</td>
+</tr>
+<tr>
+<td rowspan="3">Listening Mode</td>
+<td>All Mode</td>
+<td>0</td>
+<td>Listen to All mode, can hear voices of everyone in the room.</td>
+</tr>
+<tr>
+<td>World Mode</td>
+<td>1</td>
+<td>Listen to World only mode, only hear voices of people within range.</td>
+</tr>
+<tr>
+<td>Team Mode</td>
+<td>2</td>
+<td>Listen to Team only mode, only hear voices of members in the same team (not limited by range).</td>
+</tr>
+</tbody></table>
+
+```ts
+zg.setRangeAudioCustomMode(0, 0);
+```
+</Accordion>
+
+
+### 11 Leave Room
+
+Call the [logoutRoom](@logoutRoom) interface to leave the room. After leaving, the microphone and speaker will be automatically disabled (i.e., unable to send your own audio and unable to hear other people's audio), and the speaker information list will be cleared.
+
+```javascript
+zg.logoutRoom(roomID)
+```
+
+
+## FAQ
+
+1. **How many streams can be played simultaneously within the listening range?**
+
+Range audio supports playing up to 20 streams simultaneously.
+
+To ensure voice clarity, when more than 20 people nearby are speaking, only the sounds of the 20 speakers closest to you can be heard. If there are more than 20 people at the same distance, it's determined by the order in which each `userID` is first passed when calling the [updateAudioSource](@updateAudioSource) interface.
+
+2. **Does "range" in range audio refer to listening range or speaking range?**
+
+The "range" in range audio refers to listening range.
+
+3. **Do team members have 3D audio effects when speaking?**
+
+Voice within a team has the effect of ordinary calling, without 3D audio effects for now.
+
+4. **If I'm already calling the publishing stream interface, will there be conflicts when using range audio?**
+
+Range audio currently uses the main channel to send audio. If you are already using the main channel, there will be conflicts.
+
+## Browser Compatibility
+
+- For browser compatibility of range audio, please refer to [Which browsers does ZEGO Express Web SDK support](https://www.zegocloud.com/docs/faq/web-sdk-browser-support_1).
+- Browser compatibility for 3D audio effects is as follows:
+<table>
+
+  <tbody><tr>
+    <th>Browser</th>
+    <th>Compatibility</th>
+  </tr>
+  <tr>
+    <td>Chrome</td>
+    <td>14 and above</td>
+  </tr>
+  <tr>
+    <td>Edge</td>
+    <td>79 and above</td>
+  </tr>
+  <tr>
+    <td>Firefox</td>
+    <td>53 and above</td>
+  </tr>
+  <tr>
+    <td>Opera</td>
+    <td>15 and above</td>
+  </tr>
+  <tr>
+    <td>IE</td>
+    <td>Not supported</td>
+  </tr>
+  <tr>
+    <td>Safari</td>
+    <td>14.1 and above</td>
+  </tr>
+  <tr>
+    <td>WebView Android</td>
+    <td>55 and above</td>
+  </tr>
+  <tr>
+    <td>Firefox for Android</td>
+    <td>53 and above</td>
+  </tr>
+  <tr>
+    <td>Opera Android</td>
+    <td>42 and above</td>
+  </tr>
+  <tr>
+    <td>Safari on iOS</td>
+    <td>14.5 and above</td>
+  </tr>
+  <tr>
+    <td>Samsung Internet</td>
+    <td>6.0 and above</td>
+  </tr>
+</tbody></table>

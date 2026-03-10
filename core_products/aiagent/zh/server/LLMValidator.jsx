@@ -8,7 +8,7 @@ const LLMValidator = ({ lang = 'zh' }) => {
   const t = i18n[lang] || i18n.zh;
 
   const vendors = [
-    { id: 'volcengine', name: '火山方舟', url: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions', model: 'doubao-seed-1-6-lite-251015' },
+    { id: 'volcengine', name: '火山方舟', url: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions', model: 'doubao-1-5-lite-32k-250115' },
     { id: 'aliyun', name: '阿里云百炼', url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-plus' },
     { id: 'minimax', name: 'MiniMax', url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'MiniMax-Text-01' },
     { id: 'openai', name: 'OpenAI', url: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4' },
@@ -35,9 +35,9 @@ const LLMValidator = ({ lang = 'zh' }) => {
   const [userMessage, setUserMessage] = useState('');
 
   const generateLLMConfig = (vendor, language) => {
-    const baseConfig = { Url: vendor.url, ApiKey: 'your_api_key', Model: vendor.model, SystemPrompt: t.systemprompt, Temperature: 0.7, TopP: 0.9, Params: { max_tokens: 16384 } };
+    const baseConfig = { Vendor: 'OpenAIChat', Url: vendor.url, ApiKey: 'your_api_key', Model: vendor.model, SystemPrompt: t.systemprompt, Temperature: 0.7, TopP: 0.9, Params: { max_tokens: 16384 } };
     if (language === 'PHP') {
-      return `"LLM" => [\n    "Url" => "${baseConfig.Url}",\n    "ApiKey" => "${baseConfig.ApiKey}",\n    "Model" => "${baseConfig.Model}",\n    "SystemPrompt" => "${baseConfig.SystemPrompt}",\n    "Temperature" => ${baseConfig.Temperature},\n    "TopP" => ${baseConfig.TopP},\n    "Params" => ["max_tokens" => ${baseConfig.Params.max_tokens}]\n],`;
+      return `"LLM" => [\n    "Vendor" => "${baseConfig.Vendor}",\n    "Url" => "${baseConfig.Url}",\n    "ApiKey" => "${baseConfig.ApiKey}",\n    "Model" => "${baseConfig.Model}",\n    "SystemPrompt" => "${baseConfig.SystemPrompt}",\n    "Temperature" => ${baseConfig.Temperature},\n    "TopP" => ${baseConfig.TopP},\n    "Params" => ["max_tokens" => ${baseConfig.Params.max_tokens}]\n],`;
     }
     return `"LLM": ${JSON.stringify(baseConfig, null, 4)},`;
   };
@@ -303,10 +303,11 @@ public class AgentRegistration
     return issues;
   };
 
-  // 校验LLM配置参数
+  // 校验LLM配置参数（与 shared-components.yaml LLM 定义一致）
   const validateLLMConfig = (params) => {
-    const validParams = ['Url', 'ApiKey', 'Model', 'SystemPrompt', 'Temperature', 'TopP', 'Params', 'AddAgentInfo', 'AgentExtraInfo'];
+    const validParams = ['Vendor', 'Url', 'ApiKey', 'Model', 'SystemPrompt', 'Temperature', 'TopP', 'Params', 'AddAgentInfo', 'AgentExtraInfo'];
     const requiredParams = ['Url', 'Model'];
+    const vendorEnum = ['OpenAIChat', 'OpenAIResponses'];
     const errors = [];
 
     // 检查必填参数
@@ -319,7 +320,6 @@ public class AgentRegistration
     // 检查参数拼写和大小写
     for (const key in params) {
       if (!validParams.includes(key)) {
-        // 检查是否是大小写错误
         const lowerKey = key.toLowerCase();
         const matchedParam = validParams.find(p => p.toLowerCase() === lowerKey);
         if (matchedParam) {
@@ -328,6 +328,23 @@ public class AgentRegistration
           errors.push(`${t.paramError}，${key} ${t.invalidParam}！`);
         }
       }
+    }
+
+    // Vendor 可选，若提供则必须是 OpenAIChat 或 OpenAIResponses
+    if (params.Vendor !== undefined && params.Vendor !== null && params.Vendor !== '') {
+      if (!vendorEnum.includes(params.Vendor)) {
+        errors.push(`${t.paramError}，Vendor 仅支持：${vendorEnum.join('、')}`);
+      }
+    }
+
+    // Temperature 范围 [0, 2]
+    if (params.Temperature !== undefined && (typeof params.Temperature !== 'number' || params.Temperature < 0 || params.Temperature > 2)) {
+      errors.push('Temperature 取值范围为 [0, 2]');
+    }
+
+    // TopP 范围 [0, 1]
+    if (params.TopP !== undefined && (typeof params.TopP !== 'number' || params.TopP < 0 || params.TopP > 1)) {
+      errors.push('TopP 取值范围为 [0, 1]');
     }
 
     // 特别校验Params参数
@@ -388,6 +405,7 @@ public class AgentRegistration
       // 处理PHP格式
       if (cleanText.startsWith('"LLM" =>')) {
         const params = {};
+        const vendorMatch = cleanText.match(/"Vendor"\s*=>\s*"([^"]*)"/);
         const urlMatch = cleanText.match(/"Url"\s*=>\s*"([^"]*)"/);
         const apiKeyMatch = cleanText.match(/"ApiKey"\s*=>\s*"([^"]*)"/);
         const modelMatch = cleanText.match(/"Model"\s*=>\s*"([^"]*)"/);
@@ -395,6 +413,7 @@ public class AgentRegistration
         const temperatureMatch = cleanText.match(/"Temperature"\s*=>\s*([\d.]+)/);
         const topPMatch = cleanText.match(/"TopP"\s*=>\s*([\d.]+)/);
         const maxTokensMatch = cleanText.match(/"max_tokens"\s*=>\s*(\d+)/);
+        if (vendorMatch) params.Vendor = vendorMatch[1];
         if (urlMatch) params.Url = urlMatch[1];
         if (apiKeyMatch) params.ApiKey = apiKeyMatch[1];
         if (modelMatch) params.Model = modelMatch[1];

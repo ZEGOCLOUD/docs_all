@@ -1,0 +1,361 @@
+---
+articleID: 4300
+date: "2024-01-31"
+---
+# Volume Changes and Audio Spectrum
+
+- - -
+
+## Feature Introduction
+
+<table>
+
+<tbody><tr>
+<th>Concept</th>
+<th>Description</th>
+<th>Application Scenario</th>
+<th>Scenario Diagram</th>
+</tr>
+<tr>
+<td>Volume Change</td>
+<td>Refers to the volume level of a stream, hereinafter referred to as "sound level".</td>
+<td>During stream publishing and playing, determine which user on the mic is speaking and display it in the UI.</td>
+<td>&nbsp; <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Android/ZegoLiveRoom/SoundLevel.png" /></Frame></td>
+</tr>
+<tr>
+<td>Audio Spectrum</td>
+<td>Refers to the energy value of digital audio signals at various frequency points.</td>
+<td>In Karaoke scenarios, after publishing or playing streams, allow the host or audience to see animations of pitch and volume changes.</td>
+<td>&nbsp; &nbsp;<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Android/ZegoLiveRoom/FrequencySpectrum.png" /></Frame></td>
+</tr>
+</tbody></table>
+
+## Sample Source Code Download
+
+Please refer to [Download Sample Source Code](/real-time-video-ios-oc/quick-start/run-example-code) to get the source code.
+
+For related source code, please check the files in the "/ZegoExpressExample/Examples/AdvancedAudioProcessing/SoundLevel" directory.
+
+
+## Prerequisites
+
+Before implementing sound level and audio spectrum features, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in the project and implemented basic audio and video stream publishing and playing functions. For details, please refer to [Quick Start - Integration](/real-time-video-ios-oc/quick-start/integrating-sdk) and [Quick Start - Implementation Flow](/real-time-video-ios-oc/quick-start/implementing-video-call).
+
+
+## Usage Steps in Non-Stream Mixing Scenarios
+
+### 1 Listen for sound level and audio spectrum callback interfaces
+
+- Interface prototypes
+
+    - Local captured audio sound level callback interfaces [onCapturedSoundLevelUpdate](@onCapturedSoundLevelUpdate), [onCapturedSoundLevelInfoUpdate](@onCapturedSoundLevelInfoUpdate):
+
+        ```objc
+        // Local captured audio sound level callback
+        //
+        // @param soundLevel Local captured sound level value, ranging from 0.0 to 100.0
+        - (void)onCapturedSoundLevelUpdate:(NSNumber *)soundLevel;
+
+        // Local captured audio sound level callback, supports voice detection
+        //
+        // @note To trigger this callback, you must call the [startSoundLevelMonitor] function to start the sound level monitor.
+        // @note The callback notification period is the parameter value set when calling [startSoundLevelMonitor].
+        //
+        // @param soundLevelInfo Local captured sound level value, ranging from 0.0 to 100.0
+        - (void)onCapturedSoundLevelInfoUpdate:(ZegoSoundLevelInfo *)soundLevelInfo;
+        ```
+
+    - Remote audio sound level callback interfaces [onRemoteSoundLevelUpdate](@onRemoteSoundLevelUpdate), [onRemoteSoundLevelInfoUpdate](@onRemoteSoundLevelInfoUpdate):
+
+        ```objc
+        // Remote played stream audio sound level callback
+        //
+        // @param soundLevels Key-value pairs of remote sound levels, key is stream ID, value is the corresponding stream's sound level value, value ranges from 0.0 to 100.0
+        - (void)onRemoteSoundLevelUpdate:(NSDictionary<NSString *, NSNumber *> *)soundLevels;
+
+        // Remote played stream audio sound level callback, supports voice detection
+        //
+        // @note To trigger this callback, you must call the [startSoundLevelMonitor] function to start the sound level monitor and be in the state of playing stream.
+        // @note The callback notification period is the parameter value set when calling [startSoundLevelMonitor].
+        //
+        // @param soundLevelInfos Key-value pairs of remote sound levels, key is stream ID, value is the corresponding stream's sound level value, value ranges from 0.0 to 100.0
+        - (void)onRemoteSoundLevelInfoUpdate:(NSDictionary<NSString *, ZegoSoundLevelInfo *> *)soundLevelInfos;
+
+        ```
+
+    - Local captured audio spectrum callback interface [onCapturedAudioSpectrumUpdate](@onCapturedAudioSpectrumUpdate):
+
+        ```objc
+        // Local captured audio spectrum callback
+        //
+        // @param audioSpectrum Array of local captured audio spectrum values, spectrum values range from [0-2^30]
+        - (void)onCapturedAudioSpectrumUpdate:(NSArray<NSNumber *> *)audioSpectrum;
+        -
+        ```
+
+    - Remote played stream audio spectrum callback interface [onRemoteAudioSpectrumUpdate](@onRemoteAudioSpectrumUpdate):
+
+        ```objc
+        // Remote played stream audio spectrum callback
+        //
+        // @param audioSpectrums Key-value pairs of remote audio spectrum, key is stream ID, value is the corresponding stream's audio spectrum value array, spectrum values range from [0-2^30]
+        - (void)onRemoteAudioSpectrumUpdate:(NSDictionary<NSString *, NSArray<NSNumber *> *> *)audioSpectrums;
+        ```
+
+- Usage example
+
+    The callbacks for remote played stream sound level and remote audio spectrum will return an `NSDictionary`, where the `key` is the stream ID of other users currently publishing streams in the room, and the `value` is the sound level/audio spectrum data corresponding to that stream.
+
+    You can first get the list of existing streams in the current room through the [onRoomStreamUpdate](@onRoomStreamUpdate) callback method and save it, then use the saved stream list to index the NSDictionary to get the sound level/audio spectrum data corresponding to each stream.
+
+    The following example demonstrates how to get sound level/audio spectrum data from callback methods and pass it to the UI. For specific context, please refer to the files in the "/ZegoExpressExample/Examples/AdvancedAudioProcessing/SoundLevel" directory in the sample source code.
+
+    ```objc
+    // Local captured audio sound level callback
+    - (void)onCapturedSoundLevelUpdate:(NSNumber *)soundLevel {
+        ZGSoundLevelTableViewCell *cell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]];
+        cell.soundLevel = soundLevel;
+    }
+
+    // Local captured audio sound level callback, supports voice detection
+    - (void)onCapturedSoundLevelInfoUpdate:(ZegoSoundLevelInfo *)soundLevelInfo {
+        ZGSoundLevelTableViewCell *cell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]];
+        cell.soundLevelInfo = soundLevelInfo;
+    }
+
+    // soundLevels Key-value pairs of remote sound levels, key is stream ID, value is the corresponding stream's sound level value
+    - (void)onRemoteSoundLevelUpdate:(NSDictionary<NSString *,NSNumber *> *)soundLevels {
+        NSInteger rowCount = [self.tableView numberOfRowsInSection:1];
+        for (NSInteger row = 0; row < rowCount; row++) {
+            ZGSoundLevelTableViewCell *cell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:row inSection:1]];
+            if ([soundLevels objectForKey:cell.streamID]) {
+                cell.soundLevel = soundLevels[cell.streamID];
+            }
+        }
+    }
+
+    // soundLevelInfos Key-value pairs of remote sound levels, key is stream ID, value is the corresponding stream's sound level value
+    - (void)onRemoteSoundLevelInfoUpdate:(NSDictionary<NSString *, ZegoSoundLevelInfo *> *)soundLevelInfos {
+        NSInteger rowCount = [self.tableView numberOfRowsInSection:1];
+        for (NSInteger row = 0; row < rowCount; row++) {
+            ZGSoundLevelTableViewCell *cell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:row inSection:1]];
+            if ([soundLevelInfos objectForKey:cell.streamID]) {
+                cell. soundLevelInfos = soundLevelInfos[cell.streamID];
+            }
+        }
+    }
+
+    // Local captured audio spectrum callback
+    - (void)onCapturedAudioSpectrumUpdate:(NSArray<NSNumber *> *)audioSpectrum {
+        ZGSoundLevelTableViewCell *cell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]];
+        cell.spectrumList = audioSpectrum;
+    }
+
+    // audioSpectrums Key-value pairs of remote audio spectrum, key is stream ID, value is the corresponding stream's audio spectrum value array
+    - (void)onRemoteAudioSpectrumUpdate:(NSDictionary<NSString *,NSArray<NSNumber *> *> *)audioSpectrums {
+        NSInteger rowCount = [self.tableView numberOfRowsInSection:1];
+        for (NSInteger row = 0; row < rowCount; row++) {
+            ZGSoundLevelTableViewCell *cell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:row inSection:1]];
+            if ([audioSpectrums objectForKey:cell.streamID]) {
+                cell.spectrumList = audioSpectrums[cell.streamID];
+            }
+        }
+    }
+    ```
+
+### 2 Start monitoring sound level and audio spectrum callbacks
+
+You can separately start calling the interfaces to monitor the corresponding callbacks for sound level or audio spectrum.
+
+- Call the [startSoundLevelMonitor](@startSoundLevelMonitor) interface to start monitoring sound level:
+
+    ```objc
+    // Start sound level monitoring
+    //
+    - (void)startSoundLevelMonitor;
+
+    // Start sound level monitoring, supports enabling advanced features
+    //
+    // @note After starting monitoring, you can receive local captured audio sound level callbacks through [onCapturedSoundLevelUpdate] and remote played stream audio sound level callbacks through [onRemoteSoundLevelUpdate].
+    // @note Developers can call the [startPreview] function before joining the room and combine it with [onCapturedSoundLevelUpdate] to determine whether the audio device is working properly.
+    // @note The [onCapturedSoundLevelUpdate] and [onRemoteSoundLevelUpdate] callback notification period is the value set by the parameter.
+    //
+    // @param config Configuration for starting sound level monitoring
+    - (void)startSoundLevelMonitorWithConfig:(ZegoSoundLevelConfig *)config;
+    ```
+    <Note title="Note">Configuring the `millisecond` property of [ZegoSoundLevelConfig](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~objectivec_ios~class~ZegoSoundLevelConfig) can set the interval for sound level callbacks. The sound level monitoring time period is in milliseconds, ranging from [100, 3000]. Default is 100 ms.</Note>
+
+    After calling the above interface, the [onCapturedSoundLevelUpdate](@onCapturedSoundLevelUpdate) callback method will be triggered immediately. When not publishing stream and not previewing, the callback value is 0. [onRemoteSoundLevelUpdate](@onRemoteSoundLevelUpdate) will only have callbacks after calling the [startPlayingStream](@startPlayingStream) interface to start playing stream.
+
+- Call the [startAudioSpectrumMonitor](@startAudioSpectrumMonitor) interface to start monitoring audio spectrum:
+
+    ```objc
+    // Start audio spectrum monitoring
+    //
+    - (void)startAudioSpectrumMonitor;
+    ```
+
+    After calling the above interface, the [onCapturedAudioSpectrumUpdate](@onCapturedAudioSpectrumUpdate) callback method will be triggered immediately. When not publishing stream and not previewing, the callback value is 0. [onRemoteAudioSpectrumUpdate](@onRemoteAudioSpectrumUpdate) will only have callbacks after calling the [startPlayingStream](@startPlayingStream) interface to start playing stream.
+
+### 3 Stop monitoring sound level and audio spectrum callbacks
+
+You can separately stop calling the switches to monitor the corresponding callbacks for sound level or audio spectrum.
+
+- Call the [stopSoundLevelMonitor](@stopSoundLevelMonitor) interface to stop monitoring sound level:
+
+    ```objc
+    // Stop sound level monitoring
+    //
+    - (void)stopSoundLevelMonitor;
+    ```
+
+    After calling the above interface, [onCapturedSoundLevelUpdate](@onCapturedSoundLevelUpdate) and [onRemoteSoundLevelUpdate](@onRemoteSoundLevelUpdate) will no longer callback.
+
+- Call the [stopAudioSpectrumMonitor](@stopAudioSpectrumMonitor) interface to stop monitoring audio spectrum:
+
+    ```objc
+    // Stop audio spectrum monitoring
+    //
+    - (void)stopAudioSpectrumMonitor;
+    ```
+
+    After calling the above interface, [onCapturedAudioSpectrumUpdate](@onCapturedAudioSpectrumUpdate) and [onRemoteAudioSpectrumUpdate](@onRemoteAudioSpectrumUpdate) will no longer callback.
+
+## Usage Steps in Stream Mixing Scenarios
+
+
+
+- Stream mixing is a feature that mixes multiple streams into one stream. When customers need to display the sound level information of each stream before stream mixing, they can use the stream mixing sound level feature. Since the output of stream mixing is a single stream, using the sound level information of the mixed output stream cannot meet the requirement to display the sound levels of all input streams. In this case, when mixing streams, the sound level information of the input streams needs to be carried in the stream information, and then when playing the mixed output stream, the sound level information of each input stream is parsed from the stream information.
+- When parsing the sound level information of each input stream from the stream information, we get the sound level value corresponding to each input stream, which is a dictionary. The `key` in the dictionary is the stream identifier, and the `value` is the sound level value. However, due to the size limitation of stream information, the `key` cannot use the stream ID, and can only use a numeric ID (soundLevelID) to identify the stream.
+- In manual stream mixing configuration, developers need to maintain the association between numeric ID (soundLevelID) and stream ID. In the callback, developers will get the numeric ID (soundLevelID) and corresponding sound level information.
+- In room automatic stream mixing, the stream mixing server and SDK will automatically handle the association between numeric ID and stream ID. In the callback, developers get the sound level information corresponding to the stream ID.
+
+
+
+### 1 Listen for stream mixing sound level callback interfaces
+
+- Interface prototypes
+
+    - Sound level update callback interface for each single stream in manual stream mixing [onMixerSoundLevelUpdate](@onMixerSoundLevelUpdate):
+
+        ```objc
+        /**
+         * Sound level update callback for each single stream in stream mixing
+         *
+         * Callback notification period is 100 ms.
+         * @param soundLevel Key-value pairs of sound levels for each single stream in stream mixing, key is the soundLevelID of each single stream, value is the corresponding single stream's sound level value. Value ranges from 0.0 to 100.0.
+         */
+        - (void)onMixerSoundLevelUpdate:(NSDictionary<NSNumber *, NSNumber *> *)soundLevels {
+
+        }
+        ```
+
+    - Sound level update callback interface for each single stream in automatic stream mixing [onAutoMixerSoundLevelUpdate](@onAutoMixerSoundLevelUpdate):
+
+    <Warning title="Warning">
+    You can only get `streamID` in the callback interface when you are logged into the room where automatic stream mixing is located and playing the stream mixing of this room.
+    {/* If you need to get `streamID` without logging into the room where automatic stream mixing is located, please contact ZEGOCLOUD Technical Support for configuration. */}
+    </Warning>
+        ```objc
+        /**
+         * Sound level update callback for each single stream in automatic stream mixing
+         *
+         * Callback notification period is 100 ms.
+         * @param soundLevels Key-value pairs of sound levels for each single stream in stream mixing, key is the streamID of each single stream, value is the corresponding single stream's sound level value, value ranges from 0.0 to 100.0
+         */
+        - (void)onAutoMixerSoundLevelUpdate:(NSDictionary<NSString *, NSNumber *> *)soundLevels {
+
+        }
+        ```
+
+### 2 Start monitoring sound level callbacks
+
+When starting/updating stream mixing, you can start the switch to monitor sound level callbacks.
+
+- Manual stream mixing scenario
+
+  When calling the [startMixerTask](@startMixerTask) interface to initiate a manual stream mixing task, setting the `enableSoundLevel` parameter to `YES` can start monitoring sound level, and assign a unique `soundLevelID` for each input stream:
+
+    ```objc
+    ZegoMixerTask *task = [[ZegoMixerTask alloc] initWithTaskID:@"task123"];
+    // Enable stream mixing sound level
+    [task enableSoundLevel:YES];
+
+    ZegoMixerInput *input = [[ZegoMixerInput alloc] init];
+    // Assign a soundLevelID to the input stream
+    input.soundLevelID = 123;
+
+    // Other configurations
+
+    [[ZegoExpressEngine sharedEngine] startMixerTask:task callback:nil];
+    ```
+
+- Automatic stream mixing scenario
+
+  When calling the [startAutoMixerTask](@startAutoMixerTask) interface to initiate an automatic stream mixing task, setting the `enableSoundLevel` parameter to `YES` can start monitoring sound level:
+
+    ```objc
+    ZegoAutoMixerTask *task = [[ZegoAutoMixerTask alloc] init];
+
+    task.taskID = @"autotask123";
+    task.roomID = @"room123";
+    task.enableSoundLevel = YES;
+    // Other configurations
+
+    [[ZegoExpressEngine sharedEngine] startAutoMixerTask:task callback:nil];
+    ```
+
+
+### 3 Stop monitoring sound level callbacks
+
+When updating a stream mixing task, you can set to stop monitoring sound level callbacks.
+
+- Manual stream mixing scenario
+
+  When calling the [startMixerTask](@startMixerTask) client interface to update a stream mixing task, setting the `enableSoundLevel` parameter to `NO` can stop monitoring sound level:
+
+    ```objc
+    ZegoMixerTask *task = [[ZegoMixerTask alloc] initWithTaskID:@"task123"];
+    // Enable stream mixing sound level
+    [task enableSoundLevel:NO];
+
+    ZegoMixerInput *input = [[ZegoMixerInput alloc] init];
+    // Assign a soundLevelID to the input stream
+    input.soundLevelID = 123;
+
+    // Other configurations
+
+    [[ZegoExpressEngine sharedEngine] startMixerTask:task callback:nil];
+    ```
+
+- Automatic stream mixing scenario
+
+  When calling the [startAutoMixerTask](@startAutoMixerTask) client interface to update an automatic stream mixing task, setting the `enableSoundLevel` parameter to `NO` can stop monitoring sound level:
+
+    ```objc
+    ZegoAutoMixerTask *task = [[ZegoAutoMixerTask alloc] init];
+
+    task.taskID = @"autotask123";
+    task.roomID = @"room123";
+    task.enableSoundLevel = NO;
+    // Other configurations
+
+    [[ZegoExpressEngine sharedEngine] startAutoMixerTask:task callback:nil];
+    ```
+
+
+## FAQ
+
+1. **Why don't I receive relevant callbacks after enabling sound level and audio spectrum monitoring switches?**
+
+    The local captured callback will be triggered immediately, and the callback value is 0 when not publishing stream. The remote played stream callback will only be triggered after successfully playing stream [startPlayingStream](@startPlayingStream).
+
+
+## Related Documentation
+
+- [What is the difference between media volume and call volume?](https://www.zegocloud.com/docs/faq/background-music-volume-issue)
+- [How to handle no sound issue?](https://www.zegocloud.com/docs/faq/no-audio-issue)
+- [How to handle low volume issue?](https://www.zegocloud.com/docs/faq/low-audio-volume-issue)

@@ -1,0 +1,922 @@
+# Implement a live audio room
+
+This doc will introduce how to implement a live audio room.
+
+## Prerequisites
+
+Before you begin, make sure you complete the following:
+
+- Complete SDK integration by referring to **Quick Start** doc.
+- Download the [demo](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_android/tree/master/best_practice
+) that comes with this doc.
+- Activate the **In-app Chat** service.
+![https://doc-media.zego.im/sdk-doc/Pics/InappChat/ActivateZIMinConsole2.png](https://doc-media.zego.im/sdk-doc/Pics/InappChat/ActivateZIMinConsole2.png)
+
+## Preview the effect
+
+You can achieve the following effect with the [demo](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_android/tree/master/best_practice
+) provided in this doc:
+
+|Home Page|Host Page|Audience Page|Audience taps the speaker seat|Host check the requests|
+|--- | --- | --- |--- |--- |
+|<img src="https://doc-media.zego.im/sdk-doc/Pics/zegocloud/audioroom/home_page.jpg" />|<img src="https://doc-media.zego.im/sdk-doc/Pics/zegocloud/audioroom/host.jpg" />|<img src="https://doc-media.zego.im/sdk-doc/Pics/zegocloud/audioroom/audience.jpg" />|<img src="https://doc-media.zego.im/sdk-doc/Pics/zegocloud/audioroom/audience_takeseat.jpg" />|<img src="https://doc-media.zego.im/sdk-doc/Pics/zegocloud/audioroom/host_requests.jpg" />|
+
+
+> The host can tap the **Lock icon** on the lower right to change the room mode.
+> - Free mode: Audience became the speaker once click the speaker seat.
+> - Request mode: Auidence has to wait for the host to agree with the seat-taking request that is triggered by clicking the speaker seat.
+
+
+## Understand the tech
+
+The usage of basic SDK functions has been introduced by [Quick start](../quick-start/quick-start.mdx). If you are not familiar with the concept of stream publishing/playing, please read the document carefully again.
+
+In a live audio room:
+
+- All the audience can start playing streams after entering the room to listen to the speakers on the speaker seat in the room.
+- Speaker starts publishing streams after they are on the speaker seat to transmit local audio to the audience in the room.
+
+### How to manage speaker seats
+
+In addition to implementing the above logic, the live audio room also needs to manage speaker seats. The speaker seat management function can usually be implemented using the [room attribute](#14207) feature of the ZIM SDK.
+
+This feature allows app clients to set and synchronize custom room attributes in the room. Room attributes are stored on the ZEGOCLOUD server in a Key-Value manner, and the ZEGOCLOUD server handles write conflict arbitration and other issues to ensure data consistency.
+
+At the same time, modifications made by app clients to room attributes are synchronized to all other audiences in the room in real time through the ZEGOCLOUD server.
+
+> Each room allows a maximum of 20 attributes to be set, with a `key` length limit of 16 bytes and a `value` length limit of 1024 bytes.
+
+
+Taking Alice takes speaker seat as an example, the process is as follows:
+
+```mermaid
+sequenceDiagram
+    participant Alice
+    participant sdk1 as SDK
+    participant server as ZEGOCLOUD Server
+    participant sdk2 as SDK
+    participant Bob
+
+    Alice  ->> sdk1  : Set Room Attribute
+    sdk1   ->> server: Set Room Attribute
+    server ->> sdk2  : onRoomAttributesUpdated
+    sdk2   ->> Bob   : onRoomAttributesUpdated
+
+    Bob    ->> Bob   : Seat changes
+
+    Note over Alice, Bob: Chatting
+```
+
+
+**Using Room Attributes to represent Speaker Seats:**
+
+You can use the speaker seat number in the live audio room as the key of the room attribute and use `userID` as the value of the room attribute to represent the speaker seat status of the room.
+
+> For example, if the user with userID "user123" is on the No.0 speaker seat and the user with userID "user456" is on the No.1 speaker seat, then the room attribute is represented as follows:
+
+```json
+{
+  "0":"user123", // Indicates te user123 is on the NO.0 speaker seat
+  "1":"user456", // Indicates te user456 is on the NO.1 speaker seat
+}
+```
+
+**The design of the room attribute feature can solve some common problems in speaker seat management in live audio room scenario:**
+
+<table>
+<tbody><tr>
+<th>Feature</th>
+<th>Description</th>
+<th>Usage</th>
+</tr>
+<tr>
+<td>Owner</td>
+<td>The first audience to set a key will become the owner of that key. By default, the key can only be modified by the owner.</td>
+<td>Can be used to avoid conflicts when grabbing the speaker seat.</td>
+</tr>
+<tr>
+<td>Automatic Deletion</td>
+<td>When setting KV, the key can be configured as "automatically deleted after the owner leaves the room".</td>
+<td>Can be used to achieve the function of "automatic update of speaker seat when speaker gets offline", avoiding the problem of speaker seat disorder due to app client disconnection.</td>
+</tr>
+<tr>
+<td>Forced Modification</td>
+<td>Supports ignoring the owner and forcefully modifying KV.</td>
+<td>Can be used to achieve the function of "Host forcefully remove the audience from speaker seat".&nbsp;</td>
+</tr>
+<tr>
+<td>Combined Operations</td>
+<td>Multiple operations on different KVs can be combined into one combined operation to avoid conflicts caused by other users operating related KVs.</td>
+<td>Can be used to achieve the function of changing the speaker seat.</td>
+</tr>
+</tbody></table>
+
+
+
+
+### How to manage room mode
+
+In the live audio room app, you may need to support the host to modify the room mode:
+
+1. Free mode: Audience became the speaker once click the speaker seat.
+2. Request mode: Auidence has to wait for the host to agree with the seat-taking request that is triggered by clicking the speaker seat.
+
+
+The room mode is implemented using the [`setRoomExtraInfo`](@setRoomExtraInfo). `RoomExtraInfo` is similar to the above `RoomAttribute`, also stored on the ZEGOCLOUD server, but the usage of `RoomExtraInfo` is simpler:
+There are no complex parameters, only support for setting a key-value string (key maximum 10 bytes, value maximum 128 bytes), which is more suitable for simple business operations bound to the room, such as room mode, room announcements, etc.
+
+You can encapsulate any business field into the JSON protocol and set it to `RoomExtraInfo` to implement business logic such as room mode.
+
+
+> When the host calls the [`setRoomExtraInfo`](@setRoomExtraInfo) method, the in-room users can receive the set `RoomExtraInfo` via [`onRoomExtraInfoUpdate`](@onRoomExtraInfoUpdate).
+
+
+```mermaid
+sequenceDiagram
+    participant Alice
+    participant sdk1 as SDK
+    participant server as ZEGOCLOUD Server
+    participant sdk2 as SDK
+    participant Bob
+
+    Alice  ->> sdk1  : setRoomExtraInfo
+    sdk1   ->> server: setRoomExtraInfo
+    server ->> sdk2  : onRoomExtraInfoUpdate
+    sdk2   ->> Bob   : onRoomExtraInfoUpdate
+
+    Bob    ->> Bob   : Room mode changed
+
+    Note over Alice, Bob: Room mode updated
+```
+
+
+### How to request to take a speaker seat using roomrequest
+
+#### 1. What is roomrequest?
+
+
+The process of co-hosting seat-taking request implemented based on roomrequest, roomrequest  is a protocol or message to manage communication and connections in networks. ZEGOCLOUD packages all roomrequest capabilities into a SDK, providing you with a readily available real-time roomrequest API.
+
+<Video src="https://www.youtube.com/embed/pfnBmt9FST8"/>
+
+#### 2. How to send & receive roomrequest messages through the ZIM SDK interface
+
+The ZIM SDK provides rich functionality for sending and receiving messages, see [Send & Receive messages (roomrequest)](/zim-android/guides/messaging/send-and-receive-messages). And here, you will need to use the customizable roomrequest message: `ZIMCommandMessage`
+
+
+> Complete demo code for this section can be found at [ZIMService.java](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_android/blob/master/best_practice/app/src/main/java/com/zegocloud/demo/bestpractice/internal/sdk/zim/ZIMService.java).
+
+(1) Send RoomRequests (`ZIMCommandMessage`) in the room by calling [`sendMessage`](@sendMessage) with the following:
+
+```java
+zim.sendMessage(commandMessage, mRoomID, ZIMConversationType.ROOM, config, new ZIMMessageSentCallback() {
+    // ...
+    @Override
+    public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {
+        // ...
+    }
+});
+```
+
+(2) After sending, other users in the room will receive the RoomRequest from the [onReceiveRoomMessage](@onReceiveRoomMessage) callback. You can listen to this callback by following below:
+
+
+```java
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onReceiveRoomMessage(ZIM zim, ArrayList<ZIMMessage> messageList, String fromRoomID) {
+        super.onReceiveRoomMessage(zim, messageList, fromRoomID);
+
+        // ...
+    }
+});
+```
+
+
+#### 3. How to customize business RoomRequests
+
+> Complete demo code for this section can be found at [ZIMService.java](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_android/blob/master/best_practice/app/src/main/java/com/zegocloud/demo/bestpractice/internal/sdk/zim/ZIMService.java) and [RoomRequest.java](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_android/blob/master/best_practice/app/src/main/java/com/zegocloud/demo/bestpractice/internal/sdk/zim/RoomRequest.java).
+
+**JSON RoomRequest encoding**
+
+Since a simple `String` itself is difficult to express complex information, RoomRequests can be encapsulated in `JSON` format, making it more convenient for you to organize the protocol content of the RoomRequests.
+
+Taking the simplest JSON RoomRequest as an example: `{"action_type": 0}`, in such a JSON RoomRequest, you can use the `action_type` field to express different RoomRequest types, such as:
+
+- Sending a  request: `{"action_type": RoomRequestAction.ACTION_REQUEST}`
+- Canceling a  request: `{"action_type": RoomRequestAction.ACTION_CANCEL}`
+- Accepting a  request: `{"action_type": RoomRequestAction.ACTION_ACCEPT}`
+- Rejecting a  request: `{"action_type": RoomRequestAction.ACTION_REJECT}`
+
+
+In addition, you can also extend other common fields for RoomRequests, such as `senderID` ，`receiverID`,`extended_data`:
+
+
+```java
+public class RoomRequest {
+
+    // ...
+    public String toString() {
+        JSONObject jsonObject = new JSONObject();
+        try {
+            jsonObject.put("action_type", actionType);
+            jsonObject.put("sender_id", sender);
+            jsonObject.put("receiver_id", receiver);
+            jsonObject.put("extended_data", extendedData);
+            jsonObject.put("request_id", requestID);
+        } catch (JSONException e) {
+            throw new RuntimeException(e);
+        }
+        return jsonObject.toString();
+    }
+
+    // ...
+}
+
+public @interface RoomRequestAction {
+    int ACTION_REQUEST = 0;
+    int ACTION_ACCEPT = 1;
+    int ACTION_REJECT = 2;
+    int ACTION_CANCEL = 3;
+}
+
+```
+
+**JSON RoomRequest decoding**
+
+And users who receive RoomRequests can decode the JSON RoomRequest and know and process specific business logic based on the fields in it, such as:
+
+
+```java
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onReceiveRoomMessage(ZIM zim, ArrayList<ZIMMessage> messageList, String fromRoomID) {
+        super.onReceiveRoomMessage(zim, messageList, fromRoomID);
+
+        zimRoomService.onReceiveRoomMessage(zim, messageList, fromRoomID);
+    }
+    // ...
+})
+
+// ...
+public void onReceiveRoomMessage(ZIM zim, ArrayList<ZIMMessage> messageList, String fromRoomID) {
+    try {
+        for (ZIMMessage zimMessage : messageList) {
+            if (zimMessage instanceof ZIMCommandMessage) {
+                ZIMCommandMessage commandMessage = (ZIMCommandMessage) zimMessage;
+                String message = new String(commandMessage.message, StandardCharsets.UTF_8);
+                JSONObject jsonObject = new JSONObject(message);
+                ZIMUserInfo currentUser = zimUserService.getCurrentUser();
+                if (jsonObject.has("action_type") && currentUser != null) {
+                    String sender = jsonObject.getString("sender_id");
+                    String receiver = jsonObject.getString("receiver_id");
+                    int actionType = jsonObject.getInt("action_type");
+
+                    if (currentUser.userID.equals(receiver)) {
+                        // ...
+                    }
+                }
+            }
+        }
+    } catch (JSONException e) {
+       // ...
+    }
+}
+```
+
+**Further extending RoomRequests**
+
+Based on this pattern, when you need to do any protocol extensions in your business, you only need to extend the `extended_data` field of the RoomRequest to easily implement new business logic, such as:
+
+- Muting audience: After receiving the corresponding RoomRequest, the UI blocks the user from sending live bullet messages.
+- Sending virtual gifts: After receiving the RoomRequest, show the gift special effects.
+- Removing audience: After receiving the RoomRequest, prompt the audience that they have been removed and exit the room.
+
+
+**Friendly reminder**:
+After reading the following text and further understanding the implementation of seat-taking request RoomRequests, you will be able to easily extend your business RoomRequests.
+
+<Note title="Note">
+The demo in this document is a pure client API + ZEGOCLOUD solution. If you have your own business server and want to do more logical extensions, you can use our [Server API](#14007) to pass RoomRequests and combine your server's room business logic to increase the reliability of your app.
+```mermaid
+
+sequenceDiagram
+    participant Alice
+    participant appServer as App Server
+    participant server as ZEGOCLOUD Server
+    participant sdk as SDK
+    participant Bob
+
+    Alice  ->> appServer  : Send seat-taking request
+    appServer   ->> appServer  : Process your own business logic
+    appServer   ->> server: Alice's seat-taking request
+    server ->> sdk  : Alice's seat-taking request
+    sdk   ->> Bob   : Alice's seat-taking request
+
+
+    Note over Alice, Bob: ...
+
+```
+</Note>
+
+
+
+
+
+
+## Implementation
+
+
+Based on the above technical principles, we will explain the implementation details of the live audio room solution to you in detail.
+
+### Integrate and start to use the ZIM SDK
+
+If you have not used the ZIM SDK before, you can read the following section:
+
+<Accordion title="Import the ZIM SDK" defaultOpen="false">
+
+
+To import the ZIM SDK, do the following:
+
+1. Set up repositories.
+
+    - If your Android Gradle Plugin is **v7.1.0 or later**: go to the root directory of your project, open the `settings.gradle` file, and add the following line to the `dependencyResolutionManagement`:
+
+        ```groovy
+        ...
+        dependencyResolutionManagement {
+            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+            repositories {
+                maven { url 'https://maven.zego.im' }
+                mavenCentral()
+                google()
+            }
+        }
+        ```
+
+        <Warning title="Warning">
+        If you can not find the above fields in `settings.gradle`, it's probably because your Android Gradle Plugin version is lower than v7.1.0.
+
+        For more details, see [Android Gradle Plugin Release Note v7.1.0](https://developer.android.com/build/releases/past-releases/agp-7-1-0-release-notes#settings-gradle).
+        </Warning>
+
+    - If your Android Gradle Plugin is **earlier than 7.1.0**: go to the root directory of your project, open the `build.gradle` file, and add the following line to the `allprojects`:
+
+        ```groovy
+        ...
+        allprojects {
+            repositories {
+                maven { url 'https://maven.zego.im' }
+                mavenCentral()
+                google()
+            }
+        }
+        ```
+
+2. Declare dependencies:
+
+    Go to the `app` directory, open the `build.gradle` file, and add the following line to the `dependencies`. (**x.y.z** is the SDK version number, to obtain the latest version number, see [Release Notes](/zim-android/client-sdks/zim-release-notes).
+
+    ```groovy
+    ...
+    dependencies {
+        ...
+        implementation 'im.zego:zim:x.y.z'
+    }
+    ```
+</Accordion>
+
+<Accordion title="Use the ZIM SDK" defaultOpen="false">
+
+
+After successful integration, you can use the ZIM SDK like this:
+
+```java
+import im.zego.zim.ZIM
+```
+
+Creating a ZIM instance is the very first step, an instance corresponds to a user logging in to the system as a client.
+```java
+ZIMAppConfig appConfig = new ZIMAppConfig();
+appConfig.appID = yourAppID;
+appConfig.appSign = yourAppSign;
+zim = ZIM.create(appConfig, application);
+```
+
+</Accordion>
+
+
+Later on, we will provide you with detailed instructions on how to use the ZIM SDK to develop the live audio room feature.
+
+
+### Manage multiple SDKs more easily
+
+In most cases, you need to use multiple SDKs together. For example, in the live audio room scenario described in this doc, you need to use the `zim sdk` to implement the speaker seat management feature, and then use the `zego_express_engine sdk` to implement the live audio room feature.
+
+If your app has direct calls to SDKs everywhere, it can make the code difficult to manage and troubleshoot. To make your app code more organized, we recommend the following way to manage these SDKs:
+
+
+<Accordion title="Create service classes for SDK management" defaultOpen="false">
+
+
+Create a `ZIMService` class for the `zim sdk`, which manages the interaction with the SDK and stores the necessary data. Please refer to the complete code in [ZIMService.java](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_android/blob/master/best_practice/app/src/main/java/com/zegocloud/demo/bestpractice/internal/sdk/zim/ZIMService.java).
+
+```java
+public class ZIMService {
+
+    // ...
+
+    public void initSDK(Application application, long appID, String appSign) {
+        zimProxy.create(application, appID, appSign);
+        // ...
+    }
+}
+
+class ZIMProxy {
+
+    private SimpleZIMEventHandler zimEventHandler;
+
+    public void create(Application application, long appID, String appSign) {
+        ZIMAppConfig zimAppConfig = new ZIMAppConfig();
+        zimAppConfig.appID = appID;
+        zimAppConfig.appSign = appSign;
+        ZIM.create(zimAppConfig, application);
+
+        zimEventHandler = new SimpleZIMEventHandler();
+        if (getZIM() != null) {
+            ZIM.getInstance().setEventHandler(zimEventHandler);
+        }
+    }
+
+}
+```
+
+
+Similarly, create an `ExpressService` class for the `zego_express_engine sdk`, which manages the interaction with the SDK and stores the necessary data. Please refer to the complete code in [ExpressService.java](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_android/blob/master/best_practice/app/src/main/java/com/zegocloud/demo/bestpractice/internal/sdk/express/ExpressService.java).
+
+```java
+public class ExpressService {
+
+    // ...
+    public void initSDK(Application application, long appID, String appSign, ZegoScenario scenario) {
+        ZegoEngineConfig config = new ZegoEngineConfig();
+        config.advancedConfig.put("notify_remote_device_unknown_status", "true");
+        config.advancedConfig.put("notify_remote_device_init_status", "true");
+        ZegoExpressEngine.setEngineConfig(config);
+        engineProxy.createEngine(application, appID, appSign, scenario);
+        // ...
+    }
+}
+
+class ExpressEngineProxy {
+
+    private SimpleExpressEventHandler expressEventHandler;
+
+    public void createEngine(Application application, long appID, String appSign, ZegoScenario scenario) {
+        ZegoEngineProfile profile = new ZegoEngineProfile();
+        profile.appID = appID;
+        profile.appSign = appSign;
+        profile.scenario = scenario;
+        profile.application = application;
+        expressEventHandler = new SimpleExpressEventHandler();
+        ZegoExpressEngine.createEngine(profile, expressEventHandler);
+    }
+}
+```
+
+With the service, you can add methods to the service whenever you need to use any SDK interface.
+
+E.g., easily add the connectUser method to the ZIMService when you need to implement login:
+
+```java
+public class ZIMService {
+    // ...
+    public void connectUser(String userID, String userName, ZIMLoggedInCallback callback) {
+        ZIMUserInfo zimUserInfo = new ZIMUserInfo();
+        zimUserInfo.userID = userID;
+        zimUserInfo.userName = userName;
+        zim.login(zimUserInfo, new ZIMLoggedInCallback() {
+            @Override
+            public void onLoggedIn(ZIMError errorInfo) {
+                // ...
+            }
+        });
+    }
+}
+```
+
+</Accordion>
+
+<Accordion title="Create a singleton manager for SDK services" defaultOpen="false">
+
+
+As shown below. Please refer to the complete code in [ZEGOSDKManager.java](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_android/blob/master/best_practice/app/src/main/java/com/zegocloud/demo/bestpractice/internal/sdk/ZEGOSDKManager.java).
+
+```java
+public class ZEGOSDKManager {
+    public ExpressService expressService = new ExpressService();
+    public ZIMService zimService = new ZIMService();
+
+    private static final class Holder {
+        private static final ZEGOSDKManager INSTANCE = new ZEGOSDKManager();
+    }
+
+    public static ZEGOSDKManager getInstance() {
+        return Holder.INSTANCE;
+    }
+
+    public void initSDK(Application application, long appID, String appSign,ZegoScenario scenario) {
+        expressService.initSDK(application, appID, appSign,scenario);
+        zimService.initSDK(application, appID, appSign);
+    }
+}
+```
+
+
+In this way, you have implemented a singleton class that manages the SDK services you need. From now on, you can get an instance of this class anywhere in your project and use it to execute SDK-related logic, such as:
+
+
+
+- When the app starts up: call `ZEGOSDKManager.getInstance().initSDK(application,appID,appSign);`
+- When login : call `ZEGOSDKManager.getInstance().connectUser(userID,userName,callback);`
+
+Later, we will introduce how to add live audio room feature based on this.
+
+
+</Accordion>
+
+
+### Speaker seat management
+
+Later, we will introduce how to add the speaker seat management feature based on that.
+
+#### Take a speaker seat
+
+- For an audience to take a speaker seat, call the [`setRoomAttributes`](@setRoomAttributes) and set the speaker seat number as the key and the audience's userID as the attribute value in the room's additional attributes. If the setting is successful, the audience member has successfully taken a speaker seat and can start publishing streams.
+
+Sample code:
+
+```java
+public void takeSeat(int seatIndex, ZIMRoomAttributesOperatedCallback callback) {
+    ZEGOSDKUser localUser = ZEGOSDKManager.getInstance().expressService.getCurrentUser();
+    if (localUser == null || isTakeSeat) {
+        return;
+    }
+    isTakeSeat = true;
+    String key = String.valueOf(seatIndex);
+    String value = localUser.userID;
+
+    ZIMRoomAttributesSetConfig config = new ZIMRoomAttributesSetConfig();
+    config.isDeleteAfterOwnerLeft = true;
+    config.isForce = true;
+    config.isUpdateOwner = true;
+    ZEGOSDKManager.getInstance().zimService.setRoomAttributes(key, value, config,
+        new ZIMRoomAttributesOperatedCallback() {
+            @Override
+            public void onRoomAttributesOperated(String roomID, ArrayList<String> errorKeys, ZIMError errorInfo) {
+                isTakeSeat = false;
+                if (callback != null) {
+                    callback.onRoomAttributesOperated(roomID, errorKeys, errorInfo);
+                }
+            }
+        });
+}
+```
+
+The complete reference code can be found at [RoomSeatService.java](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_android/blob/master/best_practice/app/src/main/java/com/zegocloud/demo/bestpractice/internal/business/audioroom/RoomSeatService.java)
+
+**Instructions for grabbing the speaker seat:** When taking the speaker seat, set the `isForce` attribute of `ZIMRoomAttributesSetConfig` to false. When multiple audiences try to take the same speaker seat at the same time, the server will receive the first request and return a successful response, setting the owner of that key to the user who made the request. Subsequent modification requests from other users will fail.
+
+
+#### Leave the speaker seat
+
+- For a speaker to leave the speaker seat, call the [`deleteRoomAttributes`](@deleteRoomAttributes) to delete the speaker seat number that the speaker was using, and stop publishing streams.
+
+Sample code:
+
+```java
+public void leaveSeat(int seatIndex, ZIMRoomAttributesOperatedCallback callback) {
+    ZEGOSDKUser localUser = ZEGOSDKManager.getInstance().expressService.getCurrentUser();
+    if (localUser == null) {
+        return;
+    }
+    List<String> list = Collections.singletonList(String.valueOf(seatIndex));
+    ZEGOSDKManager.getInstance().zimService.deleteRoomAttributes(list, new ZIMRoomAttributesOperatedCallback() {
+        @Override
+        public void onRoomAttributesOperated(String roomID, ArrayList<String> errorKeys, ZIMError errorInfo) {
+            if (callback != null) {
+                callback.onRoomAttributesOperated(roomID, errorKeys, errorInfo);
+            }
+        }
+    });
+}
+```
+
+The complete reference code can be found at [RoomSeatService.java](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_android/blob/master/best_practice/app/src/main/java/com/zegocloud/demo/bestpractice/internal/business/audioroom/RoomSeatService.java)
+
+
+#### Remove a speaker
+
+
+When the host needs to remove a speaker from the speaker seat, call the [`deleteRoomAttributes`](@deleteRoomAttributes), and set the `isForce` field of `ZIMRoomAttributesDeleteConfig` to true, to force clear the room attributes of the corresponding speaker seat, thereby removing the speaker from the seat.
+
+
+```java
+public void removeSpeakerFromSeat(String userID, ZIMRoomAttributesOperatedCallback callback) {
+    ZEGOSDKUser localUser = ZEGOSDKManager.getInstance().expressService.getCurrentUser();
+    if (localUser == null) {
+        return;
+    }
+    for (LiveAudioRoomSeat seat : seatList) {
+        int seatIndex = seat.seatIndex;
+        ZEGOSDKUser seatUser = seat.getUser();
+        if (seatUser != null) {
+            String seatUserID = seatUser.userID;
+            if (Objects.equals(userID, seatUserID)) {
+                leaveSeat(seatIndex, callback);
+                break;
+            }
+        }
+    }
+}
+```
+
+The complete reference code can be found at [RoomSeatService.java](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_android/blob/master/best_practice/app/src/main/java/com/zegocloud/demo/bestpractice/internal/business/audioroom/RoomSeatService.java)
+
+
+
+#### Changing speaker seat
+
+> Ignore this section if you are not going to implement the seat changing function.
+
+When a speaker switches from one seat to another, for example, Speaker A switches from the No.2 seat to the No.3 seat, he needs to first delete the room attribute corresponding to the No.2 seat (to leave No.2 seat), and then set the value of the room attribute corresponding to No.3 seat to their own userID (to take No.3 seat). This process involves two steps. Consider the following extreme situation:
+
+When Speaker A has just completed the first step (deleting the room attribute corresponding to the No.2 seat and leaving the No.2 seat), User B takes the No.3 seat ahead of Speaker A, causing Speaker A to successfully leave the No.2 seat but fail to take the No.3 seat.
+
+In this situation, Speaker A loses the speaker seat, which obviously does not meet expectations.
+
+
+**To handle this situation, you need to prevent other users from operating on the relevant speaker seats before Speaker A completes the two-step operation. This can be achieved using the feature of combined operations:**
+
+```java
+// 1. Start the combined operations.
+ZIMRoomAttributesBatchOperationConfig config = new ZIMRoomAttributesBatchOperationConfig();
+config.isForce = true;
+config.isDeleteAfterOwnerLeft = false;
+config.isUpdateOwner = false;
+zim.beginRoomAttributesBatchOperation(mRoomID, config);
+
+
+// 2. Operation 1: leave the No.2 seat
+List<String> keys = Collections.singletonList(String.valueOf(3));
+ZIMRoomAttributesDeleteConfig config = new ZIMRoomAttributesDeleteConfig();
+zim.deleteRoomAttributes(keys, mRoomID, config, callback);
+
+// 3. Operation 2: take the No.3 seat
+String key = String.valueOf(2);
+String value = localUser.userID;
+ZIMRoomAttributesSetConfig config = new ZIMRoomAttributesSetConfig();
+config.isDeleteAfterOwnerLeft = true;
+config.isForce = false;
+HashMap<String, String> attributes = new HashMap<>();
+attributes.put(key, value);
+zim.setRoomAttributes(attributes, mRoomID, config, callback);
+
+
+// 4. End the combined operations.
+zim.endRoomAttributesBatchOperation(mRoomID, callback);
+```
+
+<Accordion title="Complete reference code for switching seats" defaultOpen="false">
+
+The complete reference code is as follows:
+
+```java
+public void switchSeat(int fromSeatIndex, int toSeatIndex, ZIMRoomAttributesBatchOperatedCallback callback) {
+    AudioRoomUser localUser = ZEGOSDKManager.getInstance().expressService.getLocalUser();
+    if (localUser == null) {
+        return;
+    }
+    if (!batchOperation) {
+        ZEGOSDKManager.getInstance().zimService.beginRoomPropertiesBatchOperation();
+        batchOperation = true;
+        tryTakeSeat(toSeatIndex, null);
+        leaveSeat(fromSeatIndex, null);
+        ZEGOSDKManager.getInstance().zimService.endRoomPropertiesBatchOperation(
+            new ZIMRoomAttributesBatchOperatedCallback() {
+                @Override
+                public void onRoomAttributesBatchOperated(String roomID, ZIMError errorInfo) {
+                    batchOperation = false;
+                    if (callback != null) {
+                        callback.onRoomAttributesBatchOperated(roomID, errorInfo);
+                    }
+                }
+            });
+    }
+}
+```
+
+</Accordion>
+
+
+
+### Room mode
+
+We define the room mode as follows:
+
+|   | Free mode | Request mode |
+|---|---|---|
+|roomExtraInfo|`{"lockseat":false}`|`{"lockseat":true}`|
+
+
+The host can call the [`setRoomExtraInfo`](@setRoomExtraInfo)  to switch between the Free mode and the Request mode.
+
+```java
+public void setHostAndLockSeat() {
+    JSONObject extraInfoValueJson = audioRoomExtraInfo.getExtraInfoValueJson();
+    try {
+        ZEGOSDKUser localUser = ZEGOSDKManager.getInstance().expressService.getCurrentUser();
+        JSONObject jsonObject = new JSONObject(extraInfoValueJson.toString());
+        jsonObject.put(EXTRA_INFO_VALUE_HOST, localUser.userID);
+        jsonObject.put(EXTRA_INFO_VALUE_LOCK_SEAT, true);
+        ZEGOSDKManager.getInstance().expressService.setRoomExtraInfo(EXTRA_INFO_KEY, jsonObject.toString());
+    } catch (JSONException e) {
+        throw new RuntimeException(e);
+    }
+}
+```
+
+The complete reference code can be found at [RoomSeatService.java](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_android/blob/master/best_practice/app/src/main/java/com/zegocloud/demo/bestpractice/internal/business/audioroom/RoomSeatService.java)
+
+
+### Request to take a speaker seat using roomrequest
+
+#### Send & Cancel a seat-taking request
+
+> The implementation of sending and canceling seat-taking requests is similar, with only the type of RoomRequest being different. Here, sending will be used as an example to explain the implementation of the demo.
+
+In the Demo, a seat-taking request button has been placed in the lower right corner of the `LiveAudioRoomActivity` as seen from the **audience perspective**. When the button is clicked, the following actions will be executed.
+
+1. Encode the JSON RoomRequest, where the `action_type` is defined as `RoomRequestAction.ACTION_REQUEST` in the demo.
+2. add `room_request_type` to extendedData,mark it as `REQUEST_TAKE_SEAT`;
+
+3. Call `sendRoomRequest` to send the RoomRequest. (`sendRoomRequest` simplifies the [`sendMessage`](@sendMessage) interface of `ZIM SDK`.)
+  - If the method call is successful: the applying status of the local end (i.e. the audience) will be switched to applying for take a seat, and the `seat-taking request` button will switch to `Cancel Take Seat`.
+  - If the method call fails: an error message will be prompted. **In actual app development, you should use a more user-friendly UI to prompt the failure of the seat-taking request.**
+
+```java
+@Override
+protected void afterClick() {
+    super.afterClick();
+    // ...
+    RoomRequestExtendedData extendedData = new RoomRequestExtendedData();
+    extendedData.roomRequestType = RoomRequestType.REQUEST_TAKE_SEAT;
+    ZEGOSDKManager.getInstance().zimService.sendRoomRequest(hostUser.userID, jsonObject.toString(),
+        new RoomRequestCallback() {
+            @Override
+            public void onRoomRequestSend(int errorCode, String requestID) {
+                if (errorCode == 0) {
+                   mRequestID = requestID;
+                }
+            }
+        });
+// ...
+}
+
+ public void sendRoomRequest(String receiverID, String extendedData, RoomRequestCallback callback) {
+        if (zimProxy.getZIM() == null || currentRoom == null || currentUser == null) {
+            return;
+        }
+        RoomRequest roomRequest = new RoomRequest();
+        roomRequest.receiver = receiverID;
+        roomRequest.sender = currentUser.userID;
+        roomRequest.extendedData = extendedData;
+        roomRequest.actionType = RoomRequestAction.ACTION_REQUEST;
+
+        byte[] bytes = roomRequest.toString().getBytes(StandardCharsets.UTF_8);
+        ZIMCommandMessage commandMessage = new ZIMCommandMessage(bytes);
+        zimProxy.sendMessage(commandMessage, currentRoom.roomID, ZIMConversationType.ROOM, new ZIMMessageSendConfig(),
+            new ZIMMessageSentCallback() {
+                @Override
+                public void onMessageAttached(ZIMMessage message) {
+
+                }
+
+                @Override
+                public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {
+                    if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+                        roomRequest.requestID = String.valueOf(message.getMessageID());
+                        roomRequestMap.put(roomRequest.requestID, roomRequest);
+                    }
+                //...
+                }
+            });
+    }
+
+public void updateUI() {
+    RoomRequest roomRequest = ZEGOSDKManager.getInstance().zimService.getRoomRequestByRequestID(mRequestID);
+    if (roomRequest == null) {
+        setText("Apply to Take Seat");
+    } else {
+        setText("Cancel Take Seat");
+    }
+    setBackgroundResource(R.drawable.bg_cohost_btn);
+    setCompoundDrawablesWithIntrinsicBounds(R.drawable.liveaudioroom_bottombar_cohost, 0, 0, 0);
+}
+```
+
+The complete reference code can be found at [TakeSeatButton.java](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_android/blob/master/best_practice/app/src/main/java/com/zegocloud/demo/bestpractice/components/audioroom/TakeSeatButton.java)
+
+3. Afterwards, the local end (audience end) will wait for the response from the host.
+  - If the host rejects the seat-taking request: the applying status of the local end will be switched to not applying.
+  - If the host accepts the seat-taking request: the audience became a speaker, and can start publishing streams.
+
+
+#### Accept & Reject the seat-taking request
+
+
+1. In the demo, when the host receives a seat-taking request RoomRequest, the audience who requested will show in the request list, the host can check the list and choose to accept or reject the audience's seat-taking request after clicking on the request list.
+2. After the host responds, a RoomRequest of acceptance or rejection will be sent. The related logic of sending RoomRequests will not be further described here.
+
+The relevant code snippet is as follows, and the complete code can be found in [RoomRequestListDialog.java](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_android/blob/master/best_practice/app/src/main/java/com/zegocloud/demo/bestpractice/components/RoomRequestListDialog.java) and [RoomRequestListAdapter.java](https://github.com/ZEGOCLOUD/zegocloud_sdk_demo_android/blob/master/best_practice/app/src/main/java/com/zegocloud/demo/bestpractice/components/RoomRequestListAdapter.java)
+
+
+<Accordion title="Handle seat-taking requests" defaultOpen="false">
+
+
+1. Add the audience to the request list after receiving his seat-taking request.
+
+```java
+ZEGOSDKManager.getInstance().zimService.addIncomingRoomRequestListener(incomingRoomRequestListener);
+
+// ...
+
+incomingRoomRequestListener = new IZIMEventHandler() {
+    public void onInComingRoomRequestReceived(String requestID, String extendedData) {
+        RoomRequestExtendedData data = RoomRequestExtendedData.parse(extendedData);
+        if (data != null && data.roomRequestType == roomRequestType) {
+            RoomRequest request = ZEGOSDKManager.getInstance().zimService.getRoomRequestByRequestID(requestID);
+            if (request != null) {
+                seatRequestAdapter.addItem(request.sender);
+            }
+        }
+    }
+
+    // ...
+}
+```
+
+2. In the user list, the host can choose to click accept or reject.
+
+```java
+@Override
+public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+    // ...
+
+    agree.setOnClickListener(v -> {
+        ZEGOSDKManager.getInstance().zimService.acceptRoomRequest(protocol, new RoomRequestCallback() {
+            @Override
+            public void onRoomRequestSend(int errorCode, String requestID) {
+
+            }
+        });
+    });
+
+    disagree.setOnClickListener(v -> {
+        ZEGOSDKManager.getInstance().zimService.rejectRoomRequest(protocol, new RoomRequestCallback() {
+            @Override
+            public void onRoomRequestSend(int errorCode, String requestID) {
+
+            }
+        });
+    });
+}
+```
+
+</Accordion>
+
+## FAQs
+
+<Accordion title="How to determine if the remote microphone device is working normally" defaultOpen="false">
+
+You can listen to the [`onRemoteMicStateUpdate`](@onRemoteMicStateUpdate) callback notification of Express SDK to determine whether the microphone device of the remote publishing stream device is working normally or turned off, and preliminarily understand the cause of the device problem according to the corresponding state.
+
+
+<Warning title="Warning">This callback will not be triggered when the remote stream is played from the CDN.</Warning>
+
+
+</Accordion>
+
+
+<Accordion title="How to get the sound level of the speaker's voice" defaultOpen="false">
+
+You can listen to the [`onRemoteSoundLevelUpdate`](@onRemoteSoundLevelUpdate) callback notification of Express SDK to get the sound level of the speaker's voice.
+
+</Accordion>
+
+
+## Conclusion
+
+Congratulations! Hereby you have completed the development of the live audio room feature.
+
+If you have any suggestions or comments, feel free to share them with us via [Discord](https://discord.gg/EtNRATttyp). We value your feedback.

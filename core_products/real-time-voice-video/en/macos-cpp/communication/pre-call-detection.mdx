@@ -1,0 +1,244 @@
+---
+articleID: 12056
+date: "2024-01-02"
+---
+# Pre-call Detection
+
+---
+
+## Function Overview
+
+To ensure a real-time Video Call experience, you can perform network and device detection before the call to identify and resolve issues in advance.
+- Network detection: Detects the network environment, which can be used to determine or predict whether the network environment is suitable for publishing/playing streams of a specified bitrate.
+- Device detection: Detects whether the local microphone, camera, and speakers are working properly.
+
+This document will introduce how to use ZEGOCLOUD SDK interfaces to implement the above two types of detection.
+
+
+## Prerequisites
+
+Before implementing pre-call network/device detection functions, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated the ZEGO Express SDK into your project and implemented basic audio and video stream publishing and playing functions. For details, please refer to [Quick Start - Integration](/real-time-video-macos-cpp/quick-start/integrating-sdk) and [Quick Start - Implementation Process](/real-time-video-macos-cpp/quick-start/implementing-video-call).
+
+
+
+## Network Detection
+
+Please refer to [Network and Performance](/real-time-video-macos-cpp/communication/testing-network) for operations.
+
+
+## Device Detection
+
+
+### Microphone Detection
+
+**Detection Logic**
+
+The microphone device detection process is shown in the following figure:
+
+```mermaid
+graph TD
+    A[Start microphone detection] --> B[Start microphone]
+    B --> C{Check microphone permission}
+    C -->|No| D{Agree to authorize}
+    C -->|Yes| E{Check if microphone is available}
+    D -->|Agree| E
+    D -->|Disagree| F[Device error]
+    E -->|No| F
+    E -->|Yes| G{Check microphone audio data}
+    G -->|Data abnormal| F
+    G -->|Data normal| H[Device normal]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Microphone_detection.png" /></Frame>
+*/}
+
+
+**Related Interfaces**
+
+**1. Start Microphone**
+
+Call the [startPreview](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_macos~class~zego-express-i-zego-express-engine&jumpType=route#start-preview) interface to start audio capture without publishing streams.
+
+```cpp
+engine->startPreview(&canvas);
+```
+
+**2. Check Microphone Permissions**
+
+The ZEGOCLOUD SDK will automatically check microphone permissions. If the user has not authorized, it will request user consent; if the user refuses, the user needs to manually enable permissions in system settings.
+
+
+
+**3. Check if Microphone is Available**
+
+Detect whether the device is abnormal through the following callbacks. If no abnormal feedback is detected (you can simultaneously start "4. Check Microphone Audio Data"), and the microphone audio data detection is normal, the microphone device is available.
+
+- Version 2.15.0 and later: Listen to the [onLocalDeviceExceptionOccurred](@onLocalDeviceExceptionOccurred) callback to detect if the device is abnormal.
+- Before version 2.15.0: Listen to the `onDeviceError` callback to detect if the device is abnormal.
+<CodeGroup>
+  ```cpp Version 2.15.0 and later
+/**
+ * Local device exception notification.
+ *
+ * Supported versions: 2.15.0 and later.
+ * Description: Local device exception.
+ * Trigger timing: This callback is triggered when local audio or video device functions encounter an exception.
+ *
+ * @param exceptionType Device exception type.
+ * @param deviceType The type of device where the exception occurred.
+ * @param deviceID Device ID. Currently only supports desktop devices, used to identify specific devices; for mobile devices, this parameter will return an empty string.
+ */
+virtual void onLocalDeviceExceptionOccurred(ZegoDeviceExceptionType /*exceptionType*/, ZegoDeviceType /*deviceType*/, const std::string& /*deviceID*/) {
+
+}
+  ```
+  ```cpp Before version 2.15.0
+/**
+* Device exception notification.
+* @param errorCode The error code for device exception, please refer to the common error code document: /real-time-video-macos-cpp/error-code#7。
+* @param deviceName Device name.
+*/
+virtual void onDeviceError(int /*errorCode*/, const std::string& /*deviceName*/) {}
+  ```
+</CodeGroup>
+
+
+**4. Check Microphone Audio Data**
+
+Call the [startSoundLevelMonitor](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_macos~class~zego-express-i-zego-express-engine&jumpType=route#start-sound-level-monitor) interface to obtain the energy value of the sound captured by the microphone. If the data is normal, the microphone is working properly and can be used for calls.
+
+```cpp
+engine->startSoundLevelMonitor();
+```
+
+
+### Camera Detection
+
+**Detection Logic**
+
+The camera device detection process is shown in the following figure:
+
+```mermaid
+graph TD
+    A[Start camera detection] --> B[Start camera]
+    B --> C{Check camera permission}
+    C -- No --> D{Agree to authorize}
+    C -- Yes --> E{Check if camera is available}
+    D -- Agree --> E
+    D -- Disagree --> F[Device error]
+    E -- No --> F
+    E -- Yes --> G{Check if image is normal}
+    G -- Image abnormal --> F
+    G -- Image normal --> H[Device normal]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Camera_detection.png" /></Frame>
+*/}
+
+
+**Related Interfaces**
+
+**1. Start Camera**
+
+Call the [startPreview](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_macOS~class~zego-express-i-zego-express-engine&jumpType=route#start-preview) interface to bind the view for camera preview, and start video capture and preview without publishing streams.
+
+```cpp
+ZegoCanvas canvas(ZegoView(ui->frame_Preview->winId()));
+engine->startPreview(&canvas);
+```
+
+**2. Check Camera Permissions**
+
+The ZEGOCLOUD SDK will automatically check camera permissions. If the user has not authorized, it will request user consent; if the user refuses, the user needs to manually enable permissions in system settings.
+
+
+
+**3. Check if Camera is Available**
+
+Detect whether the device is abnormal through the following callbacks. If no abnormal feedback is detected (you can simultaneously start "4. Check if Image is Normal"), and the image display is normal, the device is available.
+
+- Version 2.15.0 and later: Listen to the [onLocalDeviceExceptionOccurred](@onLocalDeviceExceptionOccurred) callback to detect if the device is abnormal.
+- Before version 2.15.0: Listen to the `onDeviceError` callback to detect if the device is abnormal.
+
+<CodeGroup>
+  ```cpp Version 2.15.0 and later
+/**
+ * Local device exception notification.
+ *
+ * Supported versions: 2.15.0 and later.
+ * Description: Local device exception.
+ * Trigger timing: This callback is triggered when local audio or video device functions encounter an exception.
+ *
+ * @param exceptionType Device exception type.
+ * @param deviceType The type of device where the exception occurred.
+ * @param deviceID Device ID. Currently only supports desktop devices, used to identify specific devices; for mobile devices, this parameter will return an empty string.
+ */
+virtual void onLocalDeviceExceptionOccurred(ZegoDeviceExceptionType /*exceptionType*/, ZegoDeviceType /*deviceType*/, const std::string& /*deviceID*/) {
+
+}
+  ```
+  ```cpp Before version 2.15.0
+/**
+* Device exception notification.
+* @param errorCode The error code for device exception, please refer to the common error code document: /real-time-video-macos-cpp/error-code#7。
+* @param deviceName Device name.
+*/
+virtual void onDeviceError(int /*errorCode*/, const std::string& /*deviceName*/) {}
+  ```
+</CodeGroup>
+
+**4. Check if Image is Normal**
+
+If the image displays normally at this time, the camera is working properly and can be used for calls.
+
+
+### Speaker Detection
+
+**Detection Logic**
+
+The playback device detection process is shown in the following figure:
+
+```mermaid
+graph TD
+    A[Start speaker detection] --> B[Use media player to play audio file]
+    B --> C{Can you hear sound}
+    C -->|Yes| D[Device normal]
+    C -->|No| E[Device error]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Playback_device_detection.png" /></Frame>
+*/}
+
+
+**Related Interfaces**
+
+**1. Use Media Player to Play Audio File**
+
+Call the [IZegoMediaPlayer](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_macos~class~zego-express-i-zego-media-player&jumpType=route#public-func-lists) interface to play the audio file you use for testing.
+
+```cpp
+// 1. Create media player.
+IZegoMediaPlayer *mediaPlayer = engine->createMediaPlayer();
+// 2. Load resource.
+std::string currentSelectPath = "xxx";
+mediaPlayer->loadResource(currentSelectPath, nullptr);
+// 3. Play resource.
+mediaPlayer->start();
+```
+
+**2. Check if Sound is Heard**
+
+If you can hear the corresponding audio, the playback device is working properly and can be used for calls. Call the [onMediaPlayerStateUpdate](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_macos~class~zego-express-i-zego-media-player-event-handler&jumpType=route#on-media-player-state-update) callback to view the media player status:
+
+```cpp
+/**
+* Player playback state callback.
+* @param mediaPlayer The player instance of the callback.
+* @param state Player state.
+* @param errorCode Error code, please refer to the common error code document: /real-time-video-macos-cpp/error-code#7。
+*/
+virtual void onMediaPlayerStateUpdate(IZegoMediaPlayer* /*mediaPlayer*/, ZegoMediaPlayerState /*state*/, int /*errorCode*/) { }
+```

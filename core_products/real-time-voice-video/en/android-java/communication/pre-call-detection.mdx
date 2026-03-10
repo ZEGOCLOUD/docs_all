@@ -1,0 +1,274 @@
+---
+articleID: 12054
+date: "2024-01-02"
+---
+# Pre-Call Network/Device Detection
+
+---
+
+## Feature Overview
+
+To ensure a real-time call experience, network and device detection can be performed before the call to identify and resolve issues in advance.
+
+- Network detection: Detect the network environment, which can be used to judge or predict whether the network environment is suitable for publishing/playing streams of specified bitrates.
+- Device detection: Detect whether the local microphone, camera, and speaker can work normally.
+
+This article will introduce how to use ZEGO SDK interfaces to implement the above two aspects of detection.
+
+
+## Prerequisites
+
+Before implementing pre-call network/device detection functionality, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in your project and implemented basic audio and video streaming functionality. For details, please refer to [Quick Start - Integration](/real-time-video-android-java/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-android-java/quick-start/implementing-video-call).
+
+
+
+## Network Detection
+
+Please refer to [Network and Performance](/real-time-video-android-java/communication/testing-network) for operations.
+
+
+## Device Detection
+
+
+### Microphone Detection
+
+#### Detection Logic
+
+The microphone device detection process is shown in the following figure:
+
+```mermaid
+graph TD
+    A[Start microphone detection] --> B[Start microphone]
+    B --> C{Check microphone permission}
+    C -->|No| D{Agree to authorize}
+    C -->|Yes| E{Check if microphone is available}
+    D -->|Agree| E
+    D -->|Disagree| F[Device error]
+    E -->|No| F
+    E -->|Yes| G{Check microphone audio data}
+    G -->|Data abnormal| F
+    G -->|Data normal| H[Device normal]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Microphone_detection.png" /></Frame>
+*/}
+
+
+#### Corresponding Interfaces
+
+**1. Start Microphone**
+
+Call the [startPreview](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine&jumpType=route#start-preview) interface to start audio capture without publishing stream.
+
+```java
+engine.startPreview();
+```
+
+**2. Detect Microphone Permissions**
+
+ZEGO SDK automatically checks microphone permissions.
+<Warning title="Warning">
+Because Android 6.0 requires dynamic permission requests for some important permissions, you cannot only apply for static permissions through the "AndroidMainfest.xml" file. Therefore, you also need to refer to executing the following code, where "requestPermissions" is a method of "Activity".
+</Warning>
+
+```java
+String[] permissionNeeded = {
+    "android.permission.RECORD_AUDIO"};
+
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+    if (ContextCompat.checkSelfPermission(this, "android.permission.RECORD_AUDIO") != PackageManager.PERMISSION_GRANTED) {
+        //101 is requestCode, can be any number greater than 0, will be passed through to the permission request result callback onRequestPermissionsResult
+        requestPermissions(permissionNeeded, 101);
+    }
+}
+```
+
+**3. Detect Whether Microphone is Available**
+
+Detect whether the device is abnormal through the following callbacks. If no abnormal feedback is detected (can start "4. Detect Microphone Recording Data" synchronously), and the microphone recording data detection is normal, the microphone device is available.
+
+- Version 2.15.0 and later: Listen to the [onLocalDeviceExceptionOccurred](@onLocalDeviceExceptionOccurred) callback to detect whether the device is abnormal.
+- Versions before 2.15.0: Listen to the `onDeviceError` callback to detect whether the device is abnormal.
+
+<CodeGroup>
+```java title="Version 2.15.0 and later"
+/**
+ * Local device exception notification.
+ *
+ * Supported versions: 2.15.0 and later.
+ * Detailed description: Local device exception.
+ * Notification timing: This callback is triggered when local audio or video device function is abnormal.
+ *
+ * @param exceptionType Device exception type.
+ * @param deviceType Device type that is abnormal.
+ * @param deviceID Device ID. Currently only supports desktop devices, used to identify specific devices; for mobile devices, this parameter will return an empty string.
+ */
+public void onLocalDeviceExceptionOccurred(ZegoDeviceExceptionType exceptionType, ZegoDeviceType deviceType, String deviceID){
+
+}
+```
+
+```java title="Versions before 2.15.0"
+/**
+* Audio and video device error notification.
+* @param deviceName Device type name.
+* @param errorCode Error code, please refer to common error codes: /real-time-video-android-java/client-sdk/error-code#7.
+*/
+void onDeviceError(String deviceName, int errorCode);
+```
+</CodeGroup>
+
+
+**4. Detect Microphone Recording Data**
+
+Call the [startSoundLevelMonitor](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine&jumpType=route#start-sound-level-monitor) interface to obtain the energy value of the sound captured by the microphone. If the data is not abnormal, the microphone is normal and can be used for calls.
+
+```java
+engine.startSoundLevelMonitor();
+```
+
+
+### Camera Detection
+
+#### Detection Logic
+
+The camera device detection process is shown in the following figure:
+
+```mermaid
+graph TD
+    A[Start camera detection] --> B[Start camera]
+    B --> C{Check camera permission}
+    C -- No --> D{Agree to authorize}
+    C -- Yes --> E{Check if camera is available}
+    D -- Agree --> E
+    D -- Disagree --> F[Device error]
+    E -- No --> F
+    E -- Yes --> G{Check if image is normal}
+    G -- Image abnormal --> F
+    G -- Image normal --> H[Device normal]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Camera_detection.png" /></Frame>
+*/}
+
+
+#### Corresponding Interfaces
+
+**1. Start Camera**
+
+Call the [startPreview](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-express-engine&jumpType=route#start-preview) interface to bind the camera preview view and start video capture and preview without publishing stream.
+
+```java
+engine.startPreview();
+```
+
+**2. Detect Camera Permissions**
+
+ZEGO SDK automatically checks camera permissions.
+<Warning title="Warning">
+Because Android 6.0 requires dynamic permission requests for some important permissions, you cannot only apply for static permissions through the "AndroidMainfest.xml" file. Therefore, you also need to refer to executing the following code, where "requestPermissions" is a method of "Activity".
+</Warning>
+
+```java
+String[] permissionNeeded = {
+    "android.permission.CAMERA"};
+
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+    if (ContextCompat.checkSelfPermission(this, "android.permission.CAMERA") != PackageManager.PERMISSION_GRANTED) {
+        //101 is requestCode, can be any number greater than 0, will be passed through to the permission request result callback onRequestPermissionsResult
+        requestPermissions(permissionNeeded, 101);
+    }
+}
+```
+
+**3. Detect Whether Camera is Available**
+
+Detect whether the device is abnormal through the following callbacks. If no abnormal feedback is detected (can start "4. Detect Whether Screen is Normal" synchronously), and the screen display is normal, the device is available.
+
+- Version 2.15.0 and later: Listen to the [onLocalDeviceExceptionOccurred](@onLocalDeviceExceptionOccurred) callback to detect whether the device is abnormal.
+- Versions before 2.15.0: Listen to the `onDeviceError` callback to detect whether the device is abnormal.
+
+<CodeGroup>
+  ```java title="Version 2.15.0 and later"
+/**
+ * Local device exception notification.
+ *
+ * Supported versions: 2.15.0 and later.
+ * Detailed description: Local device exception.
+ * Notification timing: This callback is triggered when local audio or video device function is abnormal.
+ *
+ * @param exceptionType Device exception type.
+ * @param deviceType Device type that is abnormal.
+ * @param deviceID Device ID. Currently only supports desktop devices, used to identify specific devices; for mobile devices, this parameter will return an empty string.
+ */
+public void onLocalDeviceExceptionOccurred(ZegoDeviceExceptionType exceptionType, ZegoDeviceType deviceType, String deviceID){
+
+}
+```
+
+  ```java title="Versions before 2.15.0"
+/**
+* Audio and video device error notification.
+* @param deviceName Device type name.
+* @param errorCode Error code, please refer to common error codes: /real-time-video-android-java/client-sdk/error-code#7.
+*/
+void onDeviceError(String deviceName, int errorCode);
+```
+</CodeGroup>
+
+
+**4. Detect Whether Screen is Normal**
+
+If the screen display is normal at this time, the camera is normal and can be used for calls.
+
+
+### Speaker Detection
+
+#### Detection Logic
+
+The playback device detection process is shown in the following figure:
+
+```mermaid
+graph TD
+    A[Start speaker detection] --> B[Use media player to play audio file]
+    B --> C{Can you hear sound}
+    C -->|Yes| D[Device normal]
+    C -->|No| E[Device error]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Playback_device_detection.png" /></Frame>
+*/}
+
+
+#### Corresponding Interfaces
+
+**1. Use Media Player to Play Audio File**
+
+Call the [ZegoMediaPlayer](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-zego-media-player&jumpType=route) interface to play the audio file you use for testing.
+
+```java
+// 1. Create player object.
+ZegoMediaPlayer mediaPlayer = engine.createMediaPlayer();
+// 2. Load resource.
+String resourcePath = "xxx";
+mediaPlayer.loadResource(resourcePath, null);
+// 3. Play resource.
+mediaPlayer.start();
+```
+
+**2. Detect Whether Sound is Heard**
+
+If you can hear the corresponding audio, the playback device is normal and can be used for calls. Call the [onMediaPlayerStateUpdate](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~Java_android~class~im-zego-zegoexpress-callback-i-zego-media-player-event-handler&jumpType=route#on-media-player-state-update) callback to view the player status callback:
+
+```java
+/**
+* Player playback status callback.
+* @param mediaPlayer The player instance of the callback.
+* @param state Player status.
+* @param errorCode Error code, for details please refer to the common error codes document: /real-time-video-android-java/client-sdk/error-code#7.
+*/
+public void onMediaPlayerStateUpdate(ZegoMediaPlayer mediaPlayer, ZegoMediaPlayerState state, int errorCode){}
+```

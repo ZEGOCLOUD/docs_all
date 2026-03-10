@@ -1,0 +1,201 @@
+---
+articleID: 6519
+date: "2025-01-20"
+---
+# Screen Sharing
+
+- - -
+
+## Feature Introduction
+
+Screen sharing refers to sharing screen content as video to other viewers during video calls or interactive live streaming to enhance interactive experience and improve communication efficiency.
+
+Screen sharing is widely used in the following scenarios:
+
+- In video conference scenarios, screen sharing can share the speaker's local files, data, web pages, PPT and other images with other participants;
+- In online classroom scenarios, screen sharing can display the teacher's courseware, notes, lecture content and other images to students.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/screen_share_scene_new.png" /></Frame>
+
+## Example Source Code Download
+
+Please refer to [Download Example Source Code](/real-time-video-electron-js/quick-start/run-example-code) to obtain the source code.
+
+## Prerequisites
+
+Before implementing the screen sharing function, please ensure:
+
+- Windows7, Windows8, Windows10 or above.
+- macOS 10.13 or above, and Apple Xcode 14.0 or above.
+- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com), and valid AppID and AppSign have been applied for. For details, please refer to [Console - Project Information](/console/project-info).
+- ZEGO Express Electron SDK has been integrated into the project, and basic audio and video publishing and playing functionality has been implemented. For details, please refer to [Quick Start - Integration](/real-time-video-electron-js/quick-start/integrating-sdk) and [Quick Start - Implement Video Call](/real-time-video-electron-js/quick-start/implementing-video-call).
+
+
+## Implementation Process
+
+<Warning title="Warning">
+When capturing screens, only iOS and Android platforms support simultaneous capture of video and audio; other platforms only support capturing video. If you need to capture audio, developers need to implement the relevant logic themselves.
+</Warning>
+
+### 1 Get Window (including Screen) List Information
+
+The SDK can get information about all currently shareable windows through [getScreenCaptureSources](@getScreenCaptureSources).
+
+```js
+var screenCaptureSourceList = []
+zgEngine.getScreenCaptureSources(400, 400, 100, 100).then(solve = function(res)
+    {
+        console.log('getScreenCaptureSources successful: ' + res)
+        screenCaptureSourceList = res
+    }, reject = function(res)
+    {
+        console.log("getScreenCaptureSources failed: " + res)
+    })
+```
+
+### 2 Create Screen Sharing Source
+
+Through the window ID and window type in the above window information, call the [createScreenCaptureSource](@createScreenCaptureSource) interface to create a screen sharing source object.
+
+```js
+var screencapturesource = zgEngine.createScreenCaptureSource(parseInt(currentSelectSourceID), getScreenCaptureType(currentSelectSourceID))
+    if(screencapturesource)
+    {
+        console.log("create screencapture successful!")
+        screencapturesource.on('onExceptionOccurred', (res) =>{
+            console.log('onExceptionOccurred')
+        })
+    }
+    else
+    {
+        console.log("create screencapture failed!")
+        return
+    }
+```
+
+### 3 Set Capture Source as Screen Sharing Source
+
+The default video source for SDK publishing is the camera source. If you need to publish a screen sharing source, you need to switch to screen sharing through [setVideoSource](@setVideoSource).
+
+```js
+zgEngine.setVideoSource(zgDefines.ZegoVideoSourceType.ScreenCapture, screencapturesource.getIndex(), zgDefines.ZegoPublishChannel.Main)
+```
+
+### 4 Start Sharing
+
+Call the [startCapture](@startCapture) interface to share the window image.
+
+```js
+screencapturesource.startCapture()
+```
+
+### 5 Update Sharing Source
+
+Call the [updateCaptureSource](@updateCaptureSource) interface to update the shared window image.
+
+```js
+screencapturesource.updateCaptureSource(parseInt(currentSelectSourceID), zgDefines.ZegoScreenCaptureSourceType.Window)
+```
+
+### 6 Update Sharing Source Region
+
+Call the [updateCaptureRegion](@updateCaptureRegion) interface to dynamically update the shared window region. Setting it to (0, 0, 0, 0) can restore the entire window sharing.
+
+
+```js
+screencapturesource.updateCaptureRegion({x: 10, y: 10, width: 400, height: 400})
+```
+
+### 7 Filter Specified Windows
+
+Call the [setExcludeWindowList](@setExcludeWindowList) interface to filter out specified window images in the shared screen. This is only applicable when sharing the entire screen.
+
+```js
+let sourceIDList = []
+sourceIDList.push(screenCaptureSourceMap[0].sourceID)
+sourceIDList.push(screenCaptureSourceMap[1].sourceID)
+screencapturesource.setExcludeWindowList(sourceIDList)
+```
+
+### 8 Whether to Activate Window
+
+Call the [enableWindowActivate](@enableWindowActivate) interface to activate the currently shared window.
+
+```js
+screencapturesource.enableWindowActivate(true)
+```
+
+### 9 Whether to Display Mouse
+
+Call the [enableCursorVisible](@enableCursorVisible) interface to show or hide the mouse.
+
+```js
+screencapturesource.enableCursorVisible(true)
+```
+
+### 10 Listen to Event Callbacks
+
+By listening to the [onExceptionOccurred](/real-time-video-electron-js/quick-start/setting-callback) callback, receive notifications related to capture exceptions.
+
+```js
+// Capture exception callback. When there is an exception callback, the capture will be interrupted.
+screencapturesource.on('onExceptionOccurred', (res) =>{
+            console.log('onExceptionOccurred')
+})
+```
+
+### 11 Login to Room and Start Publishing Stream
+
+Call the [loginRoom ](@loginRoom) interface, pass in the room ID parameter "roomID" and user parameter "user", to login to the room.
+
+Call the [startPublishingStream ](@startPublishingStream) interface, pass in the stream ID parameter "streamID", to send the local audio and video stream to remote users.
+
+
+```js
+// Start logging in to the room
+var TheRoomID = document.getElementById("roomIDInput").value
+var TheUserID = document.getElementById("userIDInput").value
+var TheUserName = document.getElementById("userNameInput").value
+zgEngine.loginRoom(TheRoomID, { userID: TheUserID, userName: TheUserName});
+
+// Start publishing stream
+var ThePublishStreamID = document.getElementById("publishStreamIDInput").value
+zgEngine.startPublishingStream(ThePublishStreamID, config= {roomID: TheRoomID}, zgDefines.ZegoPublishChannel.Main);
+
+```
+
+So far, we have completed the operation of capturing screen data and sharing it to the remote end through ZEGO Express Electron SDK.
+
+### 12 Watch Remote Screen Sharing
+
+After completing the above steps, other users can use the [startPlayingStream](@startPlayingStream) interface to pull the screen sharing stream.
+
+```js
+var ThePlayStreamID = document.getElementById("playStreamIDInput").value
+zgEngine.startPlayingStream(ThePlayStreamID, { canvas: remoteCanvas});
+```
+### 13 Stop Sharing
+
+Users can call the [stopCapture](@stopCapture) interface to stop sharing.
+
+```js
+screencapturesource.stopCapture()
+```
+
+## FAQ
+
+**When the Android device is fixed in portrait orientation (automatic rotation is disabled), opening screen capture causes abnormal popup orientation and interface landscape/portrait switching. How to solve this?**
+
+Due to the conflict between the device's fixed portrait orientation and the App's landscape interface, the landscape/portrait switches rapidly during screen capture, causing system data abnormality and black screen. Solutions:
+
+- Solution 1: Override SDK configuration through `tools:replace`
+
+  The default orientation of the SDK screen sharing auxiliary Activity is "fullUser". It needs to be modified in the project's AndroidManifest.xml:
+  1. Add the "tools" tool namespace in the root node (manifest tag);
+  2. Find the above Activity configuration, change its screen orientation (screenOrientation) to "unspecified", and add `tools:replace` to forcibly override the SDK default configuration.
+  After recompiling, the popup will be consistent with the App's landscape orientation, avoiding switching black screen.
+
+- Solution 2: Enable device automatic rotation
+
+  Go to device "Settings > Display > Auto-rotate screen". After enabling, the popup orientation will follow the App's landscape orientation, and there will be no switching black screen problem.
+

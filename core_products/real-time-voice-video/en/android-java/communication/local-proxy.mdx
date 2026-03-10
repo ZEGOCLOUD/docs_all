@@ -1,0 +1,174 @@
+
+# Local Proxy
+
+### Feature Overview
+
+Local Proxy (formerly "Client Proxy") means that developers can set up a socks5 proxy server as a transit station for SDK data. After enabling the local proxy, all sending and receiving of SDK network data will go through the set socks5 proxy server.
+
+### Usage Scenarios
+
+When the developer's local network uses a socks5 proxy server to access the external network, it will not be able to access ZEGO services through direct connection. In this case, the local proxy feature can be used to access ZEGO services.
+
+### Architecture Description
+
+```mermaid
+sequenceDiagram
+    participant ClientAPP
+    participant ZEGO Express SDK
+    participant socks5ProxyServer
+    participant ZEGOVideoCallCloud
+    note right of ZEGOVideoCallCloud:───> Handled by developer<br>   ┄┄> Handled by ZEGO internally
+    ClientAPP->>ZEGO Express SDK: Set proxy
+    ZEGO Express SDK-->>socks5ProxyServer: Request to connect proxy
+    socks5ProxyServer-->>ZEGO Express SDK: Connect proxy succeeded
+    ZEGO Express SDK-->>socks5ProxyServer: Send data
+    socks5ProxyServer-->>ZEGOVideoCallCloud: Send data
+    ZEGOVideoCallCloud-->>socks5ProxyServer: Receive data
+    socks5ProxyServer-->>ZEGO Express SDK: Receive data
+```
+{/*
+<Frame width="512" height="auto" caption="">
+  <img src="https://doc-media.zego.im/sdk-doc/Pics/Express/iOS_Client_Framework.png" />
+</Frame>
+*/}
+
+### Usage Process
+
+<Steps>
+<Step title="Configure proxy server">
+Please ensure that your proxy server and proxy support the standard socks5 protocol proxy server.
+<Warning title="Warning">If it cannot support the standard socks5 protocol proxy server, please contact ZEGOCLOUD Technical Support for configuration.</Warning>
+For socks5 proxy servers, it is recommended to use 3proxy and Dante (ubuntu).
+
+- For Dante installation and configuration, please refer to [Dante Installation and Configuration Tutorial](http://wiki.kartbuilding.net/Dante_Socks_Server).
+- For 3proxy installation and configuration, please refer to [3proxy Installation and Configuration Tutorial](https://3proxy.org/doc/howtoe.html).
+```shell title="3proxy example configuration"
+#!/usr/local/bin/3proxy
+#3proxy internal timeout
+timeouts 1 5 30 60 180 1800 15 60
+#Add username and password
+users hyz:CL:12345678 hyz1:CL:123456789
+
+#log save address
+log /root/3proxy/3proxy.log D
+#log save format
+logformat "- +_L%t.%.  %N.%p %E %U %C:%c %R:%r %O %I %h %T"
+#number of rotated logs
+rotate 30
+
+#proxy server address
+internal 192.168.200.55
+
+#enable authentication
+auth strong
+flush
+#allowed usernames
+allow hyz,hyz1
+#specify socks 5 port
+socks -p1080
+
+#maximum number of connections supported by socks5
+#ZEGO configuration needs to be calculated based on the number of clients and the number of publishing and playing streams. 1 client with 1 publishing stream and 1 playing stream requires at least 3+1+1=5 connections
+#For example: 10 clients, each client has 10 publishing streams and 10 playing streams, then a total of at least 10*(3+10*1+10*1)=230 connections are required. It is recommended to appropriately increase redundancy and configure maxconn to 300
+**maxconn** **300**
+```
+
+</Step>
+<Step title="Configure client">
+The proxy information that the client needs to configure is as follows:
+
+
+:::if{props.platform="undefined|android"}
+
+```java
+//Method 1
+ZegoProxyInfo proxy = new ZegoProxyInfo();
+//Support setting domain name or ip address
+//proxy.hostName = "xxxxxxxxxxx.zego.im";
+proxy.ip = "192.168.1.1";
+proxy.port = 1080;
+
+//If there is proxy verification, you need to fill in username and password; if not, you can leave it blank
+ proxy.userName = "admin";
+ proxy.password = "bigsecret";
+
+//Support setting multiple at the same time. When one proxy is unavailable, it will automatically switch to the next
+ArrayList<ZegoProxyInfo> list = new ArrayList<~>();
+list.add(proxy);
+ZegoExpressEngine.setLocalProxyConfig(list, true);
+
+//Method 2
+/*
+ * Configure socks5 proxy information by setting advancedConfig. (Need to be set before creating the engine)
+ * key is "socks5_proxy"
+ * value is in the following format:
+ * Field explanation:
+ * socks5:1             // Set whether to enable socks5, 0 is off, 1 is on
+ * ip:192.168.100.1     // Set proxy IP address, fill in the real IP address here
+ * port：1080           // Set proxy port number, fill in the real port number here
+ * username:admin       // Set proxy security verification username. If there is no security verification, this field can be not set
+ * password:123456      // Set proxy security verification password. If there is no security verification, this field can be not set
+
+ * Use '&' to connect between fields
+ * Reference value: "socks5:1&ip:192.168.100.1&port:1080&username:admin&password:123456"
+ */
+
+ZegoEngineConfig engineConfig = new ZegoEngineConfig();
+HashMap<String, String> advanceConfig = new HashMap<>();
+String proxy = String.format("socks5:1&ip:%s&port:%s&username:%s&password:%s",
+                        "192.168.100.1", "1080", "admin", "123456");
+advanceConfig.put("socks5_proxy", proxy);
+engineConfig.advancedConfig = advanceConfig;
+ZegoExpressEngine.setEngineConfig(engineConfig);
+```
+:::
+:::if{props.platform="iOS"}
+```swift
+// Method 1
+ ZegoProxyInfo* proxy = [ZegoProxyInfo alloc];
+//Support setting domain name or ip address
+ proxy.ip = @"192.168.1.1";
+//proxy.hostName = @"xxxxxxxxxxxxx.zego.im";
+ proxy.port = 10826;
+//If there is proxy verification, you need to fill in username and password; if not, you can leave it blank
+ proxy.userName = @"admin";
+ proxy.password = @"bigsecret";
+
+//Support setting multiple at the same time. When one proxy is unavailable, it will automatically switch to the next
+ NSArray<ZegoProxyInfo *> *inputArray = @[proxy];
+ [ZegoExpressEngine setLocalProxyConfig:inputArray enable:TRUE];
+
+// Method 2
+/*
+ * Configure socks5 proxy information by setting advancedConfig. (Need to be set before creating the engine)
+ * key is "socks5_proxy"
+ * value is in the following format:
+ * Field explanation:
+ * socks5:1             // Set whether to enable socks5, 0 is off, 1 is on
+ * ip:192.168.100.1     // Set proxy IP address, fill in the real IP address here
+ * port：1080           // Set proxy port number, fill in the real port number here
+ * username:admin       // Set proxy security verification username. If there is no security verification, this field can be not set
+ * password:123456      // Set proxy security verification password. If there is no security verification, this field can be not set
+
+ * Use '&' to connect between fields
+ * Reference value: "socks5:1&ip:192.168.100.1&port:1080&username:admin&password:123456"
+ */
+ZegoEngineConfig *config = [[ZegoEngineConfig alloc] init];
+NSString *socks5 = [NSString stringWithFormat:@"socks5:1&ip:%@&port:%@&username:%@&password:%@",
+@"192.168.100.1", @"1080", @"admin", @"password"];
+config.advancedConfig = @{@"socks5_proxy": socks5};
+[ZegoExpressEngine setEngineConfig:config];
+```
+:::
+
+</Step>
+</Steps>
+
+### FAQ
+
+#### 1. How to check whether the local proxy is in effect?
+
+**How to solve if the socks5 proxy setting does not take effect?**
+
+- Check the configuration information fields of socks5_proxy, for example, whether socks5:1 is enabled; whether IP and Port are valid values; if the proxy is configured with security verification, verify whether username and password are set correctly.
+- Need to ensure that the socks5 proxy is set before creating the engine. Mid-way modification is not supported.

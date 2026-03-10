@@ -1,3 +1,6 @@
+---
+date: '2026-02-05'
+---
 # Display Subtitles
 
 ---
@@ -31,23 +34,8 @@ ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
     @Override
     public void onRecvExperimentalAPI(String content) {
         super.onRecvExperimentalAPI(content);
-        try {
-            // Step 1: Parse content into a JSONObject
-            JSONObject json = new JSONObject(content);
-
-            // Step 2: Check the value of the method field
-            if (json.has("method") && json.getString("method")
-                .equals("liveroom.room.on_recive_room_channel_message")) {
-                // Step 3: Get params and parse them
-                JSONObject paramsObject = json.getJSONObject("params");
-                String msgContent = paramsObject.getString("msg_content");
-
-                // AudioChatTextMessage will parse the JSON string
-                audioChatMessageParser.parseAudioChatMessage(msgContent);
-            }
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
+        // !mark
+        audioChatMessageParser.onRecvExperimentalAPI(content);
     }
 });
 
@@ -244,6 +232,29 @@ onBeforeUnmount(() => {
   clearMessages()
 })```
 
+```
+</Accordion>
+:::
+:::if{props.platform="MiniProgram"}
+You can directly download the [subtitle component source code](https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/miniprogram/miniprogram/hooks/useChat.ts) to your project and use it directly.
+<Accordion title="Subtitle Component Usage Example" defaultOpen="true">
+```javascript
+// Subtitle component usage example code
+// Import chatHook in the page
+import { useChat } from 'useChat';
+
+// Call the useChat method, pass in the Express SDK instance, messages is the message list, put it in your subtitle component for rendering
+const { messages, setupEventListeners, clearMessages } = useChat(zg);
+
+onLoad() {
+  // Register event listeners when the page loads
+  setupEventListeners()
+}
+
+onUnload() {
+  // Clear messages when the page is destroyed
+  clearMessages()
+}
 ```
 </Accordion>
 :::
@@ -516,7 +527,7 @@ class _YourPageState extends State<YourPage> {
 }
 ```
 :::
-:::if{props.platform="Web"}
+:::if{props.platform="Web|MiniProgram"}
 By listening to the `recvExperimentalAPI` callback, the client can obtain room custom messages with `method` as `onRecvRoomChannelMessage`. Below is an example of the callback listener code([click to view the complete example code](https://github.com/ZEGOCLOUD/ai_agent_quick_start/blob/master/web/src/hooks/useChat.ts)):
 ```javascript {2,4,15}
 // WARNING!!!: The data received through custom room messages may be out of order, and sorting needs to be performed based on the SeqId field.
@@ -576,7 +587,7 @@ Determine the message type based on the Cmd field, and obtain the message conten
 <Tabs>
 <Tab title="Cmd is 3, ASR Text">
 
-:::if{props.platform="Web"}
+:::if{props.platform="Web|MiniProgram"}
 ```javascript
  // Handle user message
  function handleUserMessage(data, seqId, round) {
@@ -638,13 +649,31 @@ Determine the message type based on the Cmd field, and obtain the message conten
 
 The corresponding message processing flow is shown in the figure below:
 
-<Frame width="auto" height="auto" >
-  <img src="https://media-resource.spreading.io/docuo/workspace740/af061ebc6eaf0f12ae9e7f72235bd04e/5b7718691f.png" alt="image.png"/>
-</Frame>
+```mermaid
+flowchart TD
+    Start([Start])
+    Parse[Parse Data field]
+    CheckExists{New message MessageId exists in<br/>UI message list?}
+    CheckSeqId{New message SeqId is larger?}
+    Replace[Replace the content of the corresponding message in the UI message list]
+    Ignore[Ignore]
+    Add[Add new message to UI message list]
+    End([End])
+
+    Start --> Parse
+    Parse --> CheckExists
+    CheckExists -->|Yes| CheckSeqId
+    CheckExists -->|No| Add
+    CheckSeqId -->|Yes| Replace
+    CheckSeqId -->|No| Ignore
+    Replace --> End
+    Ignore --> End
+    Add --> End
+```
 
 </Tab>
 <Tab title="Cmd is 4, LLM Text">
-:::if{props.platform="Web"}
+:::if{props.platform="Web|MiniProgram"}
 ```javascript
 // Handle agent message
 function handleAgentMessage(data, seqId, round) {
@@ -710,9 +739,30 @@ The corresponding message processing flow is shown in the figure below. Among th
 - AI message cache: A HashMap, with key as MessageId and value as the new message.
 - UI message list: An array containing user messages and AI messages, storing all messages displayed on the UI.
 
-<Frame width="auto" height="auto" >
-  <img src="https://media-resource.spreading.io/docuo/workspace740/af061ebc6eaf0f12ae9e7f72235bd04e/e2b7eb3ce5.png" alt="image copy.png"/>
-</Frame>
+```mermaid
+flowchart TD
+    Start([Start])
+    Parse[Parse Data field]
+    AddCache[Add new message to AI message cache]
+    CheckExists{New message MessageId exists in<br/>UI message list?}
+    RemoveCache[Remove message from AI message cache]
+    MergeSeqId[Sort and merge message content by SeqId]
+    UpdateUI[Update the content of the corresponding message in the UI message list]
+    AddToUI[Add new message to UI message list]
+    UpdateDisplay[Update UI display]
+    End([End])
+
+    Start --> Parse
+    Parse --> AddCache
+    AddCache --> CheckExists
+    CheckExists -->|Yes| RemoveCache
+    CheckExists -->|No| AddToUI
+    RemoveCache --> MergeSeqId
+    MergeSeqId --> UpdateUI
+    UpdateUI --> UpdateDisplay
+    AddToUI --> UpdateDisplay
+    UpdateDisplay --> End
+```
 
 </Tab>
 </Tabs>

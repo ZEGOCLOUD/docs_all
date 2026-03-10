@@ -27,7 +27,7 @@ const PRODUCT_CONFIG = {
     icon: "https://zego-public-develop-center.oss-cn-shanghai.aliyuncs.com/homePageData/image/ico_live_streaming.png", 
     description: "为高质量体验而生，直播分发产品中的\"六边形战士\"，打造超低延迟、超强同步、抗极端弱网、超低卡顿、超清画质、首帧秒开的极致体验。",
     apiPaths: {
-      client: "/live-streaming-api/overview",
+      client: "/client-sdk/api-reference/function-list",
       server: "/live-streaming-server/api-reference/overview"  
     },
     hasVideoCapability: true,

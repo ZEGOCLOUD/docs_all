@@ -1,0 +1,257 @@
+---
+articleID: 11691
+date: "2025-07-30"
+---
+# Integration with ZEGO Effects SDK
+
+---
+
+## Overview
+
+### Introduction
+
+Video Call is a real-time audio and video interaction service product from ZEGO. Developers can build audio and video applications through its flexible and easy-to-use APIs. At the same time, another product from ZEGO - AI Effects, based on leading AI algorithms, provides features such as face beautification, body reshaping, makeup, stickers, etc. By combining the two, you can easily achieve the integration of audio/video interaction and AI Effects, creating real-time AI Effects applications.
+
+The combination of the two can be widely used in live streaming scenarios such as entertainment live streaming, game live streaming, video conferences, etc.
+
+<video poster="https://doc-media.zego.im/sdk-doc/Pics/ZegoEffects/AI_cover.png" src="https://doc-media.zego.im/sdk-doc/doc/video/AI/AI.mp4" width="65%" muted="true" loop="true" autoplay="autoplay" preload="auto" nocontrols></video>
+
+### Concept Explanation
+
+- ZEGO Express SDK: ZEGO's real-time audio and video SDK, providing basic real-time audio and video functions, including stream publishing and playing, live co-hosting, etc. Hereinafter referred to as ZEGO Express SDK.
+- ZEGO Effects SDK: ZEGO's AI Effects SDK, providing multiple intelligent image rendering and algorithm capabilities, including intelligent face beautification, AR effects, image segmentation, etc. Hereinafter referred to as ZEGO Effects SDK.
+
+
+## Sample Source Code
+
+To facilitate developers in implementing the combination of the two, ZEGO provides sample code. For details, please refer to [AI Effects - Running Sample Code](/ai-effects-macos-c/quick-starts/run-sample-codes).
+
+
+## Prerequisites
+
+- Created a project in the [ZEGOCLOUD Console](https://console.zego.im), applied for a valid AppID and AppSign. For details, please refer to "Project Information" in [Console - Project Management](/console/project-info); and contact ZEGOCLOUD Technical Support to enable the ZEGO Effects service.
+- Integrated ZEGO Express SDK into your project and implemented basic audio/video stream publishing and playing functions. For details, please refer to [Quick Start - Integration](/real-time-video-macos-cpp/quick-start/integrating-sdk) and [Quick Start - Implementing Video Call](/real-time-video-macos-cpp/quick-start/implementing-video-call).
+- Integrated ZEGO Effects SDK into your project. For details, please refer to "AI Effects" [Quick Start - Integration](/ai-effects-macos-c/quick-starts/import-the-sdk).
+- Obtained the unique authentication file for ZEGO Effects SDK. For details, please refer to "AI Effects" [Quick Start - Online Authentication](/ai-effects-macos-c/quick-starts/online-authentication).
+
+
+## Implementation Steps
+
+The principle of using ZEGO Effects SDK and ZEGO Express SDK together to perform real-time AI Effects processing on video data is shown in the following figure:
+<Frame width="512" height="auto" caption="">
+  <img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/video_pre_processing_en.png" />
+</Frame>
+
+Through the above process, the specific implementation steps are shown in the following figure:
+```mermaid
+sequenceDiagram
+    participant Client
+    participant ZEGO Effects SDK
+    participant ZEGO Express SDK
+
+    Client->>ZEGO Effects SDK: 1. Initialize ZEGO Effects SDK
+    Client->>ZEGO Express SDK: 1. Initialize ZEGO Express SDK
+    Client->>ZEGO Express SDK: 2. Get raw video data
+    ZEGO Express SDK<<->>ZEGO Effects SDK: 3. Pass raw data to Effects SDK for AI processing<br>and return processed data to Express SDK
+    Client->>ZEGO Express SDK: 4. Client publishes processed video data
+    ZEGO Express SDK->>Client: 5. Other clients play processed data, play video
+```
+{/*
+<Frame width="512" height="auto" caption="">
+  <img src="https://doc-media.zego.im/sdk-doc/Pics/ZegoEffects/Apple/RTC_AI_bestPractise3.png" />
+</Frame>
+*/}
+
+1. Initialize ZEGO Effects SDK and ZEGO Express SDK. There is no timing restriction on initialization.
+2. Obtain original video data, which can be obtained through [Custom Video Capture](/real-time-video-macos-cpp/video/custom-video-capture) or [Custom Video Pre-processing](/real-time-video-macos-cpp/video/custom-video-preprocessing) of ZEGO Express SDK.
+3. Pass the captured original video data to ZEGO Effects SDK for AI Effects processing.
+4. Pass the processed data to ZEGO Express SDK for stream publishing. If you need to adjust AI Effects during stream publishing and playing, you can use the relevant functions of ZEGO Effects SDK to make real-time changes.
+5. Remote users play the processed data by pulling it through ZEGO Express SDK.
+
+
+### Initialize ZEGO Effects/Express SDK
+
+There is no timing restriction on the initialization of the two SDKs. The following steps take "initializing ZEGO Effects SDK first, then initializing ZEGO Express SDK" as an example.
+
+#### Initialize ZEGO Effects SDK
+
+1. Import Effects models and resources.
+
+    When using AI-related functions of ZEGO Effects SDK, you must first import AI models and resources.
+
+    ```cpp
+    // Pass in the absolute path of the face recognition model. Face detection, eye enlarging, and face slimming functions all need to be imported
+    // Pass in the absolute path of the portrait segmentation model. AI portrait segmentation function needs to be imported
+    // Pass in the absolute path of the resources.
+    char* resouce_path_list[] = {"D:\\YOUR_APP\\FaceDetectionModel.bundle",
+                             "D:\\YOUR_APP\\Segmentation.bundle",
+                             "D:\\YOUR_APP\\FaceWhiteningResources.bundle",
+                             "D:\\YOUR_APP\\PendantResources.bundle",
+                             "D:\\YOUR_APP\\RosyResources.bundle",
+                             "D:\\YOUR_APP\\TeethWhiteningResources.bundle",
+                             "D:\\YOUR_APP\\CommonResources.bundle"};
+
+    // Pass in the path list of resources or models, must be called before create
+    zego_effects_set_resources(resouce_path_list, 7);
+    ```
+
+    For all resources and models supported by ZEGO Effects SDK, please refer to "AI Effects" [Quick Start - Import Resources and Models](/ai-effects-macos-c/quick-starts/import-resources-and-models).
+
+
+2. Create Effects object. Pass in the authentication file obtained in [Prerequisites](#prerequisites) to create the Effects object.
+
+    ```cpp
+    // Please refer to the actual file obtained for the authentication content
+    zego_effects_create(&m_handle,"ABCDEFG");
+    ```
+
+3. Initialize Effects object.
+
+    Call the [zego_effects_init_env](https://www.zegocloud.com/article/api?doc=Effects_SDK_API~c_macos~class~ZegoEffects#zego-effects-init-env) interface to initialize the Effects object. You need to pass in the width and height of the video image data to be processed.
+
+    Taking a 1280 × 720 video image as an example:
+
+    ```cpp
+    // Initialize Effects object and pass in the width and height of the original image to be processed
+    zego_effects_init_env(m_handle,1280,720);
+    ```
+
+
+#### Initialize ZEGO Express SDK
+
+Call the [createEngine](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP~class~zego-express-zego-express-sdk#create-engine) interface to initialize ZEGO Express SDK.
+
+```cpp
+ZegoEngineProfile profile;
+// AppID and AppSign are assigned by ZEGO to each App; for security reasons, it is recommended to store AppSign in the app's business backend and obtain it from the backend when needed
+profile.appID = appID;
+profile.appSign = appSign;
+profile.scenario = ZegoScenario::ZEGO_SCENARIO_DEFAULT;
+// Create engine instance
+auto engine = ZegoExpressSDK::createEngine(profile, nullptr);
+```
+
+### Obtain Original Video Data
+
+ZEGO Express SDK can obtain original video data through two methods: [Custom Video Pre-processing](/real-time-video-macos-cpp/best-practice/integration-with-zego-effects-sdk) and [Custom Video Capture](/real-time-video-macos-cpp/best-practice/integration-with-zego-effects-sdk).
+
+The differences between the two methods are as follows. Developers can choose according to actual needs.
+
+<table>
+
+  <tbody><tr>
+    <th>Data acquisition method</th>
+    <th>Video data capture method</th>
+    <th>Advantages</th>
+  </tr>
+  <tr>
+    <td>Custom Video Pre-processing</td>
+    <td>Video data is captured internally by ZEGO Express SDK, and original video data is obtained through callbacks.</td>
+    <td>Extremely simple combination of ZEGO Express SDK and ZEGO Effects SDK. Developers do not need to manage device input sources. They only need to operate on the original data thrown by ZEGO Express SDK and then pass it back to ZEGO Express SDK.</td>
+  </tr>
+  <tr>
+    <td>Custom Video Capture</td>
+    <td>Video data is captured by the developer and provided to ZEGO Express SDK.</td>
+    <td>When integrating with multiple vendors, business implementation is more flexible, and there is greater room for performance optimization.</td>
+  </tr>
+</tbody></table>
+
+<a id="Customvideopreprocessing"></a>
+
+- **Method 1: Custom Video Pre-processing**
+
+    Taking obtaining original video data of type ZEGO_VIDEO_BUFFER_TYPE_CV_PIXEL_BUFFER as an example.
+
+    Developers call the [enableCustomVideoProcessing](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP~class~zego-express-i-zego-express-engine#enable-custom-video-processing) interface to enable custom video pre-processing. After enabling, ZEGO Express SDK will capture video data internally. After capture is complete, the captured original video data can be obtained through the [onCapturedUnprocessedCVPixelBuffer](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_macos~class~zego-express-i-zego-custom-video-process-handler#on-captured-unprocessed-cv-pixel-buffer) callback interface.
+
+    ```cpp
+    ZegoCustomVideoProcessConfig config;
+    config.bufferType = ZEGO_VIDEO_BUFFER_TYPE_CV_PIXEL_BUFFER;
+    // Enable custom pre-processing
+    engine->enableCustomVideoProcessing(true,&config);
+    ```
+
+    For specific principles, please refer to "Video Call" [Custom Video Pre-processing](/real-time-video-macos-cpp/video/custom-video-preprocessing).
+
+<a id="CustomCollection"></a>
+
+- **Method 2: Custom Video Capture**
+
+    Custom video capture mainly relies on developers capturing video data themselves. For specific methods, please refer to "Video Call" [Custom Video Capture](/real-time-video-macos-cpp/video/custom-video-capture).
+
+
+### Perform AI Effects Processing
+
+After obtaining the original video data, pass the data to ZEGO Effects SDK to start AI Effects processing on the video (e.g., face beautification, makeup, background segmentation, etc.).
+
+- **Method 1: Custom Video Pre-processing**
+
+    In the [onCapturedUnprocessedCVPixelBuffer](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_macos~class~zego-express-i-zego-custom-video-process-handler&jumpType=route#on-captured-unprocessed-cv-pixel-buffer) callback, after obtaining the original video data, call the relevant interfaces of ZEGO Effects SDK to perform AI Effects processing (please refer to [Face Beautification](/ai-effects-macos-c/guides/face-beautification), [Shape Retouch](/ai-effects-macos-c/guides/shape-retouch), [Background Segmentation](/ai-effects-macos-c/guides/background-segmentation), [Face Detection](/ai-effects-macos-c/guides/face-detection), [Stickers](https://www.zegocloud.com/docs/faq/ai-stickers-implementation), [Filters](/ai-effects-macos-c/guides/filters)), and return the processed data to ZEGO Express SDK.
+
+    ```cpp
+    // Taking custom pre-processing as an example
+    // Callback method to get original data
+    // Callback processing
+    class MyHandler : public IZegoCustomVideoProcessHandler {
+        // ......
+    protected:
+        void onCapturedUnprocessedCVPixelBuffer(void * buffer, unsigned long long referenceTimeMillisecond, ZegoPublishChannel channel) override;
+    };
+
+    void MyHandler::onCapturedUnprocessedCVPixelBuffer(void * buffer, unsigned long long referenceTimeMillisecond, ZegoPublishChannel channel) {
+        // Callback method to get original data texture
+        CVPixelBufferRef pixelBuffer = (CVPixelBufferRef)buffer;
+
+        CVReturn cvRet = CVPixelBufferLockBaseAddress(pixelBuffer, 0);
+        if (cvRet != kCVReturnSuccess) return;
+
+        int width = CVPixelBufferGetWidth(pixelBuffer);
+        int height = CVPixelBufferGetHeight(pixelBuffer);
+        int stride = CVPixelBufferGetBytesPerRow(pixelBuffer);
+
+        unsigned char *dest = (unsigned char *)CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0);
+
+        QImage image(dest,width,height,stride,QImage::Format_ARGB32);
+
+        zego_effects_video_frame_param param;
+        param.format = zego_effects_video_frame_format_bgra32;
+        param.width  = image.width();
+        param.height = image.height();
+        // Custom pre-processing: Use ZEGO Effects SDK here
+        zego_effects_process_image_buffer_rgb(m_handle,image.bits(), image.bytesPerLine() * image.height(),param);
+
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
+        // Send the processed buffer back to ZEGO Express SDK
+        engine->sendCustomVideoProcessedCVPixelBuffer(buffer,referenceTimeMillisecond,channel);
+    }
+
+    auto myHandler = std::make_shared< MyHandler >();
+    engine->setCustomVideoProcessHandler(myHandler);
+    ```
+
+- **Method 2: Custom Video Capture**
+
+    After receiving the [onStart](@onStart) callback from custom capture, developers obtain video data through custom capture, then call the relevant interfaces of ZEGO Effects SDK to perform AI Effects processing (please refer to [Face Beautification](/ai-effects-macos-c/guides/face-beautification), [Shape Retouch](/ai-effects-macos-c/guides/shape-retouch), [Background Segmentation](/ai-effects-macos-c/guides/background-segmentation), [Face Detection](/ai-effects-macos-c/guides/face-detection), [Stickers](https://www.zegocloud.com/docs/faq/ai-stickers-implementation), [Filters](/ai-effects-macos-c/guides/filters)), and return the processed data to ZEGO Express SDK (you can refer to "3 Send video frame data to SDK" in [Custom Video Capture](/real-time-video-macos-cpp/video/custom-video-capture#3-send-video-frame-data-to-sdk)).
+
+### Publish Processed Data
+
+After processing by ZEGO Effects SDK is completed, return the processed data to ZEGO Express SDK.
+
+ZEGO Express SDK calls the [startPublishingStream](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_macos~class~zego-express-i-zego-express-engine#start-publishing-stream) interface, passes in the processed data stream streamID, and starts stream publishing to send to the cloud server.
+
+```cpp
+// Start publishing stream
+engine->startPublishingStream("streamID");
+```
+
+### Play Processed Data
+
+After ZEGO Express SDK starts publishing the stream, remote users can call the [startPlayingStream](https://www.zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_macos~class~zego-express-i-zego-express-engine#start-playing-stream) interface, pass in the processed data stream streamID, pull the video data, and play it.
+
+```cpp
+// Pull real-time stream under Qt framework
+ZegoView playWND = ZegoView(ui->view->winId());
+ZegoCanvas canvas(playWND);
+engine->startPlayingStream("streamID", &canvas);
+```
+At this point, developers can fully realize real-time adjustment of AI Effects while publishing and playing audio/video streams.

@@ -1,0 +1,342 @@
+---
+articleID: 14495
+date: "2024-01-02"
+---
+# Pre-call Detection
+
+---
+
+## Function Overview
+
+To ensure a high-quality real-time communication experience, you can test devices before a call to identify and resolve potential issues in advance.
+Device testing primarily checks whether the local microphone, camera, and speaker are functioning properly.
+
+## Download Sample Source Code
+
+Please refer to [Download Sample Source Code](/real-time-video-web/quick-start/run-example-code) to get the source code.
+
+For related source code, please check the files in the "src/Examples/Others/DeviceDetection" directory.
+
+## Prerequisites
+
+Before implementing pre-call device detection, ensure that:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and Server address. For details, refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK into your project and implemented basic audio/video stream publishing and playing functionality. For details, refer to [Quick Start - Integration](/real-time-video-web/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-web/quick-start/implementing-video-call).
+
+## Implementation Methods
+
+Click [Online Experience](https://zegoim.github.io/express-demo-web/src/Examples/Others/DeviceDetection/index.html) to try the device detection feature.
+
+### Testing Microphone
+
+The microphone device testing process is shown in the following diagram:
+
+```mermaid
+graph TD
+    A[Start microphone detection] --> B{Get microphone permission}
+    B -->|No| C{Agree to authorize}
+    B -->|Yes| D[Start microphone]
+    C -->|Agree| D
+    C -->|Disagree| F[Device error]
+    D --> E{Check if microphone is available}
+    E -->|No| F
+    E -->|Yes| G{Check microphone audio data}
+    G -->|Data abnormal| F
+    G -->|Data normal| H[Device normal]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Microphone_detection_new.jpeg" /></Frame>
+*/}
+
+**1. Check microphone device permissions and get microphone device list**
+
+Call the [getMicrophones](@getMicrophones) interface to get the list of microphone devices. [getMicrophones](@getMicrophones) will request microphone permission if no device permission is detected.
+
+- Version 2.14.0 and later: Use getMicrophones to get devices.
+- Version 2.13.0 and earlier: Use enumDevices to get the device list.
+
+<CodeGroup>
+  ```js title="Version 2.14.0 and later"
+// Version 2.14.0 and later: Use getMicrophones to get devices.
+const microphones = await zg.getMicrophones()
+  ```
+
+  ```js title="Version 2.13.0 and earlier"
+// Request microphone device permission by creating a microphone media stream
+const stream = await zg.createStream({
+    camera: {
+        video: false,
+        audio: true
+    }
+});
+zg.destroyStream(stream);
+// Get all media devices interface, need to request microphone permission in advance
+const mediaDevices = await zg.enumDevices()
+const { microphones } = mediaDevices
+  ```
+</CodeGroup>
+
+**2. Start and test microphone**
+
+When calling the [createZegoStream](@createZegoStream) interface to create a [ZegoLocalStream](@-ZegoLocalStream) stream instance object, use "deviceID" to start the microphone you want to test.
+
+- Version 3.0.0 and later: After the microphone starts, the [createZegoStream](@createZegoStream) interface will check if the microphone is available and will throw an error code if it's not available.
+- Versions before 3.0.0: After the microphone starts, the [createStream](@createStream) interface will check if the microphone is available and will throw an error code if it's not available.
+
+<CodeGroup>
+  ```js title="Version 3.0.0 and later"
+   // Get the deviceID of the first microphone device
+  const { deviceID } = microphones[0]
+  // Create a media stream that collects microphone audio,
+  const micStream = await zg.createZegoStream({
+      camera: {
+          video: false,
+          audio: {
+              input: deviceID
+          }
+      }
+  })
+  ```
+
+  ```js title="Versions before 3.0.0"
+  // Get the deviceID of the first microphone device
+  const { deviceID } = microphones[0]
+  // Create a media stream that collects microphone audio,
+  const micStream = await zg.createStream({
+      camera: {
+          video: false,
+          audio: true,
+          audioInput: deviceID
+      }
+  })
+  ```
+</CodeGroup>
+
+
+
+**3. Test microphone audio data**
+
+Register the local captured audio sound level callback [capturedSoundLevelUpdate](@capturedSoundLevelUpdate), where "soundLevel" ranges from [0, 100].
+
+```js
+zg.on("capturedSoundLevelUpdate", (soundLevel) => {
+    console.log(soundLevel)
+})
+```
+
+After starting the microphone, call the [setSoundLevelDelegate](@setSoundLevelDelegate) interface to enable the sound level feature, which triggers the [capturedSoundLevelUpdate](@capturedSoundLevelUpdate) event to get changes in microphone sound level. Determine if the microphone is working properly based on whether the "soundLevel" data in the [capturedSoundLevelUpdate](@capturedSoundLevelUpdate) event callback fluctuates normally. Usually, when speaking into the microphone, "soundLevel" will fluctuate above 10.
+
+```js
+// Enable sound level detection
+zg.setSoundLevelDelegate(true);
+```
+
+### Testing Camera
+
+The camera device testing process is shown in the following diagram:
+
+```mermaid
+graph TD
+    A[Start camera detection] --> B{Check camera permission}
+    B -- No --> C{Agree to authorize}
+    B -- Yes --> D[Start camera]
+    C -- Agree --> D
+    C -- Disagree --> H[Device error]
+    D --> E{Check if camera is available}
+    E -- No --> H
+    E -- Yes --> F{Check if image is normal}
+    F -- Image abnormal --> H
+    F -- Image normal --> G[Device normal]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Camera_detection_new.jpeg" /></Frame>
+*/}
+
+
+**1. Check camera device permissions and get camera device list**
+
+Call the [getCameras](@getCameras) interface to get the list of camera devices. [getCameras](@getCameras) will request camera permission if no device permission is detected.
+
+- Version 2.14.0 and later: Use getCameras to get devices.
+- Version 2.13.0 and earlier: Use enumDevices to get the device list.
+
+<CodeGroup>
+  ```js title="Version 2.14.0 and later"
+// Version 2.14.0 and later: Use getCameras to get devices
+const cameras = await zg.getCameras()
+  ```
+
+  ```js title="Version 2.13.0 and earlier"
+// Request camera device permission by creating a camera media stream
+const stream = await zg.createStream({
+    camera: {
+        video: true,
+        audio: false
+    }
+});
+zg.destroyStream(stream);
+// Get all media devices interface, need to request microphone permission in advance
+const mediaDevices = await zg.enumDevices()
+const { cameras } = mediaDevices
+  ```
+</CodeGroup>
+**2. Start and test camera**
+
+
+Call the [createZegoStream](@createZegoStream) interface to create a [ZegoLocalStream](@-ZegoLocalStream) stream instance object, use "deviceID" to start the camera you want to test.
+
+- Version 3.0.0 and later: After the camera starts, the [createZegoStream](@createZegoStream) interface will check if the camera is available and will throw an error code if it's not available.
+- Versions before 3.0.0: After the camera starts, the [createStream](@createStream) interface will check if the camera is available and will throw an error code if it's not available.
+
+<CodeGroup>
+  ```js title="Version 3.0.0 and later"
+// Get the deviceID of the first camera device
+const { deviceID } = cameras[0]
+// Create a media stream that collects camera video,
+const cameraStream = await zg.createZegoStream({
+    camera: {
+        video: {
+            input: deviceID
+        },
+        audio: false
+    }
+})
+  ```
+
+```js title="Versions before 3.0.0"
+// Get the deviceID of the first camera device
+const { deviceID } = cameras[0]
+// Create a media stream that collects camera video,
+const cameraStream = await zg.createStream({
+    camera: {
+        video: true,
+        videoInput: deviceID,
+        audio: false
+    }
+})
+```
+</CodeGroup>
+
+**3. Check if video is normal**
+
+Play the media stream that collects camera video through the html5 `<video>` tag element so that users can judge whether the camera device can capture video properly.
+
+<CodeGroup>
+```js title="Version 3.0.0 and later"
+// Version 3.0.0 and later: Use createZegoStream to create stream preview
+// Preview container div
+<div id="camera-view" playsinline autoplay muted></div>
+
+cameraStream.playVideo(document.querySelector("#camera-view"));
+```
+
+```js title="Versions before 3.0.0"
+// Versions before 3.0.0: Use createStream to create stream preview
+<video id="camera-view" playsinline autoplay muted></video>
+
+// video is the video tag element on html5, used for video preview
+const video = document.getElementById("camera-view")
+video.srcObject = cameraStream
+```
+
+</CodeGroup>
+
+### Testing Speaker
+
+The speaker device testing process is shown in the following diagram:
+
+```mermaid
+graph TD
+    A[Start speaker detection] --> B[Use media player to play audio file]
+    B --> C{Can you hear sound}
+    C -->|Yes| D[Device normal]
+    C -->|No| E[Device error]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Playback_device_detection.png" /></Frame>
+*/}
+
+**1. Check speaker device permissions and get speaker device list**
+
+Call the [getSpeakers](@getSpeakers) interface to get the list of microphone devices. [getSpeakers](@getSpeakers) will request audio output device permission if no device permission is detected.
+
+- Version 2.14.0 and later: Use getSpeakers to get devices.
+- Version 2.13.0 and earlier: Use enumDevices to get the device list.
+
+<CodeGroup>
+  ```js title="Version 2.14.0 and later"
+// Version 2.14.0 and later: Use getSpeakers to get devices
+const speakers = await zg.getSpeakers()
+  ```
+
+  ```js title="Version 2.13.0 and earlier"
+// Request audio output device permission by creating a microphone media stream
+const stream = await zg.createStream({
+    camera: {
+        video: false,
+        audio: true
+    }
+});
+zg.destroyStream(stream);
+// Get all media devices interface, need to request microphone permission in advance
+const mediaDevices = await zg.enumDevices()
+const { speakers } = mediaDevices
+  ```
+</CodeGroup>
+
+**2. Play audio files through `<audio>` tag**
+
+Use the html5 `<audio>` tag to play your test audio file by assigning the audio address to src.
+
+```html
+<audio controls id="music-player" src="http://xxx.mp3" loop></audio>
+```
+
+**3. Specify speaker for audio playback**
+
+Call the [useAudioOutputDevice](@useAudioOutputDevice) interface to specify the audio player to play sound and listen to whether the corresponding speaker plays sound.
+
+<Warning title="Warning">
+
+
+The [useAudioOutputDevice](@useAudioOutputDevice) interface only supports Chrome browser.
+
+</Warning>
+
+
+
+
+```js
+// Get the deviceID of the first speaker device
+const { deviceID } = speakers[0]
+// Get the audio player
+player = document.getElementById("#music-player")
+// Specify the speaker device used by the audio player
+zg.useAudioOutputDevice(player, deviceID)
+// Play music
+player.play()
+```
+
+### Hot-plug of Audio and Video Capture Devices
+
+ZEGO Express Web SDK provides [videoDeviceStateChanged](@videoDeviceStateChanged) and [audioDeviceStateChanged](@audioDeviceStateChanged) events to monitor and get the plug/unplug status of audio and video devices, which can be used to update the device list.
+
+```js
+zg.on('videoDeviceStateChanged', (updateType, deviceInfo) => {
+  if(updateType === "ADD") {
+    cameras.push(deviceInfo)
+  } else if(updateType === "DELETE") {
+    cameras = cameras.filter(item=>(item.deviceID === deviceInfo.deviceID))
+  }
+});
+zg.on('audioDeviceStateChanged', (updateType, deviceType, deviceInfo) => {
+  if(updateType === "ADD") {
+    microphones.push(deviceInfo)
+  } else if(updateType === "DELETE") {
+    microphones = microphones.filter(item=>(item.deviceID === deviceInfo.deviceID))
+  }
+});
+```
+
+If you want to force the use of a new device when it's inserted, you need to use the [on](@on) method to register the [videoDeviceStateChanged](@videoDeviceStateChanged) or [audioDeviceStateChanged](@audioDeviceStateChanged) event, and call [useVideoDevice](@useVideoDevice) or [useAudioDevice](@useAudioDevice) in the corresponding callback function to switch audio/video capture devices.

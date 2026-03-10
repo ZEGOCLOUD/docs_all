@@ -1,0 +1,222 @@
+---
+articleID: 18444
+---
+# Mobile Front and Rear Camera Switching
+
+- - -
+
+## Introduction
+
+After successfully creating a stream, developers can switch the capture camera through the [useVideoDevice](@useVideoDevice) interface. However, when using it directly on H5, some device models may experience unexpected issues, such as black screens or camera switching failures.
+
+This article introduces three ways to switch between front and rear cameras on mobile devices. Developers should choose the appropriate configuration method based on their current SDK version.
+
+<Warning title="Warning">
+
+
+H5 front/rear cameras are configured through facingMode.
+
+</Warning>
+
+
+
+## Solution
+
+### Method 1
+
+<Note title="Note">
+
+
+This method is only supported in SDK version 3.2.0 and above.
+
+</Note>
+
+
+
+1. Call the [createZegoStream](@createZegoStream) interface to create a rear camera capture stream zegoLocalStream, and use zegoLocalStream to publish the stream.
+2. Call the [useFrontCamera](@useFrontCamera) interface to switch to the front or rear camera.
+
+```js
+// Create a stream using the rear camera
+const localStream = await zg.createZegoStream({
+    camera: {
+        video: {
+            facingMode: "environment" // Camera facing direction, "user" means front camera, "environment" means rear camera
+        }
+    }
+});
+// Switch to front camera
+await zg.useFrontCamera(localStream, true);
+// Switch to rear camera
+await zg.useFrontCamera(localStream, false);
+```
+
+### Method 2
+
+<Note title="Note">
+
+
+This method is supported in all SDK versions from 3.0.0 and above.
+
+</Note>
+
+
+
+1. Call the [createZegoStream](@createZegoStream) interface to create a front camera capture stream zegoLocalStream, and use zegoLocalStream to publish the stream.
+
+2. Call the [stopCaptureVideo](@stopCaptureVideo) interface to stop the current camera capture.
+
+3. Call the [startCaptureCamera](@startCaptureCamera) interface to switch to the rear camera and restart capture.
+
+4. Call the [updatePublishingStream](@updatePublishingStream) interface to update to the publishing stream.
+
+```html
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>switch h5 camera</title>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <script src="./ZegoExpressWebRTC-3.0.0.js"></script>
+    </head>
+    <body>
+        <button id="switchCamera">Switch Camera</button>
+        <div id="localView"></div>
+    </body>
+    <script>
+        (async ()=> {
+            // Initialize information, please enter the AppID and Server address obtained from the ZEGO console
+            let appID = xxxxx;
+            let server = 'xxxxxxx';
+            // Initialize instance
+            const zg = new ZegoExpressEngine(appID, server);
+            zg.setDebugVerbose(false);
+            let facingMode = 'user'; // Camera facing direction, "user" means front camera, "environment" means rear camera
+
+            const zegoLocalStream = await zg.createZegoStream({
+                camera: { video: { facingMode } }
+            });
+            const $localView = document.querySelector('#localView');
+            zegoLocalStream.playVideo($localView);
+
+            document.querySelector('#switchCamera').addEventListener('click', async ()=> {
+                facingMode = facingMode == 'user' ? 'environment': 'user'; // Camera facing direction, "user" means front camera, "environment" means rear camera
+                await zegoLocalStream.stopCaptureVideo(); // Stop current camera capture
+                await zegoLocalStream.startCaptureCamera({facingMode}); // Restart capture
+                // If startPublishingStream was called successfully, you need to call updatePublishingStream to update to the publishing stream
+                await zg.updatePublishingStream(zegoLocalStream, 0);
+            });
+        })();
+
+    </script>
+</html>
+```
+
+### Method 3
+
+<Note title="Note">
+
+
+This method is supported in all SDK versions.
+
+</Note>
+
+
+
+For H5 front and rear camera switching scenarios, it is recommended to use the track replacement method.
+
+1. Call the [createStream](@createStream) interface to create a front camera capture stream localStream, and use localStream to publish the stream.
+
+2. Switch to the rear camera.
+
+    1. Use `getVideoTracks` to get the videoTrack of localStream, and stop this video track through the `stop` method.
+
+    Please note that some device models (for example: Honor 10) do not support using two cameras at the same time. If the videoTrack is not actively stopped, the rear camera stream creation will fail.
+
+    2. Call the [createStream](@createStream) interface to create a rear camera capture stream.
+
+    3. Call the [replaceTrack](@replaceTrack) interface to replace the video track of localStream with the rear camera video track.
+
+
+```html
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Zego Express Video Call</title>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <script src="./js/ZegoExpressWebRTC-2.19.0.js"></script>
+    </head>
+    <body>
+        <h1>Zego RTC Video Call</h1>
+        <div class="video-wrapper">
+            <button onclick="switchCamera()">Switch Camera</button>
+            <video id="local-video" autoplay muted playsinline controls></video>
+        </div>
+    </body>
+    <script>
+        // Initialize information, please enter the AppID and Server address obtained from the ZEGO console
+        let appID = xxxxx;
+        let server = 'xxxxxxx';
+
+        let userID = 'Kline'; // userID is set by the user, must be globally unique
+        let userName = "Kline";// userName is set by the user, no uniqueness requirement
+        let roomID = "room01"; // roomID is set by the user, must be globally unique
+
+        let localStream = null;
+        let isFrontendCamera = true; // Set to true means front camera
+        let streamConfig = {
+            videoQuality: 2,
+            video: true,
+            audio: true,
+        };
+        // Initialize instance
+        const zg = new ZegoExpressEngine(appID, server);
+        zg.on('roomStateUpdate', async (roomID, state, errorCode, extendedData) => {
+            if (state == 'CONNECTED') {
+                localStream = await zg.createStream({
+                    camera: {
+                        facingMode: 'user', // Camera facing direction, "user" means front camera, "environment" means rear camera
+                        ...streamConfig
+                    }
+                });
+                const localVideo = document.getElementById('local-video');
+                localVideo.srcObject = localStream;
+                zg.startPublishingStream('h5switchCamera', localStream);
+            }
+        });
+
+        // Join room
+        fetch(`https://wsliveroom-alpha.zego.im:8282/token?app_id=${appID}&id_name=${userID}`)
+            .then(rsp=> rsp.text())
+            .then(token=> {
+                zg.loginRoom(roomID, token, { userID, userName }, { userUpdate: true })
+            });
+
+        async function switchCamera() {
+            // Stop video track
+            localStream.getVideoTracks()[0].stop();
+            let stream;
+            if(isFrontendCamera) {// Switch to rear camera
+                stream = await zg.createStream({
+                    camera: {
+                        facingMode: 'environment', // Camera facing direction, "user" means front camera, "environment" means rear camera
+                        ...streamConfig
+                    }
+                });
+            } else {// Switch to front camera
+                stream = await zg.createStream({
+                    camera: {
+                        facingMode: 'user', // Camera facing direction, "user" means front camera, "environment" means rear camera
+                        ...streamConfig
+                    }
+                });
+            }
+            let videoTrack = stream.getVideoTracks()[0];
+            let {errorCode, extendedData} = await zg.replaceTrack(localStream, videoTrack); // errorCode == 0 means success
+            console.warn('switchCamera', {errorCode, extendedData});
+            isFrontendCamera = !isFrontendCamera;
+        }
+    </script>
+</html>
+```

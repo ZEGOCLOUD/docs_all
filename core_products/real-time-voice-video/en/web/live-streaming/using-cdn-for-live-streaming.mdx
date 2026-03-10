@@ -1,0 +1,253 @@
+---
+articleID: 1218
+date: "2024-01-02"
+---
+# Using CDN for Live Streaming
+---
+
+## Feature Overview
+
+When the publishing end uses third-party publishing tools (such as OBS software, IP cameras, etc.) to publish streams to CDN, or uses ZEGO SDK's CDN relay feature to push audio and video to third-party CDNs, audiences can watch the live stream in real-time by playing streams from the CDN.
+
+Relaying to CDN (Content Delivery Network) refers to the process of pushing audio and video streams from ZEGOCLOUD to CDN. Based on this feature, developers can integrate RTC products with CDN live streaming products, allowing users to directly watch and listen to live content from web pages or third-party players.
+
+<Warning title="Warning">
+
+
+When initiating relay or direct publishing to CDN, please set the video encoding format to H.264.
+
+</Warning>
+
+
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/relay_cdn_en.jpeg" /></Frame>
+
+
+
+To prevent attackers from stealing or forging your publishing URL, you can refer to [CDN Stream Publishing Authentication](/real-time-video-web/live-streaming/cdn-stream-publishing-authentication) to enhance the security of your stream publishing.
+
+
+
+## Example Source Code Download
+
+Please refer to [Download Example Source Code](/real-time-video-web/quick-start/run-example-code) to get the source code.
+
+For related source code, please view files in the "src/Examples/AdvancedStreaming/StreamByCDN" directory.
+
+## Prerequisites
+
+Before using CDN live streaming, ensure that:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and Server address. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated the ZEGO Express SDK into your project and implemented basic audio and video stream publishing and playing functions. For details, please refer to [Quick Start - Integration](/real-time-video-web/quick-start/integrating-sdk) and [Quick Start - Implementation Process](/real-time-video-web/quick-start/implementing-video-call).
+
+<Warning title="Warning">
+
+
+CDN live streaming is not enabled by default. Please enable it in the [ZEGOCLOUD Console](https://console.zegocloud.com) before use (for activation steps, please refer to "CDN" in [Project Management - Service Configuration](/console/service-configuration/activate-cdn-service)), or contact ZEGO Technical Support to enable it.
+
+</Warning>
+
+
+
+## Relay to CDN
+
+### Start Publishing Stream
+
+Please refer to "Publish Stream" in [Quick Start - Implementation Process](/real-time-video-web/quick-start/implementing-video-call) to publish audio and video streams to ZEGOCLOUD.
+
+### Start Relaying
+
+After the stream is successfully published, call the [addPublishCdnUrl](@addPublishCdnUrl) interface to add a URL for dynamic relaying to CDN, which allows pushing audio and video streams to the CDN.
+
+```javascript
+// After successful stream publishing, start relaying to CDN
+
+// Stream ID used when publishing
+String streamID = "STREAM_ID"; // CDN URL to relay to, please fill in the actual URL. streamID is the stream name for publishing and can be customized
+String URL = "rtmp://publishing-domain-name/access-point/streamID";
+const result = await zg.addPublishCdnUrl(streamID, targetURL);
+console.warn(result);
+```
+
+### Stop Relaying
+
+Call the [removePublishCdnUrl](@removePublishCdnUrl) interface to remove the URL for dynamic relaying to CDN. **When calling the [removePublishCdnUrl](@removePublishCdnUrl) interface to stop relaying, please ensure that the current stream streamID exists.**
+
+<Note title="Note">
+
+
+- If developers need to relay to multiple CDN vendors, they can call the relaying API multiple times using the same stream ID (URLs must be different).
+- After relaying to multiple CDNs, developers need to call the interface multiple times to stop all relayed streams when stopping relaying.
+- After relaying to multiple CDNs, developers can obtain status change notifications for each relayed stream from the list parameter in the CDN callback status notification.
+
+</Note>
+
+
+
+```javascript
+// Stream ID used when publishing
+const streamID = "STREAM_ID";
+// CDN URL to stop relaying, please fill in the actual URL. streamID is the stream name for publishing
+const URL = "rtmp://publishing-domain-name/access-point/streamID";
+const result = await zg.removePublishCdnUrl(streamID, targetURL);
+console.warn(result);
+```
+
+### Get Stream Address
+
+Register the [roomStreamUpdate](@roomStreamUpdate) callback. The addition or deletion of streams in the logged-in room will trigger this callback, which returns the corresponding playback addresses for the streams through "streamList".
+
+```javascript
+zg.on('roomStreamUpdate', (roomID, updateType, streamList) => {
+   console.log('roomStreamUpdate roomID ', roomID, streamList);
+});
+```
+
+### Start Playing Stream
+
+Developers can play streams using any of the following methods.
+
+#### Method 1: Integrate Player Plugin to Play Stream
+
+ZEGO's self-developed web player plugin supports playing CDN live streaming in H.265 and H.264 formats. It can be quickly integrated into web applications, providing developers with stable and smooth CDN live streaming capabilities. For details, please refer to [Player Overview](/real-time-video-web/player-plugin/overview).
+
+<Warning title="Warning">
+
+
+Currently, this player plugin only supports playing the FLV protocol.
+
+</Warning>
+
+
+
+1. **Please refer to [Player Plugin - Integration Guide](/real-time-video-web/player-plugin/integration) to integrate the player plugin and complete operations such as instantiating the player plugin.**
+2. Set the URL address and call the player plugin's [ZegoExpressPlayer > play](@play-ZegoExpressPlayer) interface to play the CDN live stream.
+
+    ```js
+    player.src = "http://xxxx/livestream/stream.flv"; // Currently only supports http-flv format resources
+    playButton.onclick = () => {
+        player.play();
+    };
+    ```
+
+#### Method 2: Play Stream Based on Browser Video Tag
+
+<Note title="Note">
+
+
+- Currently, playing rtmp addresses on the web platform depends on the flash plugin. If the browser does not support the flash plugin, the browser cannot play streams with rtmp addresses.
+- Safari browser cannot play flv streams and can only play streams with m3u8 or rtmp addresses.
+- CDN-related addresses default to HTTP format. If you consider security or want to use the web end for CDN audience stream playing, you need to configure HTTPS. For details, please refer to: [Console - Service Configuration - CDN](/console/service-configuration/activate-cdn-service).
+
+</Note>
+
+
+
+
+
+- On Safari browser, set the "src" attribute value of the "video" tag to play streams through the hls playback address.
+
+    ```javascript
+    videoElement.src = 'https://XXX.m3u8';
+    ```
+
+- On other browsers (except Safari), use the "video" tag to play streams through the flv playback address.
+
+    ```javascript
+    if (flvjs.isSupported()) {
+        //If flv.js is supported
+        flvPlayer = flvjs.createPlayer({
+            type: 'flv',
+            isLive: true,
+            url: flvUrl,
+            hasAudio: true,//Whether audio is needed
+            hasVideo: true,//Whether video is needed
+       });
+       flvPlayer.on(flvjs.Events.LOADING_COMPLETE, function () {
+           console.error('LOADING_COMPLETE');
+           flvPlayer.play();
+      });
+      flvPlayer.attachMediaElement(videoElement);
+      flvPlayer.load();
+      videoElement.muted = false;
+      videoElement.controls = true;
+  }
+  ```
+
+## Default Relay to CDN
+
+### Start Publishing Stream
+
+Please refer to "Publish Stream" in [Quick Start - Implementation Process](/real-time-video-web/quick-start/implementing-video-call) to publish audio and video streams to ZEGOCLOUD.
+
+At this time, all live streams published by users using ZEGO Express SDK to ZEGO Audio and Video Cloud will be relayed to CDN. Currently, only ZEGO's own CDN is supported.
+
+### Start Playing Stream
+
+Starting from Express Web SDK version 3.3.0, you can play CDN live streams by using ZEGO's self-developed web [Player Plugin (version 1.3.0 and above)](/real-time-video-web/player-plugin/release-notes). This player plugin supports playing CDN live streaming in H.265 and H.264 formats, can be quickly integrated into web applications, and provides developers with stable and smooth CDN live streaming capabilities. For details, please refer to [Player Overview](/real-time-video-web/player-plugin/overview).
+
+<Warning title="Warning">
+
+
+Currently, this player plugin only supports playing the FLV protocol.
+
+</Warning>
+
+
+
+1. **Please refer to [Player Plugin - Integration Guide](/real-time-video-web/player-plugin/integration) to integrate the player plugin and complete operations such as instantiating the player plugin.**
+
+2. Listen to the SDK's [roomStreamUpdate](@roomStreamUpdate) callback. When the callback notifies that a stream has been added, get other users' streamID to play the stream just published by others.
+
+3. In the [roomStreamUpdate](@roomStreamUpdate) callback, call the [startPlayingStream](@startPlayingStream) interface and pass in "streamID" to play the user's audio and video. Set the [resourceMode](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~javascript_web~interface~ZegoWebPlayOption#resource-mode) parameter to the number "1", indicating playing streams only from CDN.
+
+4. Pass the generated player instance in [CDNPlayer](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~javascript_web~interface~ZegoWebPlayOption#resource-mode), otherwise you will not be able to successfully pull CDN streams.
+
+5. Listen to the [playerStateUpdate](@playerStateUpdate) callback to receive notifications about whether audio and video were successfully played.
+
+```html
+<body>
+    ...
+    <div id="player-container" zg-width="640" zg-height="360"></div>
+    ...
+    <!-- Currently the player plugin only supports script tag import -->
+    <script src="./zego-express-player/ZegoExpressPlayer-1.3.0.js"></script>
+</body>
+```
+
+```javascript
+...
+
+zg.on('roomStreamUpdate', async (roomID, updateType, streamList, extendedData) => {
+    if (updateType == 'ADD') {
+        // Stream added
+        for (var i = 0; i < streamList.length; i++) {
+            console.log('Room',roomID,'stream added:', streamList[i]['streamID'])
+            const playOption = {
+                resourceMode: 1, // CDN
+                CDNPlayer: new ZegoExpressPlayer(zg, {
+                    container: document.getElementById("player-container"),
+                    mode: "live"
+                });
+            };
+            // streamList contains the corresponding stream's streamID
+            zg.startPlayingStream(streamID, playOption);
+        }
+        const message = "Other user's video stream streamID: " + streamID.toString();
+    } else if (updateType == 'DELETE') {
+        // Stream deleted
+        for (var i = 0; i < streamList.length; i++) {
+            console.log('Room',roomID,'stream removed:', streamList[i]['streamID'])
+            // streamList contains the corresponding stream's streamID
+            zg.stopPlayingStream(streamID);
+          }
+       }
+});
+
+zg.startPlayingStream(streamID, playOption);
+```
+
+## Related Documentation
+
+[How to handle disconnection during the process of relaying streams to CDN?](/faq/cdn-relay-disconnect-handling)

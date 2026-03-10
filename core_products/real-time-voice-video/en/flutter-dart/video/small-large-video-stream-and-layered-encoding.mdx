@@ -1,0 +1,209 @@
+---
+articleID: 18030
+date: "2024-04-01"
+---
+# Video Stream Types and Layered Encoding
+
+- - -
+
+## Feature Overview
+
+- Video Layered Encoding (H.264 SVC) is an extension of H.264 AVC that supports layered bitstreams and became an official ITU encoding standard in 2007.
+- Video Dual-Stream Encoding (H.264 DualStream) references the concept of H.264 SVC. By layering video bitstreams, it ensures a smooth experience for terminals with different network and device performance.
+
+When the following requirements appear in the developer's co-hosting or streaming business scenarios, it is recommended to use the SDK's `Video Layered Encoding` or `Video Dual-Stream Encoding` features:
+
+- Need to display different quality video streams on different terminals.
+- Need to maintain smooth co-hosting in poor network environments.
+- Need to adaptively pull video stream quality based on network status.
+
+Both encoding methods divide the bitstream into "base layer" and "enhancement layer", which can provide better experience for users with different network states and device performance. The base layer guarantees the most basic video quality, while the enhancement layer is a supplement to the base layer. For users with good networks, the enhancement layer can be pulled for a better experience. For users with poor network status, pulling only the base layer can guarantee basic video quality. The following is a detailed comparison of the two features:
+
+<table>
+  <colgroup>
+    <col width="12%"/>
+    <col width="48%"/>
+    <col width="40%"/>
+  </colgroup>
+<tbody><tr>
+<th>-</th>
+<th><b>Video Layered Encoding (H.264 SVC)</b></th>
+<th><b>Video Dual-Stream Encoding (H.264 DualStream)</b></th>
+</tr>
+<tr>
+<td>Implementation Logic</td>
+<td>Start 1 encoder to encode bitstreams with different parameters as the base layer and enhancement layer of the bitstream.</td>
+<td>Start 2 encoders to encode bitstreams with different parameters as the base layer and enhancement layer of the bitstream.</td>
+</tr>
+<tr>
+<td>Protocol Used</td>
+<td colspan="2">Uses ZEGO's private protocol. Only by pulling from ZEGO servers can the playing end pull different layered video streams.</td>
+</tr>
+<tr>
+<td>Encoding/Decoding</td>
+<td>The encoding process of base layer and enhancement layer is not independent, but can be decoded independently.</td>
+<td>The encoding and decoding processes of base layer and enhancement layer are independent of each other.</td>
+</tr>
+<tr>
+<td>Publishing</td>
+<td>Select encoding format as "ZegoVideoCodecID.Svc".</td>
+<td><ol><li>Select encoding format as "ZegoVideoCodecID.H264DualStream".</li><li>(Optional) Configure video parameters for base layer and enhancement layer separately through [setPublishDualStreamConfig] interface.</li></ol></td>
+</tr>
+<tr>
+<td rowspan="2">Playing</td>
+<td colspan="2">No difference in interface calls. The same user can only pull one layer of the video stream at the same time. By default, when the network is good, only the enhancement layer is pulled; when the network is poor, only the base layer is pulled.</td>
+</tr>
+<tr>
+<td>The resolution of the pulled base layer is 50% of the enhancement layer, the bitrate is 25% of the enhancement layer, and the frame rate remains the same, which cannot be customized.</td>
+<td>Depends on the video parameters of the base layer and enhancement layer set by the publishing end.</td>
+</tr>
+<tr>
+<td>Advantages</td>
+<td><ul><li>Can generate different bitstreams or extract different bitstreams as needed. Using layered video encoding to encode once is more efficient than using normal encoding methods multiple times.</li><li>More flexible application.</li><li>Stronger network adaptability.</li></ul></td>
+<td><ul><li>Can separately configure video parameters for enhancement layer and base layer.</li><li>Can use hardware encoding to reduce CPU performance burden.</li><li>Better scalability, can support multiple encoding standards in the future.</li><li>Better universality, supported by mainstream software and hardware encoders.</li></ul></td>
+</tr>
+<tr>
+<td>Disadvantages</td>
+<td><ul><li>Slightly lower compression efficiency: Under the same conditions, layered video encoding has about 20% lower compression efficiency than normal encoding methods. That is, to achieve the same video quality as normal encoding methods, the bitrate of layered video encoding needs to be 20% higher than normal encoding methods. The more layers, the more the efficiency decreases. (Currently SDK only supports 1 base layer and 1 enhancement layer)</li><li>Low encoding efficiency: Under the same conditions, layered video encoding has higher encoding computational complexity than normal encoding methods, so encoding efficiency is about 10% lower than normal encoding methods.</li><li>Does not support hardware encoding: Layered video encoding does not support hardware encoding and has a large burden on CPU performance; supports hardware decoding.</li><li>Fewer supported encoders, currently only the openH264 encoder is supported.</li></ul></td>
+<td>When using software encoding, performance consumption is slightly higher than layered video encoding.</td>
+</tr>
+</tbody></table>
+
+
+## Download Sample Source Code
+
+Please refer to [Download Sample Source Code](/real-time-video-flutter/quick-start/run-example-code) to get the source code.
+
+For related source code, please check files in the "/lib/topics/VideoAdvanced/encoding_and_decoding" directory.
+
+
+## Prerequisites
+
+Before implementing the two video encoding features, ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in your project and implemented basic audio and video publishing and playing features. For details, please refer to [Quick Start - Integrating SDK](/real-time-video-flutter/quick-start/integrating-sdk) and [Quick Start - Implementing Video Call](/real-time-video-flutter/quick-start/implementing-video-call).
+
+
+
+## Implementation Steps
+
+### Layered Video Encoding
+
+**Enable Layered Video Encoding**
+
+Before calling [startPublishingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPublishingStream.html), call the [setVideoConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/setVideoConfig.html) interface, set the parameter `codecID` in the [ZegoVideoConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoVideoConfig-class.html) class to `ZegoVideoCodecIDSVC` to enable layered video encoding, and call the [startPublishingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPublishingStream.html) interface to start publishing.
+
+```dart
+ZegoVideoConfig videoConfig = ZegoVideoConfig.preset(ZegoVideoConfigPreset.Preset360P);
+videoConfig.codecID = ZegoVideoCodecID.Svc;
+
+ZegoExpressEngine.instance.setVideoConfig(videoConfig);
+ZegoExpressEngine.instance.startPublishingStream("0012");
+```
+
+<Note title="Note">
+
+
+Setting "codecID" to "Default", "VP8", or "H265" can disable this feature.
+
+
+</Note>
+
+
+
+**Specify Layered Video to Pull**
+
+After the publishing end enables layered video encoding, users at the playing end can call the [setPlayStreamVideoType](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/setPlayStreamVideoType.html) interface before or after playing, passing specific playing parameters to pull a specific video layer. Currently supported video layers are as follows:
+
+|Enum Value|Description|
+|-|-|
+|ZegoVideoStreamTypeDefault|(Default) Automatically select the appropriate video layer based on network status, e.g., pull only the base layer in weak network conditions.|
+|ZegoVideoStreamTypeSmall| Base layer, small resolution type.|
+|ZegoVideoStreamTypeBig| Enhancement layer, large resolution type.|
+
+```dart
+ZegoExpressEngine.instance.setPlayStreamVideoType(ZegoVideoStreamType.Big, streamID);
+ZegoExpressEngine.instance.startPlayingStream(self.streamID, playCanvas);
+```
+
+### Dual-Stream Video Encoding
+
+The implementation steps of `Dual-Stream Video Encoding` are basically the same as `Layered Video Encoding`, except that `Dual-Stream Video Encoding` supports setting the resolution, frame rate, and bitrate of the large stream and small stream separately before publishing.
+
+**Enable Dual-Stream Video Encoding**
+
+Before calling [startPublishingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPublishingStream.html), call the [setVideoConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/setVideoConfig.html) interface, set the parameter `codecID` in the [ZegoVideoConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoVideoConfig-class.html) class to `ZegoVideoCodecIDH264DualStream` to enable dual-stream video encoding.
+
+```dart
+ZegoVideoConfig videoConfig = ZegoVideoConfig.preset(ZegoVideoConfigPreset.Preset360P);
+videoConfig.codecID = ZegoVideoCodecID.H264DualStream
+
+ZegoExpressEngine.instance.setVideoConfig(videoConfig);
+```
+
+<Note title="Note">
+
+
+Setting "codecID" to "Default", "VP8", or "H265" can disable this feature.
+
+
+</Note>
+
+
+
+**Set Parameters for Base Layer and Enhancement Layer**
+
+Through the [setPublishDualStreamConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/setPublishDualStreamConfig.html) interface, separately set the resolution, frame rate, and bitrate of the large stream and small stream, and call the [startPublishingStream](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/startPublishingStream.html) interface to start publishing.
+
+<Warning title="Warning">
+- Must specify parameters for both large stream and small stream for the [setPublishDualStreamConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/setPublishDualStreamConfig.html) interface to take effect.
+- The "ratio" of the resolution set for the large stream and small stream must be consistent, otherwise calling the [setPublishDualStreamConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePublisher/setPublishDualStreamConfig.html) interface will result in an error.
+</Warning>
+
+
+
+
+```dart
+List<ZegoPublishDualStreamConfig> configList = List<ZegoPublishDualStreamConfig>();
+
+ZegoPublishDualStreamConfig big = ZegoPublishDualStreamConfig(ZegoVideoStreamType.Big, 540, 960, 15, 1200);
+configList.add(big);
+
+ZegoPublishDualStreamConfig small = ZegoPublishDualStreamConfig(ZegoVideoStreamType.Small, 180, 320, 15, 300);
+configList.add(small);
+ZegoExpressEngine.instance.setPublishDualStreamConfig(configList);
+
+ZegoExpressEngine.instance.startPublishingStream("dual_streamid");
+```
+
+**Specify Video Bitstream to Pull**
+
+After the publishing end enables video dual-stream encoding, users at the playing end can call the [setPlayStreamVideoType](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEnginePlayer/setPlayStreamVideoType.html) interface before or after playing, passing specific playing parameters to pull a specific video layer. Currently supported video layers are as follows:
+
+|Enum Value|Description|
+|-|-|
+|ZegoVideoStreamTypeDefault|(Default) Automatically select the appropriate video layer based on network status, e.g., pull only the base layer in weak network conditions.|
+|ZegoVideoStreamTypeSmall| Base layer, small resolution type.|
+|ZegoVideoStreamTypeBig| Enhancement layer, large resolution type.|
+
+```dart
+ZegoExpressEngine.instance.setPlayStreamVideoType(ZegoVideoStreamType.Big,streamID);
+ZegoExpressEngine.instance.startPlayingStream(streamID,canvans);
+```
+
+## FAQ
+
+1. **For relay or direct publishing to CDN, when the audience pulls streams from CDN, are layered video encoding and dual-stream effective? What are the bitrate and resolution of the stream pulled from CDN?**
+
+    - `Video Layered Encoding` and `Video Dual-Stream Encoding` use ZEGO's private protocol. Only when the playing end pulls RTC streams or L3 streams from ZEGO servers can they pull different layered video streams.
+
+    - In the direct publishing to CDN scenario, since it does not go through ZEGO servers, the bitstream layering is invalid, and the SDK will fall back to H.264 encoding. The resolution and bitrate of the stream pulled from CDN are consistent with the resolution and bitrate set by the publishing user.
+
+    - In the relay to CDN scenario, since CDN pulling does not use ZEGO's private protocol, the stream relayed by ZEGO servers to CDN servers does not support layered video encoding or video dual-stream encoding. Only one can be selected from relaying the base layer or relaying the enhancement layer. The resolution, bitrate, and frame rate when pulling from CDN depend on whether the relay is the base layer or enhancement layer.
+
+<Warning title="Warning">
+        When relaying to CDN, the default is to relay the enhancement layer. If the business needs to relay the base layer to CDN, please contact ZEGOCLOUD Technical Support for configuration.
+</Warning>
+
+

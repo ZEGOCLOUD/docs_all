@@ -1,0 +1,146 @@
+---
+articleID: 10908
+date: "2024-01-02"
+---
+# Network Testing
+
+- - -
+
+## Feature Overview
+
+<Warning title="Warning">
+
+
+This document is not currently applicable to the Web platform.
+
+</Warning>
+
+
+
+ZEGOCLOUD provides network speed testing functionality, which can detect uplink and downlink network speeds before users publish/play streams, to determine the bitrate of audio and video streams suitable for publishing/playing under the current network environment.
+
+
+When the uplink speed test results show a high packet loss rate, it is recommended to reduce the publishing bitrate by lowering the resolution or frame rate to ensure normal publishing; when the downlink speed test results show a high packet loss rate, it is recommended to use the [Advanced Features - Set Video Encoding](/real-time-video-flutter/video/set-video-encoding) feature provided by the SDK to pull low-bitrate streams to ensure normal playing.
+
+ZEGO recommends using the SDK's network speed testing feature in the following business scenarios:
+
+- In call scenarios, network quality assessment is required.
+
+- In education scenarios, pre-class network detection is required.
+
+- In live streaming scenarios, network connection speed testing is required.
+
+
+
+The basic principle of network speed testing is shown in the following figure:
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/Network_speed_test_en.png" /></Frame>
+
+## Prerequisites
+
+Before implementing the network speed testing feature, ensure that:
+
+- The ZEGO Express SDK has been integrated into your project and basic real-time audio and video functions have been implemented. For details, please refer to [Quick Start - Integration](/real-time-video-flutter/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-flutter/quick-start/implementing-video-call).
+- A project has been created in the [ZEGOCLOUD Console](https://console.zegocloud.com), and a valid AppID and AppSign have been obtained. For details, please refer to [Console - Project Information](/console/project-info).
+
+## Usage Steps
+
+### 1 Listen to Speed Test Callbacks
+
+Before starting the speed test, you can set up speed test-related callbacks first.
+
+- Under normal speed test circumstances, the [onNetworkSpeedTestQualityUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onNetworkSpeedTestQualityUpdate.html) callback is triggered when network speed quality updates.
+
+- When an error occurs during the speed test, the [onNetworkSpeedTestError](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onNetworkSpeedTestError.html) callback is triggered.
+
+
+
+```dart
+// Network speed test quality callback
+ZegoExpressEngine.onNetworkSpeedTestQualityUpdate = (ZegoNetworkSpeedTestQuality quality, ZegoNetworkSpeedTestType type) {
+
+};
+
+// Network speed test error callback
+ZegoExpressEngine.onNetworkSpeedTestError = (int errorCode, ZegoNetworkSpeedTestType type) {
+
+};
+```
+
+### 2 Start Speed Test
+
+Create an instance of [ZegoNetworkSpeedTestConfig](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoNetworkSpeedTestConfig-class.html) for network speed test configuration, set whether to perform uplink and downlink speed tests and expected bitrates according to the actual situation, and call the [startNetworkSpeedTest](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineUtilities/startNetworkSpeedTest.html) interface to start the network speed test.
+
+<Note title="Note">
+
+
+
+After calling the [startNetworkSpeedTest](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineUtilities/startNetworkSpeedTest.html) interface to start the speed test, the default support is speed testing for 30 seconds (if you need to adjust the duration, please contact ZEGO technical support to modify the dynamic configuration). The speed test will be forcibly terminated after timeout. If you need to continue the speed test, please call this interface again.
+
+</Note>
+
+
+
+
+
+```dart
+var videoConfig = await ZegoExpressEngine.instance.getVideoConfig();
+// Perform uplink speed test, specify expected publishing bitrate
+bool testUplink = true;
+int expectedUplinkBitrate = videoConfig.bitrate;
+
+// Perform downlink speed test, specify expected playing bitrate
+bool testDownlink = true;
+int expectedDownlinkBitrate = videoConfig.bitrate;
+
+var config =ZegoNetworkSpeedTestConfig(testUplink, expectedUplinkBitrate, testDownlink, expectedDownlinkBitrate);
+
+// Start speed test, default callback interval is 3 seconds
+ZegoExpressEngine.instance.startNetworkSpeedTest(config);
+
+// If you need to set the callback interval, you can refer to the following call (taking 1.5 seconds as an example)
+ZegoExpressEngine.instance.startNetworkSpeedTest(config, interval: 1500);
+```
+
+The speed test results will be returned in [onNetworkSpeedTestQualityUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onNetworkSpeedTestQualityUpdate.html) through [ZegoNetworkSpeedTestQuality](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoNetworkSpeedTestQuality-class.html) (Network Speed Test Quality). By analyzing the parameter values, you can determine whether the current network quality is good.
+
+The parameters in [ZegoNetworkSpeedTestQuality](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoNetworkSpeedTestQuality-class.html) are as follows:
+
+<table>
+
+<tbody><tr>
+<th>Parameter</th>
+<th>Description</th>
+<th>Explanation</th>
+</tr>
+<tr>
+<td>connectCost</td>
+<td>Time spent connecting to the server, in milliseconds.</td>
+<td>If the network connection is interrupted during the speed test, reconnection will be initiated automatically. This variable will be updated accordingly. The smaller the value, the better.</td>
+</tr>
+<tr>
+<td>rtt</td>
+<td>Network latency, in milliseconds.</td>
+<td>Represents the time consumed between the SDK and the server round trip. The smaller the value, the better.</td>
+</tr>
+<tr>
+<td>packetLostRate</td>
+<td>Packet loss rate, in percentage.</td>
+<td>The value range is 0.0 - 1.0. For example, 0.5 means that 5 out of every 10 data packets sent to the server may be lost on the way.</td>
+</tr>
+<tr>
+<td>quality</td>
+<td>Network quality</td>
+<td>Represents the current network quality level. For details, please refer to [ZegoStreamQualityLevel](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoStreamQualityLevel.html): <ul><li>Excellent: Excellent quality.</li><li>Good: Good quality.</li><li>Medium: Normal quality.</li><li>Bad: Poor quality.</li><li>Die: Abnormal quality.</li><li>Unknown: Unknown quality.</li></ul> </td>
+</tr>
+</tbody></table>
+
+### 3 Stop Speed Test
+
+Call the [stopNetworkSpeedTest](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngineUtilities/stopNetworkSpeedTest.html) interface to stop the network speed test.
+
+After stopping the speed test, you will no longer receive [onNetworkSpeedTestQualityUpdate](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onNetworkSpeedTestQualityUpdate.html) or [onNetworkSpeedTestError](https://www.zegocloud.com/unique-api/express-video-sdk/en/dart_flutter/zego_express_engine/ZegoExpressEngine/onNetworkSpeedTestError.html) callbacks.
+
+```dart
+ZegoExpressEngine.instance.stopNetworkSpeedTest();
+```

@@ -1,0 +1,219 @@
+---
+articleID: 6857
+date: "2024-02-02"
+---
+# Supplemental Enhancement Information (SEI)
+
+- - -
+
+## Feature Overview
+
+In audio/video streaming applications, besides being able to publish and play audio/video content through streaming channels, you can also use Streaming Supplemental Enhancement Information (SEI) to package text information with audio/video content through streaming channels, publish from the host side (publishing side), and receive from the audience side (playing side), to achieve precise synchronization between text data and audio/video content.
+
+It can generally be used for application scenarios such as precise layout of video screens, remote lyrics synchronization, live quiz, etc.
+
+<Note title="Note">
+
+
+For SEI related concepts and principles, please refer to [How to understand and use SEI (Supplemental Enhancement Information)](/faq/media-sei-usage).
+
+
+</Note>
+
+
+
+## Usage Steps
+
+The function of sending and receiving SEI information requires sending SEI information on the publishing side and receiving SEI information on the playing side, as shown in the following figure:
+
+```mermaid
+sequenceDiagram
+    participant PublishingClientApp
+    participant ZEGO Express SDK
+    participant PlayingClientApp
+
+    PublishingClientApp->>ZEGO Express SDK: Initialize SDK <br/> [createEngine]
+    PublishingClientApp->>ZEGO Express SDK: Login room <br/> [loginRoom]
+    PublishingClientApp->>ZEGO Express SDK: Start publishing stream <br/> [startPublishingStream]
+
+    PlayingClientApp->>ZEGO Express SDK: Initialize SDK <br/> [createEngine]
+    PlayingClientApp->>ZEGO Express SDK: Register related callback listeners <br/> [setEventHandler]
+    PlayingClientApp->>ZEGO Express SDK: Login room <br/> [loginRoom]
+    PlayingClientApp->>ZEGO Express SDK: Start playing stream <br/> [startPlayingStream]
+
+    critical Critical steps
+    PublishingClientApp->>ZEGO Express SDK: Send SEI info <br/> [sendSEI]
+    ZEGO Express SDK-->>PlayingClientApp: Receive SEI info <br/> [onPlayerRecvSEI]
+    end
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/send_and_recv_sei_Andriod_new.png" /></Frame>
+*/}
+
+Publishing side:
+
+1. Call the [loginRoom](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#login-room) interface to log in to the room.
+
+2. Call the [startPublishingStream](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#start-publishing-stream) interface to publish stream.
+
+3. After successful publishing, call the [sendSEI](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#send-sei) interface to send SEI information.
+
+Playing side:
+
+1. Create an [IZegoEventHandler](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler) object, and override the [onPlayerRecvSEI](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-player-recv-sei) method for receiving SEI information.
+
+2. Call the [loginRoom](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#login-room) interface to log in to the room.
+
+3. Call the [startPlayingStream](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#start-playing-stream) interface to play stream.
+
+4. After successful playing, when receiving the SEI information sent by the publishing side, the [onPlayerRecvSEI](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-player-recv-sei) callback will be triggered.
+
+<Note title="Note">
+
+
+    When playing stream, if the developer sets to play audio-only stream by calling [mutePlayStreamVideo](@mutePlayStreamVideo) or [muteAllPlayStreamVideo](@muteAllPlayStreamVideo) interfaces, SEI information cannot be received.
+
+</Note>
+
+
+
+### 1 (Optional) Set SEI Type
+
+<Accordion title="Set SEI Type" defaultOpen="false">
+Since the SDK uses ZEGO's self-defined SEI (nalu type = 6, payload type = 243) type packaging by default, and this type is not specified in the SEI standard, there is no conflict with SEI in video encoders or video files. However, when developers need to use third-party decoders to decode (such as FFmpeg), it will cause failure to decode the correct SEI. At this time, it is necessary to call the [setSEIConfig](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#set-sei-config) interface before publishing stream to change the SEI type sent by the SDK, using the UserUnregister SEI (nalu type = 6, payload type = 5) type packaging.
+
+<Note title="Note">
+
+
+This step only needs to be performed when developers use third-party decoders to decode SEI.
+
+</Note>
+
+
+
+- Interface prototype:
+
+```cpp
+/**
+ * Set media enhancement supplemental information (SEI) type
+ *
+ * Must be set before publishing stream.
+ *
+ * @param config SEI configuration properties. Default uses ZEGO-defined SEI type.
+ */
+virtual void setSEIConfig(ZegoSEIConfig config) = 0;
+```
+
+- Call example:
+
+```cpp
+ZegoSEIConfig seiConfig;
+// Use H.264's SEI (nalu type = 6, payload type = 5) type packaging. Because the video encoder itself will generate SEI with payload type of 5, or when using video files to publish stream, such SEI may also exist in video files. Therefore, when using this type, users need to put uuid + content as a buffer into the SEI sending interface. At this time, to distinguish SEI generated by the video encoder itself, when the App sends this type of SEI, it can fill in a service-specific uuid (uuid length is 16 bytes). When the receiving party uses the SDK to parse SEI with payload type of 5, it will filter out SEI with matching uuid based on the set filter string and throw it to the service. If no filter string is set, the SDK will throw all received SEI to the developer.
+seiConfig.type = ZEGO_SEI_TYPE_USER_UNREGISTER;
+
+engine->setSEIConfig(seiConfig);
+
+// Set uuid filter field through advancedConfig. After setting, SDK will only throw SEI whose first 12 bytes are the uuid set by the developer
+ZegoEngineConfig engineConfig;
+// Other users receive SEI information through [onPlayerRecvSEI], the first 12 bytes must be zegozegozego, others will be filtered
+engineConfig.advancedConfig.put("unregister_sei_filter", "zegozegozego");
+engineConfig.advancedConfig = {{"unregister_sei_filter", "zegozegozego"}};
+ZegoExpressSDK::setEngineConfig(engineConfig);
+
+// Start publishing stream
+engine->startPublishingStream("STREAM_ID");
+```
+</Accordion>
+
+### 2 Publishing Side
+
+The interface for sending SEI information needs to be called after successful publishing. The interface prototype is as follows:
+
+- Interface prototype
+
+```cpp
+/**
+ * Send media enhancement supplemental information
+ *
+ * This interface can send streaming enhancement supplemental information to synchronize some other additional information while the developer publishes and transmits audio/video stream data.
+ * Generally, for scenarios such as synchronizing music lyrics or precise layout of video screens, you can choose to use sending SEI.
+ * After the publishing side sends SEI, the playing side can obtain SEI content by listening to the [onPlayerRecvSEI] callback.
+ * Since SEI information follows video frames or audio frames, frame loss may occur due to network issues, so SEI information may also be lost. To solve this situation, it should be sent several times within the frequency limit.
+ * Frequency limit: Do not exceed 30 times per second.
+ * SEI data length limit is 4096 bytes.
+ *
+ * @param data SEI content
+ * @param dataLength SEI content length
+ */
+virtual void sendSEI(const unsigned char* data, unsigned int dataLength) = 0;
+```
+
+- Call example is as follows
+
+```cpp
+// Create enging object, appID, appSign are the credential information applied by the developer in ZEGO Console. For developers who have not gone online, isTestEnvironment is true
+ZegoEngineProfile profile;
+profile.appID = ZegoUtilHelper::AppID();
+profile.appSign = ZegoUtilHelper::AppSign();
+profile.scenario = ZegoScenario::ZEGO_SCENARIO_DEFAULT;
+auto engine = ZegoExpressSDK::createEngine(profile, nullptr);
+// Login room
+engine->loginRoom(roomID, user);
+// Publish stream
+engine->startPublishingStream(streamID);
+// Other service logic of the developer
+...;
+// Send SEI information at the timing required by the service scenario
+engine->sendSEI(test2,  seiLength);
+```
+
+### 3 Playing Side
+
+The callback interface for receiving SEI information needs to be triggered after successful playing. The interface prototype is as follows:
+
+- Interface prototype:
+
+```cpp
+/**
+ * Receive SEI content from remote stream
+ *
+ * After successful playing, when the remote stream calls sendSEI, this callback will be received locally.
+ * If only playing pure audio stream, the SEI information sent by the publishing side will not be received.
+ *
+ * @param streamID Stream ID of playing
+ * @param data SEI content
+ * @param dataLength SEI content length
+ */
+virtual void onPlayerRecvSEI(const std::string& /*streamID*/, const unsigned char* /*data*/, unsigned int /*dataLength*/);
+
+```
+
+- Call example is as follows:
+
+```cpp
+// Create IZegoEventHandler object, and override onPlayerRecvSEI method
+class MyEventHandler :public IZegoEventHandler
+{
+public:
+    // Listen to the callback for receiving SEI information. This callback will be triggered when the sending side calls sendSEI to send information
+    virtual void onPlayerRecvSEI(const std::string& /*streamID*/, const unsigned char* /*data*/, unsigned int /*dataLength*/) {
+        // Implement logic related to service scenarios here, such as displaying related UI, etc.
+        // Please note, do not call any SDK interfaces in the SDK callback thread, you need to manually switch to another thread, otherwise a deadlock will occur
+    }
+    // Other overridden callbacks
+    ...
+};
+auto handler=std::make_shared<MyEventHandler>();
+
+// Create enging object, appID, appSign are the credential information applied by the developer in ZEGO Console. For developers who have not gone online, isTestEnvironment is true
+ZegoEngineProfile profile;
+profile.appID = ZegoUtilHelper::AppID();
+profile.appSign = ZegoUtilHelper::AppSign();
+profile.scenario = ZegoScenario::ZEGO_SCENARIO_DEFAULT;
+auto engine = ZegoExpressSDK::createEngine(profile, nullptr);
+
+// Login room
+engine->loginRoom(roomID, user);
+// Play stream, canvas is an object of ZegoCanvas type index UI rendering control
+engine->startPlayingStream(streamID, &canvas);
+```

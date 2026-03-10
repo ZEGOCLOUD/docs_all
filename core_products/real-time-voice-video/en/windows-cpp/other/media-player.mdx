@@ -1,0 +1,262 @@
+---
+articleID: 1154
+date: "2024-07-27"
+---
+# Media Player
+
+- - -
+
+import Content from '/core_products/real-time-voice-video/en/snippets/media-player-pre.mdx'
+
+<Content />
+
+## Download Sample Source Code
+
+Please refer to [Download Sample Source Code](/real-time-video-windows-cpp/quick-start/run-example-code) to get the source code.
+
+For related source code, please check the files in the "/ZegoExpressExample/Examples/Others/MediaPlayer" directory.
+
+
+## Prerequisites
+
+Before implementing the media player feature, ensure that:
+
+- A project has been created in the [ZEGOCLOUD Console](https://console.zego.im), and a valid AppID and AppSign have been obtained. For details, please refer to [Console - Project Information](/console/project-info).
+- ZEGO Express SDK has been integrated into the project, and basic audio/video stream publishing and playing functionality has been implemented. For details, please refer to [Quick Start - Integration](/real-time-video-windows-cpp/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-windows-cpp/quick-start/implementing-video-call).
+
+
+## Implementation Steps
+
+### 1 Create media player
+
+Call the [createMediaPlayer ](@createMediaPlayer) interface of [IZegoExpressEngine](@-IZegoExpressEngine) to create a media player instance. One media player instance can only play one audio/video, and the engine supports creating up to 10 players at the same time to achieve the effect of playing multiple files simultaneously. Creating more than 10 will fail, and the interface will return `nullptr`.
+
+```cpp
+IZegoMediaPlayer* mediaPlayer = engine->createMediaPlayer();
+if (mediaPlayer == nullptr) {
+    printf("Failed to create player");
+}
+```
+
+
+### 2 (Optional) Set event callbacks for the player
+
+<Accordion title="Set player event callbacks" defaultOpen="false">
+Call the media player's [setEventHandler ](@setEventHandler) interface to set event callbacks [IZegoMediaPlayerEventHandler](@-IZegoMediaPlayerEventHandler) for the player to receive notifications such as "player state changes", "player network state updates", "player playing progress changes", etc.
+
+```cpp
+class MyMediaPlayerEventHandler: public IZegoMediaPlayerEventHandler{
+public:
+    // Player playing state change and event callback
+    void onMediaPlayerStateUpdate(IZegoMediaPlayer* mediaPlayer, ZegoMediaPlayerState state, int errorCode) override{
+        printf("currentState: %d", state);
+    }
+
+    // Player network state event callback
+    void onMediaPlayerNetworkEvent(IZegoMediaPlayer* mediaPlayer, ZegoMediaPlayerNetworkEvent networkEvent) override {
+        printf("networkEvent: %d", networkEvent);
+    }
+
+    // Player playing progress callback
+    void onMediaPlayerPlayingProgress(IZegoMediaPlayer* mediaPlayer, unsigned long long millisecond) override {
+        printf("currentProgress:%lld", millisecond);
+    }
+}
+
+auto eventHandler = std::make_shared<MyMediaPlayerEventHandler>();
+mediaPlayer->setEventHandler(eventHandler);
+```
+</Accordion>
+
+
+
+### 3 Load media resources
+
+Call the media player's [loadResource](@loadResource) to specify the media resource to play. It can be an absolute path to a local resource, such as "D:/Zego/your-movie.mp4"; or a URL to a network resource, such as `http://your.domain.com/your-movie.mp4`. Users can get the result of loading the file by passing callback parameters.
+
+```cpp
+mediaPlayer->loadResource("sourcePath", [=](int errorCode){
+    if(errorCode == 0){
+        printf("the total duration of the file: %lld", mediaPlayer->getTotalDuration());
+    } else {
+        print("load resource failed");
+    }
+});
+```
+
+If users need to load binary audio data, they can call the media player's [loadResourceFromMediaData](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_windows~class~zego-express-i-zego-media-player&jumpType=route#load-resource-from-media-data) to specify the binary audio data to play. Users can get the result of loading data by passing callback parameters.
+
+```cpp
+mediaPlayer->loadResourceFromMediaData((unsigned char*)data, dataLength, 0L,  [=](int errorCode){
+    if(errorCode == 0){
+        printf("the total duration of the file: %lld", mediaPlayer->getTotalDuration());
+    } else {
+        print("load resource failed");
+    }
+});
+```
+
+<Warning title="Warning">
+
+
+If the media resource has already been [loadResource](@loadResource-IZegoMediaPlayer) or is playing, please call the [stop](@stop-IZegoMediaPlayer) interface to stop playing first, and then call the [loadResource](@loadResource-IZegoMediaPlayer) interface to load the media resource, otherwise it cannot be loaded successfully.
+</Warning>
+
+### 4 Playback control
+
+**Playback state control**
+
+```mermaid
+stateDiagram-v2
+    [*] --> NoPlay: loadResource
+    NoPlay --> Playing: play
+    Playing --> Pausing: pause
+    Pausing --> Playing: resume
+    Pausing --> NoPlay: stop
+    Playing --> NoPlay: stop
+    Playing --> PlayEnded
+    PlayEnded --> Playing: enableRepeat
+    PlayEnded --> [*]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/mediaplayer_state_iOS.jpg" /></Frame>
+*/}
+
+Call [start](@start), [pause](@pause), [resume](@resume), [stop](@stop) to start and stop playback. Once the player's internal state changes, the [onMediaPlayerStateUpdate](@onMediaPlayerStateUpdate) callback will be triggered.
+
+Users can also call [getCurrentState](@getCurrentState) to get the player's current state at any time.
+
+If [enableRepeat](@enableRepeat) is set to "true", the player will automatically replay after finishing playing the file.
+
+```cpp
+mediaPlayer->enableRepeat(true);
+mediaPlayer->start();
+mediaPlayer->pause();
+mediaPlayer->resume();
+mediaPlayer->stop();
+```
+
+**Playback progress control**
+
+The progress of playing the file will be callbacked through the [onMediaPlayerPlayingProgress](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP~class~zego-express-i-zego-media-player-event-handler#on-media-player-playing-progress) method. The default interval for triggering the callback is 1000 ms, which can be changed through [setProgressInterval](@setProgressInterval).
+
+Users can also get the current playback progress through [getCurrentProgress](@getCurrentProgress).
+
+Adjust the progress through the [seekTo](@seekTo) interface.
+
+```cpp
+mediaPlayer->setProgressInterval(2000);
+auto progress = mediaPlayer->getCurrentProgress();
+mediaPlayer->seekTo(mediaPlayer->getTotalDuration() / 2, nullptr);
+```
+
+**Playback speed control**
+
+After loading resources, users can set the current playback speed through [setPlaySpeed](@setPlaySpeed).
+
+```cpp
+// Set 2x speed playback, playback speed range is 0.3 ~ 4.0, default is 1.0
+mediaPlayer->setPlaySpeed(2.0);
+```
+
+**Player audio control**
+
+Get and control playback volume through [getPlayVolume ](@getPlayVolume) and [setPlayVolume ](@setPlayVolume).
+
+Get and control publishing volume through [getPublishVolume ](@getPublishVolume) and [setPublishVolume ](@setPublishVolume).
+
+Call [enableAux ](@enableAux) to mix the file's sound into the stream being published.
+
+Call [muteLocal ](@muteLocal) to control local mute playback.
+
+```cpp
+auto playVolume = mediaPlayer->getPlayVolume();
+mediaPlayer->setPlayVolume(playVolume / 2);
+int publishVolume = mediaPlayer->getPublishVolume();
+mediaPlayer->setPublishVolume(publishVolume);
+mediaPlayer->muteLocal(true);
+mediaPlayer->enableAux(true);
+```
+
+If you want to get the audio data of the file, you can specify the audio frame callback [IZegoMediaPlayerAudioHandler](@-IZegoMediaPlayerAudioHandler) for the player through the [setAudioHandler](@setAudioHandler) interface.
+
+```cpp
+// Callback for player throwing audio data
+class MyAudioHandler: public IZegoMediaPlayerAudioHandler {
+public:
+    virtual void onAudioFrame(IZegoMediaPlayer* /*mediaPlayer*/, const unsigned char* /*data*/, unsigned int /*dataLength*/, ZegoAudioFrameParam /*param*/) {
+    }
+};
+auto audioHandler = std::make_shared<MyAudioHandler>();
+mediaPlayer->setAudioHandler(audioHandler);
+```
+
+**Player video control**
+
+When playing video resources, use [setPlayerCanvas](@setPlayerCanvas) to set the video display view.
+
+```cpp
+// Fill in Windows window handle
+HWND playWND = ...;
+ZegoCanvas canvas(playWND);
+mediaPlayer->setPlayerCanvas(&canvas);
+```
+
+If you want to get the video data of the file, you can specify the video frame callback [IZegoMediaPlayerVideoHandler](@-IZegoMediaPlayerVideoHandler) for the player through the [setVideoHandler](@setVideoHandler) interface.
+
+```cpp
+// Callback for player throwing video data
+class MyVideoHandler: public IZegoMediaPlayerVideoHandler {
+public:
+    void onVideoFrame(IZegoMediaPlayer* /*mediaPlayer*/, const unsigned char** /*data*/, unsigned int* /*dataLength*/, ZegoVideoFrameParam /*param*/) {
+    }
+};
+auto videoHandler = std::make_shared<MyVideoHandler>();
+mediaPlayer->setVideoHandler(videoHandler);
+```
+
+**Publish the video played by the player**
+
+1. Before publishing the player's video, you need to first set the video frame callback listener through [setVideoHandler](@setVideoHandler) to get the video frame data thrown by [onVideoFrame](@onVideoFrame).
+
+2. Use custom method to capture video and mix the obtained video data into the publishing stream data. For detailed operations, please refer to [Custom Video Capture ](/real-time-video-windows-cpp/video/custom-video-capture).
+
+<Note title="Note">
+
+
+When custom capturing data, it is recommended that developers define a "flag" marker themselves:
+
+- When the [onStart](@onStart) callback is triggered, set the "flag" marker to "True", indicating that custom captured video data can start being sent to the SDK.
+- When the [onStop](@onStop) callback is triggered, set the "flag" marker to "False", indicating that sending captured video data to the SDK needs to stop.
+</Note>
+
+3. Developers need to add judgment logic for "flag" in [onVideoFrame](@onVideoFrame). When "flag" is set to "True" (i.e., when the [onStart](@onStart) callback is triggered), call the [sendCustomVideoCaptureRawData](@sendCustomVideoCaptureRawData) method to send the obtained video data.
+
+4. Call [startPublishingStream](@startPublishingStream) to start publishing stream. Please refer to "Publishing Stream" in [Quick Start - Implementation](/real-time-video-windows-cpp/quick-start/implementing-video-call).
+
+
+
+**Voice Changer**
+
+When handling scenarios similar to adjusting accompaniment pitch in KTV, you can call the media player's [enableVoiceChanger ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_windows~class~zego-express-i-zego-express-engine#enable-voice-changer) interface to implement voice changer functionality. Developers can set the voice changer effect through the pitch parameter "pitch" in the [ZegoVoiceChangerParam ](@-ZegoVoiceChangerParam) object. The value range of this parameter is [-12.0, 12.0]. The larger the value, the sharper the voice. Voice changer is disabled by default.
+
+```cpp
+ZegoVoiceChangerParam param = ZegoVoiceChangerParam();
+// Male voice to child voice
+param.pitch = 8.0f;
+// Male voice to female voice
+param.pitch = 4.0f;
+// Female voice to child voice
+param.pitch = 6.0f;
+// Female voice to male voice
+param.pitch = -3.0f;
+mediaPlayer->enableVoiceChanger(ZEGO_MEDIA_PLAYER_AUDIO_CHANNEL_ALL, true, param);
+```
+
+### 5 Destroy media player
+
+After using the player, you need to call the [destroyMediaPlayer](@destroyMediaPlayer) interface in time to release the resources occupied by the player.
+
+```cpp
+engine->destroyMediaPlayer(mediaPlayer);
+```

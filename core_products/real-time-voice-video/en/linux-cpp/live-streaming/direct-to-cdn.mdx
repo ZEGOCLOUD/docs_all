@@ -1,0 +1,98 @@
+---
+articleID: 6866
+---
+# Direct Publishing to CDN
+
+---
+
+## Feature Overview
+
+Direct publishing to CDN (Content Delivery Network) refers to the process of pushing audio/video streams directly from the local client to CDN. Users can directly watch from web pages or third-party players through the play stream URL address. However, since the direct publishing to CDN function does not go through ZEGO real-time audio/video cloud during network transmission, developers cannot use ZEGO's ultra-low latency audio/video services.
+
+This function is generally used by developers who have audio/video distribution service cooperation with third-party CDNs.
+
+## Usage Steps
+
+### Initialize, Login Room
+
+Please refer to "Create Engine" and "Login Room" in [Quick Start - Implementation Flow](/real-time-video-linux-cpp/quick-start/implementing-video-call#create-engine).
+
+### Set SDK Direct Publishing to CDN
+
+The direct publishing to CDN function must be set `before publishing stream`.
+
+- Interface prototype:
+
+```cpp
+/**
+* Whether to publish stream directly to CDN without going through ZEGO real-time video cloud server, supports setting other publishing streams
+*
+* This interface needs to be set before publishing stream.
+* After calling this interface to push audio/video streams directly to CDN, calling [addPublishCdnUrl] and [removePublishCdnUrl] to dynamically relay to CDN will no longer take effect, because these two interfaces relay or stop relaying audio/video streams to CDN from ZEGO real-time audio/video cloud. If audio/video streams are pushed directly to CDN, they cannot be dynamically relayed to CDN through ZEGO real-time audio/video cloud.
+*
+* @param enable Whether to enable direct publishing to CDN; true means enable direct publishing to CDN; false means disable direct publishing to CDN; default is false
+* @param config CDN configuration, if nullptr then use ZEGO's backend configuration
+*/
+virtual void enablePublishDirectToCDN(bool enable, ZegoCDNConfig* config);
+```
+
+- Call example:
+
+```cpp
+ZegoCDNConfig config;
+// URL needs to be filled in by the developer according to the actual situation
+config.URL = "rtmp://xxxxxxxx";
+
+engine->enablePublishDirectToCDN(true, &config);
+engine->startPublishing("STREAM_ID")
+```
+
+### Start Publishing Stream
+
+Please refer to "Publish Stream" in [Quick Start - Implementation Flow](/real-time-video-linux-cpp/quick-start/implementing-video-call#publish-stream).
+
+### Listen to Publishing State Notifications
+
+- Interface prototype:
+
+```cpp
+/**
+ * Publishing state callback
+ *
+ * After publishing stream successfully, you can get notifications of publishing state changes through this callback interface.
+ * Developers can roughly judge the user's publishing network situation based on whether the state parameter is in [Requesting publishing state].
+ *
+ * @param streamID Stream ID of publishing
+ * @param state Publishing state
+ * @param errorCode Error code corresponding to publishing state change. Please refer to common error code document [https://doc-zh.zego.im/real-time-video-windows-cpp/client-sdk/error-code.html]
+ * @param extendedData Extended information. If using ZEGO's CDN content distribution network, after publishing stream successfully, the keys of the content of this parameter are flv_url_list, rtmp_url_list, hls_url_list. These correspond to the playing URLs of flv, rtmp, hls protocols. If not using ZEGO's CDN, you do not need to pay attention to this parameter.
+ */
+virtual void onPublisherStateUpdate(const std::string& /*streamID*/, ZegoPublisherState /*state*/, int /*errorCode*/, const std::string& /*extendedData*/);
+```
+
+- Call example:
+
+```cpp
+class MyEventHandler:public IZegoEventHandler{
+public:
+    void onPublisherRelayCDNStateUpdate(const std::string& /*streamID*/, const std::vector<ZegoStreamRelayCDNInfo>& /*streamInfoList*/) {
+        /** After calling the dynamic relay interface successfully, when the CDN connection status changes, such as network interruption causing relay abnormalities, etc., the SDK will notify through this callback while retrying relaying */
+        // Please note, do not call any SDK interfaces in the SDK callback thread, you need to manually switch to another thread, otherwise a deadlock will occur
+    }
+};
+auto handler = std::make_shared<MyEventHandler>();
+engine->setEventHandler(handler);
+```
+
+### Audience Playing Stream
+
+- When developers use ZEGO-configured CDN for direct publishing, they can directly play streams through StreamID. Please refer to "Play Stream" in [Quick Start - Implementation Flow](/real-time-video-linux-cpp/quick-start/implementing-video-call#play-stream).
+- When developers use third-party CDN for direct publishing, they can play streams through URL. Please refer to [Advanced Publishing and Playing - Playing Stream by URL](/real-time-video-linux-cpp/live-streaming/playing-stream-by-url).
+
+## API List
+
+| Method | Description |
+|-------|--------|
+| [enablePublishDirectToCDN](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#enable-publish-direct-to-cdn) | Enable direct publishing to CDN |
+| [startPublishingStream](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#start-publishing-stream) | Start publishing stream |
+| [stopPublishingStream](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#stop-publishing-stream) | Stop publishing stream |

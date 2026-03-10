@@ -1,0 +1,134 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact: { name: Real-time Voice/Video API Support, email: support@zegocloud.com }
+
+tags:
+  - name: cdn
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+paths:
+  /:
+    get:
+      tags: [cdn]
+      summary: TranscodeMedia
+      description: |
+        When users perform CDN recording, they can store the recorded media files on CDN servers and use this interface to perform on-demand transcoding on the media files, changing properties such as the source file's encoding format, resolution, and bitrate for playback on different terminals and network environments.
+
+        <Warning title="Warning">
+        Before using this interface for the first time, please confirm whether CDN recording service has been activated. If not, please go to the [ZEGOCLOUD Console](https://console.zegocloud.com) to activate it yourself, for details, please refer to [Console - Service Configuration - CDN](/console/service-configuration/activate-cdn-service), or contact ZEGOCLOUD Technical Support to activate it and configure the callback address. After the media file transcoding is completed, it will be notified through the [on-demand transcoding completion callback](/real-time-video-server/callback/cdn/on-demand-transcoding-completed).
+        </Warning>
+
+        Developers can view the transcoding task status, file playback URL and other detailed information through the [on-demand transcoding completion callback](/real-time-video-server/callback/cdn/on-demand-transcoding-completed) or the [query media file task](/real-time-video-server/api-reference/cdn/describe-media-task) interface.
+
+        <Note title="Call frequency limit">All rooms under the same AppID are limited to 20 times/second</Note>
+      operationId: start-on-demand-transcoding
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > Interface prototype parameters
+            >
+            > https://rtc-api.zego.im?Action=TranscodeMedia
+          required: true
+          schema: { type: string, enum: [TranscodeMedia] }
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - name: Vendor
+          in: query
+          required: true
+          schema: { type: string, enum: [Tencent] }
+          description: |
+            <p>CDN vendor name.</p><p>Currently only supports Tencent: Tencent Cloud.</p>
+        - name: FileId
+          in: query
+          required: true
+          schema: { type: string }
+          description: |
+            Source file ID that needs transcoding, which can be obtained through the following methods:
+            <ul><li>FileID parameter of the <a href="/real-time-video-server/callback/cdn/cdn-record-completed" target="blank">recording file generation callback</a>, only when the CDN vendor is Tencent will this parameter be called back.</li><li>file_id parameter of the <a href="/real-time-video-server/callback/cdn/merge-media-completed" target="blank">media file merge completion callback</a>.</li><li>FileId parameter of the <a href="/real-time-video-server/api-reference/cdn/search-media" target="blank">search media</a> interface.</li></ul>
+
+            > **Note**
+            >
+            > ZEGOCLOUD will not verify whether the "FileId file passed in actually exists", please pay attention to fill in the correct FileId; if an incorrect FileId is passed in, the Code in the response parameter will be 1000.
+        - name: Resolution
+          in: query
+          required: true
+          schema: { type: string, enum: ["360p","540p","720p"] }
+          description: |
+            <p>Resolution of the transcoded media file, the following values are available:</p><ul><li>360p</li><li>540p</li><li>720p</li></ul>
+
+            > **Note**
+            >
+            > If you need to customize file transcoding parameters, please contact ZEGOCLOUD Technical Support to configure custom templates. For common transcoding specifications, the parameters corresponding to the default transcoding templates for each resolution are as follows:
+            > - 360p: Container format MP4, video encoding H.264, bitrate 400 kbps, frame rate 25 fps, audio encoding AAC.
+            > - 540p: Container format MP4, video encoding H.264, bitrate 1000 kbps, frame rate 25 fps, audio encoding AAC.
+            > - 720p: Container format MP4, video encoding H.264, bitrate 1800 kbps, frame rate 25 fps, audio encoding AAC.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartOnDemandTranscodingResponse'
+
+components:
+  schemas:
+    StartOnDemandTranscodingResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int32
+          description: |
+              Only the return codes related to interface business logic are listed here. For the complete return codes, please refer to [Global Return Codes](/real-time-video-server/api-reference/return-codes).
+              <table>
+              <thead>
+                <tr><th>Return Code</th><th>Description</th><th>Solution</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>0</td><td>Request successful.</td><td>-</td></tr>
+                <tr><td>2</td><td>Input parameter error.</td><td>-</td></tr>
+                <tr><td>3</td><td>Related permissions not activated.</td><td>Please contact ZEGOCLOUD Technical Support.</td></tr>
+                <tr><td>4</td><td>CDN type mismatch.</td><td>Please check the parameters.</td></tr>
+                <tr><td>5</td><td>Configuration error.</td><td>Please contact ZEGOCLOUD Technical Support.</td></tr>
+                <tr><td>6</td><td>Request too frequent.</td><td>Please try again later.</td></tr>
+                <tr><td>7</td><td>Authentication failed.</td><td>Please check if the authentication parameters are correct.</td></tr>
+                <tr><td>1000</td><td>Request failed.</td><td>Please contact ZEGOCLOUD Technical Support.</td></tr>
+                <tr><td>41003</td><td>File does not exist.</td><td>Please confirm if the file format, file ID, etc. are correct.</td></tr>
+              </tbody>
+              </table>
+          example: 0
+        Message:
+          type: string
+          description: Operation result description.
+          example: "success"
+        RequestId:
+          type: string
+          description: Request ID returned by ZEGOCLOUD server.
+          example: "3574501647605445341"
+        Data:
+          type: object
+          description: Response data.
+          properties:
+            Tencent:
+              type: object
+              description: Tencent Cloud return content (returned when Vendor is Tencent).
+              properties:
+                TaskId:
+                  type: string
+                  description: Unique identifier ID of the media file transcoding task, the transcoding result can be viewed through the <a href="/real-time-video-server/callback/cdn/on-demand-transcoding-completed" target="blank">on-demand transcoding completion callback</a>.
+                  example: "1500020831-procedurev2-58ed61fcdbb0f78a0bf15cabd8ae4713tt0"
+                RequestId:
+                  type: string
+                  description: Unique request ID returned by the CDN vendor corresponding to the Vendor parameter value in the request (i.e., Tencent), which needs to be provided when locating problems.
+                  example: "1413c592-5ad4-404e-bfa1-589c32dbcee8"
+

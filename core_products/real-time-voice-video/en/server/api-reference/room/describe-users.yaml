@@ -1,0 +1,178 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: Real-time Voice/Video API Support
+    email: support@zegocloud.com
+
+tags:
+  - name: room
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+paths:
+  /:
+    get:
+      tags:
+        - room
+      summary: DescribeUsers
+      description: |
+        This API allows you to query the basic status of users in a Room, including whether the User is in the Room, the User's role, the time when the User logged into the Room, etc.
+
+        <Note title="Rate Limit">All Rooms under the same AppID: 10 times/second</Note>
+      operationId: describe-users
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > API prototype parameter
+            >
+            > https://rtc-api.zego.im?Action=DescribeUsers
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [DescribeUsers]
+          style: form
+          explode: true
+        # Common parameters
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        # Business parameters
+        - name: RoomId
+          in: query
+          description: Room ID.
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+        - name: UserId
+          in: query
+          description: List of User IDs to query the status for, supports up to 10 User IDs.
+          required: true
+          schema:
+            type: array
+            items:
+              type: string
+            minItems: 1
+            maxItems: 10
+            example: ["a", "b"]
+          style: form
+          explode: true
+      responses:
+        "200":
+          description: Operation successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DescribeUsersResponse'
+              example:
+                Code: 0
+                Data:
+                  UserStatusList:
+                    - UserId: a
+                      Status: 1
+                      LoginTime: 1675674019365
+                      UserRole: 1
+                    - UserId: b
+                      Status: 1
+                      LoginTime: 1675674019455
+                      UserRole: 1
+                Message: success
+                RequestId: TestRequestId1675674022729915000
+
+components:
+  schemas:
+    DescribeUsersResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          format: int32
+          description: |
+            Return code. The following only lists some return codes related to the API business logic. For complete return codes, please refer to [Global Return Codes](/real-time-video-server/api-reference/return-codes).
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Return Code</th>
+                  <th>Description</th>
+                  <th>Suggested Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>2</td>
+                  <td>Input parameter error.</td>
+                  <td>-</td>
+                </tr>
+                <tr>
+                  <td>3</td>
+                  <td>Input parameter length too long.</td>
+                  <td>Please re-enter the parameters.</td>
+                </tr>
+                <tr>
+                  <td>206</td>
+                  <td>App request QPS too high and is rate limited.</td>
+                  <td>Reduce request frequency, or contact ZEGOCLOUD technical support to increase the QPS limit threshold.</td>
+                </tr>
+                <tr>
+                  <td>50001</td>
+                  <td>
+                    Room does not exist.</br></br>
+                    <b>📌Note:</b>
+                    <ul>
+                      <li>1. When there are no Users in the Room, the Room will be automatically destroyed by the server.</li>
+                      <li>2. When there is only one User in the Room, if that User leaves or is kicked out of the Room, the Room will be automatically destroyed by the server.</li>
+                      <li>3. When a User's heartbeat request times out after 100 seconds, the User will be disconnected; after all Users are no longer in the Room, the Room will be automatically destroyed by the server.</li>
+                    </ul>
+                  </td>
+                  <td>Please confirm whether the requested RoomId exists.</td>
+                </tr>
+              </tbody>
+            </table>
+
+        Message:
+          type: string
+          description: Description of the operation result.
+        RequestId:
+          type: string
+          description: Request ID.
+        Data:
+          type: object
+          properties:
+            UserStatusList:
+              type: array
+              description: User status list.
+              items:
+                type: object
+                properties:
+                  UserId:
+                    type: string
+                    description: User ID.
+                  Status:
+                    type: integer
+                    format: uint32
+                    description: |
+                      User status. 0: Not in the Room. 1: In the Room.
+                  LoginTime:
+                    type: integer
+                    format: int64
+                    description: The time when this User logged into the Room, Unix millisecond timestamp.
+                  UserRole:
+                    type: integer
+                    format: uint32
+                    description: |
+                      User role.
+                      - 1: Host.
+                      - 2: Audience.
+                      - 4: Administrator. This type of User mainly exists in scenarios such as cloud recording and audio/video Stream review. The User-related interfaces of the client SDK will filter out this type of User.
+
+                      **This return parameter is only meaningful when accessing the LiveRoom service. Please ignore this parameter when accessing the Express service.**
+
+

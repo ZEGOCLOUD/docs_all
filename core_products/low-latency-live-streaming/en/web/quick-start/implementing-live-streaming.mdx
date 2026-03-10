@@ -1,0 +1,690 @@
+---
+articleID: 16050
+date: '2026-03-05'
+---
+# Quick Implement Live Streaming
+
+- - -
+
+This article introduces how to quickly implement a simple video live streaming through the Live Streaming feature.
+
+
+## Introduction
+
+Explanation of related concepts:
+
+- ZEGO Express SDK: A real-time audio and video and live streaming SDK provided by ZEGO, which can provide developers with convenient access, high definition and smoothness, multi-platform interoperability, low latency, and high concurrency audio and video services.
+- Stream: Refers to a group of continuously sending audio and video data encapsulated in a specified encoding format. A user can publish multiple streams at the same time (for example, one stream for camera data and one for screen sharing data) and can also play multiple streams at the same time. Each stream is identified by a stream ID (streamID).
+- Publish stream: The process of pushing the packaged audio and video data stream to the ZEGOCLOUD.
+- Play stream: The process of pulling and playing the existing audio and video data stream from the ZEGO MSDN network.
+- Room: An audio and video space service provided by ZEGO, used to organize user groups. Users in the same room can send and receive real-time audio and video and messages to each other.
+    - Users need to log in to a room before they can publish and play streams.
+    - Users can only receive relevant messages in the room they are in (user entry and exit, audio and video stream changes, etc.).
+    - Each room is identified by a unique roomID within an AppID. All users who log in to the room using the same roomID belong to the same room.
+
+
+
+
+
+## Prerequisites
+
+Before implementing the basic Live Streaming feature, please make sure:
+- ZEGO Express SDK has been integrated into the project. For details, please refer to [Quick Start - Integration](/real-time-video-web/quick-start/integrating-sdk).
+- A project has been created in the [ZEGOCLOUD Console](https://console.zego.im) and valid AppID and ServerSecret have been applied for. 
+
+
+## Example Code
+
+We provide a complete HTML example file that implements the basic process for your reference during development.
+
+<Accordion title="Complete Example HTML" defaultOpen="false">
+```html
+
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Zego Express Video Call</title>
+    <!-- Need to change to the correct SDK version number here -->
+    <script src="ZegoExpressWebRTC-x.x.x.js"></script>
+
+</head>
+
+<body>
+    <h1>
+        Zego RTC Video Call
+    </h1>
+    <div class="video-wrapper">
+        <h4>Local video</h4>
+        <h4>Remote video</h4>
+        <div id="local-video"></div>
+        <div id="remote-video"></div>
+    </div>
+    <script>
+        // Project unique identifier AppID, Number type, please obtain from ZEGO Console
+        let appID = 0
+        // Access server address Server, String type, please obtain from ZEGO Console (refer to "Prerequisites" above for how to obtain)
+        let server = ""
+
+        // Initialize instance
+        const zg = new ZegoExpressEngine(appID, server);
+        zg.setDebugVerbose(false)
+        // Room state update callback
+        // Here, after successfully logging in to the room, start publishing immediately. When implementing specific business, you can choose other timing to publish, as long as the current room connection status is successfully connected.
+        // Room state update callback
+        zg.on('roomStateChanged', async (roomID, reason, errorCode, extendedData) => {
+            if (reason == 'LOGINED') {
+                console.log("Successfully connected to the room. Only when the room state is successfully connected, can operations such as publishing and playing streams be performed.")
+            }
+        })
+
+        zg.on('roomUserUpdate', (roomID, updateType, userList) => {
+            // Notification of other users entering or exiting the room
+        });
+
+        zg.on('roomStreamUpdate', async (roomID, updateType, streamList, extendedData) => {
+            // Notification of audio and video stream changes of other users in the room
+            if (updateType == 'ADD') {
+                // Stream added, start playing
+                // Here, play the audio and video of the first stream in the newly added stream list
+                const streamID = streamList[0].streamID;
+                // streamList has the streamID of the corresponding stream
+                const remoteStream = await zg.startPlayingStream(streamID);
+                // Create media stream playback component
+                const remoteView = zg.createRemoteStreamView(remoteStream);
+                remoteView.play("remote-video", {enableAutoplayDialog:true});
+
+            } else if (updateType == 'DELETE') {
+                // Stream deleted, stop playing by the streamID of each stream in the stream deletion list streamList
+                const streamID = streamList[0].streamID;
+                zg.stopPlayingStream(streamID)
+            }
+        });
+
+        // Log in to the room, returns true if successful
+        // userUpdate must be set to true to receive roomUserUpdate callback.
+        let userID = "user1"; // userID is set by the user, must be globally unique
+        let userName = "user1";// userName is set by the user, no uniqueness requirement
+        let roomID = "123"; // roomID is set by the user, must be globally unique
+        // token is generated by the user's own server. To run the process faster, you can get a temporary audio and video token through the ZEGO Console https://console.zego.im/, token is a string
+        let token = ``;
+
+        zg.loginRoom(roomID, token, { userID: userID, userName: userName }, { userUpdate: true }).then(async result => {
+            if (result == true) {
+                console.log("login success");
+                // Successfully connected to the room. Only when the room state is successfully connected, can operations such as publishing and playing streams be performed.
+                // Create stream, preview
+                // After calling the createZegoStream interface, you need to wait for the ZEGO server to return the ZegoLocalStream instance object before performing subsequent operations
+                const localStream = await zg.createZegoStream();
+
+                // Preview screen, mount the playback component to the page DOM node
+                localStream.playVideo(document.querySelector("#local-video"), {enableAutoplayDialog:true});
+                // Start publishing, publish your own audio and video stream to the ZEGO audio and video cloud. Here, streamID is defined by the user and must be globally unique
+                let streamID = new Date().getTime().toString();
+                zg.startPublishingStream(streamID, localStream)
+            }
+        });
+        // // Second way to log in to the room
+        // (async function main(){
+        //     await zg.loginRoom(roomID, token, { userID, userName: userID }, { userUpdate: true })
+        // })()
+    </script>
+</body>
+
+</html>
+
+```
+</Accordion>
+
+
+## Implementation Process
+
+Taking User A playing User B's stream as an example, the basic process of a simple live streaming is as follows:
+
+1. User A creates an instance and logs in to the room. (After successful login, can preview their own screen and publish stream.)
+2. User B creates an instance and logs in to the same room. After successful login, User B starts publishing. At this time, the SDK will trigger the [roomStreamUpdate ](@roomStreamUpdate) callback, indicating that there is a stream change in the room.
+3. User A can monitor the [roomStreamUpdate ](@roomStreamUpdate) callback. When the callback notifies that a stream is added, obtain User B's stream ID to play the stream just published by User B.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/common_usage_zh_Web.png" /></Frame>
+
+### Enable Service
+
+The Live Streaming feature is not enabled by default. Please enable it by yourself in the [ZEGOCLOUD Console](https://console.zego.im) before using it (for enabling steps, please refer to "Live Streaming" in [Project Management - Service Configuration](/console/service-configuration/l3)), or contact ZEGOCLOUD Technical Support to enable it.
+
+### Create Interface
+
+To facilitate the implementation of basic real-time audio and video functions, you can refer to the example code and the figure below to implement a simple page.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/express_quickstart_video_call_pc_new.png" /></Frame>
+
+Open or create an "index.html" page file and copy the following code into the file.
+
+```html
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Zego Express Video Call</title>
+
+</head>
+
+<body>
+    <h1>
+        Zego RTC Video Call
+    </h1>
+    <h4>Local video</h4>
+    <div id="local-video"></div>
+    <h4>Remote video</h4>
+    <div id="remote-video"></div>
+    <script>
+    // The js example code in the documentation below can be pasted here
+    // const zg = new ZegoExpressEngine(appID, server);
+    </script>
+</body>
+
+</html>
+```
+
+### Create Engine and Listen to Callbacks
+
+1. Create and initialize an instance of [ZegoExpressEngine ](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~javascript_web~class~ZegoExpressEngine), pass your project's AppID to the parameter "appID", and pass Server to the parameter "server".
+
+<Warning title="Warning">
+
+
+    The ZegoExpressEngine instance cannot be processed reactively by the framework, otherwise unpredictable problems will occur. For example, on the Vue3 framework, you can use Vue3's markRaw interface to mark the SDK instance to avoid being converted to a proxy.
+
+</Warning>
+
+
+
+
+2. The SDK provides notification callbacks such as room connection status, audio and video stream changes, and user entry/exit. After creating the engine, you can register callbacks through the [on](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~javascript_web~class~ZegoExpressEngine#on) method of the engine instance.
+
+<Warning title="Warning">
+
+
+    To avoid missing event notifications, it is recommended to register callbacks immediately after creating the engine
+
+</Warning>
+
+
+
+```javascript
+
+// Project unique identifier AppID, Number type, please obtain from ZEGO Console
+let appID = ;
+// Access server address Server, String type, please obtain from ZEGO Console (refer to "Prerequisites" above for how to obtain)
+let server = "";
+
+// Initialize instance
+const zg = new ZegoExpressEngine(appID, server);
+
+// Room state update callback
+zg.on('roomStateChanged', (roomID, reason, errorCode, extendData) => {
+    if (reason == 'LOGINING') {
+        // Logging in
+    } else if (reason == 'LOGINED') {
+        // Logged in successfully
+        //Only when the room state is successfully logged in or successfully reconnected, can publishing (startPublishingStream) and playing (startPlayingStream) normally send and receive audio and video
+        //Push your own audio and video stream to the ZEGO audio and video cloud
+    } else if (reason == 'LOGIN_FAILED') {
+        // Login failed
+    } else if (reason == 'RECONNECTING') {
+        // Reconnecting
+    } else if (reason == 'RECONNECTED') {
+        // Reconnection successful
+    } else if (reason == 'RECONNECT_FAILED') {
+        // Reconnection failed
+    } else if (reason == 'KICKOUT') {
+        // Kicked out of the room
+    } else if (reason == 'LOGOUT') {
+        // Logged out successfully
+    } else if (reason == 'LOGOUT_FAILED') {
+        // Logout failed
+    }
+});
+
+//Notification of other users entering or exiting the room
+//Only when calling loginRoom to log in to the room with ZegoRoomConfig passed, and the userUpdate parameter of ZegoRoomConfig is "true", can users receive the roomUserUpdate callback.
+zg.on('roomUserUpdate', (roomID, updateType, userList) => {
+    if (updateType == 'ADD') {
+        for (var i = 0; i < userList.length; i++) {
+            console.log(userList[i]['userID'], 'joined room: ', roomID)
+        }
+    } else if (updateType == 'DELETE') {
+        for (var i = 0; i < userList.length; i++) {
+            console.log(userList[i]['userID'], 'left room: ', roomID)
+        }
+    }
+});
+
+zg.on('roomStreamUpdate', async (roomID, updateType, streamList, extendedData) => {
+    // Notification of audio and video stream changes of other users in the room
+});
+
+```
+
+
+<Accordion title="Common Notification Callbacks" defaultOpen="false">
+```javascript
+// Room connection status update callback
+// When the local user calls loginRoom to join the room, you can monitor your connection status in the room in real time by listening to the roomStateChanged callback.
+zg.on('roomStateChanged', (roomID, reason, errorCode, extendData) => {
+    if (reason == 'LOGINING') {
+        // Logging in
+    } else if (reason == 'LOGINED') {
+        // Logged in successfully
+        //Only when the room state is successfully logged in or successfully reconnected, can publishing (startPublishingStream) and playing (startPlayingStream) normally send and receive audio and video
+        //Push your own audio and video stream to the ZEGO audio and video cloud
+    } else if (reason == 'LOGIN_FAILED') {
+        // Login failed
+    } else if (reason == 'RECONNECTING') {
+        // Reconnecting
+    } else if (reason == 'RECONNECTED') {
+        // Reconnection successful
+    } else if (reason == 'RECONNECT_FAILED') {
+        // Reconnection failed
+    } else if (reason == 'KICKOUT') {
+        // Kicked out of the room
+    } else if (reason == 'LOGOUT') {
+        // Logged out successfully
+    } else if (reason == 'LOGOUT_FAILED') {
+        // Logout failed
+    }
+});
+
+//Notification of addition/reduction of audio and video streams published by other users in the room
+//Streams published by yourself cannot receive notifications here
+zg.on('roomStreamUpdate', async (roomID, updateType, streamList, extendedData) => {
+    if (updateType == 'ADD') {
+        // Stream added
+        for (var i = 0; i < streamList.length; i++) {
+            console.log('Room ',roomID,' added stream: ', streamList[i]['streamID'])
+        }
+        const message = "Other user's video stream streamID: " + streamID.toString();
+    } else if (updateType == 'DELETE') {
+        // Stream deleted
+        for (var i = 0; i < streamList.length; i++) {
+            console.log('Room ',roomID,' removed stream: ', streamList[i]['streamID'])
+        }
+    }
+});
+
+//Notification of other users entering or exiting the room
+//Only when calling loginRoom to log in to the room with ZegoRoomConfig passed, and the userUpdate parameter of ZegoRoomConfig is "true", can users receive the roomUserUpdate callback.
+zg.on('roomUserUpdate', (roomID, updateType, userList) => {
+    if (updateType == 'ADD') {
+        for (var i = 0; i < userList.length; i++) {
+            console.log(userList[i]['userID'], 'joined room: ', roomID)
+        }
+    } else if (updateType == 'DELETE') {
+        for (var i = 0; i < userList.length; i++) {
+            console.log(userList[i]['userID'], 'left room: ', roomID)
+        }
+    }
+});
+
+//Notification of user publishing stream state
+//When the state of the user publishing stream changes, this callback will be received. If the network interruption causes publishing exception, the SDK will also notify the state change while retrying publishing.
+zg.on('publisherStateUpdate', result => {
+    // Publishing state update callback
+    var state = result['state']
+    var streamID = result['streamID']
+    var errorCode = result['errorCode']
+    var extendedData = result['extendedData']
+    if (state == 'PUBLISHING') {
+        console.log('Successfully published audio and video stream: ', streamID);
+    } else if (state == 'NO_PUBLISH') {
+        console.log('Not published audio and video stream');
+    } else if (state == 'PUBLISH_REQUESTING') {
+        console.log('Requesting to publish audio and video stream: ', streamID);
+    }
+    console.log('Error code:', errorCode,' Additional information:', extendedData)
+})
+
+//Publishing quality callback.
+//After successful publishing, you will periodically receive callback audio and video stream quality data (such as resolution, frame rate, bitrate, etc.).
+zg.on('publishQualityUpdate', (streamID, stats) => {
+    // Publishing quality callback
+    console.log('Stream quality callback')
+})
+
+//Notification of user playing stream state
+//When the state of the user playing stream changes, this callback will be received. If the network interruption causes playing exception, the SDK will automatically retry.
+zg.on('playerStateUpdate', result => {
+    // Playing state update callback
+    var state = result['state']
+    var streamID = result['streamID']
+    var errorCode = result['errorCode']
+    var extendedData = result['extendedData']
+    if (state == 'PLAYING') {
+        console.log('Successfully played audio and video stream: ', streamID);
+    } else if (state == 'NO_PLAY') {
+        console.log('Not played audio and video stream');
+    } else if (state == 'PLAY_REQUESTING') {
+        console.log('Requesting to play audio and video stream: ', streamID);
+    }
+    console.log('Error code:', errorCode,' Additional information:', extendedData)
+})
+
+//Quality callback when playing audio and video stream.
+//After successful playing, you will periodically receive notification of quality data when playing audio and video stream (such as resolution, frame rate, bitrate, etc.).
+zg.on('playQualityUpdate', (streamID,stats) => {
+    // Playing quality callback
+})
+
+//Notification of received broadcast message
+zg.on('IMRecvBroadcastMessage', (roomID, chatData) => {
+    console.log('Broadcast message IMRecvBroadcastMessage', roomID, chatData[0].message);
+    alert(chatData[0].message)
+});
+
+//Notification of received bullet comment message
+zg.on('IMRecvBarrageMessage', (roomID, chatData) => {
+    console.log('Bullet comment message IMRecvBroadcastMessage', roomID, chatData[0].message);
+    alert(chatData[0].message)
+});
+
+//Notification of received custom signaling message
+zg.on('IMRecvCustomCommand', (roomID, fromUser, command) => {
+    console.log('Custom message IMRecvCustomCommand', roomID, fromUser, command);
+    alert(command)
+});
+```
+</Accordion>
+
+### Check Compatibility
+
+Considering that different browsers have different compatibility with WebRTC, before implementing the publishing and playing functions, you need to check whether the browser can normally run WebRTC.
+
+You can call the [checkSystemRequirements](@checkSystemRequirements) interface to check browser compatibility. For the meaning of check results, please refer to the parameter description under the [ZegoCapabilityDetection](@-ZegoCapabilityDetection) interface.
+
+```js
+const result = await zg.checkSystemRequirements();
+// The returned result is the compatibility check result. When webRTC is true, it means that webRTC is supported, and the meaning of other attributes can be found in the interface API documentation.
+console.log(result);
+// {
+//   webRTC: true,
+//   customCapture: true,
+//   camera: true,
+//   microphone: true,
+//   videoCodec: { H264: true, H265: false, VP8: true, VP9: true },
+//   screenSharing: true,
+//   errInfo: {}
+// }
+```
+
+You can also use ZEGO's [Online Detection Tool](https://zegoim.github.io/express-demo-web/src/Examples/Others/WebrtcCheck/index.html?lang=en), open it in the browser that needs to be detected, and directly check the browser's compatibility. Please refer to [Browser Compatibility and Known Issues](/real-time-video-web/introduction/browser-restrictions) for the browser versions supported by the SDK.
+
+
+### Log In to Room
+
+**1. Generate Token**
+
+Logging in to the room requires a Token for identity verification. Developers can directly obtain temporary Tokens (valid for 24 hours) from the [ZEGOCLOUD Console](https://console.zego.im/dashboard) to use. 
+
+<Note title="Note">
+
+
+Temporary Tokens are for debugging only. Before going live, please generate Tokens from the developer's business server. For details, please refer to [Use Token Authentication](/real-time-video-web/communication/using-token-authentication).
+
+</Note>
+
+
+
+**2. Log In to Room**
+
+Call the [loginRoom ](@loginRoom) interface, pass in the room ID parameter "roomID", "token", and user parameter "user", and pass in the parameter "config" according to the actual situation to log in to the room. If the room does not exist, calling this interface will create and log in to this room.
+
+<Warning title="Warning">
+
+
+- The values of "roomID", "userID", and "userName" parameters are all custom.
+- Both "roomID" and "userID" must be unique. It is recommended that developers set "userID" to a meaningful value and associate it with their own business account system.
+- "userID" must be consistent with the userID passed when generating the token, otherwise the login will fail.
+- Only when calling the [loginRoom](@loginRoom) interface to log in to the room with [ZegoRoomConfig](@-ZegoRoomConfig) configuration passed, and the "userUpdate" parameter value is "true", can users receive the [roomUserUpdate](@roomUserUpdate) callback.
+
+</Warning>
+
+
+
+```javascript
+// Log in to the room, returns true if successful
+// userUpdate must be set to true to receive roomUserUpdate callback.
+
+let userID = Util.getBrow() + '_' + new Date().getTime();
+let userName = "user0001";
+let roomID = "0001";
+let token = ;
+// To avoid missing any notifications, you need to listen to callbacks such as user join/exit room, room connection status change, publishing status change, etc. before logging in to the room.
+zg.on('roomStateChanged', async (roomID, reason, errorCode, extendedData) => {
+
+})
+zg.loginRoom(roomID, token, { userID, userName: userID }, { userUpdate: true }).then(result => {
+     if (result == true) {
+        console.log("login success")
+     }
+});
+```
+
+You can monitor your connection status with the room in real time by listening to the [roomStateChanged](@roomStateChanged) callback. Only when the room status is successfully connected, can you perform operations such as publishing and playing streams. If the login to the room fails, please refer to the [Error Code](/live-streaming-web/client-sdk/error-code) for operation.
+
+<a id="publishingStream"></a>
+
+### Host Preview Their Own Screen and Publish to ZEGO Cloud
+
+1. Create Stream and Preview Own Screen
+
+<Note title="Note">
+
+
+Whether previewing or not, you can publish your own audio and video stream to the ZEGO audio and video cloud.
+
+</Note>
+
+
+
+Before starting to publish, you need to create the local audio and video stream. Call the [createZegoStream](@createZegoStream) interface to obtain the [ZegoLocalStream](@ZegoLocalStream) instance object localStream, which will capture camera screen and microphone sound by default.
+
+Through the localStream's [playVideo](@playVideo) and [playAudio](@playAudio) interfaces, create a local media stream playback component to play the audio and video to be published or already successfully published;
+
+2. After waiting for the [createZegoStream](@createZegoStream) interface to return the [ZegoLocalStream](@ZegoLocalStream) instance object localStream, publish your own audio and video stream to the ZEGO audio and video cloud.
+
+Call the [startPublishingStream](@startPublishingStream) interface, pass in the "streamID" and the stream object "localStream" obtained from creating the stream, and send the local audio and video stream to remote users.
+
+<Note title="Note">
+
+
+"streamID" is generated locally by you, but needs to ensure that under the same AppID, "streamID" is globally unique. If under the same AppID, different users each publish a stream with the same "streamID", the user who publishes later will fail to publish.
+
+</Note>
+
+```javascript
+// Here, publishing is performed immediately after successfully logging in to the room. When implementing specific business, you can choose other timing to publish, as long as the current room connection status is successfully connected.
+
+zg.loginRoom(roomID, token, { userID, userName: userID }, { userUpdate: true }).then(async result => {
+     if (result == true) {
+        console.log("login success")
+        // Create stream, preview
+           // After calling the createZegoStream interface, you need to wait for the ZEGO server to return the ZegoLocalStream instance object before performing subsequent operations
+           const localStream = await zg.createZegoStream();
+
+           // Preview screen, mount the playback component to the page DOM node
+           localStream.playVideo(document.querySelector("#local-video"));
+
+           // Start publishing, publish your own audio and video stream to the ZEGO audio and video cloud
+           let streamID = new Date().getTime().toString();
+           zg.startPublishingStream(streamID, localStream)
+     }
+});
+```
+
+3. (Optional) Set Audio and Video Capture Parameters
+
+<Accordion title="Set Related Capture Parameters via Properties" defaultOpen="false">
+You can set audio and video related capture parameters through the following properties in the [createZegoStream](@createZegoStream) interface as needed. For details, please refer to [Custom Video Capture](/real-time-video-web/video/custom-video-capture):
+
+- [camera](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~javascript_web~interface~ZegoStreamOptions#camera): Configuration for camera and microphone capture streams
+
+- [screen](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~javascript_web~interface~ZegoStreamOptions#screen): Configuration for screen capture streams
+
+- [custom](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~javascript_web~interface~ZegoStreamOptions#custom): Configuration for third-party stream capture
+</Accordion>
+
+
+### Play Host's Audio and Video
+
+
+When conducting live streaming, we need to play the host's audio and video. Using Live Streaming to play streams, the latency can be controlled within 1s, achieving a high-quality live streaming experience with ultra-low latency, strong synchronization, extreme weak network resistance, ultra-low stuttering, ultra-clear picture quality, and instant first frame.
+
+When other users join the room and publish audio and video streams to the ZEGO cloud, the SDK will trigger the [roomStreamUpdate](@roomStreamUpdate) callback to notify that there is a new stream in the room. Based on this, the "streamID" of other users can be obtained. At this time, call the [startPlayingStream](@startPlayingStream) interface according to the "streamID" of other users passed in to play the audio and video screen that has been published to the ZEGO server by the remote end.
+
+<Warning title="Warning">
+
+
+- Some browsers may block playing media streams using [ZegoStreamView](@-ZegoStreamView) media stream playback component due to autoplay restriction policies. The SDK will pop up a prompt on the interface by default to resume playback.
+- You can set the second parameter options.enableAutoplayDialog of the ZegoStreamView.play() method to false to turn off automatic popups, and by displaying a button in the [autoplayFailed](@autoplayFailed) event callback, guide users to click to resume playback.
+- It is recommended to use [createRemoteStreamView](@createRemoteStreamView) to play media streams, and not recommended to use audio or video tags to play media streams.
+
+</Warning>
+
+
+
+
+```javascript
+// Stream state update callback
+zg.on('roomStreamUpdate', async (roomID, updateType, streamList, extendedData) => {
+    // When updateType is ADD, it means that there is a new audio and video stream. At this time, you can call the startPlayingStream interface to play the audio and video stream
+    if (updateType == 'ADD') {
+        // Stream added, start playing
+        // Here, to make the example code more concise, we only play the first stream in the newly added audio and video stream list. In actual business, it is recommended that developers loop through streamList and play each audio and video stream
+        const streamID = streamList[0].streamID;
+        // streamList has the streamID of the corresponding stream
+        const remoteStream = await zg.startPlayingStream(streamID);
+
+        // Create media stream playback component object for playing remote media streams.
+        const remoteView = zg.createRemoteStreamView(remoteStream);
+        // Mount the playback component to the page, "remote-video" is the id of the component container DOM element.
+        remoteView.play("remote-video");
+
+    } else if (updateType == 'DELETE') {
+        // Stream deleted, stop playing
+    }
+});
+```
+
+<Warning title="Warning">
+
+
+Live Streaming is not enabled by default. Please enable it by yourself in the ZEGO Console or contact ZEGOCLOUD Technical Support. For details, please refer to [Enable Service](#enableService).
+
+</Warning>
+
+
+
+
+Call the [startPlayingStream](@startPlayingStream) interface, and set the [resourceMode](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~javascript_web~interface~ZegoWebPlayOption#resource-mode) parameter to the number "2", indicating Live Streaming playing.
+
+
+```javascript
+// Stream state update callback
+zg.on('roomStreamUpdate', async (roomID, updateType, streamList, extendedData) => {
+    // When updateType is ADD, it means that there is a new audio and video stream. At this time, you can call the startPlayingStream interface to play the audio and video stream
+    if (updateType == 'ADD') {
+        // Stream added, start playing
+        // Here, to make the example code more concise, we only play the first stream in the newly added audio and video stream list. In actual business, it is recommended that developers loop through streamList and play each audio and video stream
+
+        let streamID = streamList[0].streamID;
+        const remoteStream = await zg.startPlayingStream(streamID,{resourceMode:2});
+
+        // Create media stream playback component object for playing remote media streams.
+        const remoteView = zg.createRemoteStreamView(remoteStream);
+        // Mount the playback component to the page, "remote-video" is the id of the component container DOM element.
+        remoteView.play("remote-video");
+
+    } else if (updateType == 'DELETE') {
+        // Stream deleted, stop playing
+    }
+});
+```
+
+### Debug Live Streaming Feature
+
+
+Run the project on a real device. After running successfully, you can see the local video screen.
+
+For convenience, ZEGO provides a [Web platform for debugging](https://zegoim.github.io/express-demo-web/src/Examples/QuickStart/VideoTalk/index.html?lang=en). On this page, enter the same AppID, RoomID, different UserID, and corresponding [Token](/console/development-assistance/temporary-token) to join the same room and communicate with real devices. When successfully starting audio and video calls, you can hear remote audio and see remote video screens.
+
+
+
+### Stop Audio and Video Live Streaming
+
+**1. Stop Publishing, Destroy Stream**
+
+Call the [stopPublishingStream](@stopPublishingStream) interface to stop sending the local audio and video stream to remote users. Call the [destroyStream](@destroyStream) interface to destroy the created stream data.
+
+```javascript
+// Stop publishing based on local streamID
+zg.stopPublishingStream(streamID)
+// localStream is the ZegoLocalStream instance object obtained by calling the createZegoStream interface
+zg.destroyStream(localStream)
+```
+
+**2. Stop Playing**
+
+Call the [stopPlayingStream](@stopPlayingStream) interface to stop playing the audio and video stream published by the remote end.
+
+<Warning title="Warning">
+
+
+If the developer receives a notification of "reduction" of audio and video streams through the [roomStreamUpdate](@roomStreamUpdate) callback, please call the [stopPlayingStream ](@stopPlayingStream) interface to stop playing in time to avoid playing empty streams and generating additional costs; or, the developer can choose the appropriate timing according to their own business needs and actively call the [stopPlayingStream ](@stopPlayingStream) interface to stop playing.
+
+</Warning>
+
+
+```javascript
+// Stream state update callback
+zg.on('roomStreamUpdate', async (roomID, updateType, streamList, extendedData) => {
+    if (updateType == 'ADD') {
+        // Stream added, start playing
+    } else if (updateType == 'DELETE') {
+        // Stream deleted, stop playing by the streamID of each stream in the stream deletion list streamList
+        const streamID = streamList[0].streamID;
+        zg.stopPlayingStream(streamID)
+    }
+});
+```
+
+**3. Log Out of Room**
+
+Call the [logoutRoom](@logoutRoom) interface to log out of the room.
+
+```javascript
+zg.logoutRoom(roomID)
+```
+
+
+**4. Destroy Engine**
+
+If the user will no longer use audio and video functions, call the [destroyEngine ](@destroyEngine) interface to destroy the engine and release resources such as microphone, camera, memory, and CPU.
+
+```javascript
+zg.destroyEngine();
+zg = null;
+```
+
+The API call sequence for the entire publishing and playing process can be found in the figure below:
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/quickstart_uml_web_new1.png" /></Frame>
+
+
+
+
+## Related Documents
+- [Error Code Document](/live-streaming-web/client-sdk/error-code)
+- [How to Set and Get SDK Logs and Stack Information?](/faq/express-logs-stacktrace?product=ExpressVideo&platform=web)
+- [How to Use ZEGO Express Web SDK on Mobile?](/faq/mobile-web-sdk-usage)
+- [How to Handle Black Screen or No Sound During Web Platform Live Streaming?](/faq/web-live-failure)
+- [Why Can't I Open the Camera?](/faq/camera-access-failure)

@@ -1,0 +1,457 @@
+---
+articleID: 1074
+date: '2026-03-05'
+---
+# Call Quality Monitoring
+
+- - -
+
+## Feature Overview
+
+During calls using ZEGO Express SDK, users may sometimes experience poor network conditions. At this time, you can understand changes in current call network quality and audio/video information through relevant callbacks.
+
+For example, when conducting multi-person audio and video calls or multi-person singing, if we need to display user network quality in real-time, we can refer to this document to implement corresponding functions.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/Call_quality_monitoring.png" /></Frame>
+
+
+
+## Example Source Code
+
+Please refer to [Download Example Source Code](/real-time-video-android-java/quick-start/run-example-code) to get the source code.
+
+For related source code, please check the files in the "/ZegoExpressExample/AdvancedStreaming/src/main/java/im/zego/streammonitoring" directory.
+
+## Prerequisites
+
+Before monitoring call quality, please ensure:
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in your project and implemented basic audio and video streaming functionality. For details, please refer to [Quick Start - Integration](/real-time-video-android-java/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-android-java/quick-start/implementing-video-call).
+
+
+## Basic Network Quality Report
+
+You can receive upstream and downstream network quality for users (including yourself) by listening to the [onNetworkQuality](@onNetworkQuality) callback. This callback is received every two seconds. For network quality levels, please refer to [ZegoStreamQualityLevel](@-ZegoStreamQualityLevel).
+
+Different versions of [onNetworkQuality](@onNetworkQuality) have different callback logic:
+
+<table>
+
+<tbody><tr>
+<th>Version</th>
+<th>Callback Logic</th>
+</tr>
+<tr>
+<td>2.22.0 and above</td>
+<td>Based on the onNetworkQuality interface callback logic of 2.14.0 ～ 2.21.1, it can also estimate the network situation of remote publishing users. If the remote publishing user's heartbeat is lost once, the callback network quality is unknown; if the remote publishing user's heartbeat is lost 3 times, the callback network quality is die.</td>
+</tr>
+<tr>
+<td>2.14.0 ～ 2.21.1</td>
+<td>
+* As long as you publish or play stream, you can receive your own network quality callback.&nbsp;&nbsp;
+* When you play audio and video streams published by other users and that user is in your Room, you will receive that user's network quality callback.&nbsp;
+* When "userID" is "" (empty string), it represents this time is your own network quality; when "userID" is not "" (empty string), it represents a report from other users in the Room.
+</td>
+</tr>
+<tr>
+<td>2.10.0 ～ 2.13.1</td>
+<td>
+* You must both publish and play stream to receive your own network quality callback.&nbsp;
+* When you play a stream, the user publishing that stream must be in the same Room and also playing stream, for you to receive that user's network quality callback.
+* When "userID" is "" (empty string), it represents this time is your own network quality; when "userID" is not "" (empty string), it represents a report from other users in the Room.
+</td>
+</tr>
+</tbody></table>
+
+<Warning title="Warning">
+
+
+
+[onNetworkQuality](@onNetworkQuality) is not applicable to live streaming scenarios using CDN. You can refer to [Advanced Quality Report - Publish Stream Quality Report](/real-time-video-android-java/communication/monitor-stream-quality) to monitor CDN publish stream quality.
+</Warning>
+
+
+```java
+public void setEngineEventHandler(){
+        engine.setEventHandler(new IZegoEventHandler() {
+            @Override
+            public void onNetworkQuality(String userID, ZegoStreamQualityLevel upstreamQuality, ZegoStreamQualityLevel downstreamQuality) {
+                super.onNetworkQuality(userID, upstreamQuality, downstreamQuality);
+                if (userID == "") {
+                    // Represents network quality of local user (local end)
+                    //("My upstream network quality is %lu", (unsigned long)upstreamQuality);
+                    //("My downstream network quality is %lu", (unsigned long)downstreamQuality);
+                } else {
+                    //Represents network quality of other users in the Room
+                    //("User %s's upstream network quality is %lu", userID, (unsigned long)upstreamQuality);
+                    //("User %s's downstream network quality is %lu", userID, (unsigned long)downstreamQuality);
+                }
+
+                /*
+                ZegoStreamQualityLevel.EXCELLENT, Network quality excellent
+                ZegoStreamQualityLevel.GOOD, Network quality good
+                ZegoStreamQualityLevel.MEDIUM, Network quality normal
+                ZegoStreamQualityLevel.BAD, Network quality poor
+                ZegoStreamQualityLevel.DIE, Network abnormal
+                ZegoStreamQualityLevel.UNKNOWN, Network quality unknown
+                */
+
+            }
+        });
+
+    }
+```
+
+
+## Advanced Quality Report
+
+If the above basic network quality report cannot meet your needs, ZEGO also provides more detailed publish stream quality reports, play stream quality reports, and other related information.
+
+### Publish Stream Quality Report
+
+The publish stream quality report refers to the quality report describing the process of users publishing audio and video to the ZEGO server, including the frame rate of the audio and video stream during the capture and encoding stages, and the frame rate, bitrate, delay, and packet loss rate of the transmitted (sent) audio and video stream.
+
+You can receive publish stream quality callbacks by registering [onPublisherQualityUpdate](@onPublisherQualityUpdate). This callback is received every three seconds after successful publishing. You can understand the health status of the published audio and video stream in real-time based on the quality ([ZegoPublishStreamQuality](@-ZegoPublishStreamQuality)) parameter.
+
+- In most cases, you only need to pay attention to the "level" parameter of "quality" to judge the comprehensive quality of the published stream based on the "level" enumeration value. For details, please refer to [ZegoStreamQualityLevel](@-ZegoStreamQualityLevel).
+- If you want to pay attention to more detailed publish stream quality parameters, you can refer to [ZegoPublishStreamQuality](@-ZegoPublishStreamQuality).
+
+
+```java
+    engine.setEventHandler(new IZegoEventHandler() {
+
+            // Developers can monitor specific quality in this callback and report to the business server for monitoring, or monitor a certain field of the quality object to give user-friendly prompts
+            @Override
+            public void onPublisherQualityUpdate(String streamID, ZegoPublishStreamQuality quality) {
+                String networkQuality = "";
+                // level represents the comprehensive score of publish stream quality. In most cases, developers can refer to this score to display upstream network quality
+
+                switch (quality.level) {
+                    case EXCELLENT:
+                        networkQuality = "Excellent";
+                        break;
+                    case GOOD:
+                        networkQuality = "Good";
+                        break;
+                    case MEDIUM:
+                        networkQuality = "Medium";
+                        break;
+                    case BAD:
+                        networkQuality = "Poor";
+                        break;
+                    case DIE:
+                        networkQuality = "Failed";
+                        break;
+                    case UNKNOWN:
+                        networkQuality = "Unknown";
+                        break;
+                    default:
+                        break;
+                }
+                //("Network quality is: %s", networkQuality);
+            }
+        });
+```
+
+### Play Stream Quality Report
+
+The play stream quality report refers to the quality report of the process of users playing audio and video streams, including the frame rate, bitrate, delay, and packet loss rate of the received audio and video stream, the frame rate of the audio and video stream during the decoding stage, and the frame rate, freeze rate, and overall audio and video quality during the rendering stage.
+
+You can receive play stream quality callbacks by registering [onPlayerQualityUpdate](@onPlayerQualityUpdate). This callback is received every three seconds after successful playing. Developers can understand the health status of the played audio and video stream in real-time based on the quality ([ZegoPlayStreamQuality](@-ZegoPlayStreamQuality)) parameter.
+
+- In most cases, you only need to pay attention to the "level" parameter of "quality" to judge the comprehensive quality of the played stream based on the "level" enumeration value. For details, please refer to [ZegoStreamQualityLevel](@-ZegoStreamQualityLevel).
+- If you want to pay attention to more detailed play stream quality parameters, you can refer to [ZegoPlayStreamQuality](@-ZegoPlayStreamQuality).
+
+
+```java
+    engine.setEventHandler(new IZegoEventHandler() {
+            // Developers can monitor specific quality in this callback and report to the business server for monitoring, or monitor a certain field of the quality object to give user-friendly prompts
+            @Override
+            public void onPlayerQualityUpdate(String streamID, ZegoPlayStreamQuality quality) {
+                String networkQuality = "";
+                // level represents the comprehensive score of play stream quality. In most cases, developers can refer to this score to display downstream network quality
+
+                switch (quality.level) {
+                    case EXCELLENT:
+                        networkQuality = "Excellent";
+                        break;
+                    case GOOD:
+                        networkQuality = "Good";
+                        break;
+                    case MEDIUM:
+                        networkQuality = "Medium";
+                        break;
+                    case BAD:
+                        networkQuality = "Poor";
+                        break;
+                    case DIE:
+                        networkQuality = "Failed";
+                        break;
+                    case UNKNOWN:
+                        networkQuality = "Unknown";
+                        break;
+                    default:
+                        break;
+                }
+                //("Network quality is: %s", networkQuality);
+            }
+        });
+}
+```
+
+## MOS Audio Quality Score
+
+Starting from ZEGO Express SDK version 2.16.0, the play stream quality callback [onPlayerQualityUpdate](@onPlayerQualityUpdate) adds a "mos" field, representing the score of play stream audio quality. When developers are concerned about audio quality, they can understand the current audio quality status through this field.
+
+The value range of the mos field is [-1, 5], where -1 means unknown (e.g., unable to score when play stream is abnormal), and [0, 5] means the normal scoring range. The subjective audio quality perception corresponding to real-time audio MOS scoring is as follows:
+
+<table>
+
+  <tbody><tr>
+    <th>MOS Value</th>
+    <th>Evaluation Criteria</th>
+  </tr>
+  <tr>
+    <td>4.0 ～ 5.0</td>
+    <td>Audio quality is very good, clear and smooth, can be heard clearly.</td>
+  </tr>
+  <tr>
+    <td>3.5 ～ 4.0</td>
+    <td>Audio quality is good, occasional audio quality damage, but still clear and smooth, can be heard clearly.</td>
+  </tr>
+  <tr>
+    <td>3.0 ～ 3.5</td>
+    <td>Audio quality is medium, occasional stuttering, requires some attention to hear clearly.</td>
+  </tr>
+  <tr>
+    <td>2.5 ～ 3.0</td>
+    <td>Audio quality is poor, frequent stuttering, requires concentrated attention to hear clearly.</td>
+  </tr>
+  <tr>
+    <td>2.0 ～ 2.5</td>
+    <td>Audio quality is very poor, some semantic loss, difficult to communicate.</td>
+  </tr>
+  <tr>
+    <td>0 ～ 2.0</td>
+    <td>Audio quality is extremely poor, massive semantic loss, unable to communicate.</td>
+  </tr>
+  <tr>
+    <td>-1</td>
+    <td>Unknown.</td>
+  </tr>
+</tbody></table>
+
+
+## Other Information Monitoring
+
+### Publish/Play Stream Status Change Notification
+
+#### Publish Stream Status Callback
+
+After successful publishing, you can receive notifications of publish stream status changes through [onPublisherStateUpdate](@onPublisherStateUpdate).
+
+```java
+engine.setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onPublisherStateUpdate(String streamID, ZegoPublisherState state, int errorCode, JSONObject extendedData) {
+        super.onPublisherStateUpdate(streamID, state, errorCode, extendedData);
+        // When state is ZEGO_PUBLISHER_STATE_NO_PUBLISH, and errcode is non-zero, it indicates publish stream failed, and no retry will be performed. At this time, a publish stream failure prompt can be displayed on the interface;
+        // When state is ZEGO_PUBLISHER_STATE_PUBLISH_REQUESTING, and errcode is non-zero, it indicates retrying publish stream. At this time, if publish stream is not successful within the retry time, a publish stream failure notification will be thrown.
+    }
+}
+```
+
+You can roughly judge the user's publish stream network situation based on whether the "state" parameter in the callback is in "requesting publish stream status". The values of the "state" parameter correspond to the user's publish stream status as follows:
+
+<table>
+
+<tbody><tr>
+<th>Enumeration Value</th>
+<th>Description</th>
+</tr>
+<tr>
+<td>ZEGO_PUBLISHER_STATE_NO_PUBLISH</td>
+<td>No publish stream status, in this state before publishing. If a steady-state exception occurs during the publish stream process, such as incorrect AppID, AppSign, or Token, or if other users are already publishing, publishing a stream with the same stream ID will fail, it will enter the no publish stream status.</td>
+</tr>
+<tr>
+<td>ZEGO_PUBLISHER_STATE_PUBLISH_REQUESTING</td>
+<td>Requesting publish stream status. After the publish stream operation is successfully executed, it will enter the requesting publish stream status. Usually, this status is used for UI interface display. If an interruption occurs due to poor network quality, the SDK will perform internal retry and also return to the requesting publish stream status.</td>
+</tr>
+<tr>
+<td>ZEGO_PUBLISHER_STATE_PUBLISHING</td>
+<td>Publishing stream status. Entering this status indicates that publish stream has been successful and users can communicate normally.</td>
+</tr>
+</tbody></table>
+
+The parameter "extendedData" is extended information attached to the status update. If using ZEGO's CDN content distribution network, after successful publishing, the keys of the parameter's content are "flv_url_list", "rtmp_url_list", "hls_url_list", corresponding to the play URLs of flv, rtmp, and hls protocols respectively.
+
+#### Play Stream Status Change Callback
+
+After successful playing, developers can receive notifications of play stream status changes through [onPlayerStateUpdate](@onPlayerStateUpdate).
+
+```java
+engine.setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onPlayerStateUpdate(String streamID, ZegoPlayerState state, int errorCode, JSONObject extendedData) {
+        super.onPlayerStateUpdate(streamID, state, errorCode, extendedData);
+        // When state is ZEGO_PLAYER_STATE_NO_PLAY, and errcode is non-zero, it indicates play stream failed, and no retry will be performed. At this time, a play stream failure prompt can be displayed on the interface;
+        // When state is ZEGO_PLAYER_STATE_PLAY_REQUESTING, and errcode is non-zero, it indicates retrying play stream. At this time, if play stream is not successful within the retry time, a play stream failure notification will be thrown.
+    }
+}
+```
+
+Developers can roughly judge the user's play stream network situation based on whether the "state" parameter is in "requesting play stream status". The values of the "state" parameter correspond to the user's play stream status as follows:
+
+<table>
+
+<tbody><tr>
+<th>Enumeration Value</th>
+<th>Description</th>
+</tr>
+<tr>
+<td>ZEGO_PLAYER_STATE_NO_PLAY</td>
+<td>No play stream status, in this state before playing. If a steady-state exception occurs during the play stream process, such as incorrect AppID, AppSign, or Token, it will enter the no play stream status.</td>
+</tr>
+<tr>
+<td>ZEGO_PLAYER_STATE_PLAY_REQUESTING</td>
+<td>Requesting play stream status. After the play stream operation is successfully executed, it will enter the requesting play stream status. Usually, this status is used for application interface display. If an interruption occurs due to poor network quality, the SDK will perform internal retry and also return to the requesting play stream status.</td>
+</tr>
+<tr>
+<td>ZEGO_PLAYER_STATE_PLAYING</td>
+<td>Playing stream status. Entering this status indicates that play stream has been successful and users can communicate normally.</td>
+</tr>
+</tbody></table>
+
+### Notification of Receiving Audio/Video First Frame
+
+#### Publish Stream End Audio Capture First Frame Callback
+
+You can receive audio first frame callbacks by registering [onPublisherCapturedAudioFirstFrame](@onPublisherCapturedAudioFirstFrame). After the publish stream interface is called successfully, this callback will be received when the SDK captures the first frame of audio data.
+
+<Note title="Notes">
+
+In the case of not publishing, after calling the publish stream interface, that is, when the engine of the audio and video module inside the SDK starts, the SDK will capture the local device's audio data and receive this callback. Developers can judge whether the SDK actually captures audio data based on this callback. If this callback is not received, it indicates that the audio capture device is occupied or abnormal.
+</Note>
+
+```java
+engine.setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onPublisherCapturedAudioFirstFrame() {
+        super.onPublisherCapturedAudioFirstFrame();
+    }
+}
+```
+
+#### Publish Stream End Video Capture First Frame Callback
+
+You can receive video first frame callbacks by registering [onPublisherCapturedVideoFirstFrame](@onPublisherCapturedVideoFirstFrame). After the publish stream interface is called successfully, this callback will be received when the SDK captures the first frame of video data.
+
+<Note title="Notes">
+In the case of not publishing or not previewing, after calling the publish stream or preview interface, that is, when the engine of the audio and video module inside the SDK starts, the SDK will capture the local device's video data and receive this callback. You can judge whether the SDK actually captures video data based on this callback. If this callback is not received, it indicates that the video capture device is occupied or abnormal.
+</Note>
+
+
+```java
+engine.setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onPublisherCapturedVideoFirstFrame(ZegoPublishChannel channel) {
+    super.onPublisherCapturedVideoFirstFrame(channel);
+    }
+}
+```
+
+#### Play Stream End Audio Receive First Frame Callback
+
+Developers can listen to play stream end audio receive first frame callbacks by registering [onPlayerRecvAudioFirstFrame](@onPlayerRecvAudioFirstFrame). After the play stream interface is called successfully, this callback will be received when the SDK plays the first frame of audio data.
+
+```java
+engine.setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onPlayerRecvAudioFirstFrame(String streamID) {
+        super.onPlayerRecvAudioFirstFrame(streamID);
+        AppLogger.getInstance().receiveCallback("onPlayerRecvAudioFirstFrame streamID:%s",streamID);
+    }
+}
+```
+
+#### Play Stream End Video Receive First Frame Callback
+
+You can listen to play stream end receive video first frame callbacks by registering [onPlayerRecvVideoFirstFrame](@onPlayerRecvVideoFirstFrame). After the play stream interface is called successfully, this callback will be received when the SDK plays the first frame of video data.
+
+```java
+engine.setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onPlayerRecvVideoFirstFrame(String streamID) {
+        super.onPlayerRecvVideoFirstFrame(streamID);
+    }
+}
+```
+
+#### Play Stream End Rendered Video First Frame Callback
+
+You can listen to play stream end rendered video first frame callbacks by registering [onPlayerRenderVideoFirstFrame](@onPlayerRenderVideoFirstFrame). After the play stream interface is called successfully, this callback will be received when the SDK plays and renders the first frame of video data.
+
+<Note title="Notes">
+
+You can use this callback to calculate first frame delay or update the UI components of the playing stream.
+
+</Note>
+
+```java
+engine.setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onPlayerRenderVideoFirstFrame(String streamID){
+        super.onPlayerRenderVideoFirstFrame(streamID);
+    }
+}
+```
+
+### Video Resolution Change Callback
+
+#### Capture Video Resolution Change Callback
+
+You can listen to capture video size change callbacks by registering [onPublisherVideoSizeChanged](@onPublisherVideoSizeChanged). After successful publishing, if the video capture resolution changes during publishing, this callback will be received.
+
+<Note title="Notes">
+
+When not publishing or not previewing, for the first publishing or first preview, that is, when the engine of the audio and video module inside the SDK starts, the SDK will capture the local device's video data, and the capture resolution will change at this time.
+
+You can use this callback to remove the cover of the local preview UI and other similar operations. You can also dynamically adjust the proportion of the preview view based on the resolution of this callback.
+</Note>
+
+
+```java
+engine.setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onPublisherVideoSizeChanged(int width, int height, ZegoPublishChannel channel) {
+        super.onPublisherVideoSizeChanged(width, height, channel);
+    }
+}
+```
+
+#### Play Stream Resolution Change Notification
+
+You can receive play stream resolution change notifications by registering [onPlayerVideoSizeChanged](@onPlayerVideoSizeChanged). After successful playing, if the video resolution changes during playing, this callback will be received, and users can adjust the display based on the final resolution of the stream.
+
+<Note title="Notes">
+
+- If the played stream only has audio data, this callback will not be received.
+- If the publish stream end triggers the SDK's internal traffic control due to network problems, it may dynamically reduce the encoding resolution of the publish stream end. At this time, this callback will also be received.
+- This callback is triggered when the played audio and video stream is actually rendered to the set UI play interface. Developers can use this callback notification to update or switch the UI components that actually play the stream.
+</Note>
+
+
+```java
+engine.setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onPlayerVideoSizeChanged(String streamID, int width, int height) {
+    }
+}
+```
+
+## Related Documents
+
+- [How to handle video freeze issues?](/faq/video-freeze-issue)
+- [How to handle audio freeze issues?](/faq/audio-stutter)
+- [How to understand and use SEI (Supplemental Enhancement Information)?](/faq/media-sei-usage?product=ExpressVideo&platform=all)

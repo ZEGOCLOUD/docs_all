@@ -1,0 +1,228 @@
+---
+articleID: 16915
+date: "2025-01-20"
+---
+# Screen Sharing
+
+- - -
+
+## Overview
+
+Screen sharing refers to sharing screen content as video with other viewers during Video Call or Live Streaming to enhance interactive experience and improve communication efficiency.
+
+Screen sharing is widely used in the following scenarios:
+
+- In video conferencing scenarios, screen sharing can share the speaker's local files, data, web pages, PPT, and other visuals with other participants;
+- In online classroom scenarios, screen sharing can display the teacher's courseware, notes, lecture content, and other visuals for students to view.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/screen_share_scene_new.png" /></Frame>
+
+## Download Example Source Code
+
+Please refer to [Download Example Source Code](/real-time-video-macos-cpp/quick-start/run-example-code) to get the source code.
+
+For related source code, please check files in the "/ZegoExpressExample/Example/Others/ScreenSharing/" directory.
+
+```
+others
+...
+├── ScreenSharing
+│   ├── ScreenCaptureSourceDialog.cpp // Display thumbnails of shareable windows
+│   ├── ScreenCaptureSourceDialog.h
+│   ├── ScreenCaptureSourceDialog.ui
+│   ├── ScreenSharing.cpp // Main screen sharing workflow
+│   ├── ScreenSharing.h
+│   └── ScreenSharing.ui
+...
+```
+
+## Prerequisites
+
+Before implementing screen sharing, please ensure:
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and applied for a valid AppID and AppSign. For details, please refer to [Console - Project Information](/console/project-info).
+- You have integrated ZEGO Express SDK in the project and implemented basic audio and video stream publishing and playing functions. For details, please refer to [Quick Start - Integration](/real-time-video-macos-cpp/quick-start/integrating-sdk) and [Quick Start - Implementation Flow](/real-time-video-macos-cpp/quick-start/implementing-video-call).
+
+
+
+## Implementation Flow
+
+<Warning title="Warning">
+- For screen capture, only iOS and Android platforms support simultaneous video and audio capture; other platforms only support video capture. To capture audio, developers need to implement the relevant logic themselves.
+- If you need to implement screen sharing functionality yourself, please refer to [How to implement screen sharing through custom capture?](/faq/custom-capture-screen-share).
+</Warning>
+
+
+
+
+
+Calling the screen sharing interface on the Mac platform will obtain relevant permissions. You need to enable screen recording permissions and accessibility permissions in "Security & Privacy". If it does not take effect, you need to delete the previous permissions and add them again.
+- Screen recording permission
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/Adobe_Captivate.png" /></Frame>
+
+- Accessibility permission
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/Auxiliary_functions.png" /></Frame>
+
+### Get Window (Including Screen) List Information
+
+The SDK can obtain information about all currently shareable windows through [getScreenCaptureSources](@getScreenCaptureSources).
+
+```cpp
+IZegoExpressEngine *engine = ZegoExpressSDK::getEngine();
+std::vector<ZegoScreenCaptureSourceInfo> infoList = engine->getScreenCaptureSources(400, 400, 100, 100);
+```
+
+### Create Screen Sharing Source
+
+Call the [createScreenCaptureSource](@createScreenCaptureSource) interface with the window ID and window type from the above window information to create a screen sharing source object.
+
+```cpp
+if (infoList.size() > 0) {
+    ZegoScreenCaptureSourceInfo info = infoList[0];
+    IZegoScreenCaptureSource *source = engine->createScreenCaptureSource(info.sourceID, info.sourceType);
+}
+```
+
+### Set Capture Source to Screen Sharing Source
+
+The default video source for SDK stream publishing is the camera source. If you need to publish the screen sharing source, you need to switch to screen sharing through [setVideoSource](@setVideoSource).
+
+```cpp
+engine->setVideoSource(ZEGO_VIDEO_SOURCE_SCREEN_CAPTURE, source->getIndex(), ZEGO_PUBLISH_CHANNEL_MAIN);
+
+```
+
+### Start Sharing
+
+Call the [startCapture](@startCapture) interface to share the window visuals.
+
+```cpp
+source->startCapture();
+```
+
+### Update Sharing Source
+
+Call the [updateCaptureSource](@updateCaptureSource) interface to update the shared window visuals.
+
+```cpp
+ZegoScreenCaptureSourceInfo info = infoList[1];
+source->updateCaptureSource(info.sourceID, info.sourceType);
+```
+
+### Update Sharing Source Region
+
+Users can call the [updateCaptureRegion](@updateCaptureRegion) interface to dynamically update the shared window region, where setting to (0, 0, 0, 0) can restore the entire window sharing.
+
+
+```cpp
+source->updateCaptureRegion(10, 10, 400, 400);
+```
+
+### Filter Specified Windows
+
+Call the [setExcludeWindowList](@setExcludeWindowList) interface to filter out specified window visuals in the shared screen, which is only applicable when sharing the entire screen.
+
+```cpp
+void* list[2];
+list[0] = infoList[1].sourceID
+list[1] = infoList[2].sourceID
+source->setExcludeWindowList(list, 2);
+```
+
+### Enable Window Activation
+
+Users can call the [enableWindowActivate](@enableWindowActivate) interface to activate the currently shared window.
+
+```cpp
+source->enableWindowActivate(true);
+```
+
+### Show Cursor
+
+Call the [enableCursorVisible](@enableCursorVisible) interface to show or hide the cursor.
+
+```cpp
+source->enableCursorVisible(true);
+```
+
+<a id="callback"></a>
+
+### Set Event Callback
+
+Call the [setEventHandler](@setEventHandler-IZegoScreenCaptureSource) interface to set the sharing source event callback.
+
+```cpp
+std::shared_ptr<ScreenCaptureSourceEventHandler> handler = std::make_shared<ScreenCaptureSourceEventHandler>(this);
+source->setEventHandler(handler);
+
+···
+// Capture data callback, which can be used for local recording.
+void onAvailableFrame(IZegoScreenCaptureSource * /*source*/, const void * /*data*/,unsigned int /*dataLength*/, ZegoVideoFrameParam /*param*/) override;
+
+// Capture exception callback. When an exception callback occurs, capture will be interrupted.
+void onExceptionOccurred(IZegoScreenCaptureSource * /*source*/,ZegoScreenCaptureSourceExceptionType /*exceptionType*/) override;
+
+// Window capture status callback. When the window region position changes, it will be notified through this callback. When the window is not within the current screen region, capture will be stopped.
+void onWindowStateChanged(IZegoScreenCaptureSource * /*source*/,ZegoScreenCaptureWindowState /*windowState*/,ZegoRect /*windowRect*/) override;
+```
+
+### Login Room and Start Publishing Stream
+
+Call the [loginRoom](@loginRoom) interface, pass in the Room ID parameter "roomID" and user parameter "user", to login to the room.
+
+Call the [startPublishingStream ](@startPublishingStream) interface, pass in the Stream ID parameter "streamID", to send the local audio and video stream to remote users.
+
+
+```cpp
+// Start login room
+ZegoUser user(m_currentUserId, m_currentUserId);
+engine->loginRoom(m_currentRoomId, user);
+
+// Start publishing stream
+engine->startPublishingStream(m_currentPublishStreamId, ZEGO_PUBLISH_CHANNEL_MAIN);
+
+```
+
+At this point, we have completed the operation of capturing screen data and sharing it remotely through ZEGO Express SDK.
+
+### Play Remote Screen Sharing
+
+After completing the above steps, other users can use the [startPlayingStream](@startPlayingStream) interface to play the screen sharing stream.
+
+```cpp
+ZegoCanvas canvas(ZegoUtilHelper::GetView(ui->frame_Play));
+canvas.viewMode = ZEGO_VIEW_MODE_ASPECT_FIT;
+engine->startPlayingStream(m_currentPlayStreamId, &canvas);
+```
+
+### Stop Sharing
+
+Users can call the [stopCapture](@stopCapture) interface to stop sharing.
+
+```cpp
+source->stopCapture();
+```
+
+### Destroy Screen Capture Source Object
+
+When the screen capture function is no longer needed, you can call the [destroyScreenCaptureSource](@destroyScreenCaptureSource) interface to destroy the screen capture source object.
+
+```cpp
+engine->createScreenCaptureSource(source);
+```
+
+## More Features
+
+<a id="highlight"></a>
+
+### Border
+
+During screen sharing, you can call the [enableHightLight](@enableHightLight) interface to enable borders for screen regions or windows, and set the border color and width.
+
+```cpp
+ZegoLayerBorderConfig config;
+// Border color, format is 0xRRGGBB, default is green, which is 0x00FF00
+config.color = 0x00FF00;
+// Border size, default value is 4, maximum value is 100
+config.width = 4;
+source->enableHightLight(enable, config);
+```

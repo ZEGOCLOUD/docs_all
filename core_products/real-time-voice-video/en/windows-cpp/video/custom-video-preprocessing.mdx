@@ -1,0 +1,141 @@
+---
+articleID: 10357
+date: "2024-07-11"
+---
+
+
+# Custom Video Pre-processing
+
+- - -
+
+## Introduction
+
+Video pre-processing is a process between capture and encoding. After developers capture video data themselves and obtain the video data captured by the SDK, they can perform video pre-processing through the basic AI effects and watermark features that come with the SDK. If the SDK cannot meet the developers' needs (for example, the AI effects effect cannot meet expectations), they can also work with the ZEGO Effects SDK to perform some special processing on the video, such as AI effects, adding accessories, etc. This process is custom video pre-processing.
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/video_pre_processing_en.png" /></Frame>
+
+Compared with custom video capture, the advantage of custom video pre-processing is that developers do not need to manage the device input source, but only need to operate on the raw data thrown out by the ZEGO Express SDK, and then send it back to the ZEGO Express SDK.
+
+<Note title="Note">
+
+
+For more complex scenarios, such as wanting to do layer mixing through camera footage, it is recommended that developers use the [Custom Video Capture](/real-time-video-windows-cpp/video/custom-video-capture) feature to implement, which has more room for performance optimization.
+</Note>
+
+
+## Download Sample Source Code
+
+ZEGO provides sample source code for implementing AI effects through the Effects SDK. Please refer to [Using Voice Call with AI Effects Together](/real-time-video-windows-cpp/best-practice/integration-with-zego-effects-sdk).
+
+## Prerequisites
+
+Before performing custom video pre-processing, ensure that:
+
+- A project has been created in the [ZEGOCLOUD Console](https://console.zego.im), and valid AppID and AppSign have been obtained. For details, please refer to [Console - Project Information](/console/project-info).
+- ZEGO Express SDK has been integrated into the project, and basic audio and video streaming functionality has been implemented. For details, please refer to [Quick Start - Integration](/real-time-video-windows-cpp/quick-start/integrating-sdk) and [Quick Start - Implementation Process](/real-time-video-windows-cpp/quick-start/implementing-video-call).
+
+
+## Usage Steps
+
+The flow and interface calls for custom video pre-processing are as follows:
+
+```mermaid
+sequenceDiagram
+    participant App as Client App
+    participant SDK as ZEGO Express SDK
+
+    App->>SDK: Initialize Express SDK <br/> [createEngine]
+    App->>SDK: Set custom video render configuration <br/> [enableCustomVideoRender]
+    App->>SDK: Set render callback handler,<br>implement callback methods <br/> [setCustomVideoRenderHandler]
+    App->>SDK: Login room <br/> [loginRoom]
+
+    critical Call publish/play stream interfaces to get video data, then perform custom rendering
+        App->>SDK: Start preview, publish stream <br/> [startPreview, startPublishingStream]
+        SDK-->>App: Local preview captured video data notification <br/> [onCapturedVideoFrameRawData]
+        App->>SDK: Play stream <br/> [startPlayingStream]
+        SDK-->>App: Remote play stream video data notification <br/> [onRemoteVideoFrameRawData]
+    end
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Common/ZegoExpressEngine/custom_video_process_win_new.png" /></Frame>
+*/}
+
+1. Initialize the Express SDK and login to the room.
+
+2. Call the [enableCustomVideoProcessing](@enableCustomVideoProcessing) interface to [enable custom video pre-processing](#1-enable-custom-video-pre-processing) feature.
+
+3. [Get raw video data and perform video pre-processing](#2-get-raw-video-data-and-perform-video-pre-processing).
+
+    1. Call the [setCustomVideoProcessHandler](@setCustomVideoProcessHandler) interface to register the custom video pre-processing callback, and implement callback methods such as [onCapturedUnprocessedRawData](@onCapturedUnprocessedRawData).
+    2. Start preview and publish stream.
+    3. Get raw video data through the [onCapturedUnprocessedRawData](@onCapturedUnprocessedRawData) callback interface. Developers can perform related processing according to business needs: can process through the basic AI effects, watermark and other features that come with the Express SDK; can also work with the Effects SDK to achieve more processing effects.
+    4. After the video data processing is completed, call the [sendCustomVideoProcessedRawData](@sendCustomVideoProcessedRawData) interface in the [onCapturedUnprocessedRawData](@onCapturedUnprocessedRawData) callback to send the processed video frame data to the Express SDK.
+
+4. Other clients can play the processed video stream.
+5. After completion, stop preview and publishing stream, leave the room, destroy the engine, and release resources.
+
+### 1 Enable custom video pre-processing
+
+Create a custom video pre-processing [ZegoCustomVideoProcessConfig](@-ZegoCustomVideoProcessConfig) object and set the [bufferType](@bufferType) property to provide the video frame data type.
+
+Currently, the Windows SDK supports the following 1 [bufferType ](@-ZegoVideoBufferType) data type. Setting other enumeration values will not work properly:
+
+| Buffer Type |Enumeration Value|Description |
+|-----|------|------|
+| RAWDATA | ZEGO_VIDEO_BUFFER_TYPE_RAW_DATA|Indicates raw video data of RAWDATA type.|
+
+Before starting preview and starting to publish stream, call the [enableCustomVideoProcessing](@enableCustomVideoProcessing) interface to enable the custom video pre-processing feature.
+
+```cpp
+ZegoCustomVideoProcessConfig config;
+// Select RAWDATA type video frame data
+config.bufferType = ZEGO_VIDEO_BUFFER_TYPE_RAW_DATA;
+
+engine->enableCustomVideoProcessing(true,&config);
+```
+
+### 2 Get raw video data and perform video pre-processing
+
+**Register custom video pre-processing callback**
+
+1. Use "CustomVideoProcessHandler" as the custom video pre-processing callback object, following the [IZegoCustomVideoProcessHandler ](@-IZegoCustomVideoProcessHandler) protocol.
+
+    ```cpp
+    class CustomVideoProcessHandler : public IZegoCustomVideoProcessHandler
+    {
+
+        ......
+
+    };
+    ```
+
+2. Call the [setCustomVideoProcessHandler ](@setCustomVideoProcessHandler) interface to set the custom video capture callback.
+
+    ```cpp
+    engine->setCustomVideoProcessHandler(customVideoProcessHandler);
+    ```
+
+**Get raw video and perform pre-processing**
+
+1. Using the "ZEGO_VIDEO_BUFFER_TYPE_RAW_DATA" type video pre-processing method requires implementing the [onCapturedUnprocessedRawData](@onCapturedUnprocessedRawData) callback method. When the SDK obtains raw video data, it will notify the developer through the [onCapturedUnprocessedRawData](@onCapturedUnprocessedRawData) method.
+
+2. Then, developers can use the basic AI effects, watermark and other features that come with the Express SDK to process video data. For details, please refer to [Publish Video Enhancement](/real-time-video-windows-cpp/video/publish-video-enhancement); can also work with the Effects SDK to achieve more processing effects. For details, please refer to [Using Voice Call with AI Effects Together](/real-time-video-windows-cpp/best-practice/integration-with-zego-effects-sdk).
+
+3. After processing is completed, call the [sendCustomVideoProcessedRawData](@sendCustomVideoProcessedRawData) interface to send the processed video frame data to the Express SDK for publishing, and other clients can play the processed video stream.
+
+```cpp
+void onCapturedUnprocessedRawData(const unsigned char** data, unsigned int* dataLength, ZegoVideoFrameParam param, unsigned long long referenceTimeMillisecond, ZegoPublishChannel channel) {
+    int width  = param.width;
+    int height = param.height;
+    int stride = param.strides[0];
+    QImage image(const_cast<unsigned char*>(data[0]),width,height,stride,QImage::Format_ARGB32);
+    zego_effects_video_frame_param frameParam;
+    frameParam.format = zego_effects_video_frame_format_bgra32;
+    frameParam.width  = image.width();
+    frameParam.height = image.height();
+    // Custom pre-processing: Use ZegoEffects SDK for video processing here
+    zego_effects_process_image_buffer_rgb(m_handle,image.bits(), image.bytesPerLine() * image.height(),frameParam);
+    // Send the processed buffer back to ZegoExpress-Video SDK
+    engine->sendCustomVideoProcessedRawData((const unsigned char**)data,dataLength,param,referenceTimeMillisecond);
+}
+```

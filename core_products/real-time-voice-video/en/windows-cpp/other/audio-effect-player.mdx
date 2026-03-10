@@ -1,0 +1,191 @@
+---
+articleID: 5672
+date: "2025-06-23"
+---
+
+
+# Audio Effect Player
+
+- - -
+
+## Feature Overview
+
+Audio effects mainly refer to short effect sounds played to enhance realism or set the atmosphere of a scene. For example: during live streaming, there are often scenarios for playing sound effects, such as applause, gift sound effects, prompt sounds, etc. In games, sometimes it is necessary to play bullet sounds, collision impact sounds, etc.
+
+The audio effect player (ZegoAudioEffectPlayer) provided by ZEGO Express SDK manages audio effects uniformly, supporting audio effect playback (multiple audio effects can be played simultaneously), playback control (such as pausing playback, volume adjustment, setting playback progress), audio effect preloading, and other functions.
+
+import Content from '/core_products/real-time-voice-video/en/snippets/audio-effect-player-pre.mdx'
+
+<Content />
+
+## Download Sample Source Code
+
+Please refer to [Download Sample Source Code](/real-time-video-windows-cpp/quick-start/run-example-code) to get the source code.
+
+For related source code, please check the files in the "/ZegoExpressExample/Examples/AdvancedAudioProcessing/AudioEffectPlayer" directory.
+
+## Prerequisites
+
+- A project has been created in the [ZEGOCLOUD Console](https://console.zego.im), and a valid AppID and AppSign have been obtained. For details, please refer to [Console - Project Information](/console/project-info).
+- ZEGO Express SDK has been integrated into the project, and basic audio/video stream publishing and playing functionality has been implemented. For details, please refer to [Quick Start - Integration](/real-time-video-windows-cpp/quick-start/integrating-sdk) and [Quick Start - Implementation](/real-time-video-windows-cpp/quick-start/implementing-video-call).
+
+
+## Implementation Steps
+
+### 1 Create audio effect player
+
+Call the [createAudioEffectPlayer ](@createAudioEffectPlayer) method of [IZegoExpressEngine](@-IZegoExpressEngine) to create an audio effect player instance.
+
+<Warning title="Warning">
+The engine currently only supports creating one instance at the same time. Creating more will return null.
+</Warning>
+
+```cpp
+IZegoAudioEffectPlayer* audioEffectPlayer = engine->createAudioEffectPlayer();
+if (audioEffectPlayer == nullptr) {
+    printf("Failed to create audio effect player");
+}
+```
+
+### 2 (Optional) Preload resources
+
+<Accordion title="Preload resources" defaultOpen="false">
+In scenarios where the same sound effect is played frequently, the SDK provides the function of preloading sound effect files into memory to optimize the performance of repeated file reading and decoding.
+
+Call the [loadResource ](@loadResource-IZegoAudioEffectPlayer) method to load sound effect resources. You can listen to the loading result through the `callback` parameter, and display loading success before playing. Supports preloading up to 15 local sound effect files at the same time (network resources are not supported), and the duration of a single sound effect file cannot exceed 30s, otherwise loading will fail.
+
+When the loaded sound effect is no longer needed, you can call the [unloadResource ](@unloadResource) interface to unload it and release related resources. Otherwise, the SDK will automatically unload the loaded sound effects when the [IZegoAudioEffectPlayer](@-IZegoAudioEffectPlayer) instance is released.
+
+<Note title="Note">
+
+
+Preloading is a non-mandatory operation. It is recommended to use it when improving performance or needing to repeatedly play a specific sound effect.
+</Note>
+
+```cpp
+// Load sound effect resource
+audioEffectPlayer->loadResource(audioEffectID, "D:/soundEffectSample.mp3", [](int errorCode){
+    printf("loadResource result=%s", errorCode==0? "succeed", "failed");
+});
+
+// Unload sound effect resource
+audioEffectPlayer->unloadResource(audioEffectID);
+```
+</Accordion>
+
+### 3 Playback control
+
+**（Optional）Set event callbacks for audio effect player**
+
+<Accordion title="Preload resources" defaultOpen="false">
+You can call the audio effect player's [setEventHandler ](@setEventHandler-IZegoAudioEffectPlayer) method as needed to set event callbacks for the player to listen to notifications such as `audio effect playback state changes`.
+
+```cpp
+class MyAudioEffectPlayerEventHandler: public IZegoAudioEffectPlayerEventHandler{
+public:
+    // Callback for state change when playing a sound effect
+    void onAudioEffectPlayStateUpdate(IZegoAudioEffectPlayer* audioEffectPlayer, unsigned int audioEffectID, ZegoAudioEffectPlayState state, int errorCode) override{
+        printf("effect %d : currentState=%d, errorCode=%d", audioEffectID, state, errorCode);
+    }
+}
+
+auto eventHandler = std::make_shared<MyAudioEffectPlayerEventHandler>();
+audioEffectPlayer->setEventHandler(eventHandler);
+```
+</Accordion>
+
+**Start playing**
+
+Call the [start ](@start-IZegoAudioEffectPlayer) method to play sound effects. Currently, only supports playing up to 12 simultaneously, and can only be local files. Network resources are not supported. `audioEffectID` needs to remain globally unique.
+
+* If the sound effect has been preloaded through the [loadResource ](@loadResource-IZegoAudioEffectPlayer) method, you only need to pass in the `audioEffectID` from preloading, and the `path` (path to the sound effect resource) field can be passed as empty.
+* If you need to repeat playback, you can configure the number of repetitions through `playCount` in [ZegoAudioEffectPlayConfig](@-ZegoAudioEffectPlayConfig). If set to 0, it means infinite repeated playback until the user manually calls [stop ](@stop-IZegoAudioEffectPlayer) to stop.
+
+```cpp
+ZegoAudioEffectPlayConfig config;
+config.repeatCount = 1;
+config.isPublishOut = false;
+audioEffectPlayer->start(audioEffectID, "D:/soundEffectSample.mp3", &config);
+```
+
+**Pause, resume, stop playback**
+
+1. Call the [pause ](@pause-IZegoAudioEffectPlayer) method to pause playing the sound effect specified by audioEffectID, or call the [pauseAll ](@pauseAll) method to pause all currently playing sound effects.
+2. After pausing sound effect playback, call the [resume ](@resume-IZegoAudioEffectPlayer) method to resume playing the sound effect specified by audioEffectID, or call the [resumeAll ](@resumeAll) method to resume all paused sound effects.
+3. Call the [stop ](@stop-IZegoAudioEffectPlayer) method to stop playing the sound effect specified by audioEffectID, or call the [stopAll ](@stopAll) method to stop playing all sound effects.
+
+```cpp
+// Pause playback
+audioEffectPlayer->pause(audioEffectID);
+// Resume playback
+audioEffectPlayer->resume(audioEffectID);
+// Stop playback
+audioEffectPlayer->stop(audioEffectID);
+
+// Pause playback of all sound effects
+audioEffectPlayer->pauseAll();
+// Resume playback of all sound effects
+audioEffectPlayer->resumeAll();
+// Stop playback of all sound effects
+audioEffectPlayer->stopAll();
+```
+
+**Adjust volume**
+
+1. Call the [setVolume ](@setVolume-IZegoAudioEffectPlayer) method to set the volume of the sound effect specified by audioEffectID. The value range is [0-200], and the default value is 100.
+2. Call the [setVolumeAll ](@setVolumeAll) method to set the volume of all sound effects at the same time. The value range is [0-200], and the default value is 100.
+
+```cpp
+// Set volume
+audioEffectPlayer->setVolume(audioEffectID, volume);
+
+// Set volume of all sound effects
+audioEffectPlayer->setVolumeAll(volume);
+```
+
+**Playback progress control**
+
+1. Call the [getTotalDuration ](@getTotalDuration) method to get the total duration of a single sound effect.
+2. Call the [getCurrentProgress ](@getCurrentProgress) method to get the current playback progress of the sound effect.
+3. Call the [seekTo ](@seekTo-IZegoAudioEffectPlayer) method to set the playback progress as needed.
+
+```cpp
+// Get total duration of sound effect
+auto totalDuration = audioEffectPlayer->getTotalDuration(audioEffectID);
+// Get current playback progress of sound effect
+auto currentProgress = audioEffectPlayer->getCurrentProgress(audioEffectID);
+// Set playback progress
+audioEffectPlayer->seekTo(audioEffectID, total / 2, [](int errorCode){
+    printf("seekTo result=%s", errorCode==0? "succeed", "failed");
+});
+```
+
+### 4 Destroy audio effect player
+
+After using the audio effect player, you need to call the [destroyAudioEffectPlayer ](@destroyAudioEffectPlayer) method in time to destroy it and release the resources occupied by the player.
+
+```cpp
+engine->destroyAudioEffectPlayer(audioEffectPlayer);
+```
+
+## FAQ
+
+1. **What is the difference between an audio effect player and a media player?**
+
+<table>
+
+    <tbody><tr>
+    <th>Player Type</th>
+    <th>Difference</th>
+    </tr>
+    <tr>
+    <td>
+    Media Player
+    </td>
+    <td>Mainly used for playing videos and longer music, supports playing network resources. Supports creating up to 4 player instances at the same time, and one instance can only play one audio/video.</td>
+    </tr>
+    <tr>
+    <td>Audio Effect Player</td>
+    <td>Mainly used for playing shorter sound effects, does not support playing network resources. Supports creating only one audio effect player instance at the same time, and the audio effect player supports multi-channel concurrent playback of sound effects. One instance can play up to 12 sound effects simultaneously.</td>
+    </tr>
+    </tbody></table>

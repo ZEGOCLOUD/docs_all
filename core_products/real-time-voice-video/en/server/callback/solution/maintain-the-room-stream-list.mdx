@@ -1,0 +1,156 @@
+---
+articleID: 19680
+---
+
+
+# Solution for Maintaining Room Stream List via Callbacks
+
+- - -
+
+## Operation scenario
+
+When developers frequently publish streams and stop publishing streams within a short period of time, the [Stream Created Callback](/real-time-video-server/callback/stream/created) and [Stream Destroyed Callback](/real-time-video-server/callback/stream/destroyed) provided by ZEGO do not guarantee that the order of results is consistent with the order of execution by the developer.
+
+When developers need to rely on the [Stream Created Callback](/real-time-video-server/callback/stream/created) and [Stream Destroyed Callback](/real-time-video-server/callback/stream/destroyed) to maintain a local room stream list, the inconsistency between the callback order and the execution order may cause some business errors.
+
+For example, the user's behavior order is:
+
+1. User u1 logs in to room r1;
+2. User u1 publishes stream s1, triggering stream created callback sc1;
+3. User u1 stops publishing stream s1, triggering stream destroyed callback sc2;
+4. User u1 publishes stream s1 again, triggering stream created callback sc3.
+
+After passing through the callback service, the order of reaching the developer's server may become:
+
+1. Stream created callback sc1 when user u1 publishes stream s1;
+2. Stream created callback sc3 when user u1 publishes stream s1 again;
+3. Stream destroyed callback sc2 when user u1 stops publishing stream s1.
+
+The developer updates the local room stream list information based on the order of callbacks. Stream s1 will be deleted, but in fact stream s1 is still in room r1.
+
+## Operation steps
+
+To solve the problems caused by the above callback out-of-order, ZEGO recommends that developers combine [Solution for Maintaining Room List via Callbacks](/real-time-video-server/callback/solution/maintain-the-room-list) and refer to the following solution to maintain the local room user list.
+
+<Warning title="Warning">
+
+
+This solution solves the out-of-order problem based on the situation where callbacks are not lost. If callbacks are lost, it cannot be solved.
+
+</Warning>
+
+
+
+### Pay attention to key callback parameters
+
+Pay attention to the key parameters of [Stream Created Callback](/real-time-video-server/callback/stream/created) and [Stream Destroyed Callback](/real-time-video-server/callback/stream/destroyed).
+
+| Parameter |	Description |
+| -- | -- |
+| event | <p>Event name:</p><ul><li>Stream created: [stream_create](/real-time-video-server/callback/stream/created)</li><li>Stream closed: [stream_close](/real-time-video-server/callback/stream/destroyed)</li></ul> |
+| room_id | Room ID. |
+| room_session_id | <p>Room session ID, globally unique, and unchanged during the complete lifecycle of a room:</p><p>This parameter is consistent with the parameter room_session_id in <a href="/real-time-video-server/callback/room/created">Room Created Callback</a> and <a href="/real-time-video-server/callback/room/destroyed">Room Destroyed Callback</a>.</p> |
+| stream_id | Stream ID, corresponds to the client's StreamID. |
+| stream_seq | The seq of the server stream list change, which increases by 1 each time the stream changes. |
+| create_time_ms | Stream creation timestamp, unit: milliseconds. |
+| destroy_timemillis | Stream destruction time, unit: milliseconds. This parameter exists in [Stream Destroyed Callback](/real-time-video-server/callback/stream/destroyed). |
+
+### Maintain local room stream list
+
+Maintain the local room stream list based on stream_id, stream_sid, create_time_ms, stream_seq, and the corresponding room's room_id and room_session_id.
+
+The data structure of the local room stream list is as follows:
+
+```php
+{
+    RoomInfo: {//Refer to "Solution for Maintaining Room List via Callbacks"
+        RoomID: room_id,
+        RoomSessionId: room_session_id,
+        RoomCreateTime:room_create_time,
+        ...//Other data that needs to be saved for business
+    },
+    StreamList:[
+        {
+            StreamId:stream_id_1,
+            StreamSid:session_sid_1,
+            StreamCreateTime:create_time_ms_1,
+            StreamSeq:stream_seq_1
+            ...//Other data that needs to be saved for business
+        },{
+            StreamId:stream_id_2,
+            StreamSid:session_sid_2,
+            StreamCreateTime:create_time_ms_2,
+            StreamSeq:stream_seq_2
+            ...//Other data that needs to be saved for business
+        }
+    ]
+}
+```
+
+### Processing judgment logic
+
+After receiving the [Stream Created Callback](/real-time-video-server/callback/stream/created) and [Stream Destroyed Callback](/real-time-video-server/callback/stream/destroyed), update the local room list.
+
+The field descriptions in the images below are as follows:
+
+| Field prefix | Meaning |
+| -- | -- |
+| zego.* | Parameters in ZEGO callbacks. |
+| local.* | Parameters maintained locally by the developer. |
+
+- Stream created callback processing flow:
+
+```mermaid
+flowchart TD
+    A[Stream create callback] --> B{Does zego.RoomId exist in room list?}
+
+    B -- No --> C[Out of order, save to callback cache queue, wait for room creation callback before processing]
+
+    B -- Yes --> D{Is zego.room_session_id ==local.RoomSessionId?}
+
+    D -- No --> E{Is zego.create_time_ms≥local.RoomCreateTime?}
+    E -- Yes --> C
+    E -- No --> F[Out of order, the room session of the stream in this callback has ended, do not process this callback]
+
+    D -- Yes --> G{Does zego.stream_id exist in stream list?}
+
+    G -- No --> H[Add stream info based on callback data]
+
+    G -- Yes --> I[Compare zego.stream_seq, local.StreamSeq, use the data with larger value]
+
+    H --> J[Read cache queue, merge callback data]
+    I --> J
+    F --> J
+```
+{/*
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/server_v2/solution_of_stream_create.jpeg" /></Frame>
+*/}
+
+
+- Stream destroyed callback processing flow:
+
+```mermaid
+flowchart TD
+    A[Stream close callback] --> B{Does zego.RoomId exist in room list?}
+
+    B -- No --> C[Out of order, save to callback cache queue, wait for room creation callback before processing]
+
+    B -- Yes --> D{Is zego.room_session_id ==local.RoomSessionId?}
+
+    D -- No --> E{Is zego.destroy_timemillis >local.RoomCreateTime?}
+    E -- Yes --> C
+    E -- No --> F[Out of order, the room session of the stream in this callback has ended, do not process this callback]
+
+    D -- Yes --> G{Does zego.stream_id exist in stream list?}
+
+    G -- No --> H[Out of order, have not received the stream creation callback for this stream yet, save to callback cache queue, wait for processing]
+
+    G -- Yes --> I{Is zego.stream_seq >local.StreamSeq?}
+
+    I -- Yes --> J[Delete stream data]
+
+    I -- No --> K[Out of order, the room session of the stream in this callback has ended, do not process this callback]
+```
+{/*
+    <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/server_v2/solution_of_stream_close.jpeg" /></Frame>
+*/}

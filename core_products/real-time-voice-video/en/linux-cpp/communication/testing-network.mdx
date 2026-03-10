@@ -1,0 +1,126 @@
+---
+articleID: 6854
+date: "2024-01-02"
+---
+# Network Speed Test
+
+- - -
+
+## Feature Overview
+
+ZEGO provides network speed test functionality, which can detect uplink and downlink network speeds before users publish/play streams, to judge what bitrate of audio/video streams is suitable for publishing/playing under current network environment.
+
+When uplink speed test results show high packet loss rate, it is recommended to use methods such as lowering resolution or lowering frame rate to reduce publishing bitrate, ensuring normal publishing; when downlink speed test results show high packet loss rate, it is recommended to use the [layered video coding](/real-time-video-linux-cpp/video/set-video-encoding) function provided by the SDK to play low bitrate streams, ensuring normal playing.
+
+When the following situations occur in developer's business, ZEGO recommends using the SDK's network speed test function:
+
+- In call scenarios, network quality assessment needs to be performed.
+
+- In education scenarios, pre-class network detection needs to be performed.
+
+- In live streaming scenarios, network connection speed testing needs to be performed.
+
+
+The basic principle of network speed test is shown in the following figure:
+
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/core_products/real-time-voice-video/en/architecture/Network_speed_test_en.png" /></Frame>
+
+
+
+## Usage Steps
+
+### 1 Listen to Speed Test Callbacks
+
+Before starting the speed test, you can first set speed test related callbacks.
+
+- Under normal speed test circumstances, when network speed quality updates, the [onNetworkSpeedTestQualityUpdate](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-network-speed-test-quality-update) callback will be triggered.
+- When an error occurs during the speed test, the [onNetworkSpeedTestError](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-network-speed-test-error) callback will be triggered.
+
+```cpp
+// Network speed test quality callback
+// Please note, do not call any SDK interfaces in the SDK callback thread, you need to manually switch to another thread, otherwise a deadlock will occur
+virtual void onNetworkSpeedTestQualityUpdate(const ZegoNetworkSpeedTestQuality& quality, ZegoNetworkSpeedTestType type)
+{
+    printf("onNetworkSpeedTestQualityUpdate rtt=%d packetLostRate=%f connectCost=%d type=%d", quality.rtt, quality.packetLostRate, quality.connectCost, type);
+}
+
+// Network speed test error callback
+virtual void onNetworkSpeedTestError(int errorCode, ZegoNetworkSpeedTestType type)
+{
+    printf("onNetworkSpeedTestError errorCode=%d type=%d", errorCode, type);
+}
+```
+
+### 2 Start Speed Test
+
+Create an instance of [ZegoNetworkSpeedTestConfig](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~struct~zego-express-zego-network-speed-test-config) network speed test configuration, set whether to perform uplink and downlink speed tests and expected bitrate according to the actual situation, and call the [startNetworkSpeedTest](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#start-network-speed-test) interface to start network speed test.
+
+<Note title="Note">
+
+
+After calling the [startNetworkSpeedTest](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#start-network-speed-test) interface to start speed test, it supports speed test for 30 seconds by default (if you need to adjust the duration, please contact ZEGO technical support to modify dynamic configuration). After exceeding the time, the speed test will be forcibly ended. If you need to continue the speed test, please call this interface again.
+
+</Note>
+
+
+
+
+```cpp
+ZegoNetworkSpeedTestConfig config;
+
+// Perform uplink speed test, specify expected publishing bitrate
+config.testUplink = true;
+config.expectedUplinkBitrate = videoConfig.bitrate;
+
+// Perform downlink speed test, specify expected playing bitrate
+config.testDownlink = true;
+config.expectedDownlinkBitrate = videoConfig.bitrate;
+
+// Start speed test
+engine->startNetworkSpeedTest(config);
+```
+
+Speed test results will be returned in the network speed test quality [ZegoNetworkSpeedTestQuality](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~struct~zego-express-zego-network-speed-test-quality) in [onNetworkSpeedTestQualityUpdate](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-network-speed-test-quality-update). By analyzing each parameter value, you can know whether the current network quality is good.
+
+The parameters in [ZegoNetworkSpeedTestQuality](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~struct~zego-express-zego-network-speed-test-quality) are as follows:
+
+<table>
+
+<tbody><tr>
+<th>Parameter</th>
+<th>Description</th>
+<th>Explanation</th>
+</tr>
+<tr>
+<td>connectCost</td>
+<td>Time spent connecting to server, unit is milliseconds.</td>
+<td>If the network connection disconnects during the speed test, it will automatically reconnect. This variable will update accordingly. The smaller the value, the better.</td>
+</tr>
+<tr>
+<td>rtt</td>
+<td>Network latency, unit is milliseconds.</td>
+<td>Represents the time consumed between the SDK and the server round trip. The smaller the value, the better.</td>
+</tr>
+<tr>
+<td>packetLostRate</td>
+<td>Packet loss rate, unit is percentage.</td>
+<td>The value range is 0.0 - 1.0. For example, 0.5 means that for every 10 packets sent to the server, 5 of them may be lost on the way.</td>
+</tr>
+<tr>
+<td>quality</td>
+<td>Network quality</td>
+<td>Represents the current network quality level. For details, please refer to [ZegoStreamQualityLevel](@-ZegoStreamQualityLevel): <ul><li>EXCELLENT: Quality is excellent.</li><li>GOOD: Quality is good.</li><li>MEDIUM: Quality is normal.</li><li>BAD: Quality is poor.</li><li>DIE: Quality is abnormal.</li><li>UNKNOWN: Quality is unknown.</li></ul>  </td>
+</tr>
+</tbody></table>
+
+
+
+### 3 Stop Speed Test
+
+Call the [stopNetworkSpeedTest](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-express-engine#stop-network-speed-test) interface to stop network speed test.
+
+After stopping the speed test, you will no longer receive [onNetworkSpeedTestQualityUpdate](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-network-speed-test-quality-update) or [onNetworkSpeedTestError](https://zegocloud.com/article/api?doc=Express_Video_SDK_API~CPP_linux~class~zego-express-i-zego-event-handler#on-network-speed-test-error) callbacks.
+
+```cpp
+engine->stopNetworkSpeedTest();
+```

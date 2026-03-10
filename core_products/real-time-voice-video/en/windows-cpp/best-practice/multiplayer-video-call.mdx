@@ -1,0 +1,217 @@
+---
+articleID: 9974
+date: "2024-01-04"
+---
+# Multi-Person Video Call
+
+- - -
+
+## Introduction
+
+This document shows how to use the ZEGO Express SDK to construct a multi-person video call scenario, that is, to implement multi-to-multi real-time audio and video interaction. Users can conduct real-time video calls with other users in the room and publish and play streams with each other. This scenario can be used for multi-person real-time video chat, video conferences, etc.
+
+## Prerequisites
+
+Before applying the multi-person video call scenario, ensure that:
+
+- A project has been created in the [ZEGOCLOUD Console](https://console.zego.im), and valid AppID and AppSign have been obtained. For details, please refer to [Console - Project Information](/console/project-info).
+- ZEGO Express SDK has been integrated into the project, and basic audio and video streaming functionality has been implemented. For details, please refer to [Quick Start - Integration](/real-time-video-windows-cpp/quick-start/integrating-sdk) and [Quick Start - Implementation Process](/real-time-video-windows-cpp/quick-start/implementing-video-call).
+
+
+## Download Sample Source Code
+
+Please refer to [Download Sample Source Code](/real-time-video-windows-cpp/quick-start/run-example-code) to obtain the source code.
+
+For related source code, please check the files in the "ZegoExpressExample/Examples/Scenes/VideoForMultipleUsers" directory.
+
+## Usage Steps
+
+This section will introduce how to use the ZEGO Express SDK to implement multi-person video calls.
+
+- The flow chart of multi-person video calls is as follows:
+
+```mermaid
+graph TD
+    1[Create engine] --> 2[Login room]
+    2 --> 3[Listen to callbacks]
+    3 --> 4[onRoomStateUpdate]
+    3 --> 10[onRoomUserUpdate]
+    3 --> 7[onRoomStreamUpdate]
+    7
+
+    4 --> 5[Get room login status]
+    5 --> 6[Start publishing stream after successful login]
+    6 --> 14[Conduct video call]
+
+    7 --> 8[Get list of audio/video stream changes in callback]
+    8 --> 9[Iterate list, play newly added audio/video streams]
+    9 --> 14[Conduct video call]
+
+    10 --> 11[Get list of user changes in callback]
+    11 --> 12[Display user join/leave room info]
+    12 --> 14[Conduct video call]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/Android/eventhandler_process_new.jpeg" /></Frame>
+*/}
+
+- The API call sequence diagram is as follows:
+
+```mermaid
+sequenceDiagram
+    participant A as ClientA
+    participant SDK as ZEGO Express SDK
+    participant B as ClientB
+
+    %% Initial stage ClientA operations
+    A->>SDK: User A creates engine <br/> [createEngine]
+    A->>SDK: User A logs in to room <br/> [loginRoom]
+    A->>SDK: Set event notification callback <br/> [setEventHandler]
+    A->>SDK: User A previews publishing stream <br/> [startPreview]
+    A->>SDK: User A starts publishing stream <br/> [startPublishingStream]
+    A->>SDK: User A starts playing stream <br/> [startPlayingStream]
+
+    %% UserB joins stage
+    rect rgb(46, 170, 153, 0.2)
+        note over A,B: User B joins
+    end
+
+    B->>SDK: User B creates engine <br/> [createEngine]
+    B->>SDK: User B logs in to room <br/> [loginRoom]
+    B->>SDK: Set event notification callback <br/> [setEventHandler]
+    SDK-->>A: Notify A of user update in room <br/> [onRoomUserUpdate]
+    B->>SDK: User B previews publishing stream <br/> [startPreview]
+    B->>SDK: User B starts publishing stream <br/> [startPublishingStream]
+    SDK-->>A: Notify A of stream update in room <br/> [onRoomStreamUpdate]
+    B->>SDK: User B starts playing stream <br/> [startPlayingStream]
+
+    %% UserA exits stage
+    rect rgb(46, 170, 153, 0.2)
+        note over A,B: User A exits
+    end
+
+    A->>SDK: User A stops preview <br/> [stopPreview]
+    A->>SDK: User A stops publishing stream <br/> [stopPublishingStream]
+    SDK-->>B: Notify B of stream update in room <br/> [onRoomStreamUpdate]
+    A->>SDK: User A stops playing stream <br/> [stopPlayingStream]
+    A->>SDK: User A logs out of room <br/> [logoutRoom]
+    SDK-->>B: Notify B of user update in room <br/> [onRoomUserUpdate]
+
+    %% UserB exits stage
+    rect rgb(46, 170, 153, 0.2)
+        note over A,B: User B exits
+    end
+
+    B->>SDK: User B stops preview <br/> [stopPreview]
+    B->>SDK: User B stops publishing stream <br/> [stopPublishingStream]
+    B->>SDK: User B stops playing stream <br/> [stopPlayingStream]
+    B->>SDK: User B logs out of room <br/> [logoutRoom]
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Android/ExpressSDK/Scenes/VideoForMultipleUsers/Video_for_Multiple_Users_android_new.png" /></Frame>
+*/}
+
+  <Note title="Note">
+
+
+  ZEGO Express SDK can support multi-person video calls. The above sequence diagram uses real-time video calls between 2 room members as an example. It is recommended that developers refer to the above process to design their own multi-person real-time video call scenarios.
+</Note>
+
+
+### 1 Create engine
+
+Define the SDK engine object, call the [createEngine](@createEngine) interface, pass the applied AppID and AppSign into the parameters "appID" and "appSign", and create the engine singleton object.
+
+If you need to register a callback handler, you can pass an object that implements [IZegoEventHandler](@-IZegoEventHandler) into the parameter "eventHandler". If you do not need to register a callback handler, you can pass "null" into the parameter "eventHandler". After creating the engine, if you still need to register a callback, you can set the callback handler by calling the [setEventHandler](@setEventHandler-IZegoExpressEngine) interface.
+
+```cpp
+// Define SDK engine object
+IZegoExpressEngine *engine;
+
+ZegoEngineProfile profile;
+// AppID and AppSign are assigned to each App by ZEGO; for security reasons, it is recommended to store AppSign in the App's business backend and obtain it from the backend when needed
+profile.appID = appID;
+profile.appSign = appSign;
+profile.scenario = ZegoScenario::ZEGO_SCENARIO_DEFAULT;
+// Create engine instance
+engine = ZegoExpressSDK::createEngine(profile, nullptr);
+```
+
+### 2 Enable room user change notifications
+
+Developers need to set "isUserStatusNotify" in [ZegoRoomConfig ](@-ZegoRoomConfig) to "true" when each user logs in to the room to receive callback notifications for other users entering and leaving the room.
+
+```cpp
+ZegoRoomConfig RoomConfig;
+RoomConfig.isUserStatusNotify = true;
+// Login room
+engine->loginRoom(roomID, user, RoomConfig);
+```
+
+### 3 Set event notification callbacks
+
+To implement the multi-person video call feature, you need to listen to the addition and deletion of users and streams in the room and make corresponding handling. You can set related callbacks through [setEventHandler](@setEventHandler-IZegoExpressEngine).
+
+**Listen to user changes in the room**
+
+Register the [onRoomUserUpdate](@onRoomUserUpdate) callback to listen to user changes in the room. The addition and deletion of users who have logged in to the room will trigger this callback.
+
+The "updateType" parameter in the callback indicates the type of user change in the room. The values of this parameter are as follows:
+
+|User Change Type|Enumeration Value|Description|
+|-|-|-|
+|User Addition|ZEGO_UPDATE_TYPE_ADD|Users increase in the room, "userList" is the list of newly added users.|
+|User Deletion|ZEGO_UPDATE_TYPE_DELETE|Users decrease in the room, "userList" is the list of deleted users.|
+
+When a user logs in to the room for the first time, if there are other users in the room, the newly logged-in user will receive the added user list through this callback, that is, the callback with "updateType" as "ZEGO_UPDATE_TYPE_ADD", and this user list is the users already existing in the room.
+
+<Warning title="Warning">
+
+
+- Only when status notification is allowed when logging in to the room via [loginRoom ](@loginRoom), that is, when "isUserStatusNotify" in [ZegoRoomConfig](@-ZegoRoomConfig) is set to "true" (default is "false"), can you listen to the [onRoomUserUpdate](@onRoomUserUpdate) callback.
+- When the number of people in the room exceeds 500, this callback will become invalid.
+</Warning>
+
+```cpp
+class MyEventHandler : public IZegoEventHandler
+{
+    void onRoomUserUpdate(const std::string &roomID, ZegoUpdateType updateType, const std::vector<ZegoUser> &userList){
+        // Update UI or perform other operations here
+    }
+};
+auto eventHandler = std::make_shared<MyEventHandler>();
+engine->setEventHandler(eventHandler)
+```
+
+**Listen to stream changes in the room**
+
+To listen to stream changes in the room, you need to register the [onRoomStreamUpdate](@onRoomStreamUpdate) callback. When other users in the room add or delete streams, this callback will be triggered to notify the changed stream list.
+
+The "updateType" parameter in the callback indicates the type of stream change in the room. The values of this parameter are as follows:
+
+|Stream Change Type|Enumeration Value|Description|
+|-|-|-|
+|Stream Addition|ZEGO_UPDATE_TYPE_ADD|Streams increase in the room, "streamList" is the list of newly added streams.|
+|Stream Deletion|ZEGO_UPDATE_TYPE_DELETE|Streams decrease in the room, "streamList" is the list of deleted streams.|
+
+
+When a user logs in to the room for the first time, if there are other users publishing streams in the room, a stream addition list will be received, that is, the callback with "updateType" as "ZEGO_UPDATE_TYPE_ADD".
+
+```cpp
+class MyEventHandler : public IZegoEventHandler
+{
+    void onRoomStreamUpdate(const std::string& currentRoomID, ZegoUpdateType updateType, const std::vector<ZegoStream>& streamList, const std::string& extendData){
+        // Update UI or perform other operations here
+    }
+};
+auto eventHandler = std::make_shared<MyEventHandler>();
+engine->setEventHandler(eventHandler)
+```
+
+### 4 Start publishing/playing streams
+
+Please refer to [Quick Start - Implementation Process](/real-time-video-windows-cpp/quick-start/implementing-video-call) to complete the operations related to "publishing streams" and "playing streams" in sequence.
+
+### 5 Stop video call
+
+During the call, if users in the room need to end the call, please refer to [Quick Start - Implementation Process](/real-time-video-windows-cpp/quick-start/implementing-video-call) to complete the related operations in sequence.

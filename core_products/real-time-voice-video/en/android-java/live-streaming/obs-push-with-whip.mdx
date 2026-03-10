@@ -1,0 +1,97 @@
+# OBS Streaming with WHIP Protocol
+---
+
+## WHIP Protocol Introduction
+
+WHIP (WebRTC-HTTP Ingestion Protocol) is a standard protocol based on HTTP that allows you to use HTML5 and different clients to push/pull WebRTC live streams to/from streaming servers or CDNs.
+
+Using WHIP can significantly improve the live streaming experience:
+- Weak network resistance: WebRTC streaming takes advantage of the UDP protocol, providing stronger weak network resistance.
+- Low latency: Reduces latency by about 150 ms compared to RTMP.
+
+<Note title="Notes">
+[OBS V30.0](https://obsproject.com/kb/whip-streaming-guide) and later versions (after October 2023) support the WHIP protocol. Older versions of OBS need to integrate plugins to implement WebRTC streaming.
+</Note>
+
+## Prerequisites
+
+- You have contacted ZEGOCLOUD Technical Support to open the relevant permissions for tool streaming to the ZEGO server, and have applied for and configured the WHIP domain.
+- Prepare a third-party streaming tool, such as [OBS](https://obsproject.com/).
+
+## Usage Steps
+
+### Generate streaming URL
+
+After applying for the WHIP domain, the streaming URL is spliced according to the following format.
+```bash
+https://i-whip{appid}.whip.zegotech.cn/whip/v1/{appid}/{streamId}?userId={userId}&zgVer=v1&zgExpired={expire}&zgNonce={nonce}
+```
+Parameter Description
+| Parameter Name | Description |
+| ------------- | -------- |
+| appid | User's appid, consistent with the domain application. |
+| streamId | The ID of the audio and video stream, customized by the user. |
+| userId | The ID of the streaming user. |
+| expire | The expiration time of the Token, refer to the Token Generation section. |
+| nonce | Random string, refer to the Token Generation section. |
+
+### Generate TOKEN
+
+The following is a list of calculation parameters for the authentication Token. Parameter names are case-sensitive.
+
+| Parameter Name | Value Type | Required | Description |
+| ------------- | -------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| appid | string | Yes | The appid assigned by ZEGO to the customer, only used to participate in Token calculation. |
+| streamId | string | Yes | Stream name, only used to participate in Token calculation. |
+| zgExpired | int64 | Yes | Token expiration time. The value is a Unix second-level timestamp, i.e., the number of seconds from 1970-01-01 00:00:00 UTC to now, participating in Token calculation and composing authentication parameters.<Warning title="Warning">It is recommended that users set a reasonable expiration time. If an expired Token is used, streaming will fail.</Warning> |
+| zgNonce | string | Yes | Number once, to avoid Token replay, reserved for implementation. It is recommended that the length does not exceed 15 bytes and can take the current millisecond number, participating in Token calculation and composing authentication parameters. |
+| zgPrivilege | string | Yes | Indicates authentication permissions:<ul><li>`0`: Indicates playing stream permission only</li><li>`1`: Indicates publishing and playing stream permission</li></ul>Only used to participate in Token calculation.<Note title="Notes">The media server will decide this parameter based on whether the request is for publishing or playing stream; when the customer backend calculates the Token, decide this parameter value based on whether this user is used for publishing or playing stream, and then participate in Token calculation.</Note> |
+| key | string | Yes | Authentication key.<Warning title="Warning">ServerSecret needs to specify the corresponding key based on whether it is publishing stream authentication or playing stream authentication.</Warning> |
+
+
+
+1. Sort and concatenate all parameters that need to participate in Token calculation except key in ascending order, and then concatenate key at the end.
+
+```javascript
+let str = "appid=176xxxx14&streamId=stream_1xxxxx4&zgExpired=86400&zgNonce=1760511934298&zgPrivilege=1&key=e0xxxxxxxxxxd";
+```
+2. Perform sha256 encryption on `str`, and the resulting string is the Token.
+
+```bash
+b0f8c8e4c6f5b3a8xxxxxxxxxxxxxxxxxxxxx0d9e8f7a6b5c4d3e2f1a0b9
+```
+
+
+## OBS Streaming
+<Steps >
+<Step title="Open OBS, set up capture sources, and enter settings options.">
+
+<Frame width="auto" height="auto" >
+  <img src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/183e5125f9.png"/>
+</Frame>
+</Step>
+<Step title="Click Live to enter the streaming URL settings interface.">
+1. Select service type as: WHIP.
+2. Fill in the live streaming URL in Server.
+3. Fill in Token in Bearer Token.
+<Frame width="auto" height="auto" >
+  <img src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/676b89fd19.png"/>
+</Frame>
+</Step>
+<Step title="Start live streaming.">
+<Frame width="auto" height="auto" >
+  <img src="https://media-resource.spreading.io/docuo/workspace564/27e54a759d23575969552654cb45bf89/060bac1272.png"/>
+</Frame>
+</Step>
+</Steps>
+
+
+
+
+
+## FAQ
+
+<Accordion title="How does the business server know whether the RTMP streaming tool has started or stopped streaming?" defaultOpen="false">
+ZEGO provides publish_start (start streaming) and publish_stop (stop streaming) callback notifications. If needed, please contact ZEGOCLOUD Technical Support for configuration.
+</Accordion>
+
