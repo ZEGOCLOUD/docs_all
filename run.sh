@@ -33,7 +33,21 @@ if [ "$NEED_SETUP" = true ]; then
     fi
 fi
 
-# 交互选择语言
+# 解析命令行参数
+case "$1" in
+    --zh)
+        echo -e "${GREEN}启动中文文档...${NC}"
+        docuo dev --zh
+        exit 0
+        ;;
+    --en)
+        echo -e "${GREEN}启动英文文档...${NC}"
+        docuo dev --en
+        exit 0
+        ;;
+esac
+
+# 交互选择语言（无参数时）
 echo -e "${BLUE}请选择文档语言:${NC}"
 echo -e "  ${GREEN}1) 中文${NC} (默认)"
 echo -e "  ${GREEN}2) 英文${NC}"
