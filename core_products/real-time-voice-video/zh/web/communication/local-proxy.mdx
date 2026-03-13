@@ -1,0 +1,302 @@
+# 本地代理
+
+- - -
+
+## 功能简介
+
+本地代理指开发者可以将自己部署的 Nginx 和 coturn 服务器作为 SDK 数据的中转站，启用本地代理后：
+
+- SDK 的 HTTP 和 WebSocket 请求数据包将通过 Nginx 服务器进行代理转发。
+- SDK 的音视频数据包将通过 coturn 服务器进行代理转发。
+
+## 适用场景
+
+当用户（浏览器页面）的网络只能访问自己的代理服务器、但不能直接访问外网服务，必须通过代理服务器访问特定的外网服务时，可以使用本功能访问 ZEGO 服务。
+
+本地代理功能适用于以下场景：
+
+| 场景                 | 网络要求                                               |
+| -------------------- | ------------------------------------------------------ |
+| 代理服务器部署在内网 | 内网防火墙需开通白名单，允许内网代理服务器访问外网。     |
+| 代理服务器部署在外网 | 内网防火墙需开通白名单，允许内网用户访问外网的代理服务器。 |
+
+<Note title="说明">
+
+如果用户的网络允许通过防火墙直接访问特定的外网服务，推荐使用 ZEGO 的 [云代理](./cloud-proxy.mdx) 的方案，免部署代理服务器，接入和维护更简易。
+</Note>
+
+## 架构说明
+
+<img src="https://doc-media.zego.im/sdk-doc/Pics/Express/Web_local_proxy.jpeg" />
+
+## 使用流程
+
+### 1 部署代理服务器
+
+<Warning title="注意">
+
+请您在业务侧自行搭建 Nginx 和 coturn 服务器，保障用户的数据隐私和安全。
+</Warning>
+
+以下介绍 Nginx、coturn 服务器的相关配置。
+
+
+<Accordion title="部署 Nginx 服务器" defaultOpen="false">
+<Steps titleSize="p">
+<Step title="（可选）搭建 Nginx 服务器">
+
+请您自行搜索 Nginx 服务器搭建相关教程，完成 Nginx 服务器搭建。如果您之前已搭建完成，请忽略本步骤。
+
+</Step>
+<Step title=" 配置 Nginx 服务器">
+
+```bash
+vi /etc/nginx/nginx.conf
+```
+
+在 Nginx 配置中添加 server 内容。
+
+```nginx
+server { 
+    # nginx 服务器域名
+    server_name proxy.example.com;
+    # nginx 服务器的访问端口
+    listen 443 ssl;
+    ssl_certificate ./cert.pem;
+    ssl_certificate_key ./key.pem;
+    proxy_ssl_server_name on;
+    proxy_ssl_session_reuse off;
+  
+    location /accesshub/ { # 对应 setLocalProxyConfig 中的 accesshubProxy 参数
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade; 
+        proxy_set_header Connection "upgrade";
+        rewrite ^/accesshub/(.*)$ /$1 break; # 将localtion 的路径进行重写到域名根路径
+        proxy_pass https://accesshub-wss.example.com;  # 该域名为示例，域名后面不要带路径。域名由ZEGO提供。
+    }
+  
+    location /logger/ { # 对应 setLocalProxyConfig 中的 loggerProxy 参数
+        proxy_http_version 1.1; 
+        proxy_set_header Upgrade $http_upgrade; 
+        proxy_set_header Connection "upgrade"; 
+        rewrite ^/logger/(.*)$ /$1 break; # 将localtion 的路径进行重写到域名根路径
+        proxy_pass https://weblogger.example.com;  # 该域名为示例，域名后面不要带路径。域名由ZEGO提供。
+    }
+}
+```
+
+假设：
+
+1. Nginx 代理服务器域名 server_name 为 `proxy.example.com`；
+2. ZEGO Express SDK 原直连的信令服务域名 proxy_pass 为 `accesshub-wss.example.com`。
+3. 通过 SDK 的 [setLocalProxyConfig](@setLocalProxyConfig) 接口设置 accesshubProxy 为 `proxy.example.com/accesshub`。
+
+后续 SDK 接口对 `accesshub-wss.example.com` 的所有请求，都会将域名部分替换为 `proxy.example.com/accesshub` 后作为请求地址请求 Nginx 代理，Nginx 服务器再对原请求地址发起请求。
+
+例如，实际 Nginx 请求地址（即原直连的请求接口地址）为 “wss://**accesshub-wss.example.com**/accesshub”，而 SDK 的代理请求地址为 “wss://**proxy.example.com/accesshub**/accesshub”。
+
+</Step>
+<Step title="执行重新加载 Nginx">
+
+```bash
+nginx -s reload
+```
+
+至此，Nginx 服务器部署完毕。
+</Step>
+</Steps>
+
+</Accordion>
+
+<Accordion title="部署 coturn 服务器" defaultOpen="false">
+
+coturn 是一种开源的 STUN/TURN 服务器。可以用于搭建一个能够在 NAT 防火墙和代理服务器背后运行的实时通信系统。
+<Steps titleSize="p">
+<Step title="（可选）安装 coturn">
+
+请您自行搜索 coturn 服务器搭建相关教程，完成 coturn 服务器搭建。如果您之前已搭建完成，请忽略本步骤。
+
+以在 CentOS 中搭建 coturn 服务器为例，执行如下命令，安装 coturn。
+
+```bash
+yum install coturn
+```
+
+执行如下命令，如果输出结果为 `/usr/bin/turnserver`，则表示安装 coturn 成功。
+
+```bash
+which turnserver
+```
+
+</Step>
+<Step title="配置运行参数">
+
+1. 创建配置文件。
+
+```bash
+cd /etc/
+sudo mkdir coturn && cd coturn
+sudo vim turnserver.conf
+```
+
+2. 编辑基本配置。
+
+```conf
+listening-port=3478
+external-ip=xx.xx.xx.xx
+min-port=30000
+max-port=60000
+verbose
+fingerprint
+realm=zego.im
+cert=**/**/turn_server_cert.pem
+pkey=***/**/turn_server_pkey.pem
+log-binding
+no-stun
+no-rfc5780
+no-stun-backward-compatibility
+response-origin-only-with-rfc5780
+log-file=/var/log/coturn/turnserver.log
+use-auth-secret=yes
+static-auth-secret=*zego*
+```
+
+| 配置参数              | 参数说明                                                                                                                                                                       |
+|---------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| listening-port      | coturn 服务器监听端口，与 Web 交互均通过此端口。                                                                                                                             |
+| external-ip         | <ul><li>如果 coturn 部署在内网，此处填写内网 IP 地址。</li><li>如果 coturn 部署在外网，此处填写外网 IP 地址。</li></ul>                                                                            |
+| min-port、max-port  | <ul><li>coturn alloc 端口，与 ZEGO 流媒体服务器交互均通过此范围内端口。</li><li>上述示例代码中的配置为 30000 - 60000 范围内的端口。</li></ul>                                                      |
+| cert、pkey          | <ul><li>证书及私钥路径，可以采用自签名证书。</li><li> `openssl req -x509 -newkey rsa:2048 -keyout ./turn_server_pkey.pem -out ./turn_server_cert.pem -days 9999 -nodes`</li></ul>                |
+| log-file            | 日志文件路径。                                                                                                                                                               |
+| use-auth-secret     | 启用或禁用 turn 服务器的身份验证功能，需要保持开启（yes）。                                                                                                                  |
+| static-auth-secret  | turn server 身份验证秘钥。您可以设置为任意字符串，不能对外暴露。                                                                                                             |
+
+3. 生成 coturn 登录凭证
+
+开发者可以使用 `turnserver.conf` 中配置的静态秘钥参数 `static-auth-secret`，在自己的业务后台生成 coturn 登录凭证，通过接口提供给客户端。
+
+使用 Node.js 生成登录凭证，参考示例代码如下：
+
+```js
+const crypto = require("crypto");
+
+// 凭证有效期的结束时间点，单位秒。这里示例是当前时间点的 86400s 后
+const end_ts = Math.floor(new Date().getTime() / 1000) + 86400;
+function getCredential(endTime, userName) {
+    // screctKey 为 turnserver.conf 中 static-auth-secret 填写的静态密钥。
+    const screctKey = "*zego*";
+    const username_ts = endTime.toString() + ":" + userName;
+    const method = crypto.createHmac("sha1", screctKey);
+    method.setEncoding("base64");
+    method.write(username_ts);
+    method.end();
+    return {
+        username: username_ts,
+        credential: method.read()
+    };
+}
+
+const { credential, username } = getCredential(end_ts, "test");
+
+console.log("username: " + username);
+console.log("credential: " + credential);
+```
+
+客户端获取到上述的 username 和 credential 后，调用 SDK 的 [setTurnServer](@setTurnServer) 接口，传入对应的参数，与 turn server 建立连接。
+
+```js
+zg.setTurnServer([{
+    url: "turn:1.2.3.4:3478?transport=udp", // 1.2.3.4:3478 为 turn server 配置的 external-ip 和 listening-port
+    username: username,
+    credential: credential
+}]);
+```
+</Step>
+<Step title=" 运行 coturn">
+
+```bash
+sudo systemctl start coturn
+```
+
+执行如下命令，确认 coturn 是否运行成功。
+
+```bash
+# 查看进程是否启动
+ps aux | grep turnserver
+# 通过 systemctl 查看 coturn 启动状态
+sudo systemctl status coturn
+```
+
+如果 coturn 运行失败、出现 `status=127` 错误提示，可能是用户没有权限执行文件。执行如下命令，给 coturn 的可执行文件添加权限。
+
+```bash
+chmod -x /usr/bin/turnserver
+```
+
+然后修改 coturn.service 文件。
+
+```bash
+sudo vim /usr/lib/systemd/system/coturn.service
+```
+
+将文件内容中的 User 和 Group 配置改为有执行权限的 root 用户和用户组。示例如下：
+
+```service
+# 省略文件前面部分内容
+[Service]
+User=root
+Group=root
+# 省略文件后面部分内容
+```
+
+修改完成，保存文件之后，再次运行 coturn。
+
+```bash
+sudo systemctl daemon-reload
+# 再次运行 coturn
+sudo systemctl start coturn
+```
+
+</Step>
+<Step title="测试 turn server">
+
+前往 [测试页面](https://webrtc.github.io/samples/src/content/peerconnection/trickle-ice/)，测试您搭建好的 turn server 是否能够正常连通访问。**如果最后一行显示 Done，则表示连通性正常。**
+
+<Frame width="auto" height="auto">
+  <img src="https://doc-media.zego.im/sdk-doc/Pics/Express/Web_local_proxy_1.jpeg" />
+</Frame>
+
+至此，coturn 服务器部署完毕。
+
+</Step>
+</Steps>
+
+</Accordion>
+
+
+### 2 设置代理服务器
+
+代理服务器部署完成后，调用 [setLocalProxyConfig](@setLocalProxyConfig) 接口，设置本地代理服务器。
+
+```js
+ZegoExpressEngine.setLocalProxyConfig(
+    {
+        // 用于中转 SDK 与 ZEGO 后台的信令数据包。格式是`${域名}:${端口}/${路径}`，端口和路径根据代理配置按需填写。
+        accesshubProxy: "proxy.example.com/accesshub",
+        // 设置日志上报代理，用于排查问题，请务必设置该代理。格式是`${域名}:${端口}/${路径}`，端口和路径根据代理配置按需填写。
+        loggerProxy: "proxy.example.com/logger"
+    },
+    true
+);
+
+const zg = new ZegoExpressEngine(appID, server);
+// 设置 turn server，用于中转 SDK 的媒体数据包。1.2.3.4:3478 为 turn server 的 ip 及端口
+zg.setTurnServer([{
+    url: "turn:1.2.3.4:3478?transport=udp",
+    // 通过部署的 turn server 加密规则获取用户名和密码传入 SDK
+    username: "username",
+    credential: "credential"
+}]);
+```
+
+设置完成后，即可使用本地代理服务。
