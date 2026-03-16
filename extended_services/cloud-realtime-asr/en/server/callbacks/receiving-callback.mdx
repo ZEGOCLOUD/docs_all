@@ -1,0 +1,139 @@
+---
+date: '2026-01-23'
+---
+
+import Content from '/snippets/Reuse/SignatureVerificationEN.mdx'
+
+# Receiving Callbacks
+
+
+<Warning title="Note">Callback service cannot be guaranteed to be completely reliable. Please carefully consider the risks of using callback solutions to build core business processes.</Warning>
+
+Through this callback, you can monitor events that occur during real-time speech recognition, including ASR results and exception events.
+
+<Warning title="Note">Please ensure that you have successfully started the real-time speech recognition task by referring to the [Start Task](./../api-reference/start.mdx) interface.</Warning>
+
+## Callback Description
+
+- Request method: POST.
+    <Note title="Note">The callback data format is JSON. You need to perform UrlDecode decoding on it.</Note>
+- Request address: Please provide the address for your business server to receive callbacks and contact ZEGOCLOUD Technical Support to configure it.
+- Transport protocol: HTTPS/HTTP, HTTPS is recommended.
+
+## Callback Parameters
+
+<Note title="Note">ZEGO will continue to optimize and update the relevant callback parameters in future iteration plans (for example: adding new fields or new parameter values for certain fields). When integrating, developers should avoid hard-coding to ensure compatibility with new versions after updates.</Note>
+
+| Parameter | Type | Description |
+|------|------|------|
+| AppId | Number | The unique identifier of the developer's APP assigned by ZEGO. |
+| Event | String | Event notification type.<ul><li>ASRResult: ASR result.</li><li>TranslationResult: Translation result.</li><li>Exception: Exception event.</li></ul> |
+| Nonce | String | Random number, used for signature string calculation. |
+| Timestamp | Number | Unix timestamp (milliseconds) when the callback is sent, used for signature string calculation. |
+| Signature | String | Signature string, used to verify the identity of the callback sender. |
+| TaskId | String | The unique identifier of the task, globally unique. |
+| RoomId | String | Room ID. |
+| Data | Object | Event details. Depending on the Event value, the members of this callback parameter are different. |
+
+### Data
+
+**Depending on the `Event` value, the parameters included in Data are different.**
+
+<Tabs>
+<Tab title="Event is ASRResult">
+| Parameter    | Type   | Description                                                                 |
+|---------|--------|----------------------------------------------------------------------|
+| UserId  | String | Speaker's UserId                                                      |
+|StreamId|String|Unique identifier of the stream|
+| Round   | Int64  | Conversation round, increases each time the user actively speaks. Guarantees ordering, not continuity.      |
+| Text    | String | Text content                                                             |
+</Tab>
+<Tab title="Event is TranslationResult">
+| Parameter    | Type   | Description                                                                 |
+|---------|--------|----------------------------------------------------------------------|
+| UserId  | String | Speaker's UserId                                                  |
+|StreamId|String|Unique identifier of the stream|
+| Round   | Int64  | Conversation round, increases each time the user actively speaks. Guarantees ordering, not continuity.    |
+| Text    | String | Translation result text                                                     |
+</Tab>
+<Tab title="Event is Exception">
+| Parameter    | Type   | Description                                                                                                                                                                                                                      |
+|---------|--------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Code    | Int    | Event code: please refer to [Exception Event Error Codes](./exception-codes.mdx) |
+| Message | String | Exception message description                                                                                                                                                                                                            |
+</Tab>
+</Tabs>
+
+
+## Callback Example
+
+The following shows callback examples for each `Event`.
+
+<Tabs>
+<Tab title="Event is ASRResult">
+```json
+{
+    "AppId": 1285661813,
+    "Data": {
+        "Round": 67202235,
+        "Text": "Hello, I am ZEGOCLOUD real-time speech recognition service",
+        "UserId": "abcd123"
+    },
+    "Event": "ASRResult",
+    "Nonce": "7503829353462121337",
+    "RoomId": "111",
+    "Signature": "bc457c45e23c1026afdb6dae93f702ccffad4182",
+    "TaskId": "1922184164614877184",
+    "Timestamp": 1747121418250
+}
+```
+</Tab>
+<Tab title="Event is TranslationResult">
+```json
+{
+    "AppId": 1285661813,
+    "Data": {
+        "Round": 67202235,
+        "Text": "Hello, I am ZEGOCLOUD real-time speech recognition service",
+        "UserId": "abcd123"
+    },
+    "Event": "TranslationResult",
+    "Nonce": "7503829353462121337",
+    "RoomId": "111",
+    "Signature": "bc457c45e23c1026afdb6dae93f702ccffad4182",
+    "TaskId": "1922184164614877184",
+    "Timestamp": 1747121418250
+}
+```
+</Tab>
+<Tab title="Event is Exception">
+```json
+
+{
+    "AppId": 1285661813,
+    "Data": {
+        "Code": 1001,
+        "Message": "General error"
+    },
+    "Event": "Exception",
+    "Nonce": "7503829353462121337",
+    "RoomId": "111",
+    "Signature": "bc457c45e23c1026afdb6dae93f702ccffad4182",
+    "TaskId": "1922184164614877184",
+    "Timestamp": 1747121418250
+}
+```
+</Tab>
+</Tabs>
+
+## Verify Signature
+
+<Content />
+## Return Response
+
+When you receive a callback, please return HTTP status code 2XX (for example, 200) to indicate successful reception. Returning anything else indicates reception failure.
+
+
+## Callback Retry Policy
+
+If the ZEGO server does not receive a response, or receives an HTTP status code other than 2XX (for example, 200), it will attempt to retry, **up to 5 retries**. The interval between each retry request and the **previous request** is 2s, 4s, 8s, 16s, 32s respectively. If it still fails after the 5th retry, no more retries will be made, and the callback will be lost.
