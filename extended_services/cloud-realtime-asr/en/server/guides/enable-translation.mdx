@@ -1,0 +1,158 @@
+---
+date: '2026-02-28'
+---
+# Configure Translation
+
+---
+
+## Feature Overview
+
+During real-time speech recognition (ASR), you can enable the translation feature to translate recognized audio content into the target language in real-time.
+- This feature supports the following two main configuration modes:
+    - **Room-level translation**: All streams in the room share one translation configuration.
+    - **Stream-level translation**: Set personalized translation configurations for different streams in the room (e.g., different target languages).
+- Currently supported translation models include: doubao-seed-translation, Qwen-MT, etc. For translation languages supported by different models, please refer to the official documentation of the corresponding model.
+- Supported methods for obtaining translation results:
+    - Server callback to get translation results.
+    - Real-time audio/video room signaling (ZEGO Express SDK) callback.
+
+## Core Parameter Configuration
+
+Configure parameters when creating a real-time speech recognition task ([StartRealtimeASRTask](/cloud-realtime-asr/api-reference/start)).
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `RoomId` | String | Yes | RTC room ID |
+| `RecognitionRange` | Int | No | Recognition range. 0: entire room, 1: specified StreamList |
+| `StreamList` | array of object | No | List of streams to recognize, effective when RecognitionRange is 1. |
+| `EnableTranslation` | Bool | No | Whether to enable translation |
+| `Translation` | Object | No | Translation LLM configuration item |
+| `SubtitleType` | Int | No | Subtitle delivery type via room signaling:<ul><li>0: No delivery</li><li>1: Deliver recognition results only</li><li>2: Deliver translation results</li><li>3: Deliver both recognition and translation results</li></ul> If client UI needs to display subtitles, it is recommended to set to <code>2</code> or <code>3</code> |
+
+<Tabs>
+<Tab title="StreamList">
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `StreamId` | String | Yes | Stream ID to recognize |
+| `ASR` | Object | No | Refer to [ASR Parameters](/cloud-realtime-asr/configuring-asr#asr-params) |
+| `EnableTranslation` | Bool | No | Whether to enable translation |
+| `Translation` | Object | No | Translation LLM configuration item |
+
+</Tab>
+<Tab title="Translation">
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `Vendor` | String | Yes | LLM vendor: DoubaoSeedTranslation, QwenMT |
+| `SourceLanguage` | String | Yes | Source language |
+| `TargetLanguage` | String | Yes | Target language |
+| `LLM` | Object | Yes | LLM parameters |
+</Tab>
+<Tab title="LLM">
+|Parameter-100px | Type-100px | Required-100px | Description|
+| :--- | :--- | :--- | :--- |
+| `Url` | String | Yes | Vendor: API endpoint for models like DoubaoSeedTranslation, QwenMT, etc. |
+| `ApiKey` | String | No | LLM verification API key. Default is empty, API key must be enabled in production environments. |
+| `Model` | String | Yes | Model to call. Different LLM vendors support different configurations, please refer to the corresponding documentation. |
+| `Params` | Object | No | LLM or application platform request parameters, please refer to the corresponding model's capabilities for supported parameters. |
+
+</Tab>
+
+</Tabs>
+
+
+
+
+
+
+## Usage Examples
+
+#### Prerequisites
+
+1. Use a translation model supported by ZEGO cloud real-time speech recognition
+2. Have already activated the translation service and obtained the model's API Key.
+
+#### Start Recognition Task with Translation and Display Translation Results on Client
+<Tabs titleSize="h5">
+<Tab title="Room-level Translation (Unified Configuration)">
+
+```json
+{
+    "RoomId": "room_01",
+    "RecognitionRange": 0,
+    "EnableTranslation": true,
+    "SubtitleType": 3,//Enable when client needs to display translation results, must be set to 2 or 3
+    "Translation": {
+        "Vendor": "DoubaoSeedTranslation",
+        "SourceLanguage": "zh",
+        "TargetLanguage": "en",
+        "LLM": {
+            "Url": "https://ark.cn-beijing.volces.com/api/v3/responses",
+            "ApiKey": "",
+            "Model": "doubao-seed-translation-250915"
+        }
+    },
+    "ASR": {
+        "Vendor": "Tencent",
+        "Params": {
+            "EngineModelType": "16k_zh"
+        }
+    }
+}
+```
+
+
+</Tab>
+<Tab title="Stream-level Translation (Personalized Configuration)">
+
+
+```json
+{
+    "RoomId": "room_02",
+    "RecognitionRange": 1,
+    "SubtitleType": 3, //Enable when client needs to display translation results, must be set to 2 or 3
+    "StreamList": [
+        {
+            "StreamId": "stream_zh_01",
+            "EnableTranslation": true,
+            "Translation": {
+                "Vendor": "DoubaoSeedTranslation",
+                "SourceLanguage": "zh",
+                "TargetLanguage": "en",
+                "LLM": {
+                    "Url": "https://ark.cn-beijing.volces.com/api/v3/responses",
+                    "ApiKey": "",
+                    "Model": "doubao-seed-translation-250915"                }
+            }
+        },
+        {
+            "StreamId": "stream_en_01",
+            "EnableTranslation": true,
+            "Translation": {
+                "Vendor": "QwenMT",
+                "SourceLanguage": "Chinese",
+                "TargetLanguage": "English",
+                "LLM": {
+                    "Url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+                    "ApiKey": "",
+                    "Model": "qwen-mt-flash"                }
+            }
+        }
+    ],
+    "ASR": {
+        "Vendor": "Tencent"
+    }
+}
+```
+
+<Note title="Note">When `RecognitionRange` is `1`, the system will prioritize reading the stream-level configuration in `StreamList`. If there is no stream-level configuration, it will use the outer `EnableTranslation` and `Translation` configuration as fallback.</Note>
+
+</Tab>
+</Tabs>
+
+#### Get Translation Results
+##### Get Translation Results via Server (Non-streaming)
+Refer to the [Receiving Callbacks](./../callbacks/receiving-callback.mdx) document to get the `Data` result when `Event` is `TranslationResult`.
+
+##### (Optional) Display Subtitles on Client
+To display translation subtitles, please refer to the [Display Subtitles](/cloud-realtime-asr/guides/display-subtitles) document.

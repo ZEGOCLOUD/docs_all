@@ -1,0 +1,216 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+
+servers:
+  - url: https://cloud-realtime-asr-api.zegotech.cn
+
+paths:
+  /:
+    post:
+      tags:
+        - cloud-realtime-asr
+      summary: StartRealtimeASRTask
+      description: Start cloud real-time speech recognition task and add the speech recognition instance to the RTC conversation.
+      operationId: start
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > Interface prototype parameters
+            >
+            > https://cloud-realtime-asr-api.zegotech.cn?Action=StartRealtimeASRTask
+          required: true
+          allowEmptyValue: false
+          schema:
+            type: string
+            enum: [StartRealtimeASRTask]
+          style: form
+          explode: true
+        # Reference shared parameters
+        - $ref: './shared-components.yaml#/components/parameters/AppId'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: './shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: './shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: './shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartASRTaskRequest"
+            examples:
+              "1 v 1 Call Example":
+                summary: "1 v 1 Call Example"
+                value:
+                  RoomId: "string"
+                  RecognitionRange: 0
+                  ASR:
+                    Vendor: "Tencent"
+                    Params:
+                      engine_model_type: "16k_zh"
+                      hotword_list: "zego|10"
+                    VADSilenceSegmentation: 500
+                  AdvancedConfig:
+                    MaxIdleTime: 120
+              "Multi-party Call Translation Example":
+                summary: "Multi-party Call Translation Example"
+                value:
+                  RoomId: "your_room_id"
+                  RecognitionRange: 1
+                  SubtitleType: 2
+                  StreamList:
+                    - StreamId: "s1"
+                      ASR:
+                        Vendor: "Tencent"
+                        Params:
+                          EngineModelType: "16k_zh"
+                      EnableTranslation: true
+                      Translation:
+                        Vendor: "DoubaoSeedTranslation"
+                        SourceLanguage: "zh"
+                        TargetLanguage: "en"
+                        LLM:
+                          Url: "https://ark.cn-beijing.volces.com/api/v3/responses"
+                          ApiKey: "your_doubao_api_key"
+                          Model: "doubao-seed-translation-250915"
+                    - StreamId: "s2"
+                      ASR:
+                        Vendor: "Tencent"
+                        Params:
+                          EngineModelType: "16k_en"
+                      EnableTranslation: true
+                      Translation:
+                        Vendor: "DoubaoSeedTranslation"
+                        SourceLanguage: "en"
+                        TargetLanguage: "zh"
+                        LLM:
+                          Url: "https://ark.cn-beijing.volces.com/api/v3/responses"
+                          ApiKey: "your_doubao_api_key"
+                          Model: "doubao-seed-translation-250915"
+      responses:
+        "200":
+          description: Task started successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartASRTaskResponse"
+
+components:
+  schemas:
+    StartASRTaskRequest:
+      type: object
+      required:
+        - RoomId
+      properties:
+        RoomId:
+          type: string
+          description: RTC room ID
+        RecognitionRange:
+          type: integer
+          description: |
+            Recognition range. 0: all streams in the room, 1: specified StreamList.
+          enum: [0, 1]
+          example: 0
+        ASR:
+          $ref: "./shared-components.yaml#/components/schemas/ASRConfig"
+        StreamList:
+          type: array
+          description: List of streams to be recognized, takes effect when RecognitionRange parameter is 1. When RecognitionRange parameter is 1, this parameter cannot be empty.
+          items:
+            $ref: "./shared-components.yaml#/components/schemas/StreamListItem"
+          example: []
+        AdvancedConfig:
+          type: object
+          description: Advanced configuration parameters.
+          properties:
+            MaxIdleTime:
+              type: integer
+              description: If there are no real users in the RTC room for more than MaxIdleTime, the background automatically stops the recognition task, in seconds.
+              minimum: 30
+              maximum: 1800
+              default: 120
+              example: 120
+        EnableTranslation:
+          type: boolean
+          description: Whether to enable translation. Disabled by default.
+        Translation:
+          type: object
+          description: Translation LLM configuration item
+          required:
+            - Vendor
+            - SourceLanguage
+            - TargetLanguage
+            - LLM
+          properties:
+            Vendor:
+              type: string
+              description: LLM vendor to call.
+              enum: [DoubaoSeedTranslation, QwenMT]
+              example: DoubaoSeedTranslation
+            SourceLanguage:
+              type: string
+              description: Source language
+              example: zh
+            TargetLanguage:
+              type: string
+              description: Target language
+              example: en
+            LLM:
+              type: object
+              description: LLM parameters for translation.
+              required:
+                - Url
+                - Model
+              properties:
+                Url:
+                  type: string
+                  description: |
+                    LLM interface address to call. Different for different Vendors:
+                    - When Vendor is DoubaoSeedTranslation: https://ark.cn-beijing.volces.com/api/v3/responses
+                    - When Vendor is QwenMT: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+                  example: "https://ark.cn-beijing.volces.com/api/v3/responses"
+                ApiKey:
+                  type: string
+                  description: LLM verification API key, defaults to empty, it is recommended to fill in for production environments. Fill in the API key for Alibaba Bailian and other application platforms.
+                  example: ""
+                Model:
+                  type: string
+                  description: The LLM model name to call, required. Different vendors support different models.
+                  example: "doubao-seed-translation-250915"
+                Params:
+                  type: object
+                  description: |-
+                    LLM or application platform request parameters, optional.<br>
+                    - For OpenAI protocol, you can configure parameters such as max_tokens, temperature, stream, etc.<br>
+                    - For other application platforms, you can fill in the parameters supported by the platform.
+                  example: {}
+        SubtitleType:
+          type: integer
+          description: |
+            Subtitle delivery type. 0: No delivery, 1: Recognition results only, 2: Translation results, 3: Recognition and translation results
+          enum: [0, 1, 2, 3]
+
+    StartASRTaskResponse:
+      type: object
+      properties:
+        Code:
+          type: integer
+          description: Return code, 0 means success, other values mean failure. For details, refer to [Return Codes](/cloud-realtime-asr/api-reference/return-codes).
+          example: 0
+        Message:
+          type: string
+          description: Request result description
+          example: "Success"
+        RequestId:
+          type: string
+          description: Request ID
+          example: "3151527792559699732"
+        Data:
+          type: object
+          properties:
+            TaskId:
+              type: string
+              description: Unique identifier of the task.
+              example: "1920370518175780864"
