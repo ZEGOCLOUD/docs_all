@@ -1,0 +1,2 @@
+- 当需要查询文档时，优先使用 plugin:context7:context7 和 Web Search 工具查询
+- 在开始设计方案或者编写代码之前，先使用 plugin:context7:context7 和 Web Search 工具查询相关文档，确保方案或代码的正确性
