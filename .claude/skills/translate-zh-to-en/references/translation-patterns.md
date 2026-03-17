@@ -56,6 +56,20 @@
 <卡片 标题="Getting Started" 描述="Quick SDK Integration" />
 ```
 
+### MDX import translation
+
+1. Check if the snippet file for english exists, if not, create it by copying the snippet file for chinese and translate the chinese text to english text.
+2. Translate the import path, change the zh to en.
+```mdx
+// Before
+import ContentA from '/core_products/aiagent/zh/server/some-snippet.mdx'
+import ContentB from '/snippets/Reuse/SignatureVerificationZH.mdx'
+
+// After
+import ContentA from '/core_products/aiagent/en/server/some-snippet.mdx'
+import ContentB from '/snippets/Reuse/SignatureVerificationEN.mdx'
+```
+
 ### Code Block Translation
 
 **Translate comments only**:
@@ -129,9 +143,9 @@ Example:
 If age \< 18, return \{error\}
 ```
 
-## OpenAPI YAML Translation Rules
+### OpenAPI YAML Translation Rules
 
-### Chinese Colon Handling (CRITICAL)
+#### Chinese Colon Handling (CRITICAL)
 
 **Rule**: If a YAML value contains Chinese colon `：`, MUST convert to multi-line format using `|`
 
@@ -148,7 +162,7 @@ description: |
 
 **Reason**: YAML parser treats `:` after space as key-value separator, causing parsing errors.
 
-### Fields to Translate
+#### Fields to Translate
 
 Translate only description-related field values:
 - `description` - descriptions
@@ -157,7 +171,7 @@ Translate only description-related field values:
 - `title` - titles
 - `x-extensions` - custom extension descriptions
 
-### Fields to Keep Unchanged
+#### Fields to Keep Unchanged
 
 **DO NOT translate**:
 - YAML keys (`info`, `paths`, `get`, `post`, `parameters`, `responses`, `schema`, etc.)
@@ -168,6 +182,19 @@ Translate only description-related field values:
 - Data type names (`string`, `integer`, `boolean`, `array`, `object`)
 - Format values (`int64`, `date-time`)
 - `$ref` references
+
+#### $ref Translation
+
+Translate the $ref path, change the zh to en.
+```yaml
+// Before
+    AppId:
+      $ref: "../../../../../snippets/common/zh/openapi/zego-shared-components.yaml#/components/parameters/AppId"
+
+// After
+    AppId:
+      $ref: "../../../../../snippets/common/en/openapi/zego-shared-components.yaml#/components/parameters/AppId"
+```
 
 
 ### JSON Translation Rules
