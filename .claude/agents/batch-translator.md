@@ -138,7 +138,17 @@ jq 'del(.details | map(select(.path == "completed_file_path.mdx")))' <pending_fi
 jq '.total_files = (.files | length)' <pending_file> > <pending_file>.tmp && mv <pending_file>.tmp <pending_file>
 ```
 
-### Step 6: Report Progress
+### Step 6: Regenerate MDX File (If Needed)
+After translating the openapi yaml file, regenerate the mdx file:
+
+**Please ensure that these yaml files have been configured in the openapi section of docuo.config.json with the corresponding generation paths. If not, please configure them first.**
+
+```bash
+cd <documentation_root>
+docuo god <openapi-group-name>
+```
+
+### Step 7: Report Progress
 
 After each file translation, report progress:
 ```
