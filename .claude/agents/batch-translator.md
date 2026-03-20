@@ -103,7 +103,10 @@ cat <pending_file> | jq -r '.files[]' 2>/dev/null || cat <pending_file> | jq -r 
 
 For each file in the pending list, **manually translate following the `translate-zh-to-en` skill rules**:
 
-1. **Read the source file** to understand content
+1. **Check file size and read the source file**:
+   - First count file lines: `wc -l <file_path>`
+   - If > 500 lines: Use Read tool with `offset` and `limit` parameters to read in batches (e.g., 300 lines per batch) to avoid context overflow errors
+   - If ≤ 500 lines: Read entire file at once
 2. **Check if it's auto-generated** (skip if frontmatter has `api` field)
 3. **Manually translate content** (following translate-zh-to-en skill rules):
    - Load terminology tables

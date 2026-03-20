@@ -75,17 +75,18 @@ Maintain all original formatting:
 
 ## Translation Process
 
-1. **Check frontmatter**: If contains `api` field, skip and report
-2. **Load terminology**: Read common and product-specific CSV files
-3. **Translate content**: Apply terminology, translate prose and comments
-4. **Convert punctuation**: Chinese punctuation → English punctuation
+1. **Check file size**: Count file lines first. If > 500 lines, use Read tool with `offset` and `limit` parameters to read in batches (e.g., 300 lines per batch) to avoid context overflow errors
+2. **Check frontmatter**: If contains `api` field, skip and report
+3. **Load terminology**: Read common and product-specific CSV files
+4. **Translate content**: Apply terminology, translate prose and comments (process batch by batch for large files)
+5. **Convert punctuation**: Chinese punctuation → English punctuation
    - `。` → `.`
    - `，` → `,`
    - `：` → `:` (except in YAML keys)
    - `（）` → `()`
    - `《》` → `""`
-5. **Add spacing**: Space between English words and punctuation
-6. **Verify**: No Chinese characters or punctuation in output
+6. **Add spacing**: Space between English words and punctuation
+7. **Verify**: No Chinese characters or punctuation in output
 
 ## Quality Standards
 
