@@ -1,0 +1,261 @@
+---
+date: '2026-03-24'
+---
+
+# 获取数字人驱动状态
+
+在数字人播放互动内容时，可能需要在客户端界面上实时获取数字人驱动状态（如“数字人是否正在说话”），帮助用户理解当前驱动进度，提升交互体验。您可以通过监听服务端或客户端回调的相应事件来获取这些状态。
+
+数字人驱动状态消息包括以下类型：
+
+- 数字人开始说话。
+- 数字人说话结束。
+
+## 快速实现
+
+要实现获取数字人驱动状态，有两种方式：
+
+1. **在客户端监听 ZEGO Express SDK 试验性 API 回调**。
+2. **通过服务端回调监听数字人驱动状态事件**，然后通过您的信令通道（如 WebSocket 等）发送自定义消息到客户端。
+
+### 前提条件
+
+- 已开通数字人服务并完成相关权限配置。
+- ZEGO Express SDK 初始化完成并加入 [RTC 房间](/glossary/term-explanation#rtc-room)。
+- 服务端已成功创建数字人视频流任务。
+- 客户端已成功登录房间并开始拉取数字人音视频流。
+
+### 在客户端监听 ZEGO Express SDK 试验性 API 回调
+
+<Note title="说明">该方式更简单，建议使用该方式实现获取数字人驱动状态。</Note>
+
+通过客户端 SDK 监听 ZEGO Express SDK 的试验性 API 回调（`onRecvExperimentalAPI`），根据消息类型处理对应的状态事件。以下是各平台示例代码：
+
+<Tabs>
+<Tab title="iOS">
+
+客户端可以通过实现 `ZegoEventHandler` 协议，监听 `onRecvExperimentalAPI` 回调获取 `method` 为 `liveroom.room.on_recive_room_channel_message` 的房间自定义消息。
+
+<CodeGroup>
+```objc YourService.m
+// 处理express onRecvExperimentalAPI接收到的消息
+- (void)onRecvExperimentalAPI:(NSString *)content {
+    NSError *error = nil;
+    NSDictionary *contentDict = [NSJSONSerialization JSONObjectWithData:[content dataUsingEncoding:NSUTF8StringEncoding]
+                                                                options:0
+                                                                  error:&error];
+    if (error || !contentDict) {
+        return;
+    }
+
+    // 1. 检查是否为房间消息
+    if (![contentDict[@"method"] isEqualToString:@"liveroom.room.on_recive_room_channel_message"]) {
+        return;
+    }
+
+    NSDictionary *params = contentDict[@"params"];
+    NSString *msgContent = params[@"msg_content"];
+    if (msgContent.length == 0) {
+        return;
+    }
+
+    // 2. 解析房间自定义消息内容
+    NSDictionary *msgDict = [NSJSONSerialization JSONObjectWithData:[msgContent dataUsingEncoding:NSUTF8StringEncoding]
+                                                            options:0
+                                                              error:&error];
+    if (error || !msgDict) {
+        return;
+    }
+
+    // 3. 判断是否为数字人产品的驱动状态消息
+    if (![msgDict[@"Product"] isEqualToString:@"digitalhuman"]) {
+        return;
+    }
+
+    // 4. 判断是否为数字人驱动状态消息 (Cmd = 1001)
+    if ([msgDict[@"Cmd"] intValue] != 1001) {
+        return;
+    }
+
+    NSDictionary *data = msgDict[@"Data"];
+    int status = [data[@"Status"] intValue];
+    NSString *driveId = data[@"DriveId"];
+
+    // 5. 更新 UI 或处理逻辑
+    if (status == 2) {
+        // !mark
+        NSLog(@"数字人开始说话，DriveID: %@", driveId);
+    } else if (status == 4) {
+        // !mark
+        NSLog(@"数字人说话结束，DriveID: %@", driveId);
+    }
+}
+```
+</CodeGroup>
+
+</Tab>
+
+<Tab title="Android">
+
+客户端可通过监听 `onRecvExperimentalAPI` 回调获取 `method` 为 `liveroom.room.on_recive_room_channel_message` 的房间自定义消息。
+
+```java
+ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onRecvExperimentalAPI(String content) {
+        try {
+            JSONObject contentJson = new JSONObject(content);
+            // 1. 检查是否为房间消息
+            if (!"liveroom.room.on_recive_room_channel_message".equals(
+                    contentJson.optString("method"))) {
+                return;
+            }
+
+            JSONObject params = contentJson.optJSONObject("params");
+            if (params == null) {
+                return;
+            }
+
+            String msgContent = params.optString("msg_content");
+            if (msgContent == null || msgContent.isEmpty()) {
+                return;
+            }
+
+            // 2. 解析房间自定义消息内容
+            JSONObject msgJson = new JSONObject(msgContent);
+            // 3. 判断是否为数字人产品的驱动状态消息
+            if (!"digitalhuman".equals(msgJson.optString("Product"))) {
+                return;
+            }
+
+            // 4. 判断是否为数字人驱动状态消息 (Cmd = 1001)
+            if (msgJson.optInt("Cmd", 0) != 1001) {
+                return;
+            }
+
+            JSONObject data = msgJson.optJSONObject("Data");
+            if (data == null) {
+                return;
+            }
+
+            int status = data.optInt("Status", 0);
+            String driveId = data.optString("DriveId", "");
+
+            // 5. 更新 UI 或处理逻辑
+            if (status == 2) {
+                // !mark
+                // 数字人开始说话
+            } else if (status == 4) {
+                // !mark
+                // 数字人说话结束
+            }
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+});
+```
+
+</Tab>
+
+<Tab title="Web">
+
+Web 端可通过监听 `recvExperimentalAPI` 回调获取房间自定义消息。为接收房间消息，建议在注册回调后调用 `callExperimentalAPI` 开启 `onRecvRoomChannelMessage`。
+
+```javascript
+zg.on("recvExperimentalAPI", (content) => {
+  try {
+    const contentData = typeof content === "string" ? JSON.parse(content) : content;
+    const method = contentData.method;
+    if (
+      method !== "onRecvRoomChannelMessage" &&
+      method !== "liveroom.room.on_recive_room_channel_message"
+    ) {
+      return;
+    }
+
+    const params = contentData.params || contentData.content;
+    const msgContent = params?.msg_content || params?.msgContent;
+    if (!msgContent) {
+      return;
+    }
+
+    const msgData = typeof msgContent === "string" ? JSON.parse(msgContent) : msgContent;
+
+    // 仅处理数字人产品的驱动状态消息
+    if (msgData.Product !== "digitalhuman") {
+      return;
+    }
+
+    if (msgData.Cmd !== 1001 || !msgData.Data) {
+      return;
+    }
+
+    const status = msgData.Data.Status;
+    const driveId = msgData.Data.DriveId;
+
+    if (status === 2) {
+      console.log(
+        driveId ? `数字人开始说话，DriveID: ${driveId}` : "数字人开始说话"
+      );
+    } else if (status === 4) {
+      console.log(
+        driveId ? `数字人说话结束，DriveID: ${driveId}` : "数字人说话结束"
+      );
+    }
+  } catch (error) {
+    console.error("处理 experimental API 消息失败:", error);
+  }
+});
+
+// 开启房间消息 experimental API
+await zg.callExperimentalAPI({
+  method: "onRecvRoomChannelMessage",
+  params: {},
+});
+```
+
+</Tab>
+</Tabs>
+
+#### 房间消息示例
+
+```json
+{
+  "method": "liveroom.room.on_recive_room_channel_message",
+  "params": {
+    "msg_content": "{\"Product\":\"digitalhuman\",\"Timestamp\":1774356158143,\"Cmd\":1001,\"Data\":{\"Status\":2,\"DriveId\":\"d5cfd6e5-5ed7-4030-8cb0-a026cef36f9c\"}}"
+  }
+}
+```
+
+说明：
+
+- 仅当 `Product = digitalhuman` 时，才表示当前消息属于数字人产品。
+- `Status = 2` 表示数字人开始说话。
+- `Status = 4` 表示数字人说话结束。
+- `DriveId` 可用于关联具体驱动任务。
+
+### 通过服务端回调监听驱动状态事件
+
+如果您希望由服务端统一管理状态，也可以通过数字人服务端回调感知驱动生命周期，再通过 WebSocket、IM、自定义信令等方式转发给客户端。
+
+#### 监听服务端回调
+
+请参考 [接收回调](../streaming-apis/receiving-callback) 文档，在服务端接收数字人事件通知。
+
+对于一次数字人驱动任务，通常可按以下方式映射说话状态：
+
+- `EventType = 4` 且 `Detail.Status = 2`：数字人开始说话。
+- `EventType = 4` 且 `Detail.Status = 4`：数字人说话结束。
+
+该方式更适合以下场景：
+
+- 由服务端统一维护状态机。
+- 需要把状态同步给多个客户端。
+- 需要和自有业务事件做聚合处理。
+
+## 推荐方案
+
+- 如果您的客户端已经接入 ZEGO Express SDK，推荐优先使用**客户端监听回调**的方式，接入更简单、链路更短。
+- 如果您的业务更依赖服务端统一调度，则建议结合**服务端回调**实现状态分发。
