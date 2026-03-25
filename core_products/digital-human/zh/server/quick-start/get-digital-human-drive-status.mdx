@@ -37,58 +37,9 @@ date: '2026-03-24'
 客户端可以通过实现 `ZegoEventHandler` 协议，监听 `onRecvExperimentalAPI` 回调获取 `method` 为 `liveroom.room.on_recive_room_channel_message` 的房间自定义消息。
 
 <CodeGroup>
-```objc YourService.m
-// 处理express onRecvExperimentalAPI接收到的消息
+```objc ZegoMainViewController+RTC.m
 - (void)onRecvExperimentalAPI:(NSString *)content {
-    NSError *error = nil;
-    NSDictionary *contentDict = [NSJSONSerialization JSONObjectWithData:[content dataUsingEncoding:NSUTF8StringEncoding]
-                                                                options:0
-                                                                  error:&error];
-    if (error || !contentDict) {
-        return;
-    }
-
-    // 1. 检查是否为房间消息
-    if (![contentDict[@"method"] isEqualToString:@"liveroom.room.on_recive_room_channel_message"]) {
-        return;
-    }
-
-    NSDictionary *params = contentDict[@"params"];
-    NSString *msgContent = params[@"msg_content"];
-    if (msgContent.length == 0) {
-        return;
-    }
-
-    // 2. 解析房间自定义消息内容
-    NSDictionary *msgDict = [NSJSONSerialization JSONObjectWithData:[msgContent dataUsingEncoding:NSUTF8StringEncoding]
-                                                            options:0
-                                                              error:&error];
-    if (error || !msgDict) {
-        return;
-    }
-
-    // 3. 判断是否为数字人产品的驱动状态消息
-    if (![msgDict[@"Product"] isEqualToString:@"digitalhuman"]) {
-        return;
-    }
-
-    // 4. 判断是否为数字人驱动状态消息 (Cmd = 1001)
-    if ([msgDict[@"Cmd"] intValue] != 1001) {
-        return;
-    }
-
-    NSDictionary *data = msgDict[@"Data"];
-    int status = [data[@"Status"] intValue];
-    NSString *driveId = data[@"DriveId"];
-
-    // 5. 更新 UI 或处理逻辑
-    if (status == 2) {
-        // !mark
-        NSLog(@"数字人开始说话，DriveID: %@", driveId);
-    } else if (status == 4) {
-        // !mark
-        NSLog(@"数字人说话结束，DriveID: %@", driveId);
-    }
+    [self handleExperimentalApi:content];
 }
 ```
 </CodeGroup>
@@ -99,59 +50,11 @@ date: '2026-03-24'
 
 客户端可通过监听 `onRecvExperimentalAPI` 回调获取 `method` 为 `liveroom.room.on_recive_room_channel_message` 的房间自定义消息。
 
-```java
+```java ZegoQuickStartMainActivity.java
 ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
     @Override
     public void onRecvExperimentalAPI(String content) {
-        try {
-            JSONObject contentJson = new JSONObject(content);
-            // 1. 检查是否为房间消息
-            if (!"liveroom.room.on_recive_room_channel_message".equals(
-                    contentJson.optString("method"))) {
-                return;
-            }
-
-            JSONObject params = contentJson.optJSONObject("params");
-            if (params == null) {
-                return;
-            }
-
-            String msgContent = params.optString("msg_content");
-            if (msgContent == null || msgContent.isEmpty()) {
-                return;
-            }
-
-            // 2. 解析房间自定义消息内容
-            JSONObject msgJson = new JSONObject(msgContent);
-            // 3. 判断是否为数字人产品的驱动状态消息
-            if (!"digitalhuman".equals(msgJson.optString("Product"))) {
-                return;
-            }
-
-            // 4. 判断是否为数字人驱动状态消息 (Cmd = 1001)
-            if (msgJson.optInt("Cmd", 0) != 1001) {
-                return;
-            }
-
-            JSONObject data = msgJson.optJSONObject("Data");
-            if (data == null) {
-                return;
-            }
-
-            int status = data.optInt("Status", 0);
-            String driveId = data.optString("DriveId", "");
-
-            // 5. 更新 UI 或处理逻辑
-            if (status == 2) {
-                // !mark
-                // 数字人开始说话
-            } else if (status == 4) {
-                // !mark
-                // 数字人说话结束
-            }
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
+        handleExperimentalApi(content);
     }
 });
 ```
@@ -162,53 +65,11 @@ ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
 
 Web 端可通过监听 `recvExperimentalAPI` 回调获取房间自定义消息。为接收房间消息，建议在注册回调后调用 `callExperimentalAPI` 开启 `onRecvRoomChannelMessage`。
 
-```javascript
+```javascript ControlPanel.vue
 zg.on("recvExperimentalAPI", (content) => {
-  try {
-    const contentData = typeof content === "string" ? JSON.parse(content) : content;
-    const method = contentData.method;
-    if (
-      method !== "onRecvRoomChannelMessage" &&
-      method !== "liveroom.room.on_recive_room_channel_message"
-    ) {
-      return;
-    }
-
-    const params = contentData.params || contentData.content;
-    const msgContent = params?.msg_content || params?.msgContent;
-    if (!msgContent) {
-      return;
-    }
-
-    const msgData = typeof msgContent === "string" ? JSON.parse(msgContent) : msgContent;
-
-    // 仅处理数字人产品的驱动状态消息
-    if (msgData.Product !== "digitalhuman") {
-      return;
-    }
-
-    if (msgData.Cmd !== 1001 || !msgData.Data) {
-      return;
-    }
-
-    const status = msgData.Data.Status;
-    const driveId = msgData.Data.DriveId;
-
-    if (status === 2) {
-      console.log(
-        driveId ? `数字人开始说话，DriveID: ${driveId}` : "数字人开始说话"
-      );
-    } else if (status === 4) {
-      console.log(
-        driveId ? `数字人说话结束，DriveID: ${driveId}` : "数字人说话结束"
-      );
-    }
-  } catch (error) {
-    console.error("处理 experimental API 消息失败:", error);
-  }
+  handleExperimentalApi(content);
 });
 
-// 开启房间消息 experimental API
 await zg.callExperimentalAPI({
   method: "onRecvRoomChannelMessage",
   params: {},
