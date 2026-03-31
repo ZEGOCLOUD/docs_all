@@ -1,9 +1,9 @@
+#! /usr/bin/env bun
 /**
  * 获取当前时间，并更新到 mdx 文件的 frontmatter 中
  */
 
-const fs = require('fs');
-const yaml = require('js-yaml');
+import fs from 'fs';
 
 /**
  * 更新 mdx 文件 frontmatter 中的日期
@@ -49,7 +49,7 @@ function updateTime(filePaths) {
 
       try {
         // 解析 YAML frontmatter
-        const parsedFrontmatter = yaml.load(frontmatterContent);
+        const parsedFrontmatter = Bun.YAML.parse(frontmatterContent);
         frontmatterObj = {
           ...(parsedFrontmatter || {}),
           date: updatedDate,
@@ -61,7 +61,7 @@ function updateTime(filePaths) {
     }
 
     // 生成新内容
-    const newContent = `---\n${yaml.dump(frontmatterObj)}---${otherContent}`;
+    const newContent = `---\n${Bun.YAML.stringify(frontmatterObj,null,2)}---${otherContent}`;
 
     try {
       fs.writeFileSync(filePath, newContent);
