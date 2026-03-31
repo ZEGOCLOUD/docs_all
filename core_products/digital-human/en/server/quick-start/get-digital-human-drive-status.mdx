@@ -1,0 +1,122 @@
+---
+date: '2026-03-24'
+---
+
+# Get Digital Human Drive Status
+
+When driving a digital human to broadcast in real time, if you need to coordinate business logic based on the digital human's "speaking" status (such as synchronizing subtitles, triggering subsequent business processes, etc.), you can listen to server-side or client-side callback events to obtain the digital human drive status.
+
+Digital human drive status messages include the following types:
+
+- The digital human starts speaking.
+- The digital human finishes speaking.
+
+## Quick Implementation
+
+To get the digital human drive status, there are two approaches:
+
+1. **Listen to the ZEGO Express SDK experimental API callback on the client side**.
+2. **Listen to digital human drive status events via server-side callbacks**, then send custom messages to the client through your signaling channel (such as WebSocket, etc.).
+
+### Prerequisites
+
+- Digital human service has been enabled and related permissions have been configured.
+- ZEGO Express SDK has been initialized and joined an [RTC room](/glossary/term-explanation#rtc-room).
+- The server has successfully created a digital human video stream task.
+- The client has successfully logged into the room and started playing the digital human audio/video stream.
+
+### Listen to ZEGO Express SDK Experimental API Callback on the Client Side
+
+<Note title="Note">This approach is simpler. It is recommended to use this method to get the digital human drive status.</Note>
+
+Listen to the ZEGO Express SDK experimental API callback (`onRecvExperimentalAPI`) on the client SDK, and handle the corresponding status events based on the message type. Below are sample codes for each platform:
+
+<Tabs>
+<Tab title="iOS">
+
+The client can implement the `ZegoEventHandler` protocol and listen to the `onRecvExperimentalAPI` callback to receive room custom messages where `method` is `liveroom.room.on_recive_room_channel_message`.
+
+<CodeGroup>
+```objc ZegoMainViewController+RTC.m
+- (void)onRecvExperimentalAPI:(NSString *)content {
+    [self handleExperimentalApi:content];
+}
+```
+</CodeGroup>
+
+</Tab>
+
+<Tab title="Android">
+
+The client can listen to the `onRecvExperimentalAPI` callback to receive room custom messages where `method` is `liveroom.room.on_recive_room_channel_message`.
+
+```java ZegoQuickStartMainActivity.java
+ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onRecvExperimentalAPI(String content) {
+        handleExperimentalApi(content);
+    }
+});
+```
+
+</Tab>
+
+<Tab title="Web">
+
+On the Web side, you can listen to the `recvExperimentalAPI` callback to receive room custom messages. To receive room messages, it is recommended to call `callExperimentalAPI` after registering the callback to enable `onRecvRoomChannelMessage`.
+
+```javascript ControlPanel.vue
+zg.on("recvExperimentalAPI", (content) => {
+  handleExperimentalApi(content);
+});
+
+await zg.callExperimentalAPI({
+  method: "onRecvRoomChannelMessage",
+  params: {},
+});
+```
+
+</Tab>
+</Tabs>
+
+#### Room Message Example
+
+```json
+{
+  "method": "liveroom.room.on_recive_room_channel_message",
+  "params": {
+    "msg_content": "{\"Product\":\"digitalhuman\",\"Timestamp\":1774356158143,\"Cmd\":1001,\"Data\":{\"Status\":2,\"DriveId\":\"d5cfd6e5-5ed7-4030-8cb0-a026cef36f9c\"}}"
+  }
+}
+```
+
+Description:
+
+- Only when `Product = digitalhuman`, the current message belongs to the digital human product.
+- `Status = 2` indicates the digital human starts speaking.
+- `Status = 4` indicates the digital human finishes speaking.
+- `DriveId` can be used to associate a specific drive task.
+
+### Listen to Drive Status Events via Server-Side Callbacks
+
+If you want the server to centrally manage the status, you can also use digital human server-side callbacks to sense the drive lifecycle, and then forward the status to the client via WebSocket, IM, custom signaling, and so on.
+
+#### Listen to Server-Side Callbacks
+
+Refer to the [Receiving Callbacks](../streaming-apis/receiving-callback) documentation to receive digital human event notifications on the server.
+
+For a single digital human drive task, the speaking status can be mapped as follows:
+
+- `EventType = 4` and `Detail.Status = 2`: The digital human starts speaking.
+- `EventType = 4` and `Detail.Status = 4`: The digital human finishes speaking.
+
+This approach is more suitable for the following scenarios:
+
+- The server centrally maintains the state machine.
+- Status needs to be synchronized to multiple clients.
+- Aggregation with your own business events is required.
+
+## Recommended Approach
+
+- If your client has already integrated the ZEGO Express SDK, it is recommended to prioritize the **client-side callback listening** approach, which is simpler to integrate with a shorter chain.
+- If your business relies more on centralized server-side scheduling, it is recommended to combine **server-side callbacks** for status distribution.
