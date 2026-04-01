@@ -4,7 +4,6 @@
  */
 
 const fs = require('fs');
-const yaml = require('js-yaml');
 
 /**
  * 更新 mdx 文件 frontmatter 中的日期
@@ -17,7 +16,6 @@ function updateTime(filePaths) {
   }
   const now = new Date();
   const updatedDate = now.getFullYear() + '-' + (now.getMonth() + 1).toString().padStart(2, '0') + '-' + now.getDate().toString().padStart(2, '0');
-  // console.log(`更新日期为 ${updatedDate}`);
 
   for (const filePath of filePaths) {
     if(!filePath.endsWith('.mdx')) {
@@ -33,36 +31,27 @@ function updateTime(filePaths) {
     }
 
     // 只匹配文件开头的 frontmatter（必须以 --- 开头）
-    // ^--- 确保从文件开头匹配，[\s\S]*? 匹配任意内容（非贪婪），\n--- 匹配结束标记
     const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
 
-    let frontmatterObj = {};
-    let otherContent = '';
+    let newContent = '';
 
     if(!frontmatterMatch) {
       console.warn(`${filePath} 没有有效的 frontmatter（必须以 --- 开头）`);
-      frontmatterObj = {date: updatedDate};
-      otherContent = '\n'+content;// 添加换行符避免 frontmatter 和内容之间没有换行符
+      // 没有 frontmatter，新增一个
+      newContent = `---\ndate: "${updatedDate}"\n---\n${content}`;
     } else {
-      const frontmatterContent = frontmatterMatch[1];
-      // 获取 frontmatter 之后的内容
-      otherContent = content.slice(frontmatterMatch[0].length);
+      const frontmatterStr = frontmatterMatch[1];
+      const otherContent = content.slice(frontmatterMatch[0].length);
 
-      try {
-        // 解析 YAML frontmatter
-        const parsedFrontmatter = yaml.load(frontmatterContent);
-        frontmatterObj = {
-          ...(parsedFrontmatter || {}),
-          date: updatedDate,
-        };
-      } catch(error) {
-        console.error(`${filePath} 的 frontmatter YAML 解析失败: ${error.message}`);
-        continue;
+      // 用正则匹配并替换 date 字段，支持 date: value / date: 'value' / date: "value"
+      if (/^date:/m.test(frontmatterStr)) {
+        const updated = frontmatterStr.replace(/^date:.*$/m, `date: "${updatedDate}"`);
+        newContent = `---\n${updated}\n---${otherContent}`;
+      } else {
+        // frontmatter 中没有 date 字段，在末尾添加
+        newContent = `---\n${frontmatterStr}\ndate: "${updatedDate}"\n---${otherContent}`;
       }
     }
-
-    // 生成新内容
-    const newContent = `---\n${yaml.dump(frontmatterObj,{forceQuotes: true})}---${otherContent}`;
 
     try {
       fs.writeFileSync(filePath, newContent);
