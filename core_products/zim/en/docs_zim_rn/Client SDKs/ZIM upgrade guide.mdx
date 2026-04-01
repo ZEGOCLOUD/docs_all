@@ -1,7 +1,297 @@
----
-articleID: 14694
+
+# ZIM Upgrade Guide
+
 ---
 
-import Content from "/core_products/zim/en/docs_zim_android/Client SDKs/ZIM upgrade guide.mdx"
+This document provides notes and important information for upgrading the ZIM React Native SDK.
 
-<Content platform="RN" />
+## Upgrade Guide for 2.19.0
+
+<Warning title="Warning">
+
+Starting from version 2.19.0, several APIs have significant changes. Please read the following guide carefully if you are upgrading from an earlier version to 2.19.0.
+</Warning>
+
+### downloadMediaFile and Related Callbacks
+
+The old `downloadMediaFile` API is deprecated. Please use the new [downloadMediaFile](@downloadMediaFile) API with the same name instead. The new version of [downloadMediaFile](@downloadMediaFile) adds a `config` parameter, which can be used to specify downloading a specific media item in a composite message.
+
+In [ZIMMediaDownloadingProgress](@ZIMMediaDownloadingProgress) and [ZIMMediaDownloadedResult](@-ZIMMediaDownloadedResult), the `message` parameter's type has changed from `ZIMMediaMessage` to `ZIMMessage` to support composite messages. TypeScript developers should adjust their code according to IDE compilation error hints.
+
+<CodeGroup>
+```typescript Usage in 2.19.0 (downloading a media item in a multi-message) {14-17,19,29}
+// Suppose multipleMessage.messageInfoList[0] is a text message, multipleMessage.messageInfoList[1] is an image message
+const multipleMessage: ZIMMessage = {
+    type: 10,
+    messageInfoList: [
+        { type: 1, message: "Hello, World!" },
+        { type: 11, fileLocalPath: '' }
+    ]
+}
+
+const config: ZIMMediaDownloadConfig = {
+    // Download the image message
+    messageInfoIndex: 1
+}
+
+zim.downloadMediaFile(multipleMessage, 1, config, (message: ZIMMessage, currentFileSize: number, totalFileSize: number) => {
+    // Download progress
+    // Developers need to check message type and convert to the corresponding message type
+    if (message.type === 10) {
+        const multipleMessage: ZIMMultipleMessage = message as ZIMMultipleMessage
+        // Handle composite message
+    }
+    // Handle other message types
+    ......
+
+}).then((res: ZIMMediaDownloadedResult) => {
+    // Download completed
+    // Developers need to check message type and convert to the corresponding message type
+    if (res.message.type === 10) {
+        const multipleMessage = res.message as ZIMMultipleMessage
+        // Handle composite message
+    }
+    // Handle other message types
+    ......
+}).catch((errorInfo) => {
+    // Download failed
+})
+```
+
+```typescript Usage in 2.19.0 (downloading a media message) {6,15}
+const imageMessage: ZIMMessage = {
+    type: 11,
+    fileLocalPath: ''
+}
+
+zim.downloadMediaFile(imageMessage, 1, (message: ZIMMessage, currentFileSize: number, totalFileSize: number) => {
+    // Download progress
+    // Developers need to check message type and convert to the corresponding message type
+    if (message.type === 11) {
+        const imageMessage: ZIMImageMessage = message as ZIMImageMessage
+        // Handle image message
+    }
+    // Handle other message types
+    ......
+}).then((res: ZIMMediaDownloadedResult) => {
+    // Download completed
+    // Developers need to check message type and convert to the corresponding message type
+    if (res.message.type === 11) {
+        const imageMessage = res.message as ZIMImageMessage
+        // Handle image message
+    }
+    // Handle other message types
+    ......
+}).catch((errorInfo) => {
+    // Download failed
+})
+```
+
+```typescript Usage in previous versions {6,8}
+const imageMessage: ZIMMessage = {
+    type: 11,
+    fileLocalPath: ''
+}
+
+zim.downloadMediaFile(imageMessage, 1, (message: ZIMMediaMessage, currentFileSize: number, totalFileSize: number) => {
+    // Download progress
+}).then((res: ZIMMediaDownloadedResult) => {
+    // Download completed
+}).catch((errorInfo) => {
+    // Download failed
+})
+```
+</CodeGroup>
+
+### sendMessage and Related Callbacks
+
+Since version 2.19.0, sending media messages should use the [sendMessage](@sendMessage) API. The `sendMediaMessage` API is deprecated to unify message sending and facilitate future extensibility.
+
+In [ZIMMessageSendNotification](@-ZIMMessageSendNotification), the [onMediaUploadingProgress](@onMediaUploadingProgress-ZIMMessageSendNotification) callback’s `message` parameter type has changed from `ZIMMessage` to `ZIMMediaMessage`. This ensures only media messages trigger the progress callback. TypeScript developers should adjust their code as per IDE compilation error prompts. (Currently, only developers using TypeScript and the [replyMessage](@replyMessage) API will encounter related compile errors.)
+
+<CodeGroup>
+```typescript Usage in 2.19.0 {10,14,19}
+const imageMessage: ZIMMessage = {
+    type: 11,
+    fileLocalPath: ''
+}
+
+const config: ZIMMessageSendConfig = {
+    priority: 1
+}
+
+const notification: ZIMMessageSendNotification = {
+    onMessageAttached: (message: ZIMMessage) => {
+        // Callback where developers can perform business logic before the message is sent
+    },
+    onMessageUploadingProgress: (message: ZIMMediaMessage, currentFileSize: number, totalFileSize: number) => {
+        // Media upload progress
+    }
+}
+
+zim.sendMessage(imageMessage, "TO_CONVERSATION_ID", 0, config, notification)
+    .then((res: ZIMMessageSentResult) => {
+        // Message sent result
+    }).catch((errorInfo) => {
+        // Message sending failed
+    })
+```
+
+```typescript Usage in previous versions {10,14,19}
+const imageMessage: ZIMMessage = {
+    type: 11,
+    fileLocalPath: ''
+}
+
+const config: ZIMMessageSendConfig = {
+    priority: 1
+}
+
+const notification: ZIMMediaMessageSendNotification = {
+    onMessageAttached: (message: ZIMMediaMessage) => {
+        // Callback where developers can perform business logic before the message is sent
+    },
+    onMessageUploadingProgress: (message: ZIMMediaMessage, currentFileSize: number, totalFileSize: number) => {
+        // Media upload progress
+    }
+}
+
+zim.sendMediaMessage(imageMessage, "TO_CONVERSATION_ID", 0, config, notification)
+    .then((res: ZIMMessageSentResult) => {
+        // Message sent result
+    }).catch((errorInfo) => {
+        // Message sending failed
+    })
+```
+</CodeGroup>
+
+
+## Upgrade Guide for 2.18.0
+
+<Warning title="Warning">
+
+Starting from version 2.18.0, several APIs have significant changes. Please read the following guide carefully if you are upgrading from an earlier version to 2.18.0.
+</Warning>
+
+### Peer Message Receive Callback
+
+The original single chat message receive callback `receivePeerMessage` is deprecated. Please use [peerMessageReceived](@peerMessageReceived) instead.
+
+The new callback supports:
+- Receiving online peer-to-peer messages while the user is online.
+- After the user re-logs in to ZIM SDK, receiving all offline peer messages sent within the last 7 days.
+
+```typescript
+// New API
+peerMessageReceived: (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => void;
+
+// Old API
+receivePeerMessage: (zim: ZIM, data: ZIMEventOfReceiveConversationMessageResult) => void;
+```
+
+### Room Message Receive Callback
+
+The original room message receive callback `receiveRoomMessage` is deprecated. Please use [roomMessageReceived](@roomMessageReceived) instead.
+
+The new callback supports:
+- Receiving online room messages while the user is online.
+- Once back online, if the user is still in the room, receiving all offline room messages sent while offline.
+
+```typescript
+// New API
+roomMessageReceived: (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => void;
+
+// Old API
+receiveRoomMessage: (zim: ZIM, data: ZIMEventOfReceiveConversationMessageResult) => void;
+```
+
+### Group Message Receive Callback
+
+The original group message receive callback `receiveGroupMessage` is deprecated. Please use [groupMessageReceived](@groupMessageReceived) instead.
+ 
+The new callback supports:
+- Receiving online group messages while the user is online.
+- After the user re-logs in to ZIM SDK, receiving all offline group messages sent within the past 7 days.
+
+```typescript
+// New API
+groupMessageReceived: (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => void;
+
+    
+// Old API
+receiveGroupMessage: (zim: ZIM, data: ZIMEventOfReceiveConversationMessageResult) => void;
+```
+
+## Upgrade Guide for 2.16.0
+
+<Warning title="Warning">
+
+Starting from version 2.16.0, several APIs have significant changes. Please read the following guide carefully if you are upgrading from an earlier version to 2.16.0.
+</Warning>
+
+#### callCancel
+
+<Note title="Note">
+
+The following changes only apply to **Advanced Mode** call invitations.
+</Note>
+
+In the new [callCancel](@callCancel) API, if the userIDs parameter contains a userID, the API will cancel the invitation for that specific callee only. If the userIDs parameter is empty, the API will cancel invitations for all callees.
+
+In contrast, the old version of `callCancel`, regardless of whether userIDs is empty or not, would cancel invitations for all callees.
+
+Since the old ZIM SDK does not support cancellation for individual callees, if you need to keep the old cancellation logic and also use the new single-cancel feature, please isolate call logic between old and new ZIM versions.
+
+<CodeGroup>
+```typescript Usage in 2.16.0
+// Cancel invitations for userIdA and userIdB only
+const callID = 'xxxx';
+const invitees = ['userIdA', 'userIdB'];  // List of invitee userIDs
+const config: ZIMCallCancelConfig  = { extendedData: 'xxxx' }; 
+zim.callCancel(invitees, callID, config)
+    .then((res: ZIMCallCancelSentResult) => {
+        // Success
+    })
+    .catch((err: ZIMError) => {
+        // Failure
+    })
+
+// Cancel the entire call invitation; works only if none of the callees have accepted
+const callID = 'xxxx';
+const invitees = [];  // List of invitee userIDs
+const config: ZIMCallCancelConfig = { extendedData: 'xxxx' }; 
+zim.callCancel(invitees, callID, config)
+    .then((res: ZIMCallCancelSentResult) => {
+        // Success
+    })
+    .catch((err: ZIMError) => {
+        // Failure
+    })
+```
+```typescript Usage in previous versions
+// Cancels the entire call invitation, regardless of whether userIDs is empty or contains userIDs. 
+// Works only if none of the callees have accepted.
+const callID = 'xxxx';
+const invitees = ['userIdA', 'userIdB'];  // List of invitee userIDs
+const config: ZIMCallCancelConfig = { extendedData: 'xxxx' }; 
+zim.callCancel(invitees, callID, config)
+    .then((res: ZIMCallCancelSentResult) => {
+        // Success
+    })
+    .catch((err: ZIMError) => {
+        // Failure
+    })
+
+// Cancel the entire call invitation; works only if none of the callees have accepted
+const callID = 'xxxx';
+const invitees = [];  // List of invitee userIDs
+const config: ZIMCallCancelConfig = { extendedData: 'xxxx' }; 
+zim.callCancel(invitees, callID, config)
+    .then((res: ZIMCallCancelSentResult) => {
+        // Success
+    })
+    .catch((err: ZIMError) => {
+        // Failure
+    })
+```
+</CodeGroup>  

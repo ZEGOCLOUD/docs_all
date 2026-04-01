@@ -1,7 +1,242 @@
----
-articleID: 14170
----
 
-import Content from "/core_products/zim/en/docs_zim_android/Client SDKs/ZIM upgrade guide.mdx"
+# ZIM Upgrade Guide
 
-<Content platform="Web" />
+- - -
+
+This document describes notes and considerations when upgrading the ZIM Web SDK version.
+
+## Upgrade Guide for 2.28.0
+
+<Warning title="Warning">
+
+In ZIM SDK version 2.28.0, the timing of event callback triggering has been adjusted. Please read the following guide when upgrading from an older version to 2.28.0.
+</Warning>
+
+### Changes to Event Callback Timing
+
+<Steps>
+<Step title="messageReactionsChanged">
+The [messageReactionsChanged](@messageReactionsChanged) event will now also be triggered on the client side after successfully calling [addMessageReaction](@addMessageReaction), [deleteMessageReaction](@deleteMessageReaction), or [deleteMessageAllReactions](@deleteMessageAllReactions). Please check whether your related business logic is affected after upgrading the SDK.
+</Step>
+
+<Step title="conversationChanged">
+The [conversationChanged](@conversationChanged) event will now also be triggered on the client side after successfully calling [deleteConversation](@deleteConversation). Please check whether your related business logic is affected after upgrading the SDK.
+</Step>
+
+<Step title="conversationsAllDeleted">
+The [conversationsAllDeleted](@conversationsAllDeleted) event will now also be triggered on the client side after successfully calling [deleteAllConversations](@deleteAllConversations). Please check whether your related business logic is affected after upgrading the SDK.
+</Step>
+
+</Steps>
+
+## Upgrade Guide for 2.21.0
+
+<Warning title="Warning">
+
+Starting from version 2.21.0, after `WebSocket` reconnects successfully, the SDK will no longer automatically rejoin previously joined rooms. Therefore, when upgrading from an older version to 2.21.0 and above, please read the following guide.
+</Warning>
+
+### Handling Room Reconnection
+
+If the SDK reconnects `WebSocket` due to background switch or network issues, it will not automatically rejoin rooms that have already been joined. Developers need to listen to both `connectionStateChanged` and `roomStateChanged` events and actively call `enterRoom` or `joinRoom` to rejoin rooms.
+
+For detailed handling, refer to: [ZIM Room Disconnection Handling](https://doc-zh.zego.im/faq/zim-reconnect-support#%E5%9C%BA%E6%99%AF-4zim-%E6%88%BF%E9%97%B4%E6%96%AD%E7%BD%91).
+
+## Upgrade Guide for 2.19.0
+
+<Warning title="Warning">
+
+Starting from version 2.19.0, the following interfaces have undergone major changes. Please read the following guide if you are upgrading from an older version to 2.19.0.
+</Warning>
+
+### sendMediaMessage
+
+Since version 2.19.0, you must use the [sendMessage](@sendMessage) interface to send media messages. The `sendMediaMessage` interface is deprecated to unify message sending and facilitate future expansion.
+
+In [ZIMMessageSendNotification](@-ZIMMessageSendNotification), the `message` parameter type of the [onMediaUploadingProgress](@onMediaUploadingProgress-ZIMMessageSendNotification) callback has changed from `ZIMMessage` to `ZIMMediaMessage`, ensuring only media messages trigger this callback. Typescript developers should fix their code according to IDE compilation errors. (Currently, only projects using Typescript and the [replyMessage](@replyMessage) interface may be affected and need to resolve compilation errors.)
+
+<CodeGroup>
+```typescript Usage since 2.19.0 {10,14,19}
+const imageMessage: ZIMMessage = {
+    type: 11,
+    fileLocalPath: File
+}
+
+const config: ZIMMessageSendConfig = {
+    priority: 1
+}
+
+const notification: ZIMMessageSendNotification = {
+    onMessageAttached: (message: ZIMMessage) => {
+        // Developers can listen to this callback for actions before the message is sent
+    },
+    onMessageUploadingProgress: (message: ZIMMediaMessage, currentFileSize: number, totalFileSize: number) => {
+        // Media upload progress
+    }
+}
+
+zim.sendMessage(imageMessage, "TO_CONVERSATION_ID", 0, config, notification)
+    .then((res: ZIMMessageSentResult) => {
+        // Message sent result
+    })
+    .catch((errorInfo) => {
+        // Message send failed
+    })
+```
+
+```typescript Usage in older versions {10,14,19}
+const imageMessage: ZIMMessage = {
+    type: 11,
+    fileLocalPath: File
+}
+
+const config: ZIMMessageSendConfig = {
+    priority: 1
+}
+
+const notification: ZIMMediaMessageSendNotification = {
+    onMessageAttached: (message: ZIMMediaMessage) => {
+        // Developers can listen to this callback for actions before the message is sent
+    },
+    onMessageUploadingProgress: (message: ZIMMediaMessage, currentFileSize: number, totalFileSize: number) => {
+        // Media upload progress
+    }
+}
+
+zim.sendMediaMessage(imageMessage, "TO_CONVERSATION_ID", 0, config, notification)
+    .then((res: ZIMMessageSentResult) => {
+        // Message sent result
+    })
+    .catch((errorInfo) => {
+        // Message send failed
+    })
+```
+</CodeGroup>
+
+## Upgrade Guide for 2.18.0
+
+<Warning title="Warning">
+
+Starting from version 2.18.0, the following interfaces have undergone significant changes. Please read the following guide if you are upgrading from an older version to 2.18.0.
+</Warning>
+
+### Peer-to-Peer Message Receiving Callback
+
+The original peer message receiving callback `receivePeerMessage` is deprecated. Please use [peerMessageReceived](@peerMessageReceived) instead.
+
+The new callback supports the following:
+- When the user is online, you can receive online peer messages via this callback.
+- After re-logging into the ZIM SDK, you can receive all peer messages sent during offline periods (up to 7 days).
+
+```typescript
+// New Interface
+peerMessageReceived: (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => void;
+
+// Old Interface
+receivePeerMessage: (zim: ZIM, data: ZIMEventOfReceiveConversationMessageResult) => void;
+```
+
+### Room Message Receiving Callback
+
+The original room message receiving callback `receiveRoomMessage` is deprecated. Please use [roomMessageReceived](@roomMessageReceived) instead.
+
+The new callback supports the following:
+- When the user is online, you can receive room messages in real-time.
+- When the user recovers from offline to online and is still in the room, lost room messages during the offline period will be received via this callback.
+
+```typescript
+// New Interface
+roomMessageReceived: (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => void;
+
+// Old Interface
+receiveRoomMessage: (zim: ZIM, data: ZIMEventOfReceiveConversationMessageResult) => void;
+```
+
+### Group Message Receiving Callback
+
+The original group message receiving callback `receiveGroupMessage` is deprecated. Please use [groupMessageReceived](@groupMessageReceived) instead.
+ 
+The new callback supports the following:
+- When the user is online, you can receive online group messages via this callback.
+- After re-logging into the ZIM SDK, you can receive all group messages sent during offline periods (up to 7 days).
+
+```typescript
+// New Interface
+groupMessageReceived: (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => void;
+
+// Old Interface
+receiveGroupMessage: (zim: ZIM, data: ZIMEventOfReceiveConversationMessageResult) => void;
+```
+
+## Upgrade Guide for 2.16.0
+
+<Warning title="Warning">
+
+Starting from version 2.16.0, the following interfaces have undergone major changes. Please read the following guide if you are upgrading from an older version to 2.16.0.
+</Warning>
+
+#### callCancel
+
+<Note title="Info">
+
+The following change only applies to **advanced mode** call invitations.
+</Note>
+
+In the new [callCancel](@callCancel) version, if the `userIDs` parameter contains one or more userIDs, the interface will only cancel invitations sent to these specific users. If the `userIDs` parameter is empty, all pending invitations will be cancelled.
+
+In older versions, the `callCancel` interface cancels invitations for all invitees regardless of whether the `userIDs` parameter is given or empty.
+
+Since the old ZIM SDK does not support single invitation cancellation, if you need to keep both the cancellation logic of older versions and the single cancellation capability of the new version, please isolate the call feature between old and new ZIM versions.
+
+<CodeGroup>
+```typescript Usage since 2.16.0
+// Cancel invitations to userIdA and userIdB specifically
+const callID = 'xxxx';
+const invitees = ['userIdA','userIdB'];  // Invitee userID list
+const config: ZIMCallCancelConfig = { extendedData: 'xxxx' }; 
+zim.callCancel(invitees, callID, config)
+    .then((res: ZIMCallCancelSentResult) => {
+        // Operation successful
+    })
+    .catch((err: ZIMError) => {
+        // Operation failed
+    })
+
+// Cancel the entire call invitation; succeeds only if all invitees have not accepted
+const callID = 'xxxx';
+const invitees = [];  // Invitee userID list
+const config: ZIMCallCancelConfig = { extendedData: 'xxxx' }; 
+zim.callCancel(invitees, callID, config)
+    .then((res: ZIMCallCancelSentResult) => {
+        // Operation successful
+    })
+    .catch((err: ZIMError) => {
+        // Operation failed
+    })
+```
+```typescript Usage in older versions
+// Cancels the entire call invitation, regardless of whether userIDs are passed in. Succeeds only if all invitees have not accepted.
+const callID = 'xxxx';
+const invitees = ['userIdA','userIdB'];  // Invitee userID list
+const config: ZIMCallCancelConfig = { extendedData: 'xxxx' }; 
+zim.callCancel(invitees, callID, config)
+    .then((res: ZIMCallCancelSentResult) => {
+        // Operation successful
+    })
+    .catch((err: ZIMError) => {
+        // Operation failed
+    })
+
+// Cancel the entire call invitation; succeeds only if all invitees have not accepted
+const callID = 'xxxx';
+const invitees = [];  // Invitee userID list
+const config: ZIMCallCancelConfig = { extendedData: 'xxxx' }; 
+zim.callCancel(invitees, callID, config)
+    .then((res: ZIMCallCancelSentResult) => {
+        // Operation successful
+    })
+    .catch((err: ZIMError) => {
+        // Operation failed
+    })
+```
+</CodeGroup>  
