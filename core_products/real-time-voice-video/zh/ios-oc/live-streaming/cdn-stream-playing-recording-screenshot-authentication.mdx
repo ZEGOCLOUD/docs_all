@@ -1,0 +1,411 @@
+---
+date: '2026-04-02'
+---
+# CDN 拉流、录制、截图鉴权
+
+- - -
+
+## 鉴权简介
+
+为防止攻击者盗取您的 URL 地址在别处使用、或伪造您的服务器生成 URL 地址，从而造成损失，您可以通过 [ZEGO 控制台](https://console.zego.im/) 自助配置 CDN 拉流、录制、截图鉴权。当开启鉴权后，需要在 URL 地址中拼接相关的鉴权参数，否则无法使用相关服务。
+
+<Warning title="注意">
+
+- 您从 [ZEGO 控制台](https://console.zego.im/) 配置拉流、录制、截图鉴权后，请妥善保管 **KEY** ，勿轻易泄露，以防被攻击者获取，造成损失。
+- 若您是 RTC 转推 CDN、或混流转推 CDN，ZEGO 服务器会自动帮您生成、并拼接 URL 地址的参数，您无需再自行生成；若您是通过第三方平台推流，则需要自行生成和拼接相关参数。
+
+</Warning>
+
+使用时，请您根据自己的 AppID 主营业务地区，选择对应的厂商页签进行配置：
+
+- AppID 主营业务地区为 `大陆`，请选择 "腾讯云" 或 "华为云" 页签。
+- AppID 主营业务地区为 `港澳台或海外`，请选择 "网宿云" 页签。
+
+## 生成鉴权 URL
+
+<Tabs>
+<Tab title="腾讯云">
+
+#### 拉流鉴权
+
+<Steps>
+<Step title="生成鉴权密钥">
+
+请前往 [ZEGO 控制台](https://console.zego.im/)，在您的 "项目配置 > 服务配置 > ZEGO CDN > 拉流鉴权" 中，开启鉴权，在弹出的文本框中配置或自动生成拉流鉴权 KEY。
+
+<Frame width="512" height="auto" caption="">
+  <img src="https://doc-media.zego.im/sdk-doc/Pics/Express/tencent_pull_auth.png" />
+</Frame>
+
+其中，主 KEY 为必填、备 KEY 为选填。**我们建议您同时配置主 KEY 和备 KEY，如果主 KEY 泄露，可平滑切换到备 KEY，不影响您的业务使用。**
+
+</Step>
+<Step title="生成 txTime">
+
+`txTime` 指该 URL 地址的有效期。
+
+例如，当前的时间是 2018-12-29 11:13:45，期望新生成的 URL 是在 3 小时后失效，那么：
+
+1. txTime 就可以设置为 2018-12-29 14:13:45。
+2. 再将该时间转换成 Unix 时间戳格式（即 1546064025）。
+3. 然后再转换成十六进制，以进一步压缩字符长度，得到 txTime = 5c271099（十六进制）。
+
+</Step>
+<Step title="生成 txSecret">
+
+txSecret 的生成方法是 `txSecret = MD5(KEY + StreamName + txTime)`。
+
+其中：
+
+- KEY：步骤 1 中配置的加密 KEY。
+- StreamName：流名称，用户自定义，用于标识直播流。
+- txTime：步骤 2 中生成的 txTime。
+- MD5：标准的 MD5 单向不可逆哈希算法。
+
+</Step>
+<Step title="得到 URL 地址">
+
+防盗链 URL 的生成规则是在原始 URL 尾部，以查询参数的形式加入防盗链参数，按照以上步骤完成后，最终 URL 格式如下：
+
+`rtmp://xxx.xx.xx/{path}?txSecret={txSecret}&txTime={txTime}`
+
+示例如下（示例 URL，该 URL 仅作为格式参考，请勿直接线上使用）：
+
+```url
+rtmp://push-tencent1.zego.im/live/123?txSecret=235cec79bf9483439762ddfd491387e2&txTime=5c271099
+```
+
+</Step>
+</Steps>
+
+#### 录制鉴权
+
+<Steps>
+<Step title="生成鉴权密钥">
+
+请前往 [ZEGO 控制台](https://console.zego.im/)，在您的 "项目配置 > 服务配置 > ZEGO CDN > 录制截图配置" 中，开启鉴权，在弹出的文本框中配置或自动生成录制鉴权 KEY。腾讯云录制鉴权仅支持主 KEY 设置。
+
+<Frame width="512" height="auto" caption="">
+  <img src="https://doc-media.zego.im/sdk-doc/Pics/Express/tencent_record_auth.png" />
+</Frame>
+
+</Step>
+<Step title="生成 URL 地址的有效期">
+
+例如，当前的时间是 2018-12-29 11:13:45，期望新生成的 URL 是在 3 小时后失效，那么：
+
+1. 失效时间可以设置为 2018-12-29 14:13:45。
+2. 再将该时间转换成 Unix 时间戳格式（即 1546064025）。
+3. 然后再转换成十六进制，得到 t = 5c271099（十六进制）。
+
+</Step>
+<Step title="生成 sign">
+
+sign 的生成方法是 `sign = MD5(KEY + Dir + t + exper + rlimit + us)`。
+
+其中：
+
+- KEY：鉴权密钥。
+- Dir：视频原始 URL 的 PATH 中除去文件名的那部分路径。如果原始 URL 为 `http://example.com/dir1/dir2/myVideo.mp4`，则播放路径为 `/dir1/dir2/`。
+- t：播放地址的过期时间戳，单位为秒，以 Unix 时间的十六进制小写形式表示。过期后该 URL 将不再有效，返回 403 响应码。考虑到机器之间可能存在时间差，防盗链 URL 的实际过期时间一般比指定的过期时间长 5 分钟，即额外给出 300 秒的容差时间。建议过期时间戳不要过短，确保视频有足够时间完整播放。
+- exper：试看时长，单位为秒，以十进制表示，不填或者填 0 表示不试看（即返回完整视频）。试看时长不要超过视频原始时长，否则可能导致播放失败。
+- rlimit：最多允许多少个不同 IP 的终端播放，以十进制表示，最大值为 9，不填表示不做限制。当限制 URL 只能被 1 个人播放时，建议 rlimit 不要严格限制成 1（例如可设置为 3），因为移动端断网后重连 IP 可能改变。
+- us：链接标识，用于随机化一个防盗链 URL，增强链接的唯一性。建议每次生成防盗链 URL 时，指定一个随机的 us 值。
+- MD5：标准的 MD5 单向不可逆哈希算法。
+
+</Step>
+<Step title="得到 URL 地址">
+
+防盗链 URL 的生成规则是在原始 URL 尾部，以查询参数的形式加入防盗链参数，按照以上步骤完成后，最终 URL 格式如下：
+
+`http://xxx.xx.xx/{path}/{filename}.mp4?t={t}&us={us}&sign={sign}`
+
+示例如下（示例 URL，该 URL 仅作为格式参考，请勿直接线上使用）：
+
+```url
+http://example.com/dir1/dir2/myVideo.mp4?t=5c271099&us=randomstr&sign=5d5b79b6c4b0e3e5e0f1a2b3c4d5e6f7
+```
+
+</Step>
+</Steps>
+
+#### 截图鉴权
+
+<Steps>
+<Step title="生成鉴权密钥">
+
+请前往 [ZEGO 控制台](https://console.zego.im/)，在您的 "项目配置 > 服务配置 > ZEGO CDN > 录制截图配置" 中，开启鉴权，在弹出的文本框中配置或自动生成截图鉴权 KEY。
+
+<Frame width="512" height="auto" caption="">
+  <img src="https://doc-media.zego.im/sdk-doc/Pics/Express/tencent_screenshot_auth.png" />
+</Frame>
+
+其中，主 KEY 为必填、备 KEY 为选填。**我们建议您同时配置主 KEY 和备 KEY，如果主 KEY 泄露，可平滑切换到备 KEY，不影响您的业务使用。**
+
+</Step>
+<Step title="生成 txTime">
+
+`txTime` 指该 URL 地址的有效期。计算方式与拉流鉴权的 txTime 相同。
+
+例如，当前的时间是 2018-12-29 11:13:45，期望新生成的 URL 是在 3 小时后失效，那么：
+
+1. txTime 就可以设置为 2018-12-29 14:13:45。
+2. 再将该时间转换成 Unix 时间戳格式（即 1546064025）。
+3. 然后再转换成十六进制，得到 txTime = 5c271099（十六进制）。
+
+</Step>
+<Step title="生成 txSecret">
+
+txSecret 的生成方法是 `txSecret = MD5(KEY + filePath + txTime)`。
+
+其中：
+
+- KEY：鉴权密钥。
+- filePath：文件 URI 路径，例如 `/1.jpg`。
+- txTime：十六进制时间戳。
+- MD5：标准的 MD5 单向不可逆哈希算法。
+
+</Step>
+<Step title="得到 URL 地址">
+
+防盗链 URL 的生成规则是在原始 URL 尾部，以查询参数的形式加入防盗链参数，按照以上步骤完成后，最终 URL 格式如下：
+
+`http://xxx.xx.xx/{path}/{filename}.jpg?txSecret={txSecret}&txTime={txTime}`
+
+示例如下（示例 URL，该 URL 仅作为格式参考，请勿直接线上使用）：
+
+```url
+http://example.com/screenshot/1.jpg?txSecret=a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6&txTime=5c271099
+```
+
+</Step>
+</Steps>
+
+</Tab>
+<Tab title="网宿云">
+
+#### 拉流鉴权
+
+<Steps>
+<Step title="生成鉴权密钥">
+
+请前往 [ZEGO 控制台](https://console.zego.im/)，在您的 "项目配置 > 服务配置 > ZEGO CDN > 拉流鉴权" 中，开启鉴权，在弹出的文本框中配置或自动生成拉流鉴权 KEY。
+
+<Frame width="512" height="auto" caption="">
+  <img src="https://doc-media.zego.im/sdk-doc/Pics/Express/wangsu_pull_auth.png" />
+</Frame>
+
+其中，主 KEY 为必填、备 KEY 为选填。**我们建议您同时配置主 KEY 和备 KEY，如果主 KEY 泄露，可平滑切换到备 KEY，不影响您的业务使用。**
+
+</Step>
+<Step title="生成 wsABStime">
+
+`wsABStime` 指该 URL 地址的有效期。计算方式与 txTime 相同，转换为十六进制后**注意大写**。
+
+例如，当前的时间是 2018-12-29 11:13:45，期望新生成的 URL 是在 3 小时后失效，那么：
+
+1. wsABStime 就可以设置为 2018-12-29 14:13:45。
+2. 再将该时间转换成 Unix 时间戳格式（即 1546064025）。
+3. 然后再转换成十六进制，得到 wsABStime = 5C271099（十六进制，**注意大写**）。
+
+</Step>
+<Step title="生成 wsSecret">
+
+wsSecret 的生成方法是 `wsSecret = MD5(wsABStime + StreamName + KEY)`。
+
+其中：
+
+- wsABStime：十六进制时间戳，如 5C271099。
+- StreamName：路径格式为 `/接入点/streamID`，如 `/live/streamid123`。
+- KEY：鉴权密钥。
+- MD5：标准的 MD5 单向不可逆哈希算法。
+
+完整示例：
+
+```plaintext
+wsSecret = MD5(5C271099/live/streamid123KEY123)
+```
+
+</Step>
+<Step title="得到 URL 地址">
+
+防盗链 URL 的生成规则是在原始 URL 尾部，以查询参数的形式加入防盗链参数，按照以上步骤完成后，最终 URL 格式如下：
+
+`rtmp://xxx.xx.xx/{path}?wsSecret={wsSecret}&wsABStime={wsABStime}`
+
+示例如下（示例 URL，该 URL 仅作为格式参考，请勿直接线上使用）：
+
+```url
+rtmp://push-ws1.zego.im/live/123?wsSecret=235cec79bf9483439762ddfd491387e2&wsABStime=5C271099
+```
+
+</Step>
+</Steps>
+
+#### 录制、截图鉴权
+
+<Steps>
+<Step title="生成鉴权密钥">
+
+请前往 [ZEGO 控制台](https://console.zego.im/)，在您的 "项目配置 > 服务配置 > ZEGO CDN > 录制截图配置" 中，开启鉴权，在弹出的文本框中配置或自动生成录制、截图鉴权 KEY。
+
+| 录制鉴权示例 | 截图鉴权示例 |
+|---|---|
+| <Frame width="280" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/wangsu_record_auth.png" /></Frame> | <Frame width="280" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/wangsu_screenshot_auth.png" /></Frame> |
+
+其中，主 KEY 为必填、备 KEY 为选填。**我们建议您同时配置主 KEY 和备 KEY，如果主 KEY 泄露，可平滑切换到备 KEY，不影响您的业务使用。**
+
+</Step>
+<Step title="生成 wsABStime">
+
+`wsABStime` 指该 URL 地址的有效期。计算方式与拉流鉴权的 wsABStime 相同。
+
+```plaintext
+wsABStime = 5C271099
+```
+
+</Step>
+<Step title="生成 wsSecret">
+
+wsSecret 的生成方法是 `wsSecret = MD5(wsABStime + uri + KEY)`。
+
+其中：
+
+- wsABStime：十六进制时间戳，如 5C271099。
+- uri：统一资源标识符，如 `/123.flv`。
+- KEY：鉴权密钥。
+- MD5：标准的 MD5 单向不可逆哈希算法。
+
+完整示例：
+
+```plaintext
+wsSecret = MD5(5C271099/123.flvKEY123)
+```
+
+</Step>
+<Step title="得到 URL 地址">
+
+防盗链 URL 的生成规则是在原始 URL 尾部，以查询参数的形式加入防盗链参数，按照以上步骤完成后，最终 URL 格式如下：
+
+`http://xxx.xx.xx/{path}/{filename}.flv?wsSecret={wsSecret}&wsABStime={wsABStime}`
+
+示例如下（示例 URL，该 URL 仅作为格式参考，请勿直接线上使用）：
+
+```url
+http://example.com/record/123.flv?wsSecret=235cec79bf9483439762ddfd491387e2&wsABStime=5C271099
+```
+
+</Step>
+</Steps>
+
+</Tab>
+<Tab title="华为云">
+
+#### 拉流鉴权
+
+<Steps>
+<Step title="获取鉴权密钥">
+
+请前往 [ZEGO 控制台](https://console.zego.im/)，在您的 "项目配置 > 服务配置 > ZEGO CDN > 拉流鉴权" 中，开启鉴权，在弹出的文本框中配置或自动生成拉流鉴权 KEY。华为云拉流鉴权仅支持主 KEY 设置。
+
+<Frame width="512" height="auto" caption="">
+  <img src="https://doc-media.zego.im/sdk-doc/Pics/Express/huawei_pull_auth.png" />
+</Frame>
+
+</Step>
+<Step title="生成 hwTime">
+
+`hwTime` 指该 URL 地址的有效时长。
+
+例如，当前的时间是 2018-12-29 11:13:45，期望新生成的 URL 是在 3 小时后失效，那么：
+
+1. hwTime 就可以设置为 2018-12-29 14:13:45。
+2. 再将该时间转换成 Unix 时间戳格式（即 1546064025）。
+3. 然后再转换成十六进制，得到 hwTime = 5c271099（十六进制）。
+
+</Step>
+<Step title="生成 hwSecret">
+
+hwSecret 的生成方法是 `hwSecret = hmac_sha256(KEY, StreamName + hwTime)`。
+
+其中：
+
+- KEY：鉴权密钥。
+- StreamName：流名称，用户自定义，用于标识直播流。
+- hwTime：十六进制时间戳。
+- hmac_sha256：HMAC-SHA256 加密算法。
+
+</Step>
+<Step title="得到 URL 地址">
+
+防盗链 URL 的生成规则是在原始 URL 尾部，以查询参数的形式加入防盗链参数，按照以上步骤完成后，最终 URL 格式如下：
+
+`rtmp://xxx.xx.xx/{path}?hwSecret={hwSecret}&hwTime={hwTime}`
+
+示例如下（示例 URL，该 URL 仅作为格式参考，请勿直接线上使用）：
+
+```url
+rtmp://push-huawei1.zego.im/live/123?hwSecret=ce201856a0957413319e883c8ccae13602f01d3d91e21daf5161964cf708a6a8&hwTime=5c271099
+```
+
+</Step>
+</Steps>
+
+#### 录制、截图鉴权
+
+<Steps>
+<Step title="获取鉴权密钥">
+
+请前往 [ZEGO 控制台](https://console.zego.im/)，在您的 "项目配置 > 服务配置 > ZEGO CDN > 录制截图配置" 中，开启鉴权，在弹出的文本框中配置或自动生成录制、截图鉴权 KEY。
+
+| 录制鉴权示例 | 截图鉴权示例 |
+|---|---|
+| <Frame width="280" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/huawei_record_auth.png" /></Frame> | <Frame width="280" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/Express/huawei_screenshot_auth.png" /></Frame> |
+
+其中，主 KEY 为必填、备 KEY 为选填。**我们建议您同时配置主 KEY 和备 KEY，如果主 KEY 泄露，可平滑切换到备 KEY，不影响您的业务使用。**
+
+</Step>
+<Step title="生成 hwTime">
+
+`hwTime` 指当前时间戳并转换为十六进制。
+
+```plaintext
+hwTime = 5c271099
+```
+
+</Step>
+<Step title="生成 hwSecret">
+
+hwSecret 的生成方法是 `hwSecret = sha256(KEY + uri + hwTime)`。
+
+其中：
+
+- KEY：鉴权密钥。
+- uri：获取文件路径（以 `/` 开头）。
+- hwTime：十六进制时间戳。
+
+</Step>
+<Step title="得到 URL 地址">
+
+防盗链 URL 的生成规则是在原始 URL 的路径中嵌入鉴权参数，按照以上步骤完成后，最终 URL 格式如下：
+
+`http://DomainName/{hwSecret}/{hwTime}/{uri}`
+
+示例如下（示例 URL，该 URL 仅作为格式参考，请勿直接线上使用）：
+
+```url
+http://example.com/ce201856a0957413319e883c8ccae13602f01d3d91e21daf5161964cf708a6a8/5c271099/screenshot/1.jpg
+```
+
+</Step>
+</Steps>
+
+</Tab>
+</Tabs>
+
+## 相关文档
+
+- [通过 URL 拉流](./playing-stream-by-url.mdx)
+- [CDN 推流鉴权](./cdn-stream-publishing-authentication.mdx)
+
+{/* 本文不要直接翻译 */}
