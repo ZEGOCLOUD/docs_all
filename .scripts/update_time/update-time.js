@@ -1,3 +1,4 @@
+#! /usr/bin/env bun
 /**
  * 获取当前时间，并更新到 mdx 文件的 frontmatter 中
  */
@@ -61,7 +62,7 @@ function updateTime(filePaths) {
     }
 
     // 生成新内容
-    const newContent = `---\n${yaml.dump(frontmatterObj)}---${otherContent}`;
+    const newContent = `---\n${yaml.dump(frontmatterObj,{forceQuotes: true})}---${otherContent}`;
 
     try {
       fs.writeFileSync(filePath, newContent);

@@ -37,7 +37,29 @@ api: some/path  # ← Has 'api' field, SKIP this file
 
 These MDX files are auto-generated from OpenAPI YAML specs.
 
-### 3. Manual Translation Only
+### 3. OpenAPI YAML Files - Run `docuo god` After Translation
+
+When translating **OpenAPI YAML files** (files defined in `docuo.config.json` under `openapi` node):
+
+1. **Verify the yaml file is in openapi config**: Check `docuo.config.json` to find the openapi group name (e.g., "rtc", "zim", "aiagent")
+
+2. **Translate the yaml file**: Translate Chinese content (descriptions, summaries, etc.) in the yaml file
+
+3. **Run `docuo god` command** to regenerate the corresponding MDX files:
+
+```bash
+cd <documentation_root>
+docuo god <openapi-group-name>
+```
+
+4. **Verify MDX was regenerated**: Check `git status` to confirm the mdx file was updated
+
+**Example**:
+- Translated `core_products/real-time-voice-video/en/server/api-reference/room/close.yaml`
+- Run `docuo god rtc`
+- Verify `close.mdx` was updated
+
+### 4. Manual Translation Only
 
 **STRICTLY FORBIDDEN**:
 - Writing scripts for batch translation
@@ -46,7 +68,7 @@ These MDX files are auto-generated from OpenAPI YAML specs.
 
 Translate each file manually, word by word, regardless of file count or size.
 
-### 4. Translation Scope
+### 5. Translation Scope
 
 **Translate**:
 - Prose descriptions and explanations
@@ -64,7 +86,7 @@ Translate each file manually, word by word, regardless of file count or size.
 - MDX/JSX component names
 - Frontmatter keys
 
-### 5. Format Preservation
+### 6. Format Preservation
 
 Maintain all original formatting:
 - Markdown syntax (headings, lists, bold, italic)
@@ -75,17 +97,18 @@ Maintain all original formatting:
 
 ## Translation Process
 
-1. **Check frontmatter**: If contains `api` field, skip and report
-2. **Load terminology**: Read common and product-specific CSV files
-3. **Translate content**: Apply terminology, translate prose and comments
-4. **Convert punctuation**: Chinese punctuation → English punctuation
+1. **Check file size**: Count file lines first. If > 500 lines, use Read tool with `offset` and `limit` parameters to read in batches (e.g., 300 lines per batch) to avoid context overflow errors
+2. **Check frontmatter**: If contains `api` field, skip and report
+3. **Load terminology**: Read common and product-specific CSV files
+4. **Translate content**: Apply terminology, translate prose and comments (process batch by batch for large files)
+5. **Convert punctuation**: Chinese punctuation → English punctuation
    - `。` → `.`
    - `，` → `,`
    - `：` → `:` (except in YAML keys)
    - `（）` → `()`
    - `《》` → `""`
-5. **Add spacing**: Space between English words and punctuation
-6. **Verify**: No Chinese characters or punctuation in output
+6. **Add spacing**: Space between English words and punctuation
+7. **Verify**: No Chinese characters or punctuation in output
 
 ## Quality Standards
 
@@ -146,6 +169,24 @@ description: Interface name: Get user list
 // CORRECT
 description: |
   Interface name: Get user list
+```
+
+### 5. MDX Import Translation
+
+When translating files with MDX imports:
+
+1. **Check if the snippet file for English exists**. If not, create it by copying the Chinese snippet file and translating the content.
+
+2. **Translate the import path** - change `zh` to `en`:
+
+```mdx
+// Before
+import ContentA from '/core_products/aiagent/zh/server/some-snippet.mdx'
+import ContentB from '/snippets/Reuse/SignatureVerificationZH.mdx'
+
+// After
+import ContentA from '/core_products/aiagent/en/server/some-snippet.mdx'
+import ContentB from '/snippets/Reuse/SignatureVerificationEN.mdx'
 ```
 
 ## Additional Resources
