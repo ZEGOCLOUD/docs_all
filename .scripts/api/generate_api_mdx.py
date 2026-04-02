@@ -123,6 +123,30 @@ def get_lang_config(path: Path) -> Dict[str, Any]:
 # 文件读取
 # ============================================================================
 
+def clean_escaped_brackets(s: str) -> str:
+    """移除数组泛型尖括号前的多余反斜杠转义。
+
+    修复如 ArrayList\\<String>、List\\<string\\>、std::vector\\<int\\> 等模式，
+    还原为 ArrayList<String>、List<string>、std::vector<int>。
+    """
+    if not s:
+        return s
+    return re.sub(r'\\+([<>])', r'\1', s)
+
+
+def clean_escaped_brackets_in_obj(obj: Any) -> None:
+    """递归遍历 JSON 对象，清理 type 和 full_code 字段中多余的转义尖括号。"""
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            if key in ('type', 'full_code') and isinstance(value, str):
+                obj[key] = clean_escaped_brackets(value)
+            elif isinstance(value, (dict, list)):
+                clean_escaped_brackets_in_obj(value)
+    elif isinstance(obj, list):
+        for item in obj:
+            clean_escaped_brackets_in_obj(item)
+
+
 def read_json_files(src_dir: Path) -> List[Dict[str, Any]]:
     files = sorted([p for p in src_dir.iterdir() if p.suffix == ".json" and p.is_file()])
     result = []
@@ -133,6 +157,8 @@ def read_json_files(src_dir: Path) -> List[Dict[str, Any]]:
             # 跳过非字典类型的 JSON（如 hotObject.json 是数组）
             if not isinstance(obj, dict):
                 continue
+            # 清理 type 和 full_code 字段中多余的转义尖括号
+            clean_escaped_brackets_in_obj(obj)
             obj["__file_name"] = p.name
             result.append(obj)
         except Exception as e:
