@@ -35,17 +35,39 @@ This skill handles anchor errors in:
 python3 ${doc_root}/.docuo/scripts/config_helper.py --resolve-url <url-path or url>
 ```
 
-### 2. Collect Headings from Target File
+### 2. Collect Anchors from Target File
 
-Scan the target file for all headings:
+Run the `collect-valid-anchors.py` script on the target file to get all valid anchors:
 
-- **Markdown headings**: `## Heading Text`, `### Heading Text`, etc. (h1-h5)
-- **Step components**: `<Step title="Heading Text">` or `<Step titleSize="h2" title="Heading Text">`
+```bash
+python3 ./scripts/collect-valid-anchors.py <target-mdx-file-path>
+```
 
-Also detect special heading wrappers:
-- `<Steps titleSize="h3">` with child `<Step title="...">` or `<Step titleSize="h2" title="...">`
+The script outputs a JSON object:
 
-**Note**: For external links, heading collection is not possible (skip to step 3 with provided headings or user input). For pure internal page anchors, use the source file itself as the target.
+```json
+{
+  "count": 12,
+  "anchors": [
+    { "type": "md_heading", "value": "quick-start" },
+    { "type": "a_tag",      "value": "prerequisites" },
+    { "type": "h_tag",      "value": "api-ref" },
+    { "type": "step",       "value": "integrate-sdk" },
+    { "type": "param_field","value": "room-id" }
+  ]
+}
+```
+
+Anchor types:
+- `md_heading` — Markdown `#` heading
+- `a_tag` — HTML `<a id="...">` tag
+- `h_tag` — HTML `<h1>`–`<h6>` tag with `id` attribute
+- `step` — `<Step>` component (only when `titleSize` is h1–h5)
+- `param_field` — `<ParamField>` component
+
+When `count > 100`, the script returns only the first 100 anchors.
+
+**Note**: For external links, heading collection is not possible (skip to step 3 with provided anchors or user input). For pure internal page anchors, use the source file itself as the target.
 
 ### 3. Semantic Matching
 
@@ -69,27 +91,61 @@ Extract the anchor text from the broken link (e.g., `#prerequisites` → "prereq
 
 ### 4. Check or Generate Anchor ID
 
-For the matched heading:
+Compare the broken anchor text against the anchors collected in step 2.
+Apply the **first matching rule** below:
 
-1. **Check if anchor already exists**:
-   - Look for `<a id="anchor-id" />` or `<a id="anchor-id"></a>` next to the heading
-   - Example: `## 前提条件 <a id="prerequisites" />`
+#### Rule A — High string similarity (> 90%)
 
-2. **If anchor exists**: Use the existing anchor ID to replace the broken one
+If any collected anchor's `value` has **string similarity > 90%** with the broken anchor (case-insensitive, after normalizing hyphens/underscores/spaces), replace the broken anchor directly with that `value`. No file modification needed.
 
-3. **If anchor doesn't exist**:
-   - **For standard headings (h1-h5)**:
-     - Generate anchor ID from heading text (lowercase, spaces to hyphens, remove special chars)
-     - Insert `<a id="generated-id" />` after the heading text or on the next line
-     - Use the generated ID to replace the broken anchor
-   - **For `<Step>` components**:
-     - Step components don't support `<a id>` tags
-     - Use the `title` attribute value directly (after normalization) as the anchor ID
-     - Replace the broken anchor with the normalized title
+#### Rule B — Same meaning across Chinese / English
+
+If no Rule A match, check whether any collected anchor has the **same semantic meaning** as the broken anchor when compared across Chinese and English (e.g., `#prerequisites` broken → collected anchor value `前提条件` in a Chinese heading). When a match is found:
+
+1. Decide the **English anchor name** (e.g., `prerequisites`) — must be ASCII only, lowercase, hyphens for spaces.
+2. Call `add-anchor.py` to insert the anchor into the target MDX file:
+
+```bash
+python3 ./scripts/add-anchor.py <target-mdx-file> \
+  --type <anchor.type> \
+  --value <anchor.value> \
+  --new-id <english-anchor-name>
+```
+
+3. Replace the broken anchor in the source file with the new English anchor name.
+
+> **Note**: `step` and `param_field` types are not supported by `add-anchor.py`. For these types, skip the `add-anchor.py` call and directly replace the broken anchor with the matched anchor's `value` (the Chinese anchor value is acceptable — no need to convert to English).
+
+#### Rule C — No meaningful match
+
+If neither Rule A nor Rule B applies (no anchor with similar or equivalent meaning exists), **remove the anchor fragment** from the link and convert it to plain text or a link without anchor.
+
+Example: `[Prerequisites](#prerequisites)` → `Prerequisites` (plain text) or `[Prerequisites](./quick-start.mdx)` (link without anchor).
 
 ### 5. Apply Fix
 
-Update the markdown file to replace the broken anchor with the corrected one.
+Update the source file to replace the broken anchor with the corrected one.
+
+### 6. Global Search and Replace
+
+For **relative links** and **internal links**, the same broken anchor may appear in multiple files across the repo. After fixing the anchor, run `replace-anchor.py` to propagate the change globally:
+
+```bash
+python3 ${doc_root}/.scripts/check/replace-link.py <old-link> <new-link>
+```
+
+- `<old-link>` — the exact broken link as it appears in files, including the anchor fragment (e.g., `./some-file.mdx#old-anchor` or `/instance/path#old-anchor`)
+- `<new-link>` — the corrected full link with the new anchor (e.g., `./some-file.mdx#new-anchor`)
+
+The script searches all `.mdx`, `.md`, `.yaml`, `.yml` files in the repo and replaces every exact occurrence.
+
+Use `--dry-run` first to preview affected files before writing:
+
+```bash
+python3 ${doc_root}/.scripts/check/replace-link.py <old-link> <new-link> --dry-run
+```
+
+**Note**: This step applies to relative and internal links only. Pure page-internal anchors (`#anchor`) are file-specific and should not be globally replaced.
 
 ## Example
 
@@ -134,7 +190,10 @@ Update the markdown file to replace the broken anchor with the corrected one.
 
 ## Related Scripts
 
-- `${doc_root}/.docuo/scripts/config_helper.py` - Core utility for URL/file path resolution
+- `${doc_root}/.docuo/scripts/config_helper.py` — Core utility for URL/file path resolution
+- `./scripts/collect-valid-anchors.py` — Collect all valid anchors from an MDX file (with type info)
+- `./scripts/add-anchor.py` — Insert a new anchor ID into a specific element in an MDX file
+- `${doc_root}/.scripts/check/replace-link.py` — Global search and replace a link across the entire repo (shared with fix-internal-link-error skill)
 
 ## Notes
 
