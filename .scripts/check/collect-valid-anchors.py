@@ -1,0 +1,1 @@
+/home/doc/.openclaw/skills/fix-link-anchor-error/scripts/collect-valid-anchors.py
