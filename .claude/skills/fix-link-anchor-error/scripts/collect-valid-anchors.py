@@ -2,16 +2,26 @@
 """收集 MDX 文件中所有有效锚点，输出带类型信息的 JSON。
 
 Usage:
-    python3 collect-valid-anchors.py <mdx-file-path>
+    python3 collect-valid-anchors.py <mdx-file-path> [--search-param-field <broken-anchor>]
 
     <mdx-file-path> 可以是相对于仓库根目录的相对路径，也可以是绝对路径。
 
-Output JSON:
+    --search-param-field <broken-anchor>:
+        特殊模式：当确认为客户端 API 文档（有 param_field 锚点）时使用。
+        将尝试以去掉类型、去掉 parent 的 fallback 顺序匹配 ParamField 锚点，
+        一旦匹配到任何层级，将返回该层级对应的所有锚点变体。
+
+Output JSON (Normal mode):
     {
         "count": <total>,
         "anchors": [ { "type": "<type>", "value": "<anchor-id>" }, ... ]
     }
     当锚点数量超过 100 时，返回实际数量但只包含前 100 条。
+
+Output JSON (--search-param-field mode):
+    {
+        "matches": [ "<anchor-1>", "<anchor-2>", ... ]
+    }
 
 Anchor types:
     "md_heading"  - Markdown 标题（# ## ### 等）
@@ -108,29 +118,131 @@ def collect_anchors(file_path: str) -> list:
     return anchors
 
 
+def _collect_param_fields_only(file_path: str) -> list:
+    """仅收集 param_field 锚点（含 import 子文件），跳过标题/标签/step 以加速。"""
+    results = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except Exception:
+        return results
+
+    # 递归 import 子文件
+    for m in _IMPORT_RE.finditer(content):
+        import_path = m.group(1)
+        if import_path.startswith('/'):
+            sub = os.path.join(REPO_ROOT, import_path.lstrip('/'))
+        else:
+            sub = os.path.normpath(os.path.join(os.path.dirname(file_path), import_path))
+        if os.path.exists(sub):
+            results.extend(_collect_param_fields_only(sub))
+
+    for value in extract_paramfield_anchors(file_path):
+        if value:
+            results.append(value)
+    return results
+
+
+def search_param_field(file_path: str, broken_anchor: str) -> list:
+    """
+    当文件为客户端 API 文档时，查找 param_field 锚点。
+
+    ParamField 锚点有三种形体：
+        method                    （纯方法名）
+        method-parent             （方法名-父类名）
+        method-parent-class       （完整形式）
+
+    Fallback 匹配顺序：
+    1. 完整匹配：broken_anchor 原样在锚点列表中查找
+    2. 去掉最后一个 - 段后再匹配（如 method-parent → method）
+    3. 继续去掉 - 段直到只剩第一段
+
+    在任意层级匹配到任何 param_field，立即返回所有以该 fallback 为前缀的锚点变体供 Agent 选择。
+    """
+    param_fields = _collect_param_fields_only(file_path)
+
+    if not param_fields:
+        return []
+
+    parts = broken_anchor.split('-')
+    for i in range(len(parts), 0, -1):
+        fallback = "-".join(parts[:i])
+        matches = []
+        for pf in set(param_fields):
+            if pf == fallback or pf.startswith(fallback + "-"):
+                matches.append(pf)
+        if matches:
+            return sorted(matches)
+    return []
+
+
+def has_param_field(file_path: str) -> bool:
+    """快速检测文件（含 import 子文件）是否包含 ParamField 组件。仅做文本搜索，不解析锚点。"""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except Exception:
+        return False
+
+    if '<ParamField' in content:
+        return True
+
+    # 检查 import 子文件
+    for m in _IMPORT_RE.finditer(content):
+        import_path = m.group(1)
+        if import_path.startswith('/'):
+            sub = os.path.join(REPO_ROOT, import_path.lstrip('/'))
+        else:
+            sub = os.path.normpath(os.path.join(os.path.dirname(file_path), import_path))
+        if os.path.exists(sub):
+            if has_param_field(sub):
+                return True
+    return False
+
+
+def _resolve_file_path(file_path: str) -> str:
+    """统一解析文件路径：支持相对路径和绝对路径。"""
+    if not os.path.isabs(file_path):
+        candidate = os.path.normpath(os.path.join(os.getcwd(), file_path))
+        if os.path.exists(candidate):
+            return candidate
+        return os.path.normpath(os.path.join(REPO_ROOT, file_path))
+    return os.path.normpath(file_path)
+
+
 def main():
     if len(sys.argv) < 2:
-        print(json.dumps({"error": "Usage: python3 collect-valid-anchors.py <mdx-file-path>"}))
+        print(json.dumps({"error": "Usage: python3 collect-valid-anchors.py <mdx-file-path> [--has-param-field] [--search-param-field <broken-anchor>]"}))
         sys.exit(1)
 
     file_path = sys.argv[1]
-    if not os.path.isabs(file_path):
-        # 优先从当前工作目录解析相对路径，兜底用仓库根目录
-        candidate = os.path.normpath(os.path.join(os.getcwd(), file_path))
-        if os.path.exists(candidate):
-            file_path = candidate
-        else:
-            file_path = os.path.normpath(os.path.join(REPO_ROOT, file_path))
-    else:
-        file_path = os.path.normpath(file_path)
+
+    # 检查子命令
+    mode = "collect"
+    search_anchor = None
+    if len(sys.argv) >= 3:
+        if sys.argv[2] == '--has-param-field':
+            mode = "has_param_field"
+        elif sys.argv[2] == '--search-param-field' and len(sys.argv) >= 4:
+            mode = "search_param_field"
+            search_anchor = sys.argv[3]
+
+    file_path = _resolve_file_path(file_path)
 
     if not os.path.exists(file_path):
         print(json.dumps({"error": f"File not found: {file_path}"}))
         sys.exit(1)
 
-    anchors = collect_anchors(file_path)
-    count = len(anchors)
-    print(json.dumps({"count": count, "anchors": anchors[:MAX_ANCHORS]}, ensure_ascii=False, indent=2))
+    if mode == "has_param_field":
+        result = has_param_field(file_path)
+        print(json.dumps({"has_param_field": result}))
+    elif mode == "search_param_field":
+        matches = search_param_field(file_path, search_anchor)
+        print(json.dumps({"matches": matches}, ensure_ascii=False, indent=2))
+    else:
+        anchors = collect_anchors(file_path)
+        count = len(anchors)
+        print(json.dumps({"count": count, "anchors": anchors[:MAX_ANCHORS]}, ensure_ascii=False, indent=2))
 
 
 if __name__ == '__main__':
