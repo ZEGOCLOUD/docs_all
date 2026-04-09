@@ -168,7 +168,7 @@ gh pr create --title "PR_TITLE" --body-file /tmp/pr-body.md --base main --draft
 
 After creating the PR:
 
-1. **Display the PR URL** so the user can review it
+1. **Display the PR URL with markdown link** so the user can click and review it
 2. **Remind about CI checks**: Tests and linting will run automatically
 3. **Suggest next steps**:
    - Add reviewers if needed: `gh pr edit --add-reviewer USERNAME`

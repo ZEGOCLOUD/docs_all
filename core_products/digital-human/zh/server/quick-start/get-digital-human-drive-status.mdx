@@ -1,0 +1,122 @@
+---
+date: '2026-03-31'
+---
+
+# 获取数字人驱动状态
+
+实时驱动数字人播报时，如需根据数字人"说话"状态联动业务逻辑（如同步展示字幕、触发后续业务流程等），可通过监听服务端或客户端回调事件，获取数字人驱动状态。
+
+数字人驱动状态消息包括以下类型:
+
+- 数字人开始说话。
+- 数字人说话结束。
+
+## 快速实现
+
+要实现获取数字人驱动状态,有两种方式:
+
+1. **在客户端监听 ZEGO Express SDK 试验性 API 回调**。
+2. **通过服务端回调监听数字人驱动状态事件**,然后通过您的信令通道(如 WebSocket 等)发送自定义消息到客户端。
+
+### 前提条件
+
+- 已开通数字人服务并完成相关权限配置。
+- ZEGO Express SDK 初始化完成并加入 [RTC 房间](/glossary/term-explanation#rtc-room)。
+- 服务端已成功创建数字人视频流任务。
+- 客户端已成功登录房间并开始拉取数字人音视频流。
+
+### 在客户端监听 ZEGO Express SDK 试验性 API 回调
+
+<Note title="说明">该方式更简单,建议使用该方式实现获取数字人驱动状态。</Note>
+
+通过客户端 SDK 监听 ZEGO Express SDK 的试验性 API 回调(`onRecvExperimentalAPI`),根据消息类型处理对应的状态事件。以下是各平台示例代码:
+
+<Tabs>
+<Tab title="iOS">
+
+客户端可以通过实现 `ZegoEventHandler` 协议,监听 `onRecvExperimentalAPI` 回调获取 `method` 为 `liveroom.room.on_recive_room_channel_message` 的房间自定义消息。
+
+<CodeGroup>
+```objc ZegoMainViewController+RTC.m
+- (void)onRecvExperimentalAPI:(NSString *)content {
+    [self handleExperimentalApi:content];
+}
+```
+</CodeGroup>
+
+</Tab>
+
+<Tab title="Android">
+
+客户端可通过监听 `onRecvExperimentalAPI` 回调获取 `method` 为 `liveroom.room.on_recive_room_channel_message` 的房间自定义消息。
+
+```java ZegoQuickStartMainActivity.java
+ZegoExpressEngine.getEngine().setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onRecvExperimentalAPI(String content) {
+        handleExperimentalApi(content);
+    }
+});
+```
+
+</Tab>
+
+<Tab title="Web">
+
+Web 端可通过监听 `recvExperimentalAPI` 回调获取房间自定义消息。为接收房间消息,建议在注册回调后调用 `callExperimentalAPI` 开启 `onRecvRoomChannelMessage`。
+
+```javascript ControlPanel.vue
+zg.on("recvExperimentalAPI", (content) => {
+  handleExperimentalApi(content);
+});
+
+await zg.callExperimentalAPI({
+  method: "onRecvRoomChannelMessage",
+  params: {},
+});
+```
+
+</Tab>
+</Tabs>
+
+#### 房间消息示例
+
+```json
+{
+  "method": "liveroom.room.on_recive_room_channel_message",
+  "params": {
+    "msg_content": "{\"Product\":\"digitalhuman\",\"Timestamp\":1774356158143,\"Cmd\":1001,\"Data\":{\"Status\":2,\"DriveId\":\"d5cfd6e5-5ed7-4030-8cb0-a026cef36f9c\"}}"
+  }
+}
+```
+
+说明:
+
+- 仅当 `Product = digitalhuman` 时,才表示当前消息属于数字人产品。
+- `Status = 2` 表示数字人开始说话。
+- `Status = 4` 表示数字人说话结束。
+- `DriveId` 可用于关联具体驱动任务。
+
+### 通过服务端回调监听驱动状态事件
+
+如果您希望由服务端统一管理状态,也可以通过数字人服务端回调感知驱动生命周期,再通过 WebSocket、IM、自定义信令等方式转发给客户端。
+
+#### 监听服务端回调
+
+请参考 [接收回调](../streaming-apis/receiving-callback) 文档,在服务端接收数字人事件通知。
+
+对于一次数字人驱动任务,通常可按以下方式映射说话状态:
+
+- `EventType = 4` 且 `Detail.Status = 2`:数字人开始说话。
+- `EventType = 4` 且 `Detail.Status = 4`:数字人说话结束。
+
+该方式更适合以下场景:
+
+- 由服务端统一维护状态机。
+- 需要把状态同步给多个客户端。
+- 需要和自有业务事件做聚合处理。
+
+## 推荐方案
+
+- 如果您的客户端已经接入 ZEGO Express SDK,推荐优先使用**客户端监听回调**的方式,接入更简单、链路更短。
+- 如果您的业务更依赖服务端统一调度,则建议结合**服务端回调**实现状态分发。
