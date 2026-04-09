@@ -24,6 +24,7 @@ Do NOT modify links containing these domains:
 - `doc-media.zego.im`
 - `site-media.zego.im`
 - `storage.zego.im`
+- `www.zego.im` with demo or artifact paths(e.g., `https://www.zego.im/audio-demo`)
 
 ## How to Fix
 

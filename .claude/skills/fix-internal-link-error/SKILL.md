@@ -9,87 +9,115 @@ This skill fixes internal link errors in documentation files. When an internal l
 
 ## Workflow
 
-### Step 1: Resolve the URL to find the expected file path
+### Step 1: Identify the target instance by routeBasePath
+
+Internal links are often cross-instance. The `routeBasePath` prefix of the URL is usually correct — only the path **after** it is broken. Use `--match-route` to identify the target instance:
 
 ```bash
-python3 ${doc_root}/.docuo/scripts/config_helper.py --resolve-url /docs/zim-android/introduction/overview
+python3 ${doc_root}/.docuo/scripts/config_helper.py --match-route <broken-url-path>
 ```
 
-This will return the expected file path if the file exists, or indicate the file is not found.
-
-### Step 2: Get instance information
-
+Example:
 ```bash
-python3 ${doc_root}/.docuo/scripts/config_helper.py --info /path/to/file.mdx
+python3 ${doc_root}/.docuo/scripts/config_helper.py --match-route /real-time-video-android-java/introduction/error-overview
 ```
 
-This returns the instance's `routeBasePath` and `path` (instance directory).
+Example return value:
+```json
+{
+  "id": "real_time_video_android_java_zh",
+  "label": "实时音视频 (Android Java)",
+  "path": "core_products/real-time-voice-video/zh/android-java",
+  "clientApiPath": "client-sdk/api-reference",
+  "routeBasePath": "real-time-video-android-java",
+  "locale": "zh"
+}
+```
 
-### Step 3: Read sidebars.json
-
-Read the `sidebars.json` file from the instance directory to get all valid file IDs and their labels.
-
-### Step 4: Calculate match scores
-
-**Label matching:**
-- Extract the link label (e.g., "Overview") from the markdown/a tag/component
-- Search all sidebar nodes for matching labels
-- Exact label match: 60 points
-- Case/spacing/punctuation difference: 50 points (-10)
-
-**Path matching:**
-- Extract the link path and remove the `routeBasePath` to get the relative file target
-- Compare with each sidebar node's `id`:
-  - Directory prefix match: +20 points
-  - Semantic similarity (filename part): +10~20 points
-
-### Step 5: Apply fix based on confidence
-
-- **High confidence (>90)**: Automatically update the file
-- **Medium confidence (60-90)**: Present options to user
-- **Low confidence (<60)**: Report issue, do not modify
-
-### Step 6: Global Search and Replace
-
-The same broken link may appear in multiple files across the repo. After confirming the correct replacement, run `replace-link.py` to propagate the fix globally:
+- **Returns instance info** → `routeBasePath` is valid; proceed to Step 2.
+- **Returns `null`** → the `routeBasePath` itself is unknown. List all valid base paths for reference:
 
 ```bash
-python3 ${doc_root}/.scripts/check/replace-link.py <old-link> <new-link>
+python3 ${doc_root}/.docuo/scripts/config_helper.py --list-routes
+```
+
+If the link's prefix doesn't match any known `routeBasePath`, report the issue to the user and stop.
+
+### Step 2: Locate sidebars.json from the instance path
+
+Step 1 already returns the `path` field of the matched instance. The `sidebars.json` is located at:
+
+```
+${doc_root}/${instance.path}/sidebars.json
+```
+
+For the example above, that would be:
+
+```
+${doc_root}/core_products/real-time-voice-video/zh/android-java/sidebars.json
+```
+
+Read this file directly — no additional script call needed.
+
+### Step 3: Calculate match scores
+
+Extract the path segment **after** the `routeBasePath` from the broken link (the part that's wrong). Compare it against every entry in `sidebars.json`:
+
+**Label matching** (use the link's display text, e.g., "Overview"):
+- Exact literal match: 90 points
+- Semantic match (same meaning, e.g. across Chinese/English): 80 points
+
+**Path matching** (bonus on top of the label score, compare the broken path suffix against the sidebar `id`):
+- Semantic match on the filename segment: +10~20 points
+
+### Step 4: Apply fix based on confidence
+
+- **High confidence (> 90)**: Automatically update the file
+- **Medium confidence (70–90)**: Present top candidates to user for confirmation
+- **Low confidence (< 70)**: Report the issue, do not modify
+
+### Step 5: Global Search and Replace
+
+The same broken link may appear in multiple files across the repo. After confirming the correct replacement, run `replace-link.py` to propagate the fix globally.
+
+First detect the language of the **source file** that contains the broken link:
+- Path contains `/zh/` or `_zh` → Chinese file → pass `--zh`
+- Otherwise → English file → no `--zh` flag
+
+```bash
+# Preview first
+python3 ./scripts/replace-link.py <old-link> <new-link> [--zh] --dry-run
+# Apply
+python3 ./scripts/replace-link.py <old-link> <new-link> [--zh]
 ```
 
 - `<old-link>` — the exact broken link as it appears in files (complete link, may include anchor fragment)
 - `<new-link>` — the corrected link (complete link, may include anchor fragment)
 
-The script searches all `.mdx`, `.md`, `.yaml`, `.yml` files in the repo and replaces every exact occurrence.
-
-Use `--dry-run` first to preview affected files before writing:
-
-```bash
-python3 ${doc_root}/.scripts/check/replace-link.py <old-link> <new-link> --dry-run
-```
+The script searches all `.mdx`, `.md`, `.yaml`, `.yml` files in the repo (filtered by language) and replaces every exact occurrence.
 
 
 ## Example
 
 Given a broken link `[Overview](/real-time-video-android-java/introduction/overview)`:
 
-1. Extract target: `introduction/overview`
-2. Find all file IDs from sidebars.json:
+1. Run `--match-route /real-time-video-android-java/introduction/overview` → returns instance `real-time-video-android-java` ✅
+2. Run `--sidebars /real-time-video-android-java/introduction/overview` → get sidebars.json
+3. Path after routeBasePath: `introduction/overview`. Compare against sidebar entries:
    - `introduction/entry` (label: "Entry")
-   - `introduction/overview-new` (label: "Overview") ← Exact match!
+   - `introduction/overview-new` (label: "Overview") ← label exact match + path prefix match → score 98 ✅
    - `introduction/product-feature-list` (label: "Product Feature List")
-3. Score `introduction/overview-new`: 98
-4. Replace the URL with `/real-time-video-android-java/introduction/overview-new`
+4. Auto-fix: replace with `/real-time-video-android-java/introduction/overview-new`
 
 
 ## Related Scripts
 
 - `${doc_root}/.docuo/scripts/config_helper.py` — Core utility for URL/file path resolution
-- `${doc_root}/.scripts/check/replace-link.py` — Global search and replace a broken link across the entire repo
+- `./scripts/replace-link.py` — Global search and replace a broken link across the entire repo
 
 ## Notes
 
-- The skill uses semantic matching to handle cases where files have been slightly renamed
-- Numeric prefixes (e.g., `01-`, `02-`) are ignored during matching
-- The `routeBasePath` from the instance configuration is always preserved in the replacement
-- Only `.mdx` and `.md` files are considered
+- Internal links are typically cross-instance: the `routeBasePath` is the reliable part; only the path after it is broken.
+- The `routeBasePath` is **always preserved** in the replacement — never change it.
+- Numeric prefixes (e.g., `01-`, `02-`) are ignored during matching.
+- Only `.mdx` and `.md` files are considered as targets.
