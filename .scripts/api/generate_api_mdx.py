@@ -123,16 +123,92 @@ def get_lang_config(path: Path) -> Dict[str, Any]:
 # 文件读取
 # ============================================================================
 
+def load_redirect_map() -> Dict[str, str]:
+    """加载 URL 重定向映射表（从 redirect_map.json）。
+
+    Returns:
+        { old_url: new_url } 字典，加载失败则返回空字典。
+    """
+    map_path = Path(__file__).parent / "redirect_map.json"
+    if not map_path.exists():
+        return {}
+    try:
+        with map_path.open("r", encoding="utf-8") as f:
+            entries = json.load(f)
+        return {e["old_url"]: e["new_url"] for e in entries if "old_url" in e and "new_url" in e}
+    except Exception as e:
+        print(f"[WARN] 加载 redirect_map.json 失败: {e}")
+        return {}
+
+
+# 模块级别单例：只加载一次
+_REDIRECT_MAP: Optional[Dict[str, str]] = None
+
+
+def get_redirect_map() -> Dict[str, str]:
+    """获取 URL 重定向映射表（懒加载单例）。"""
+    global _REDIRECT_MAP
+    if _REDIRECT_MAP is None:
+        _REDIRECT_MAP = load_redirect_map()
+    return _REDIRECT_MAP
+
+
+def apply_redirects_to_json(json_str: str) -> str:
+    """对 JSON 字符串文本中的旧 URL 进行替换。
+
+    Args:
+        json_str: 原始 JSON 文件内容
+
+    Returns:
+        替换后的 JSON 字符串
+    """
+    redirect_map = get_redirect_map()
+    if not redirect_map:
+        return json_str
+    for old_url, new_url in redirect_map.items():
+        if old_url in json_str:
+            json_str = json_str.replace(old_url, new_url)
+    return json_str
+
+
+def clean_escaped_brackets(s: str) -> str:
+    """移除数组泛型尖括号前的多余反斜杠转义。
+
+    修复如 ArrayList\\<String>、List\\<string\\>、std::vector\\<int\\> 等模式，
+    还原为 ArrayList<String>、List<string>、std::vector<int>。
+    """
+    if not s:
+        return s
+    return re.sub(r'\\+([<>])', r'\1', s)
+
+
+def clean_escaped_brackets_in_obj(obj: Any) -> None:
+    """递归遍历 JSON 对象，清理 type 和 full_code 字段中多余的转义尖括号。"""
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            if key in ('type', 'full_code') and isinstance(value, str):
+                obj[key] = clean_escaped_brackets(value)
+            elif isinstance(value, (dict, list)):
+                clean_escaped_brackets_in_obj(value)
+    elif isinstance(obj, list):
+        for item in obj:
+            clean_escaped_brackets_in_obj(item)
+
+
 def read_json_files(src_dir: Path) -> List[Dict[str, Any]]:
     files = sorted([p for p in src_dir.iterdir() if p.suffix == ".json" and p.is_file()])
     result = []
     for p in files:
         try:
-            with p.open("r", encoding="utf-8") as f:
-                obj = json.load(f)
+            raw = p.read_text(encoding="utf-8")
+            # 在解析 JSON 前，替换旧 URL
+            raw = apply_redirects_to_json(raw)
+            obj = json.loads(raw)
             # 跳过非字典类型的 JSON（如 hotObject.json 是数组）
             if not isinstance(obj, dict):
                 continue
+            # 清理 type 和 full_code 字段中多余的转义尖括号
+            clean_escaped_brackets_in_obj(obj)
             obj["__file_name"] = p.name
             result.append(obj)
         except Exception as e:

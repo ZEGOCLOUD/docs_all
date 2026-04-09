@@ -49,6 +49,25 @@ Read the `sidebars.json` file from the instance directory to get all valid file 
 - **Medium confidence (60-90)**: Present options to user
 - **Low confidence (<60)**: Report issue, do not modify
 
+### Step 6: Global Search and Replace
+
+The same broken link may appear in multiple files across the repo. After confirming the correct replacement, run `replace-link.py` to propagate the fix globally:
+
+```bash
+python3 ${doc_root}/.scripts/check/replace-link.py <old-link> <new-link>
+```
+
+- `<old-link>` — the exact broken link as it appears in files (complete link, may include anchor fragment)
+- `<new-link>` — the corrected link (complete link, may include anchor fragment)
+
+The script searches all `.mdx`, `.md`, `.yaml`, `.yml` files in the repo and replaces every exact occurrence.
+
+Use `--dry-run` first to preview affected files before writing:
+
+```bash
+python3 ${doc_root}/.scripts/check/replace-link.py <old-link> <new-link> --dry-run
+```
+
 
 ## Example
 
@@ -65,7 +84,8 @@ Given a broken link `[Overview](/real-time-video-android-java/introduction/overv
 
 ## Related Scripts
 
-- `${doc_root}/.docuo/scripts/config_helper.py` - Core utility for URL/file path resolution
+- `${doc_root}/.docuo/scripts/config_helper.py` — Core utility for URL/file path resolution
+- `${doc_root}/.scripts/check/replace-link.py` — Global search and replace a broken link across the entire repo
 
 ## Notes
 
