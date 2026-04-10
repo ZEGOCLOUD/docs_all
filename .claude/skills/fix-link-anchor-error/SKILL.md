@@ -45,11 +45,12 @@ python3 ./scripts/collect-valid-anchors.py <target-mdx-file-path> --has-param-fi
 
 Returns `{"has_param_field": true}` or `{"has_param_field": false}`.
 
-- If `true` → this is a client API document. **Skip Steps 2–6 entirely** and go directly to **Step 7**.
+- If `true` → this is a client API document. **Skip Steps 2–4 entirely** and go directly to **Step 5**.
 - If `false` → proceed with Step 2 (collect anchors) as normal.
 
 ### 2. Collect Anchors from Target File
 
+2.1. 初次收集目标文件中的锚点信息
 Run the `collect-valid-anchors.py` script on the target file to get all valid anchors:
 
 ```bash
@@ -70,6 +71,7 @@ The script outputs a JSON object:
   ]
 }
 ```
+When `count > 100`, the script returns only the first 100 anchors.
 
 Anchor types:
 - `md_heading` — Markdown `#` heading
@@ -78,12 +80,23 @@ Anchor types:
 - `step` — `<Step>` component (only when `titleSize` is h1–h5)
 - `param_field` — `<ParamField>` component
 
-When `count > 100`, the script returns only the first 100 anchors.
+2.2. 将所有 md_heading 类型的锚点转换成英文（如果包含中文）并写回原始文档中
+如果返回结果中的 md_heading 包含中文字符，那么应该生成英文锚点然后调用 add-anchor.py 插入到文档中：
+```bash
+python3 ./scripts/add-anchor.py <target-mdx-file> \
+  --type <anchor.type> \
+  --value <anchor.value> \
+  --new-id <english-anchor-name>
+```
+2.3. 重新收集目标文件中的锚点信息
+重要！！：在所有 md_heading 都处理成英文锚点后，重新运行一次 `python3 ./scripts/collect-valid-anchors.py <target-mdx-file-path>` 获取最新的锚点数据再进行后续的语义匹配和链接替换。
+如果重新收集后的锚点列表中仍然存在中文锚点，继续进行步骤 2.2 的处理过程。
+
 
 **Note**: For external links, heading collection is not possible (skip to step 3 with provided anchors or user input). For pure internal page anchors, use the source file itself as the target.
 
 
-### 3. Semantic Matching
+### 3. Semantic Match and Replace
 
 For each broken link, extract **two signals** and compare each against every collected anchor's `value`:
 
@@ -98,63 +111,22 @@ The final score for each candidate anchor is the **maximum** of its score agains
 |-----------|-------|
 | Exact match after normalization | 100 |
 | Case / spacing / punctuation difference only | 90 |
-| Partial match or contains key terms | 60–80 |
 | Chinese ↔ English semantic equivalence (cross-language) | 85–95 |
+| Partial match or contains key terms | 60–80 |
 | No meaningful overlap | < 60 |
 
-> **Example**: broken link `[获取当前播放进度](./class.mdx#getcurrentprogress-zegomediaplayer)`.
-> Anchor text `getcurrentprogress-zegomediaplayer` scores low against all collected anchors.
-> But link display text `获取当前播放进度` semantically matches a collected anchor value `getCurrentProgress` → score 90+ → high-confidence match.
+Based on the best match score, apply the corresponding action:
 
-**Score threshold:**
-- **≥ 80**: High confidence → proceed to Step 4 (auto-fix)
-- **60–80**: Medium confidence → present options to user before fixing
-- **< 60**: Low confidence → report to user, do not modify
-
-### 4. Check or Generate Anchor ID
-
-Compare the broken anchor text against the anchors collected in step 2.
-Apply the **first matching rule** below:
-
-#### Rule A — High string similarity (> 80%)
-
-If any collected anchor's `value` has **string similarity > 80%** with the broken anchor (case-insensitive, after normalizing hyphens/underscores/spaces), replace the broken anchor directly with that `value`. No file modification needed.
-
-#### Rule B — Same meaning across Chinese / English
-
-If no Rule A match, check whether any collected anchor has the **same semantic meaning** as the broken anchor when compared across Chinese and English (e.g., `#prerequisites` broken → collected anchor value `前提条件` in a Chinese heading).
-
-When a match is found, the handling depends on the anchor type:
-
-**For `md_heading`, `a_tag`, `h_tag` types — all 3 steps are MANDATORY, none can be skipped:**
-
-> ⚠️ **Step B-2 (calling `add-anchor.py`) is required. The agent MUST execute this command before updating the link. Do not skip it.**
-
-1. **[REQUIRED]** Determine the English anchor name (e.g., `prerequisites`) — ASCII only, lowercase, hyphens for spaces.
-2. **[REQUIRED]** Call `add-anchor.py` to physically insert the new anchor ID into the target MDX file:
-
-```bash
-python3 ./scripts/add-anchor.py <target-mdx-file> \
-  --type <anchor.type> \
-  --value <anchor.value> \
-  --new-id <english-anchor-name>
-```
-
-3. **[REQUIRED]** Replace the broken anchor in the source file with the new English anchor name.
+| Score | Confidence | Action |
+|-------|-----------|--------|
+| **≥ 80** | High | Auto-fix: replace the broken anchor with the matched anchor's `value` in the source file |
+| **60–80** | Medium | Present candidate to user for confirmation, then apply fix |
+| **< 60** | Low | Report to user, do not modify |
 
 **For `step` and `param_field` types** (`add-anchor.py` does not support these):
+- Directly replace the broken anchor with the matched anchor's `value` as-is. The Chinese anchor value is acceptable — no need to convert to English.
 
-- Skip steps 1–2. Directly replace the broken anchor with the matched anchor's `value` as-is. The Chinese anchor value is acceptable — no need to convert to English.
-
-#### Rule C — No meaningful match
-
-If neither Rule A nor Rule B applies (no anchor with similar or equivalent meaning exists), **keep the incorrect anchor fragment** and report to the user.
-
-### 5. Apply Fix
-
-Update the source file to replace the broken anchor with the corrected one.
-
-### 6. Global Search and Replace
+### 4. Global Search and Replace
 
 After fixing an anchor, the same broken link may appear in multiple files. Use `./scripts/replace-link.py` to propagate the fix globally — **but only for internal URL path links and pure page anchors**:
 
@@ -177,9 +149,9 @@ python3 ./scripts/replace-link.py <old-link> <new-link> [--zh]
 
 **Relative links with broken anchors must be fixed manually in each affected file.**
 
-### 7. Client API Document — ParamField Anchor Fix
+### 5. Client API Document — ParamField Anchor Fix
 
-> This step is only reached from **Step 1** (when `param_field` anchors are detected). Steps 3–6 are skipped entirely.
+> This step is only reached from **Step 1** (when `param_field` anchors are detected). Steps 3–4 are skipped entirely.
 
 Client API documents must **never be modified** — only the link in the source file is updated.
 
@@ -215,7 +187,7 @@ When multiple matches are returned, the agent should select the one that is **se
 **Rules for client API anchors:**
 - ✅ Replace the broken anchor in the **source file only** (the file with the broken link)
 - ❌ Do NOT modify the target API document file
-- ❌ Do NOT run global search and replace (no Step 6)
+- ❌ Do NOT run global search and replace (no Step 4)
 
 ## Example
 
@@ -243,10 +215,9 @@ When multiple matches are returned, the agent should select the one that is **se
 **Steps**:
 1. Resolve URL: `python3 .docuo/scripts/config_helper.py --resolve-url /aiagent-android/quick-start`
 2. Find file: `core_products/aiagent/zh/android/quick-start.mdx`
-3. Find heading: `## 前提条件` (display text similar meaning,no anchor)
-4. Generate anchor: `prerequisites`
-5. Add anchor: `## 前提条件 <a id="prerequisites" />`
-6. Fix link: `[Prerequisites](/aiagent-android/quick-start#prerequisites)`
+3. Add anchor: `## 前提条件 <a id="prerequisites" />`
+4. Display text similar meaning: `prerequisites`
+5. Fix link: `[Prerequisites](/aiagent-android/quick-start#prerequisites)`
 
 ### Example 3: Step Component
 
@@ -264,7 +235,7 @@ When multiple matches are returned, the agent should select the one that is **se
 
 **Step 1**: Collect anchors from `./class.mdx` → contains `param_field` type → detected as client API doc.
 
-**Step 7**: Run search:
+**Step 5**: Run search:
 ```bash
 python3 ./scripts/collect-valid-anchors.py ./class.mdx --search-param-field loadresourceaudioeffectidcallback-zegoexpressengine
 ```

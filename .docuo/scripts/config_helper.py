@@ -632,6 +632,52 @@ def url_to_file_path(url: str, docs_root: Optional[str] = None) -> Dict[str, Any
     }
 
 
+def list_all_route_base_paths() -> list:
+    """
+    列出所有实例的 routeBasePath。
+    先读中文配置，再读英文配置（去重）。
+
+    Returns:
+        routeBasePaths 列表，每项包含 routeBasePath、label、path、locale
+    """
+    results = []
+    seen = set()
+
+    for locale_hint in ("zh", "en"):
+        try:
+            config = _load_docuo_config(f"core_products/{locale_hint}/dummy.mdx")[0]
+        except Exception:
+            continue
+
+        for inst in config.get("instances", []):
+            rbp = inst.get("routeBasePath", "")
+            if not rbp or rbp in seen:
+                continue
+            seen.add(rbp)
+            results.append({
+                "routeBasePath": rbp,
+                "label": inst.get("label", ""),
+                "path": inst.get("path", ""),
+                "locale": locale_hint,
+            })
+
+    return results
+
+
+def match_route_base_path(url_path: str) -> Optional[Dict[str, Any]]:
+    """
+    检查 URL 路径是否以某个已知的 routeBasePath 开头。
+    优先用中文配置匹配，找不到再用英文配置。
+
+    Args:
+        url_path: URL 路径（以 / 开头，如 /real-time-video-android/introduction/overview）
+
+    Returns:
+        匹配到的实例信息，如果未找到返回 None
+    """
+    return get_instance_info_by_path(url_path)
+
+
 # 添加一个主函数用于命令行测试
 if __name__ == "__main__":
     import sys
@@ -644,11 +690,19 @@ if __name__ == "__main__":
         print("  2. URL 转文件路径:")
         print("     python3 config_helper.py --resolve-url <url>")
         print()
+        print("  3. 列出所有 routeBasePath:")
+        print("     python3 config_helper.py --list-routes")
+        print()
+        print("  4. 检查 URL 是否匹配已知 routeBasePath:")
+        print("     python3 config_helper.py --match-route <url-path>")
+        print()
         print("示例:")
         print("  python3 config_helper.py core_products/aiagent/zh/android/quick-start.mdx --info")
         print("  python3 config_helper.py core_products/aiagent/en/android/quick-start.mdx --url")
         print("  python3 config_helper.py --resolve-url /real-time-video-ios-oc/introduction/overview")
         print("  python3 config_helper.py --resolve-url https://doc-zh.zego.im/real-time-video-ios-oc/introduction/overview")
+        print("  python3 config_helper.py --list-routes")
+        print("  python3 config_helper.py --match-route /real-time-video-android/introduction/overview")
         print()
         print("选项:")
         print("  --info        显示实例信息")
@@ -656,10 +710,26 @@ if __name__ == "__main__":
         print("  --url         显示文档 URL")
         print("  --locale      显示检测到的语言")
         print("  --resolve-url 将 URL 解析为文件路径")
+        print("  --list-routes 列出所有实例的 routeBasePath")
+        print("  --match-route 检查 URL 是否以某个 routeBasePath 开头，返回匹配的实例信息")
         sys.exit(1)
 
-    # 检查是否是 URL 解析模式
-    if sys.argv[1] == "--resolve-url":
+    # --list-routes 模式
+    if sys.argv[1] == "--list-routes":
+        result = list_all_route_base_paths()
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+
+    # --match-route 模式
+    elif sys.argv[1] == "--match-route":
+        if len(sys.argv) < 3:
+            print("错误: --match-route 需要提供 URL 路径参数")
+            sys.exit(1)
+        url_path = sys.argv[2]
+        result = match_route_base_path(url_path)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+
+    # --resolve-url 模式
+    elif sys.argv[1] == "--resolve-url":
         if len(sys.argv) < 3:
             print("错误: --resolve-url 需要提供 URL 参数")
             sys.exit(1)
@@ -673,6 +743,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"错误: {str(e)}", file=sys.stderr)
             sys.exit(1)
+
     else:
         # 原有的文件路径模式
         file_path = sys.argv[1]
