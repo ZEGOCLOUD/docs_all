@@ -12,8 +12,6 @@ date: "2026-04-09"
 
 自定义视频前处理与自定义视频采集相比，优势在于无需开发者管理设备输入源，仅需对 ZEGO Express SDK 抛出来的原始数据进行操作，然后发回 ZEGO Express SDK 即可。
 
-对于比较复杂的场景，例如想通过摄像头画面做图层混合，建议开发者使用 [自定义视频采集](/real-time-video-electron-js/video/custom-video-capture) 功能实现，该方式性能优化的空间更大。
-
 ## 使用场景
 
 - **自定义美颜效果**：开发者需要使用第三方美颜 SDK 实现更高级的美颜功能。
@@ -59,7 +57,7 @@ sequenceDiagram
 
     ```js
     // 开启自定义视频前处理
-    zgEngine.enableCustomVideoProcessing(true, zgDefines.ZegoPublishChannel.Main);
+    zgEngine.enableCustomVideoProcessing(true, ZegoPublishChannel.Main);
     ```
   </Step>
   <Step title="注册自定义视频前处理插件">
@@ -70,7 +68,7 @@ sequenceDiagram
     var ZegoVideoPreProcess = require("./ZegoExpressVideoPreProcess.node");
 
     // 注册自定义视频前处理插件
-    zgEngine.registerCustomVideoProcessPlugin(ZegoVideoPreProcess.getVideoPreProcessCallback(), zgDefines.ZegoPublishChannel.Main);
+    zgEngine.registerCustomVideoProcessPlugin(ZegoVideoPreProcess.getEffectsHandler(), ZegoPublishChannel.Main);
     ```
   </Step>
   <Step title="开始预览和推流">
@@ -98,65 +96,76 @@ ZEGO 提供了自定义视频前处理插件的工程模板，开发者可以基
 
 ### 插件工作原理
 
-SDK 在采集到视频数据后，会通过回调函数将 [ZegoVideoFrameObject](/real-time-video-electron-js/client-sdk/api-reference/struct#zegovideoframeobject) 类型的视频帧数据传递给开发者注册的插件。开发者在回调函数中对视频数据进行自定义处理（如美颜、滤镜等），然后将处理后的数据返回给 SDK，SDK 会将处理后的数据进行编码并发送。
+SDK 在采集到视频数据后，会调用开发者注册的插件中的 `processImageData` 方法，将视频帧数据传递给开发者。开发者在该方法中对视频数据进行自定义处理（如美颜、滤镜等），然后 SDK 会将处理后的数据进行编码并发送。
 
 ### 插件开发步骤
 
 1. **获取插件模板**
 
-   从 [zego-express-audio-plugin](https://github.com/ZEGOIM/zego-express-audio-plugin) 仓库中获取插件工程模板。开发者可参考其中的 `zego-express-audio-process-plugin` 工程结构，创建类似的视频前处理插件工程。
+   <Card title="zego-express-electron-customio-plugin" href="https://artifact-demo.zego.im/core_products/real-time-voice-video/zh/electron-js/video/zego-express-electron-customio-plugin.zip" target="_blank" >
+   下载插件工程模板
+   </Card>
 
-2. **实现回调函数**
+   开发者可参考其中的 `zego-express-video-process-plugin` 工程结构，创建自己的视频前处理插件工程。
 
-   在 C++ 源文件中实现视频前处理回调函数。SDK 会通过该回调传递原始视频帧数据，开发者在回调中对数据进行处理后返回：
+2. **实现 ZegoEffectsHandler 接口**
+
+   在 C++ 源文件中实现 `ZegoEffectsHandler` 接口，SDK 会通过该接口的 `processImageData` 方法传递原始视频帧数据：
 
    ```cpp
+   #pragma once
+
    #include <node_api.h>
+   #include "ZegoEffectsHandler.h"
    #include <iostream>
 
-   // 定义视频帧参数结构体
-   struct ZegoVideoFrameParam {
-       unsigned int width;
-       unsigned int height;
-       unsigned int dataLength;
+   // 实现 ZegoEffectsHandler 接口
+   class MyEffectsHandler : public ZegoEffectsHandler
+   {
+   public:
+       void processImageData(unsigned char *data, unsigned int data_length, int width, int height) override
+       {
+           // 在此处对视频帧数据进行自定义前处理
+           // 例如：美颜、滤镜、水印等操作
+           printf("processImageData-> data_length: %d\n", data_length);
+           printf("processImageData-> width: %d, height: %d\n", width, height);
+       }
    };
 
-   // 视频前处理回调函数
-   // data: 视频帧数据（RGBA 格式）
-   // dataLength: 数据长度
-   // param: 视频帧参数
-   // timestamp: 时间戳
-   unsigned char* onPreProcessVideoData(unsigned char* data, unsigned int dataLength, ZegoVideoFrameParam* param, double timestamp)
-   {
-       // 在此处对视频帧数据进行自定义前处理
-       // 例如：美颜、滤镜、水印等操作
-
-       // 前处理完成后返回处理后的数据指针
-       return data;
-   }
+   // 创建全局实例
+   MyEffectsHandler g_effects_handler;
    ```
 
-3. **暴露回调地址**
+3. **暴露特效处理器实例**
 
-   通过 Node API 将回调函数地址暴露给 JavaScript 层调用：
+   通过 Node API 将特效处理器实例暴露给 JavaScript 层调用：
 
    ```cpp
-   napi_value GetVideoPreProcessCallback(napi_env env, napi_callback_info info)
+   // 定义native方法 GetEffectsHandler 获取特效处理器实例
+   napi_value GetEffectsHandler(napi_env env, napi_callback_info info)
    {
+       napi_status status;
        napi_value result;
-       napi_create_int64(env, (int64_t)onPreProcessVideoData, &result);
+       status = napi_create_int64(env, (int64_t)&g_effects_handler, &result);
+       if(status != napi_ok )
+       {
+           printf("napi_create_int64 error --- \r\n");
+           return nullptr;
+       }
        return result;
    }
 
+   // env :当前javascript的上下文文件
+   // exports : 即可看做当前文件的model.exports，初始化之前是一个空对象。
    napi_value Init(napi_env env, napi_value exports)
    {
-       napi_property_descriptor desc[] = {
-           {"getVideoPreProcessCallback", 0, GetVideoPreProcessCallback, 0, 0, 0, napi_default, 0}
-       };
-       napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);
+       napi_status status;
+       napi_property_descriptor desc ={ "getEffectsHandler", 0, GetEffectsHandler, 0, 0, 0, napi_default, 0 };
+       status = napi_define_properties(env, exports, 1, &desc);
        return exports;
    }
 
+   // 注册当前module
    NAPI_MODULE(NODE_GYP_MODULE_NAME, Init)
    ```
 
@@ -181,10 +190,8 @@ SDK 在采集到视频数据后，会通过回调函数将 [ZegoVideoFrameObject
 ## 注意事项
 
 1. 调用 [enableCustomVideoProcessing](@enableCustomVideoProcessing) 的时机必须在 [startPreview](@startPreview) 或 [startPublishingStream](@startPublishingStream) 之前。如果需要修改配置，请先调用 [logoutRoom](@logoutRoom) 登出房间，否则不会生效。
-2. 回调函数中的视频帧数据格式为 RGBA（即 `ZegoVideoFrameObject` 的 `data` 字段为 `Uint8Array` 类型），开发者需注意数据格式的匹配。
-3. 回调函数应尽量高效，避免耗时操作导致视频帧堆积，影响推流质量。
-4. 开发者不应在回调中修改视频帧的宽高参数，否则可能导致推流异常。
-5. 建议根据实际需求选择合适的视频前处理方式：简单的前处理可使用本方案，复杂的图层混合场景建议使用 [自定义视频采集](/real-time-video-electron-js/video/custom-video-capture) 功能。
+2. 回调函数应尽量高效，避免耗时操作导致视频帧堆积，影响推流质量。
+3. 开发者不应在回调中修改视频帧的宽高参数，否则可能导致推流异常。
 
 ## 相关 API
 
@@ -192,5 +199,3 @@ SDK 在采集到视频数据后，会通过回调函数将 [ZegoVideoFrameObject
 |-----|------|
 | [enableCustomVideoProcessing](@enableCustomVideoProcessing) | 开启或关闭自定义视频前处理 |
 | [registerCustomVideoProcessPlugin](@registerCustomVideoProcessPlugin) | 注册自定义视频前处理插件 |
-| [setCustomVideoProcessCutRegion](@setCustomVideoProcessCutRegion) | 设置自定义视频前处理裁剪区域 |
-| [ZegoVideoFrameObject](/real-time-video-electron-js/client-sdk/api-reference/struct#zegovideoframeobject) | 视频帧对象结构体 |
