@@ -1,0 +1,78 @@
+import { Title } from './title';
+import ArticleMetadata from './ArticleMetadata';
+
+<Title>How to handle offline push notifications in the background?</Title>
+
+<ArticleMetadata language="en" product="In-app chat" platform="All" />
+
+
+---
+## Server-triggered offline push
+1. The long connection between the receiver and the ZIM server has not been disconnected, but the receiver fails to receive messages in a timely manner. (For example, under poor network conditions)
+
+    1. The sender sends a message to the ZIM Server.
+    2. The ZIM Server pushes the onPeerMessageReceived event via the long connection with the receiver.
+    3. The ZIM Server waits for the receiver to confirm the push via the onPeerMessageReceived callback until timeout.
+    4. After timeout, the ZIM Server sends a push request to the ZIM Offline Push Service.
+    5. The ZIM Offline Push Service sends a push request to the APNs/FCM service.
+    6. The APNs/FCM service pushes the message to the receiver's mobile device according to vendor rules.
+
+    ```mermaid
+    sequenceDiagram
+        participant Sender as sender
+        participant Server as ZIM Server
+        participant Conn as Long connection
+        participant Push as ZIM Offline Push Service
+        participant APNs as APNs/FCM service
+        participant Device as receiver Mobile device
+        Sender->>Server: send message
+        Server->>Conn: Push onPeerMessageReceived
+        Note over Server: Wait for the receiver to confirm the push via onPeerMessageReceived until timeout
+        Server->>Push: request (offline push triggered after timeout)
+        Push->>APNs: request
+        APNs->>Device: Push to device according to vendor rules
+    ```
+
+2. Offline push rules when the long connection between the receiver and the ZIM server is disconnected
+
+    1. The sender sends a message to the ZIM Server.
+    2. The ZIM Server detects that the receiver's long connection with the server has been disconnected (The receiver's connection to the server has been lost).
+    3. The ZIM Server sends a Push Offline Notification to the ZIM Offline Push Service.
+    4. The ZIM Offline Push Service sends a push request to the APNs/FCM service.
+    5. The APNs/FCM service pushes the message to the receiver's mobile device according to vendor rules.
+
+    ```mermaid
+    sequenceDiagram
+        participant Sender as sender
+        participant Server as ZIM Server
+        participant Push as ZIM Offline Push Service
+        participant APNs as APNs/FCM service
+        participant Device as receiver Mobile device
+        Sender->>Server: Send message
+        Note over Server: The receiver's connection to the server has been lost
+        Server->>Push: Push offline notification
+        Push->>APNs: Send request
+        APNs->>Device: Push to device according to vendor rules
+    ```
+
+## Under what circumstances will the long connection be disconnected
+
+1. Server-side timeout (WSS / QUIC)
+    - The client maintains a persistent connection with the ZIM server via WSS or QUIC.
+    - The server expects to receive regular heartbeat messages from the client.
+    - If the server does not receive a heartbeat within 30 seconds, it considers the connection inactive and closes it.
+
+2. System-initiated connection disconnect (WSS only)
+    - For example, the user manually swipes up to close the app, and the long connection associated with the app is actively terminated by the operating system. The system automatically closes the connection.
+    - The server detects the disconnection and releases related resources.
+
+## Mobile app background states, their impact on the long connection, and how to receive push notifications in each state
+
+1. The app is active in the background and can be allocated CPU time slices and network connection permissions
+
+    - When the application is in an active state, the persistent connection with the ZIM server remains.
+    - The client can receive the onPeerMessageReceived callback in real time.
+    - It is recommended to display a local notification via the system API after receiving onPeerMessageReceived to alert the user.
+
+2. The app is inactive in the background
+    When the app enters an inactive state in the background, depending on the system's policy, it will not be able to obtain CPU time slices or continue to connect to the network. Therefore, ZIM will not be able to receive new messages from the SDK in real time, nor send long connection heartbeats to the server. In this case, the ZIM server will send push notifications to the user according to the offline push trigger rules (as described above).
