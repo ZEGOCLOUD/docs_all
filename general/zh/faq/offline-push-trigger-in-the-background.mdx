@@ -1,0 +1,79 @@
+
+import { Title } from './title';
+import ArticleMetadata from './ArticleMetadata';
+
+<Title>后台如何处理离线推送通知？</Title>
+
+<ArticleMetadata language="zh" product="即时通讯" platform="All" />
+
+
+---
+## 服务器触发离线推送
+1. 接收方与 ZIM 服务端之间的长链接尚未断开，但是接收方为能及时收到消息。（例如在网络条件不佳的情况下）
+
+    1. 发送方（sender）发送消息到 ZIM Server。
+    2. ZIM Server 通过与接收方之间的长连接，推送 onPeerMessageReceived 事件。
+    3. ZIM Server 等待接收方通过 onPeerMessageReceived 回调确认推送，直到超时。
+    4. 超时后，ZIM Server 向 ZIM 离线推送服务发起推送请求。
+    5. ZIM 离线推送服务向 APNs/FCM 服务发起推送请求。
+    6. APNs/FCM 服务根据厂商规则将消息推送到接收方的移动设备。
+
+    ```mermaid
+    sequenceDiagram
+        participant Sender as sender
+        participant Server as ZIM Server
+        participant Conn as 长连接
+        participant Push as ZIM 离线推送服务
+        participant APNs as APNs/FCM 服务
+        participant Device as receiver Mobile device
+        Sender->>Server: send message
+        Server->>Conn: Push onPeerMessageReceived
+        Note over Server: 等待接收者通过 onPeerMessageReceived 确认推送直到超时
+        Server->>Push: request（超时后触发离线推送）
+        Push->>APNs: request
+        APNs->>Device: 根据供应商的规则推送到设备
+    ```
+
+2. 接收方与 ZIM 服务器的长链接断开时的离线推送规则
+
+    1. 发送方（sender）发送消息到 ZIM Server。
+    2. ZIM Server 检测到接收方与服务器的长连接已断开（The receiver's connection to the server has been lost）。
+    3. ZIM Server 向 ZIM 离线推送服务发送离线推送通知（Push Offline Notification）。
+    4. ZIM 离线推送服务向 APNs/FCM 服务发起推送请求。
+    5. APNs/FCM 服务根据厂商规则将消息推送到接收方的移动设备。
+
+    ```mermaid
+    sequenceDiagram
+        participant Sender as sender
+        participant Server as ZIM Server
+        participant Push as ZIM 离线推送服务
+        participant APNs as APNs/FCM 服务
+        participant Device as receiver Mobile device
+        Sender->>Server: 发送消息
+        Note over Server: 接收者与服务器的连接已丢失
+        Server->>Push: 推送离线通知
+        Push->>APNs: 发送请求
+        APNs->>Device: 按照厂商规定推送至该设备
+    ```
+
+## 长连接在什么情况下会断开
+
+1. 服务器端超时（WSS / QUIC）
+    - 客户端通过 WSS 或 QUIC 与 ZIM 服务器保持持久连接。
+    - 服务器期望从客户端接收定期的心跳消息。
+    - 如果服务器在30秒内未收到心跳，则认为连接处于非活动状态并关闭连接。
+
+2. 系统发起的连接断开（仅适用于 WSS）
+    - 例如用户手动上滑关闭 app, app 相关的长链接被操作系统主动终止，系统会自动关闭连接。
+    - 服务器检测到断开连接并释放相关资源。
+
+## 移动端后台状态、不同状态对长连接的影响，以及不同状态下如何获得推送通知展示
+
+1. APP 在后台活跃，可以分配到 cpu 时间片，以及网络连接权限
+
+    - 当应用程序处于活动状态时，与 ZIM 服务器的持久连接仍会保持。
+    - 客户端可以实时接收 onPeerMessageReceived 回调。
+    - 建议收到 onPeerMessageReceived 后，自行通过系统 API 显示本地通知以提醒用户。
+
+2. APP 在后台处于非活跃状态
+    当应用在后台进入非活跃状态时，根据系统策略的不同，将无法获取 CPU 时间片，或者无法继续连接网络。因此 ZIM 将无法实时接收来自 SDK 的新消息，以及向服务端发送长链接心跳。在这种情况下，ZIM 服务端会按照离线推送的触发规则（如前文所述），向用户发送推送通知。
