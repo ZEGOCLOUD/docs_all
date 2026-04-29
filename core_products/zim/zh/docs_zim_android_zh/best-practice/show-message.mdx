@@ -1,5 +1,5 @@
 ---
-date: '2026-03-31'
+date: "2026-04-21"
 ---
 import { getPlatformData } from "/snippets/utils-content-parser.js"
 
@@ -62,6 +62,43 @@ export const messageSentStatusChangedMap= {
 2. 实时收到的消息： 实时收到的聊天消息需要渲染到聊天界面。
 3. 本地发送的消息： 本地发送的聊天消息（包含发送中、发送成功、发送失败等状态）需要渲染到聊天界面。
 
+
+<Accordion title="消息数据流示意图" defaultOpen="false">
+
+```mermaid
+sequenceDiagram
+    participant SDK as SDK 回调
+    participant MM as Message Manager
+    participant UI as UI Layer
+
+    Note over SDK: onMessageQueried<br/>onPeerMessageReceived<br/>onMessageSentStatusChanged<br/>onMessageRevoked<br/>onMessageSent<br/>onMessageDeleted<br/>...
+
+    SDK->>MM: 推送消息事件 (Transaction)
+
+    alt Add/Update 事件
+        MM->>MM: 根据 messageID/localMessageID<br/>判断消息是否已存在
+        MM->>MM: 存在则替换，不存在则插入
+        MM->>MM: 按 orderKey 排序
+    else Delete 事件
+        MM->>MM: 查找需要删除的消息
+        MM->>MM: 从列表中移除
+    end
+
+    MM->>MM: 检测消息列表是否变更
+    MM->>UI: 通知消息列表变更 (new message list)
+
+    UI->>UI: 接收新消息列表
+    UI->>UI: 重建消息视图列表
+
+    alt 消息在旧视图中不存在
+        UI->>UI: 创建新 MessageView
+    else 消息在旧视图中已存在
+        UI->>UI: 更新已有 messageView
+    end
+
+    UI->>UI: 刷新 UI
+```
+</Accordion>
 
 ## 获取消息数据渲染到聊天界面
 
@@ -528,3 +565,60 @@ void onMessageSentStatusChanged(List<ZIMMessageSentStatusChangeInfo> messageSent
 
 
 通过以上方式，即可实现在聊天页面中渲染历史消息、实时接收的消息和本地发送的消息（包含发送状态）。
+
+
+## 常见问题
+
+<Accordion title="为什么需要使用新的消息对象替换旧的消息对象？" defaultOpen="false">
+
+消息数据在生命周期内可能发生变化，常见场景包括：
+1. 发送状态从 “发送中” 变为 “发送成功” 或 “发送失败”。
+2. 消息被撤回后，消息类型发生变更（例如从文本消息变为已撤回消息）。
+3. 已发送的消息被编辑。
+
+SDK 会在上述变化发生时推送最新的消息对象。为保持消息数据的一致性，应使用最新消息对象替换已有消息，并刷新 UI。
+
+</Accordion>
+
+<Accordion title="为什么需要同时使用 messageID 和 localMessageID 标识同一条消息？" defaultOpen="false">
+
+`messageID` 由服务器分配，具备全局唯一性，是消息的主要标识符。
+
+在以下场景中，消息可能尚未分配 `messageID`：
+- 消息正在发送中
+- 消息发送失败
+- 消息仅保存在本地（通过 `insertMessageToLocalDB` 插入）
+
+此时需使用 `localMessageID` 作为客户端的临时标识符。匹配规则为：`messageID` 可用时优先使用 `messageID`，不可用时使用 `localMessageID`。
+
+结合这两个标识符，可在消息生命周期的各个阶段准确判断两个消息对象是否为同一条消息。
+</Accordion>
+
+<Accordion title="为什么消息应按 orderKey 而不是 timestamp 排序？" defaultOpen="false">
+
+`timestamp` 反映消息到达服务器的时间，`orderKey` 专为消息排序设计，能提供一致的排序结果。
+
+在快速连续发送消息或网络条件不稳定时，`timestamp` 可能出现偏差，导致消息乱序。`orderKey` 综合考虑了全局消息顺序和同一发送者的发送顺序，确保消息显示与对话流程一致。
+
+使用 `orderKey` 排序可保证：
+- 排序结果稳定
+- 对话顺序正确
+- 不同客户端间显示一致
+
+</Accordion>
+<Accordion title="为什么由客户端进行排序？能否直接提供有序的消息列表？" defaultOpen="false">
+
+ZIM 在每个 API 或事件的返回结果中，已按 `orderKey` 对消息完成排序。
+
+实际应用中，聊天页面的消息列表由多个数据源合并构成：
+- 历史消息（`queryHistoryMessage`）
+- 实时接收消息（`onPeerMessageReceived`）
+- 消息更新（状态变更、撤回、编辑等）
+
+客户端是唯一能同时获取所有数据源的层级，需在合并后统一按 `orderKey` 重新排序，以确保：
+- 消息顺序稳定正确
+- 对话流程连贯
+- 所有数据源的视图统一
+
+ZIM 负责各数据源内部的有序性，客户端负责合并后的全局排序一致性。
+</Accordion>

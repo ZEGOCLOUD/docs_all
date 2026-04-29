@@ -1,5 +1,5 @@
 ---
-date: '2026-03-31'
+date: "2026-04-21"
 ---
 import { getPlatformData } from "/snippets/utils-content-parser.js"
 
@@ -56,12 +56,49 @@ You have already integrated the ZIM SDK into your project and implemented basic 
 
 ## Message Data Source Overview
 
+
 The message data sources that need to be rendered on the page mainly include the following:
 
 1. Historical conversation messages: When you first enter the chat page and view historical messages, you need to query historical conversation messages and render them to the chat interface.
 2. Real-time received messages: Real-time received chat messages need to be rendered to the chat interface.
 3. Local sent messages: Local sent chat messages (including sending, sending successfully, and sending failed statuses) need to be rendered to the chat interface.
 
+<Accordion title="Message data flow diagram" defaultOpen="false">
+
+```mermaid
+sequenceDiagram
+    participant SDK as SDK callbacks
+    participant MM as Message Manager
+    participant UI as UI Layer
+
+    Note over SDK: onMessageQueried<br/>onPeerMessageReceived<br/>onMessageSentStatusChanged<br/>onMessageRevoked<br/>onMessageSent<br/>onMessageDeleted<br/>...
+
+    SDK->>MM: Push message events (Transaction)
+
+    alt Add/Update event
+        MM->>MM: Check if message already exists<br/>by messageID/localMessageID
+        MM->>MM: Replace if exists, insert if not
+        MM->>MM: Sort by orderKey
+    else Delete event
+        MM->>MM: Find the message to delete
+        MM->>MM: Remove from list
+    end
+
+    MM->>MM: Detect message list changes
+    MM->>UI: Notify message list change (new message list)
+
+    UI->>UI: Receive new message list
+    UI->>UI: Rebuild message view list
+
+    alt Message does not exist in old view
+        UI->>UI: Create new MessageView
+    else Message already exists in old view
+        UI->>UI: Update existing MessageView
+    end
+
+    UI->>UI: Refresh UI
+```
+</Accordion>
 
 
 ## Get Message Data and Render to the Chat Interface
@@ -533,3 +570,60 @@ void onMessageSentStatusChanged(List<ZIMMessageSentStatusChangeInfo> messageSent
 
 
 By following the above steps, you can render historical messages, real-time received messages, and local sent messages (including sending status) in the chat page.
+
+
+## FAQ
+
+<Accordion title="Why is it necessary to replace the old message object with the new one?" defaultOpen="false">
+
+Message data may change during its lifecycle. Common scenarios include:
+1. The sending status changes from "sending" to "sent" or "failed".
+2. The message is recalled, causing the message type to change (e.g., from a text message to a recalled message).
+3. A sent message is edited.
+
+The SDK pushes the latest message object when any of the above changes occur. To maintain message data consistency, you should replace the existing message with the latest message object and refresh the UI.
+
+</Accordion>
+
+<Accordion title="Why use both messageID and localMessageID to identify the same message?" defaultOpen="false">
+
+`messageID` is assigned by the server and has global uniqueness, serving as the primary identifier of a message.
+
+In the following scenarios, a message may not yet have a `messageID`:
+- The message is being sent
+- The message failed to send
+- The message is only saved locally (inserted via `insertMessageToLocalDB`)
+
+In these cases, `localMessageID` is used as a temporary client-side identifier. The matching rule is: use `messageID` when available, otherwise use `localMessageID`.
+
+By combining these two identifiers, you can accurately determine whether two message objects represent the same message at any stage of the message lifecycle.
+</Accordion>
+
+<Accordion title="Why should messages be sorted by orderKey instead of timestamp?" defaultOpen="false">
+
+`timestamp` reflects the time the message reached the server, while `orderKey` is specifically designed for message sorting and provides consistent sorting results.
+
+When messages are sent rapidly in succession or under unstable network conditions, `timestamp` may deviate, causing message ordering issues. `orderKey` takes into account both the global message order and the sending order of the same sender, ensuring that messages are displayed consistently with the conversation flow.
+
+Sorting by `orderKey` ensures:
+- Stable sorting results
+- Correct conversation order
+- Consistent display across different clients
+
+</Accordion>
+<Accordion title="Why is sorting performed on the client side? Can an ordered message list be provided directly?" defaultOpen="false">
+
+ZIM already sorts messages by `orderKey` in the results returned by each API or event.
+
+In practice, the chat page message list is composed of multiple data sources merged together:
+- Historical messages (`queryHistoryMessage`)
+- Real-time received messages (`onPeerMessageReceived`)
+- Message updates (status changes, recalls, edits, etc.)
+
+The client is the only layer that can access all data sources simultaneously. After merging, it needs to uniformly re-sort by `orderKey` to ensure:
+- Stable and correct message order
+- Coherent conversation flow
+- Unified view across all data sources
+
+ZIM is responsible for internal ordering within each data source, while the client is responsible for global sorting consistency after merging.
+</Accordion>
