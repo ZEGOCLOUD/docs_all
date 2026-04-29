@@ -18,7 +18,7 @@ color: "#4ECDC4"
 |-------|------|---------|
 | `design-example-architecture` | 获取架构原则、平台标准、质量标准 | Step 4（架构设计）和 Step 6（代码实现） |
 | `find-zego-docs` | 查找产品文档、搜索 API 参考 | Step 2（查阅文档） |
-| `browser-automation` | 自动化浏览器测试 | Step 8（功能测试） |
+| `zego-browser-automation` | 自动化浏览器测试 | Step 8（功能测试） |
 | `android-device-automation` | 自动化 Android 设备测试 | Step 8（功能测试） |
 | `ios-device-automation` | 自动化 iOS 设备测试 | Step 8（功能测试） |
 | `harmonyos-device-automation` | 自动化 HarmonyOS 设备测试 | Step 8（功能测试） |
@@ -54,14 +54,14 @@ color: "#4ECDC4"
 - 核心交互（触发条件 → 响应）
 - 数据流
 
-将交互稿保存到 `{工作目录}/interaction-design.md` 文件中。使用 AskUserQuestion 等待用户确认，并展示 `{工作目录}/interaction-design.md` 文件内容。
+将交互稿保存到 `{示例代码目录}/interaction-design.md` 文件中。使用 AskUserQuestion 等待用户确认，并展示 `{示例代码目录}/interaction-design.md` 文件内容。
 
 ### Step 4: 架构设计
 
 1. 调用 `design-example-architecture` skill 获取架构原则和模板
 2. 参考 skill 提供的 examples 目录了解现有实现
-3. 输出架构设计（ASCII ART）和时序图（Mermaid），保存到 `{工作目录}/architecture-design.md` 文件中。
-4. 使用 AskUserQuestion 等待用户确认，并展示 `{工作目录}/architecture-design.md` 文件内容。
+3. 输出架构设计（ASCII ART）和时序图（Mermaid），保存到 `{示例代码目录}/architecture-design.md` 文件中。
+4. 使用 AskUserQuestion 等待用户确认，并展示 `{示例代码目录}/architecture-design.md` 文件内容。
 
 ### Step 5: 实现规划
 
@@ -71,7 +71,7 @@ color: "#4ECDC4"
 - 实现步骤（每步包含 API 调用、参数、说明）
 - 关键代码片段
 
-保存到 `{工作目录}/implementation-plan.md`。
+保存到 `{示例代码目录}/implementation-plan.md`。
 
 ### Step 6: 代码实现
 
@@ -82,7 +82,7 @@ color: "#4ECDC4"
 5. 遇到问题创建修复任务
 
 **注意**：
-- 注意代码要写到 `{工作目录}/examples` 目录下。
+- 注意代码要写到 `{示例代码目录}/examples` 目录下。
 - 我的构建机器的环境变量是一定存在 `ZEGO_APPID` 和 `ZEGO_SERVER_SECRET` 的，所以代码设置 appid和serversecret时，要有一个fallback读取环境变量中 `ZEGO_APPID` 和 `ZEGO_SERVER_SECRET` 的值的行为。构建运行时不要等用户输入。
 
 ### Step 7: 构建运行测试
@@ -99,7 +99,7 @@ color: "#4ECDC4"
 
 大部分情况都需要多用户/设备测试，只要涉及多用户交互的都要设计多设备测试用例。
 
-根据交互稿设计测试用例，将测试用例整理成易读的表格形式，写入到 `{工作目录}/test-cases.md` 文件中，并将文件内容展示给用户确认，待用户确认可以测试后执行测试。
+根据交互稿设计测试用例，将测试用例整理成易读的表格形式，写入到 `{示例代码目录}/test-cases.md` 文件中，并将文件内容展示给用户确认，待用户确认可以测试后执行测试。
 测试用例要求：
 - 用自然语言描述，要准确且完整。
 - 覆盖所有功能点。
@@ -113,9 +113,9 @@ color: "#4ECDC4"
 
 大部分情况都需要多用户/设备测试，需要根据测试用例选择合适的用户/设备。
 
-读取`{工作目录}/test-cases.md`文件中的测试用例，依据 `zego-browser-automation`, `android-device-automation`, `ios-device-automation`, `harmonyos-device-automation`, `desktop-computer-automation` skill 指引进行测试。
+读取`{示例代码目录}/test-cases.md`文件中的测试用例，依据 `zego-browser-automation`, `android-device-automation`, `ios-device-automation`, `harmonyos-device-automation`, `desktop-computer-automation` skill 指引进行测试。
 
-测试失败应该在`{工作目录}/test-cases.md`文件中标记为失败，并记录失败原因。在一次完整测试过后，对失败的测试用例进行分析，并修复。修复完成后重新执行功能测试。
+测试失败应该在`{示例代码目录}/test-cases.md`文件中标记为失败，并记录失败原因。在一次完整测试过后，对失败的测试用例进行分析，并修复。修复完成后重新执行功能测试。
 
 ### Step 10: README 文档
 
