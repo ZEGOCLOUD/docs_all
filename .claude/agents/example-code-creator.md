@@ -18,11 +18,7 @@ color: "#4ECDC4"
 |-------|------|---------|
 | `design-example-architecture` | 获取架构原则、平台标准、质量标准 | Step 4（架构设计）和 Step 6（代码实现） |
 | `find-zego-docs` | 查找产品文档、搜索 API 参考 | Step 2（查阅文档） |
-| `zego-browser-automation` | 自动化浏览器测试 | Step 8（功能测试） |
-| `android-device-automation` | 自动化 Android 设备测试 | Step 8（功能测试） |
-| `ios-device-automation` | 自动化 iOS 设备测试 | Step 8（功能测试） |
-| `harmonyos-device-automation` | 自动化 HarmonyOS 设备测试 | Step 8（功能测试） |
-| `desktop-computer-automation` | 自动化桌面电脑测试 | Step 8（功能测试） |
+| `create-example-core-test-cases` | 生成核心功能测试用例（md + sh） | Step 8（设计测试用例） |
 
 ## 工作流程
 
@@ -75,6 +71,8 @@ color: "#4ECDC4"
 
 ### Step 6: 代码实现
 
+**开始前必须读取 `{示例代码目录}/architecture-design.md` 中的项目结构部分，严格按照其中定义的目录和文件路径编写代码。**
+
 1. 调用 `design-example-architecture` skill 确保符合架构原则
 2. 将规划书步骤转为任务列表（TaskCreate）
 3. 逐步实现，每个任务原子化
@@ -84,6 +82,8 @@ color: "#4ECDC4"
 **注意**：
 - 注意代码要写到 `{示例代码目录}/examples` 目录下。
 - 我的构建机器的环境变量是一定存在 `ZEGO_APPID` 和 `ZEGO_SERVER_SECRET` 的，所以代码设置 appid和serversecret时，要有一个fallback读取环境变量中 `ZEGO_APPID` 和 `ZEGO_SERVER_SECRET` 的值的行为。构建运行时不要等用户输入。
+
+**完成后必须校验**：用 `ls` 或 `find` 列出实际生成的文件和目录，逐一对照 `architecture-design.md` 中的项目结构，确认文件路径完全一致。如有差异，立即修正。
 
 ### Step 7: 构建运行测试
 
@@ -95,27 +95,24 @@ color: "#4ECDC4"
 
 构建出错则分析并修复。
 
-### Step 8: 功能测试
+### Step 8: 设计测试用例
 
-大部分情况都需要多用户/设备测试，只要涉及多用户交互的都要设计多设备测试用例。
+重要‼️必须加载 `create-example-core-test-cases` skill，并按该 skill 指引分析示例代码的核心功能，然后生成两个文件：
+- `{示例代码目录}/test-cases.md` — 人类易读的测试用例表格（仅覆盖核心功能）
+- `{示例代码目录}/test-cases.sh` — 自动化 Midscene 测试脚本（按平台生成对应命令）
 
-根据交互稿设计测试用例，将测试用例整理成易读的表格形式，写入到 `{示例代码目录}/test-cases.md` 文件中，并将文件内容展示给用户确认，待用户确认可以测试后执行测试。
-测试用例要求：
-- 用自然语言描述，要准确且完整。
-- 覆盖所有功能点。
-- 覆盖所有边界情况。
-- 覆盖所有国际化情况。
-
-以列表形式输出测试用例，每个测试用例要明确设备id（或者浏览器标签序号）。
-使用 AskUserQuestion 询问用户是否需要调整测试用例。
+注意：如果没有这两个文件则表示整个示例代码开发的失败！
+将两个文件内容展示给用户确认。使用 AskUserQuestion 询问用户是否需要调整测试用例。
 
 ### Step 9: 执行测试
 
-大部分情况都需要多用户/设备测试，需要根据测试用例选择合适的用户/设备。
+确保示例应用已启动运行，然后执行 `{示例代码目录}/test-cases.sh` 脚本：
 
-读取`{示例代码目录}/test-cases.md`文件中的测试用例，依据 `zego-browser-automation`, `android-device-automation`, `ios-device-automation`, `harmonyos-device-automation`, `desktop-computer-automation` skill 指引进行测试。
+```bash
+cd {示例代码目录} && chmod +x {示例代码目录}/test-cases.sh && bash {示例代码目录}/test-cases.sh
+```
 
-测试失败应该在`{示例代码目录}/test-cases.md`文件中标记为失败，并记录失败原因。在一次完整测试过后，对失败的测试用例进行分析，并修复。修复完成后重新执行功能测试。
+测试失败时分析失败原因，修复代码后重新执行脚本。
 
 ### Step 10: README 文档
 
