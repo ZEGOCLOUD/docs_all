@@ -8,18 +8,13 @@ const LLMValidator = ({ lang = 'zh' }) => {
   const t = i18n[lang] || i18n.zh;
 
   const vendors = [
-    { id: 'volcengine', name: '火山方舟', url: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions', model: 'doubao-1-5-lite-32k-250115' },
-    { id: 'aliyun', name: '阿里云百炼', url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-plus' },
-    { id: 'minimax', name: 'MiniMax', url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'MiniMax-Text-01' },
-    { id: 'openai', name: 'OpenAI', url: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4' },
-    { id: 'deepseek', name: 'DeepSeek', url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat' },
-    // { id: 'anthropic', name: 'Anthropic', url: 'https://api.anthropic.com/v1/messages', model: 'claude-3-opus-20240229' },
-    // { id: 'baidu', name: '百度千帆', url: 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions', model: 'ERNIE-Bot-4' },
-    // { id: 'google', name: 'Google AI', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-pro' },
-    // { id: 'moonshot', name: 'Moonshot AI', url: 'https://api.moonshot.cn/v1/chat/completions', model: 'moonshot-v1-8k' },
-    // { id: 'stepfun', name: '阶跃星辰', url: 'https://api.stepfun.com/v1/chat/completions', model: 'step-1-8k' },
-    // { id: 'zhipu', name: '智谱AI', url: 'https://open.bigmodel.cn/api/paas/v4/chat/completions', model: 'glm-4' },
-    { id: 'custom', name: lang === 'zh' ? '自定义/其他' : 'Custom/Other', url: '', model: '' },
+    { id: 'volcengine', name: '火山方舟 (Chat Completions)', vendor: 'OpenAIChat', url: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions', model: 'doubao-1-5-lite-32k-250115' },
+    { id: 'volcengine_responses', name: '火山方舟 (Responses API)', vendor: 'OpenAIResponses', url: 'https://ark.cn-beijing.volces.com/api/v3/responses', model: 'doubao-seed-1-6-flash-250828' },
+    { id: 'aliyun', name: '阿里云百炼', vendor: 'OpenAIChat', url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-plus' },
+    { id: 'minimax', name: 'MiniMax', vendor: 'OpenAIChat', url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'MiniMax-Text-01' },
+    { id: 'openai', name: 'OpenAI', vendor: 'OpenAIChat', url: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4' },
+    { id: 'deepseek', name: 'DeepSeek', vendor: 'OpenAIChat', url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat' },
+    { id: 'custom', name: lang === 'zh' ? '自定义/其他' : 'Custom/Other', vendor: 'OpenAIChat', url: '', model: '' },
   ];
 
   const languages = ['JavaScript', 'TypeScript', 'Java', 'Go', 'PHP', 'C++', 'C#'];
@@ -35,7 +30,8 @@ const LLMValidator = ({ lang = 'zh' }) => {
   const [userMessage, setUserMessage] = useState('');
 
   const generateLLMConfig = (vendor, language) => {
-    const baseConfig = { Vendor: 'OpenAIChat', Url: vendor.url, ApiKey: 'your_api_key', Model: vendor.model, SystemPrompt: t.systemprompt, Temperature: 0.7, TopP: 0.9, Params: { max_tokens: 16384 } };
+    const vendorType = vendor.vendor || 'OpenAIChat';
+    const baseConfig = { Vendor: vendorType, Url: vendor.url, ApiKey: 'your_api_key', Model: vendor.model, SystemPrompt: t.systemprompt, Temperature: 0.7, TopP: 0.9, Params: { max_tokens: 16384 } };
     if (language === 'PHP') {
       return `"LLM" => [\n    "Vendor" => "${baseConfig.Vendor}",\n    "Url" => "${baseConfig.Url}",\n    "ApiKey" => "${baseConfig.ApiKey}",\n    "Model" => "${baseConfig.Model}",\n    "SystemPrompt" => "${baseConfig.SystemPrompt}",\n    "Temperature" => ${baseConfig.Temperature},\n    "TopP" => ${baseConfig.TopP},\n    "Params" => ["max_tokens" => ${baseConfig.Params.max_tokens}]\n],`;
     }
@@ -464,15 +460,10 @@ public class AgentRegistration
       }
 
       // 第四步：参数校验通过，开始构建请求体并发起请求
-      // 构建请求体，优先使用Params中的参数
-      const requestBody = {
-        model: llmParams.Params?.model || llmParams.Model || 'gpt-3.5-turbo',
-        temperature: llmParams.Params?.temperature ?? llmParams.Temperature ?? 0.7,
-        top_p: llmParams.Params?.top_p ?? llmParams.TopP ?? 0.9,
-        stream: true
-      };
+      const vendorType = (llmParams.Vendor || 'OpenAIChat');
+      const isOpenAIResponses = vendorType === 'OpenAIResponses';
 
-      // 处理messages参数
+      // 处理messages/input参数
       let messages = [];
 
       // 1. 如果Params中有messages，使用它
@@ -482,7 +473,12 @@ public class AgentRegistration
 
       // 2. 如果设置了SystemPrompt且不为空，必须在messages最前面插入（不是替换）
       if (llmParams.SystemPrompt && llmParams.SystemPrompt.trim() !== '') {
-        messages.unshift({ role: 'system', content: llmParams.SystemPrompt });
+        // OpenAIResponses uses instructions field for system prompt
+        if (isOpenAIResponses) {
+          // For Responses API, system prompt goes into instructions, not messages
+        } else {
+          messages.unshift({ role: 'system', content: llmParams.SystemPrompt });
+        }
       }
 
       // 3. 检查是否包含user消息
@@ -494,18 +490,53 @@ public class AgentRegistration
         messages.push({ role: 'user', content: userContent });
       }
 
-      requestBody.messages = messages;
-
-      // 添加其他Params参数
-      if (llmParams.Params) {
-        Object.keys(llmParams.Params).forEach(key => {
-          if (!['model', 'temperature', 'top_p', 'messages'].includes(key)) {
-            requestBody[key] = llmParams.Params[key];
-          }
-        });
+      // 构建请求体，根据 Vendor 类型使用不同的格式
+      let requestBody;
+      if (isOpenAIResponses) {
+        // OpenAI Responses API format
+        requestBody = {
+          model: llmParams.Params?.model || llmParams.Model || 'gpt-4',
+          input: messages,
+          stream: true,
+        };
+        if (llmParams.SystemPrompt && llmParams.SystemPrompt.trim() !== '') {
+          requestBody.instructions = llmParams.SystemPrompt;
+        }
+        if (llmParams.Temperature !== undefined || llmParams.Params?.temperature !== undefined) {
+          requestBody.temperature = llmParams.Params?.temperature ?? llmParams.Temperature ?? 0.7;
+        }
+        if (llmParams.TopP !== undefined || llmParams.Params?.top_p !== undefined) {
+          requestBody.top_p = llmParams.Params?.top_p ?? llmParams.TopP ?? 0.9;
+        }
+        // Add other Params
+        if (llmParams.Params) {
+          Object.keys(llmParams.Params).forEach(key => {
+            if (!['model', 'temperature', 'top_p', 'messages', 'stream'].includes(key)) {
+              requestBody[key] = llmParams.Params[key];
+            }
+          });
+        }
+      } else {
+        // OpenAI Chat Completions API format
+        requestBody = {
+          model: llmParams.Params?.model || llmParams.Model || 'gpt-3.5-turbo',
+          temperature: llmParams.Params?.temperature ?? llmParams.Temperature ?? 0.7,
+          top_p: llmParams.Params?.top_p ?? llmParams.TopP ?? 0.9,
+          stream: true,
+          messages: messages,
+        };
+        // Add other Params
+        if (llmParams.Params) {
+          Object.keys(llmParams.Params).forEach(key => {
+            if (!['model', 'temperature', 'top_p', 'messages'].includes(key)) {
+              requestBody[key] = llmParams.Params[key];
+            }
+          });
+        }
       }
 
-      console.log('=== 发送给OpenAI的请求体 ===');
+      console.log('=== 发送给LLM的请求体 ===');
+      console.log('Vendor:', vendorType);
       console.log('URL:', llmParams.Url);
       console.log('Headers:', {
         'Content-Type': 'application/json',
@@ -514,7 +545,7 @@ public class AgentRegistration
       console.log('Body:', JSON.stringify(requestBody, null, 2));
 
       // 保存请求参数用于显示
-      const paramsDisplay = `URL: ${llmParams.Url}\n\nHeaders:\n${JSON.stringify({
+      const paramsDisplay = `Vendor: ${vendorType}\nURL: ${llmParams.Url}\n\nHeaders:\n${JSON.stringify({
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${llmParams.ApiKey || '(empty)'}`
       }, null, 2)}\n\nBody:\n${JSON.stringify(requestBody, null, 2)}`;
@@ -550,7 +581,15 @@ public class AgentRegistration
             if (data === '[DONE]') continue;
             try {
               const parsed = JSON.parse(data);
-              if (parsed.choices?.[0]?.delta?.content) content += parsed.choices[0].delta.content;
+              if (isOpenAIResponses) {
+                // OpenAI Responses API: extract text from response.output_text.delta events
+                if (parsed.type === 'response.output_text.delta' && parsed.delta) {
+                  content += parsed.delta;
+                }
+              } else {
+                // OpenAI Chat Completions API
+                if (parsed.choices?.[0]?.delta?.content) content += parsed.choices[0].delta.content;
+              }
             } catch (e) {}
           }
         }
