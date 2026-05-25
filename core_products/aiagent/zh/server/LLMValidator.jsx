@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 
 const LLMValidator = ({ lang = 'zh' }) => {
   const i18n = {
-    zh: { systemprompt: "你是一个友好的助手",title: 'LLM 校验器', vendor: 'LLM 厂商', language: '开发语言', llmConfig: 'LLM 配置', sampleCode: '示例代码', response: '响应结果', requestParams: '实际请求LLM参数', userMessage: '用户消息',userMessageDefault: '你好,请介绍一下你自己', userMessagePlaceholder: '如果Params中没填写messages参数或者messages参数未包含role为user的消息，则使用该值请求LLM。', validate: '校验', validating: '校验中...', success: '校验成功', error: '校验失败', receivedContent: '收到的内容', fullResponse: '完整响应', paramError: '参数错误', caseMismatch: '参数大小写不匹配', invalidParam: '不是有效参数', missingRequired: '缺少必填参数', paramsInvalid: 'Params 值不是一个有效的 Object', paramsJsonError: 'Params JSON 格式错误', trailingComma: '检测到多余的逗号' },
-    en: { systemprompt: "You are a friendly assistant", title: 'LLM Validator', vendor: 'LLM Vendor', language: 'Programming Language', llmConfig: 'LLM Configuration', sampleCode: 'Sample Code', response: 'Response', requestParams: 'Actual Request LLM Parameters', userMessage: 'User Message', userMessageDefault: 'Hello, please introduce yourself', userMessagePlaceholder: 'If Params does not contain messages parameter or messages parameter does not include a user role message, this value will be used to request LLM.', validate: 'Validate', validating: 'Validating...', success: 'Validation Successful', error: 'Validation Failed', receivedContent: 'Received Content', fullResponse: 'Full Response', paramError: 'Parameter Error', caseMismatch: 'parameter case mismatch', invalidParam: 'is not a valid parameter', missingRequired: 'Missing required parameter', paramsInvalid: 'Params value is not a valid Object', paramsJsonError: 'Params JSON format error', trailingComma: 'Trailing comma detected' }
+    zh: { systemprompt: "你是一个友好的助手",title: 'LLM 校验器', vendor: 'LLM 厂商', language: '开发语言', llmConfig: 'LLM 配置', sampleCode: '示例代码', response: '校验结果', requestParams: '实际请求LLM参数', userMessage: '用户消息',userMessageDefault: '你好,请介绍一下你自己', userMessagePlaceholder: '如果Params中没填写messages参数或者messages参数未包含role为user的消息，则使用该值请求LLM。', validate: '校验', validating: '校验中...', success: '校验成功', error: '校验失败', receivedContent: '收到的内容', fullResponse: '完整响应', paramError: '参数错误', caseMismatch: '参数大小写不匹配', invalidParam: '不是有效参数', missingRequired: '缺少必填参数', paramsInvalid: 'Params 值不是一个有效的 Object', paramsJsonError: 'Params JSON 格式错误', trailingComma: '检测到多余的逗号', paramValidationPassed: '参数校验通过！所有参数格式正确。请切换到"实际请求LLM参数"标签页查看将发送给 LLM 的完整请求参数。' },
+    en: { systemprompt: "You are a friendly assistant", title: 'LLM Validator', vendor: 'LLM Vendor', language: 'Programming Language', llmConfig: 'LLM Configuration', sampleCode: 'Sample Code', response: 'Validation Result', requestParams: 'Actual Request LLM Parameters', userMessage: 'User Message', userMessageDefault: 'Hello, please introduce yourself', userMessagePlaceholder: 'If Params does not contain messages parameter or messages parameter does not include a user role message, this value will be used to request LLM.', validate: 'Validate', validating: 'Validating...', success: 'Validation Successful', error: 'Validation Failed', receivedContent: 'Received Content', fullResponse: 'Full Response', paramError: 'Parameter Error', caseMismatch: 'parameter case mismatch', invalidParam: 'is not a valid parameter', missingRequired: 'Missing required parameter', paramsInvalid: 'Params value is not a valid Object', paramsJsonError: 'Params JSON format error', trailingComma: 'Trailing comma detected', paramValidationPassed: 'Parameter validation passed! All parameters are in the correct format. Switch to the "Actual Request LLM Parameters" tab to view the complete request parameters that will be sent to the LLM.' }
   };
   const t = i18n[lang] || i18n.zh;
 
@@ -439,8 +439,6 @@ public class AgentRegistration
     try {
       // 第一步：提取参数
       const llmParams = extractLLMParams(llmConfig);
-      console.log('=== 提取到的LLM参数 ===');
-      console.log(llmParams);
 
       // 第二步：检查提取过程是否有错误
       if (llmParams && llmParams.error) {
@@ -463,8 +461,7 @@ public class AgentRegistration
         return;
       }
 
-      // 第四步：参数校验通过，开始构建请求体并发起请求
-      // 构建请求体，优先使用Params中的参数
+      // 参数校验通过，构建预览请求参数（不实际发送请求）
       const requestBody = {
         model: llmParams.Params?.model || llmParams.Model || 'gpt-3.5-turbo',
         temperature: llmParams.Params?.temperature ?? llmParams.Temperature ?? 0.7,
@@ -472,31 +469,20 @@ public class AgentRegistration
         stream: true
       };
 
-      // 处理messages参数
       let messages = [];
-
-      // 1. 如果Params中有messages，使用它
       if (llmParams.Params?.messages && Array.isArray(llmParams.Params.messages)) {
         messages = [...llmParams.Params.messages];
       }
-
-      // 2. 如果设置了SystemPrompt且不为空，必须在messages最前面插入（不是替换）
       if (llmParams.SystemPrompt && llmParams.SystemPrompt.trim() !== '') {
         messages.unshift({ role: 'system', content: llmParams.SystemPrompt });
       }
-
-      // 3. 检查是否包含user消息
       const hasUserMessage = messages.some(msg => msg.role === 'user');
-
-      // 4. 如果没有user消息，添加一条
       if (!hasUserMessage) {
         const userContent = userMessage || t.userMessageDefault;
         messages.push({ role: 'user', content: userContent });
       }
-
       requestBody.messages = messages;
 
-      // 添加其他Params参数
       if (llmParams.Params) {
         Object.keys(llmParams.Params).forEach(key => {
           if (!['model', 'temperature', 'top_p', 'messages'].includes(key)) {
@@ -505,57 +491,13 @@ public class AgentRegistration
         });
       }
 
-      console.log('=== 发送给OpenAI的请求体 ===');
-      console.log('URL:', llmParams.Url);
-      console.log('Headers:', {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${llmParams.ApiKey ? '***' : '(empty)'}`
-      });
-      console.log('Body:', JSON.stringify(requestBody, null, 2));
-
-      // 保存请求参数用于显示
       const paramsDisplay = `URL: ${llmParams.Url}\n\nHeaders:\n${JSON.stringify({
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${llmParams.ApiKey || '(empty)'}`
       }, null, 2)}\n\nBody:\n${JSON.stringify(requestBody, null, 2)}`;
       setRequestParams(paramsDisplay);
 
-      const res = await fetch(llmParams.Url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${llmParams.ApiKey || ''}` },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        setResponse(`${t.error}: HTTP ${res.status} - ${errorText}`);
-        setIsValidating(false);
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let fullResponse = '';
-      let content = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        fullResponse += chunk;
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.choices?.[0]?.delta?.content) content += parsed.choices[0].delta.content;
-            } catch (e) {}
-          }
-        }
-      }
-      setResponse(`${t.success}!\n\n${t.receivedContent}:\n${content}\n\n${t.fullResponse}:\n${fullResponse}`);
+      setResponse(t.paramValidationPassed);
     } catch (error) {
       setResponse(`${t.error}: ${error.message}`);
     } finally {
