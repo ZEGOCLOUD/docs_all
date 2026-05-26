@@ -9,6 +9,314 @@ date: "2026-04-02"
 
 本文介绍 ZIM Flutter 平台 SDK 版本升级时的一些说明和注意事项。
 
+## 3.0.0 升级指南
+
+<Warning title="注意">
+
+本次版本（3.0.0）移除了部分已废弃超过 1 年的接口及相关枚举值和字段，同时对部分接口新增了废弃标记。请参考以下说明完成迁移。
+</Warning>
+
+### 废弃接口删除
+
+#### ZIM 初始化接口（create）
+
+废弃的旧版 `create(int appID)` 接口已被移除，请使用接受 [ZIMAppConfig](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMAppConfig-class.html) 参数的 [create](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/create.html) 接口代替。
+
+<CodeGroup>
+```dart 新版本用法
+ZIMAppConfig appConfig = ZIMAppConfig();
+appConfig.appID = 12345678;
+appConfig.appSign = 'appSign';
+ZIM.create(appConfig);
+```
+
+```dart 旧版本用法
+// 旧版接口已移除
+ZIM.create(12345678);
+```
+</CodeGroup>
+
+#### ZIM 登录接口（login）
+
+废弃的旧版 `login(ZIMUserInfo, String token)` 接口已被移除，请使用接受 `userID` 和 [ZIMLoginConfig](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMLoginConfig-class.html) 参数的 [login](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/login.html) 接口代替。
+
+<CodeGroup>
+```dart 新版本用法
+ZIMLoginConfig loginConfig = ZIMLoginConfig();
+loginConfig.userName = 'userName';
+loginConfig.token = ''; // 若使用 Token 鉴权，请填写 Token
+loginConfig.isOfflineLogin = false;
+await ZIM.getInstance()!.login('userID', loginConfig);
+```
+
+```dart 旧版本用法
+// 旧版接口已移除
+ZIMUserInfo userInfo = ZIMUserInfo();
+userInfo.userID = 'userID';
+userInfo.userName = 'userName';
+await ZIM.getInstance()!.login(userInfo, '');
+```
+</CodeGroup>
+
+#### ZIM 消息发送接口（sendMessage）
+
+废弃的 `sendPeerMessage`、`sendRoomMessage`、`sendGroupMessage` 接口已被移除，请统一使用含 `notification` 参数的 [sendMessage](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/sendMessage.html) 接口代替。
+
+<CodeGroup>
+```dart 新版本用法
+ZIMTextMessage textMessage = ZIMTextMessage(message: 'Hello');
+ZIMMessageSendConfig config = ZIMMessageSendConfig();
+ZIMMessageSendNotification notification = ZIMMessageSendNotification();
+notification.onMessageAttached = (ZIMMessage message) {
+    // 消息发送前的业务逻辑
+};
+await ZIM.getInstance()!.sendMessage(
+    textMessage,
+    'toConversationID',
+    ZIMConversationType.peer,
+    config,
+    notification,
+);
+```
+
+```dart 旧版本用法
+// 旧版接口已移除，请迁移到 sendMessage 接口
+ZIMTextMessage textMessage = ZIMTextMessage(message: 'Hello');
+ZIMMessageSendConfig config = ZIMMessageSendConfig();
+// 旧版单聊消息发送
+await ZIM.getInstance()!.sendPeerMessage(textMessage, 'toUserID', config);
+// 旧版群聊消息发送
+await ZIM.getInstance()!.sendGroupMessage(textMessage, 'toGroupID', config);
+```
+</CodeGroup>
+
+#### ZIM 消息接收回调接口
+
+在 2.18.0 中已废弃的 `onReceivePeerMessage`、`onReceiveRoomMessage`、`onReceiveGroupMessage` 回调在本版本中正式移除，建议迁移至 [onMessageReceived](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onMessageReceived.html)。
+
+<CodeGroup>
+```dart 新版本用法
+ZIMEventHandler.onMessageReceived = (ZIM zim,
+    ZIMMessageReceivedEventResult result) {
+    List<ZIMMessage> messageList = result.messageList;
+    ZIMMessageReceivedInfo info = result.info;
+    String conversationID = result.conversationID;
+    ZIMConversationType conversationType = result.conversationType;
+    // 根据 conversationType 处理不同类型会话的消息
+};
+```
+
+```dart 旧版本用法（已移除）
+ZIMEventHandler.onReceivePeerMessage = (ZIM zim,
+    List<ZIMMessage> messageList, String fromUserID) {};
+ZIMEventHandler.onReceiveRoomMessage = (ZIM zim,
+    List<ZIMMessage> messageList, String fromRoomID) {};
+ZIMEventHandler.onReceiveGroupMessage = (ZIM zim,
+    List<ZIMMessage> messageList, String fromGroupID) {};
+```
+</CodeGroup>
+
+#### ZIM 呼叫邀请回调接口
+
+旧版 `onCallInvitationTimeout(zim, callID)`（仅 callID 参数）、`onCallInvitationRejected`、`onCallInvitationAccepted`、`onCallInviteesAnsweredTimeout` 回调已被移除，请使用新版 [onCallInvitationTimeout](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onCallInvitationTimeout.html) 和 [onCallUserStateChanged](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onCallUserStateChanged.html) 代替。
+
+<CodeGroup>
+```dart 新版本用法
+ZIMEventHandler.onCallInvitationTimeout = (ZIM zim,
+    ZIMCallInvitationTimeoutInfo info,
+    String callID) {
+    // info.mode 可区分普通模式/进阶模式
+};
+
+ZIMEventHandler.onCallUserStateChanged = (ZIM zim,
+    ZIMCallUserStateChangeInfo info,
+    String callID) {
+    // info.callUserList 包含状态变更的用户列表
+    // 可统一处理接受、拒绝、超时等状态变更
+};
+```
+
+```dart 旧版本用法
+// 旧版回调已移除，请迁移到 onCallInvitationTimeout 和 onCallUserStateChanged
+ZIMEventHandler.onCallInvitationTimeout = (ZIM zim, String callID) {};
+ZIMEventHandler.onCallInvitationRejected = (ZIM zim,
+    ZIMCallInvitationRejectedInfo info, String callID) {};
+ZIMEventHandler.onCallInvitationAccepted = (ZIM zim,
+    ZIMCallInvitationAcceptedInfo info, String callID) {};
+ZIMEventHandler.onCallInviteesAnsweredTimeout = (ZIM zim,
+    List<String> invitees, String callID) {};
+```
+</CodeGroup>
+
+### 新增废弃接口（建议迁移）
+
+#### ZIM 消息接收回调接口
+
+`onPeerMessageReceived`、`onRoomMessageReceived`、`onGroupMessageReceived` 回调在本版本中新增废弃标记，当前仍可正常使用，但建议尽快迁移至 [onMessageReceived](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onMessageReceived.html)。
+
+<CodeGroup>
+```dart 建议使用（新接口）
+ZIMEventHandler.onMessageReceived = (ZIM zim,
+    ZIMMessageReceivedEventResult result) {
+    List<ZIMMessage> messageList = result.messageList;
+    ZIMMessageReceivedInfo info = result.info;
+    String conversationID = result.conversationID;
+    ZIMConversationType conversationType = result.conversationType;
+    // 根据 conversationType 处理不同类型会话的消息
+};
+```
+
+```dart 废弃接口（仍可用，建议迁移）
+ZIMEventHandler.onPeerMessageReceived = (ZIM zim,
+    List<ZIMMessage> messageList, ZIMMessageReceivedInfo info,
+    String fromUserID) {};
+ZIMEventHandler.onRoomMessageReceived = (ZIM zim,
+    List<ZIMMessage> messageList, ZIMMessageReceivedInfo info,
+    String fromRoomID) {};
+ZIMEventHandler.onGroupMessageReceived = (ZIM zim,
+    List<ZIMMessage> messageList, ZIMMessageReceivedInfo info,
+    String fromGroupID) {};
+```
+</CodeGroup>
+
+### 枚举值移除
+
+#### ZIMMessageType 枚举值移除
+
+`ZIMMessageType.system`（值为 30）已从枚举中移除，同时 `ZIMSystemMessage` 类也已被移除。如需发送系统级指令，请使用 [ZIMCommandMessage](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMCommandMessage-class.html) 代替。
+
+<CodeGroup>
+```dart 新版本用法
+// 使用 ZIMCommandMessage 代替 ZIMSystemMessage
+ZIMCommandMessage commandMessage = ZIMCommandMessage(
+    message: Uint8List.fromList('payload'.codeUnits),
+);
+await ZIM.getInstance()!.sendMessage(
+    commandMessage,
+    'toConversationID',
+    ZIMConversationType.peer,
+    ZIMMessageSendConfig(),
+    null,
+);
+```
+
+```dart 旧版本用法
+// ZIMMessageType.system 和 ZIMSystemMessage 已被移除
+ZIMSystemMessage systemMessage = ZIMSystemMessage();
+// ...
+```
+</CodeGroup>
+
+#### ZIMCallUserState 枚举值移除
+
+`ZIMCallUserState.offline`（值为 4）已从枚举中移除，请检查代码中是否有对该枚举值的判断并将其删除。
+
+```dart
+// 以下枚举值已移除，请检查并删除代码中对该值的引用
+// ZIMCallUserState.offline  （值为 4）
+```
+
+### 字段变更
+
+#### ZIMUserFullInfo.userAvatarUrl 废弃
+
+`ZIMUserFullInfo.userAvatarUrl` 已废弃，请使用 `ZIMUserFullInfo.baseInfo.userAvatarUrl` 代替。
+
+<CodeGroup>
+```dart 新版本用法
+String avatarUrl = userFullInfo.baseInfo.userAvatarUrl;
+```
+
+```dart 旧版本用法
+String avatarUrl = userFullInfo.userAvatarUrl; // 已废弃
+```
+</CodeGroup>
+
+#### ZIMMessage.conversationSeq 替换为 messageSeq
+
+`ZIMMessage.conversationSeq` 已被移除，请使用 `ZIMMessage.messageSeq` 代替。
+
+<CodeGroup>
+```dart 新版本用法
+int seq = message.messageSeq;
+```
+
+```dart 旧版本用法
+int seq = message.conversationSeq; // 已移除
+```
+</CodeGroup>
+
+#### ZIMMessageDeletedInfo.isDeleteConversationAllMessage 移除
+
+`ZIMMessageDeletedInfo.isDeleteConversationAllMessage` 已被移除，请使用 `ZIMMessageDeletedInfo.messageDeleteType` 代替。
+
+<CodeGroup>
+```dart 新版本用法
+ZIMMessageDeleteType deleteType = deletedInfo.messageDeleteType;
+// 通过 deleteType 判断是单条删除还是全量删除
+```
+
+```dart 旧版本用法
+bool isDeleteAll = deletedInfo.isDeleteConversationAllMessage; // 已移除
+```
+</CodeGroup>
+
+#### ZIMGroupMemberInfo.memberAvatarUrl 移除
+
+`ZIMGroupMemberInfo.memberAvatarUrl` 已被移除，请使用 `ZIMGroupMemberInfo.userAvatarUrl` 代替。
+
+<CodeGroup>
+```dart 新版本用法
+String avatarUrl = groupMemberInfo.userAvatarUrl;
+```
+
+```dart 旧版本用法
+String avatarUrl = groupMemberInfo.memberAvatarUrl; // 已移除
+```
+</CodeGroup>
+
+#### ZIMGroupOperatedInfo 结构变更
+
+`ZIMGroupOperatedInfo.operatedUserInfo` 字段已被移除，其内部字段已平铺到 `ZIMGroupOperatedInfo`，可直接从 `ZIMGroupOperatedInfo` 中获取对应字段。
+
+<CodeGroup>
+```dart 新版本用法
+// 直接从 ZIMGroupOperatedInfo 获取字段
+String operatorUserID = groupOperatedInfo.userID;
+String operatorUserName = groupOperatedInfo.userName;
+String operatorAvatarUrl = groupOperatedInfo.userAvatarUrl;
+```
+
+```dart 旧版本用法
+// operatedUserInfo 已移除
+String operatorUserID = groupOperatedInfo.operatedUserInfo.userID;
+String operatorUserName = groupOperatedInfo.operatedUserInfo.userName;
+```
+</CodeGroup>
+
+#### ZIMCallInvitationSentInfo.errorInvitees 替换
+
+`ZIMCallInvitationSentInfo.errorInvitees` 已被移除，请使用 `ZIMCallInvitationSentInfo.errorUserList` 代替，类型由 `List<ZIMCallUserInfo>` 变更为 `List<ZIMErrorUserInfo>`。
+
+<CodeGroup>
+```dart 新版本用法
+final result = await ZIM.getInstance()!.callInvite(invitees, config);
+for (final errorUser in result.info.errorUserList) {
+    // errorUser.userID, errorUser.reason
+}
+```
+
+```dart 旧版本用法
+// errorInvitees 已移除，请使用 errorUserList
+final result = await ZIM.getInstance()!.callInvite(invitees, config);
+for (final errorInvitee in result.info.errorInvitees) {
+    // errorInvitee.userID, errorInvitee.state
+}
+```
+</CodeGroup>
+
+- - -
+
 ## 2.28.0 升级指南
 
 <Warning title="注意">
