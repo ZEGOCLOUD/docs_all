@@ -41,6 +41,488 @@ export const groupMessageReceivedMap = {
 
 本文介绍 ZIM SDK for {getPlatformData(props,platformMap)} 版本升级时的一些说明和注意事项。
 
+## 3.0.0 升级指南
+
+<Warning title="注意">
+
+本次版本（3.0.0）移除了部分已废弃超过 1 年的接口及相关枚举值和字段，同时对部分接口新增了废弃标记。请参考以下说明完成迁移。
+</Warning>
+
+### 废弃接口删除
+
+#### ZIM 初始化接口（create）
+
+废弃的旧版 `createWithAppID:` 接口已被移除，请使用接受 [ZIMAppConfig](@ZIMAppConfig) 参数的 [createWithAppConfig:](@createWithAppConfig:) 接口代替。
+
+<CodeGroup>
+```objc 新版本用法
+ZIMAppConfig *appConfig = [[ZIMAppConfig alloc] init];
+appConfig.appID = 12345678;
+appConfig.appSign = @"appSign";
+ZIM *zim = [ZIM createWithAppConfig:appConfig];
+```
+
+```objc 旧版本用法
+// 旧版接口已移除
+ZIM *zim = [ZIM createWithAppID:12345678];
+```
+</CodeGroup>
+
+#### ZIM 登录接口（login）
+
+废弃的旧版 `loginWithUserInfo:callback:` 和 `loginWithUserInfo:token:callback:` 接口已被移除，请使用接受 `userID` 和 [ZIMLoginConfig](@ZIMLoginConfig) 参数的 [loginWithUserID:config:callback:](@loginWithUserID:config:callback:) 接口代替。
+
+<CodeGroup>
+```objc 新版本用法
+ZIMLoginConfig *loginConfig = [[ZIMLoginConfig alloc] init];
+loginConfig.userName = @"userName";
+loginConfig.token = @""; // 若使用 Token 鉴权，请填写 Token
+loginConfig.isOfflineLogin = NO;
+[[ZIM getInstance] loginWithUserID:@"userID"
+                            config:loginConfig
+                          callback:^(ZIMError * _Nonnull errorInfo) {
+    // 登录结果
+}];
+```
+
+```objc 旧版本用法
+// 旧版接口已移除
+ZIMUserInfo *userInfo = [[ZIMUserInfo alloc] init];
+userInfo.userID = @"userID";
+userInfo.userName = @"userName";
+[[ZIM getInstance] loginWithUserInfo:userInfo
+                               token:@""
+                            callback:^(ZIMError * _Nonnull errorInfo) {
+    // 登录结果
+}];
+```
+</CodeGroup>
+
+#### ZIM 消息发送接口（sendMessage）
+
+废弃的 `sendPeerMessage:toUserID:config:callback:`、`sendRoomMessage:toRoomID:config:callback:`、`sendGroupMesage:toGroupID:config:callback:` 以及旧版 `sendMediaMessage` 接口已被移除，请统一使用含 `notification` 参数的 [sendMessage:toConversationID:conversationType:config:notification:callback:](@sendMessage:toConversationID:conversationType:config:notification:callback:) 接口代替。
+
+<CodeGroup>
+```objc 新版本用法
+ZIMTextMessage *textMessage = [[ZIMTextMessage alloc] initWithMessage:@"Hello"];
+ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
+notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
+    // 消息发送前的业务逻辑
+};
+[[ZIM getInstance] sendMessage:textMessage
+              toConversationID:@"toConversationID"
+              conversationType:ZIMConversationTypePeer
+                        config:config
+                  notification:notification
+                      callback:^(ZIMMessage * _Nonnull message,
+                                 ZIMError * _Nonnull errorInfo) {
+    // 消息发送结果
+}];
+```
+
+```objc 旧版本用法
+// 旧版接口已移除，请迁移到含 notification 参数的 sendMessage 接口
+ZIMTextMessage *textMessage = [[ZIMTextMessage alloc] initWithMessage:@"Hello"];
+ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+// 旧版单聊消息发送
+[[ZIM getInstance] sendPeerMessage:textMessage
+                          toUserID:@"toUserID"
+                            config:config
+                          callback:^(ZIMMessage * _Nonnull message,
+                                     ZIMError * _Nonnull errorInfo) {}];
+// 旧版群聊消息发送
+[[ZIM getInstance] sendGroupMesage:textMessage
+                         toGroupID:@"toGroupID"
+                            config:config
+                          callback:^(ZIMMessage * _Nonnull message,
+                                     ZIMError * _Nonnull errorInfo) {}];
+```
+</CodeGroup>
+
+#### ZIM 媒体文件下载接口（downloadMediaFile）
+
+废弃的旧版 `downloadMediaFileWithMessage:fileType:progress:callback:`（不含 `config` 参数）接口已被移除，请使用含 [ZIMMediaDownloadConfig](@ZIMMediaDownloadConfig) 参数的新版 [downloadMediaFileWithMessage:fileType:config:progress:callback:](@downloadMediaFileWithMessage:fileType:config:progress:callback:) 接口代替。
+
+<CodeGroup>
+```objc 新版本用法
+ZIMImageMessage *imageMessage = (ZIMImageMessage *)message;
+ZIMMediaDownloadConfig *config = [[ZIMMediaDownloadConfig alloc] init];
+[[ZIM getInstance] downloadMediaFileWithMessage:imageMessage
+                                       fileType:ZIMMediaFileTypeOriginalFile
+                                         config:config
+                                       progress:^(ZIMMessage * _Nonnull message,
+                                                  unsigned long long currentFileSize,
+                                                  unsigned long long totalFileSize) {
+    // 下载进度
+}
+                                       callback:^(ZIMMessage * _Nonnull message,
+                                                  ZIMError * _Nonnull errorInfo) {
+    // 下载完成
+}];
+```
+
+```objc 旧版本用法
+// 旧版接口已移除，请迁移到含 config 参数的新版接口
+ZIMMediaMessage *imageMessage = (ZIMMediaMessage *)message;
+[[ZIM getInstance] downloadMediaFileWithMessage:imageMessage
+                                       fileType:ZIMMediaFileTypeOriginalFile
+                                       progress:^(ZIMMediaMessage * _Nonnull message,
+                                                  unsigned long long currentFileSize,
+                                                  unsigned long long totalFileSize) {
+    // 下载进度
+}
+                                       callback:^(ZIMMediaMessage * _Nonnull message,
+                                                  ZIMError * _Nonnull errorInfo) {
+    // 下载完成
+}];
+```
+</CodeGroup>
+
+#### ZIM 消息接收回调接口
+
+在 2.18.0 中已废弃的 `zim:receivePeerMessage:fromUserID:`、`zim:receiveRoomMessage:fromRoomID:`、`zim:receiveGroupMessage:fromGroupID:` 回调在本版本中正式移除，建议迁移至 [zim:messageReceivedWithResult:](@messageReceivedWithResult:)。
+
+<CodeGroup>
+```objc 新版本用法
+- (void)zim:(ZIM *)zim
+    messageReceivedWithResult:(ZIMMessageReceivedEventResult *)result {
+    NSArray<ZIMMessage *> *messageList = result.messageList;
+    ZIMMessageReceivedInfo *info = result.info;
+    NSString *conversationID = result.conversationID;
+    ZIMConversationType conversationType = result.conversationType;
+    // 根据 conversationType 处理不同类型会话的消息
+}
+```
+
+```objc 旧版本用法（已移除）
+- (void)zim:(ZIM *)zim
+    receivePeerMessage:(NSArray<ZIMMessage *> *)messageList
+            fromUserID:(NSString *)fromUserID {}
+- (void)zim:(ZIM *)zim
+    receiveRoomMessage:(NSArray<ZIMMessage *> *)messageList
+            fromRoomID:(NSString *)fromRoomID {}
+- (void)zim:(ZIM *)zim
+    receiveGroupMessage:(NSArray<ZIMMessage *> *)messageList
+            fromGroupID:(NSString *)fromGroupID {}
+```
+</CodeGroup>
+
+#### ZIM 呼叫邀请回调接口
+
+旧版 `zim:callInvitationTimeout:`（仅 callID 参数）、`zim:callInvitationRejected:callID:`、`zim:callInvitationAccepted:callID:`、`zim:callInviteesAnsweredTimeout:callID:` 回调已被移除，请使用新版 [callInvitationTimeout:callID:](@callInvitationTimeout:callID:) 和 [callUserStateChanged:callID:](@callUserStateChanged:callID:) 代替。
+
+<CodeGroup>
+```objc 新版本用法
+- (void)zim:(ZIM *)zim
+    callInvitationTimeout:(ZIMCallInvitationTimeoutInfo *)info
+                   callID:(NSString *)callID {
+    // info.mode 可区分普通模式/进阶模式
+}
+
+- (void)zim:(ZIM *)zim
+    callUserStateChanged:(ZIMCallUserStateChangeInfo *)info
+                  callID:(NSString *)callID {
+    // info.callUserList 包含状态变更的用户列表
+    // 可统一处理接受、拒绝、超时等状态变更
+}
+```
+
+```objc 旧版本用法
+// 旧版回调已移除，请迁移到 callInvitationTimeout:callID: 和 callUserStateChanged:callID:
+- (void)zim:(ZIM *)zim
+    callInvitationTimeout:(NSString *)callID {}
+
+- (void)zim:(ZIM *)zim
+    callInvitationRejected:(ZIMCallInvitationRejectedInfo *)info
+                    callID:(NSString *)callID {}
+
+- (void)zim:(ZIM *)zim
+    callInvitationAccepted:(ZIMCallInvitationAcceptedInfo *)info
+                    callID:(NSString *)callID {}
+
+- (void)zim:(ZIM *)zim
+    callInviteesAnsweredTimeout:(NSArray<NSString *> *)invitees
+                         callID:(NSString *)callID {}
+```
+</CodeGroup>
+
+#### importLocalMessages / exportLocalMessages 接口删除
+
+`importLocalMessages` 和 `exportLocalMessages` 接口已在 3.0.0 版本中暂时移除，且暂无替代接口。后续版本将重新开放该功能，请关注 SDK 更新日志。
+
+### 新增废弃接口（建议迁移）
+
+#### ZIM 消息接收回调接口
+
+`zim:peerMessageReceived:info:fromUserID:`、`zim:roomMessageReceived:info:fromRoomID:`、`zim:groupMessageReceived:info:fromGroupID:` 回调在本版本中新增废弃标记，当前仍可正常使用，但建议尽快迁移至 [zim:messageReceivedWithResult:](@messageReceivedWithResult:)。
+
+<CodeGroup>
+```objc 建议使用（新接口）
+- (void)zim:(ZIM *)zim
+    messageReceivedWithResult:(ZIMMessageReceivedEventResult *)result {
+    NSArray<ZIMMessage *> *messageList = result.messageList;
+    ZIMMessageReceivedInfo *info = result.info;
+    NSString *conversationID = result.conversationID;
+    ZIMConversationType conversationType = result.conversationType;
+    // 根据 conversationType 处理不同类型会话的消息
+}
+```
+
+```objc 废弃接口（仍可用，建议迁移）
+- (void)zim:(ZIM *)zim
+    peerMessageReceived:(NSArray<ZIMMessage *> *)messageList
+                   info:(ZIMMessageReceivedInfo *)info
+             fromUserID:(NSString *)fromUserID {}
+- (void)zim:(ZIM *)zim
+    roomMessageReceived:(NSArray<ZIMMessage *> *)messageList
+                   info:(ZIMMessageReceivedInfo *)info
+             fromRoomID:(NSString *)fromRoomID {}
+- (void)zim:(ZIM *)zim
+    groupMessageReceived:(NSArray<ZIMMessage *> *)messageList
+                    info:(ZIMMessageReceivedInfo *)info
+             fromGroupID:(NSString *)fromGroupID {}
+```
+</CodeGroup>
+
+#### ZIMGroupConversation 废弃
+
+`ZIMGroupConversation` 类在 3.0.0 中已被废弃，其中的 `isDisabled` 和 `mutedExpiredTime` 属性请通过基类 `ZIMConversation` 的对应属性替代：
+
+| ZIMGroupConversation（已废弃） | ZIMConversation（替代属性） |
+|---|---|
+| `isDisabled` | `isConversationDisabled` |
+| `mutedExpiredTime` | `selfMutedExpiredTime` |
+
+<CodeGroup>
+```objc 新版本用法
+BOOL isDisabled = conversation.isConversationDisabled;
+long long mutedExpiredTime = conversation.selfMutedExpiredTime;
+```
+
+```objc 旧版本用法（已废弃）
+ZIMGroupConversation *groupConversation = (ZIMGroupConversation *)conversation;
+BOOL isDisabled = groupConversation.isDisabled;
+long long mutedExpiredTime = groupConversation.mutedExpiredTime;
+```
+</CodeGroup>
+
+### 枚举值移除
+
+#### ZIMMessageType 枚举值移除
+
+`ZIMMessageTypeSystem`（值为 30）已从 `ZIMMessageType` 枚举中移除，同时 `ZIMSystemMessage` 类也已被移除。如需发送系统级指令，请使用 [ZIMCommandMessage](@ZIMCommandMessage) 代替。
+
+<CodeGroup>
+```objc 新版本用法
+// 使用 ZIMCommandMessage 代替 ZIMSystemMessage
+ZIMCommandMessage *commandMessage = [[ZIMCommandMessage alloc] init];
+commandMessage.message = [@"payload" dataUsingEncoding:NSUTF8StringEncoding];
+[[ZIM getInstance] sendMessage:commandMessage
+              toConversationID:@"toConversationID"
+              conversationType:ZIMConversationTypePeer
+                        config:[[ZIMMessageSendConfig alloc] init]
+                  notification:nil
+                      callback:^(ZIMMessage * _Nonnull message,
+                                 ZIMError * _Nonnull errorInfo) {}];
+```
+
+```objc 旧版本用法
+// ZIMMessageTypeSystem 和 ZIMSystemMessage 已被移除
+ZIMSystemMessage *systemMessage = [[ZIMSystemMessage alloc] init];
+// ...
+```
+</CodeGroup>
+
+#### ZIMCallUserState 枚举值移除
+
+`ZIMCallUserStateOffline`（值为 4）已从 `ZIMCallUserState` 枚举中移除，请检查代码中是否有对该枚举值的判断并将其删除。
+
+```objc
+// 以下枚举值已移除，请检查并删除代码中对该值的引用
+// ZIMCallUserStateOffline  （值为 4）
+```
+
+### 字段变更
+
+#### ZIMUserFullInfo.userAvatarUrl 废弃
+
+`ZIMUserFullInfo.userAvatarUrl` 已废弃，请使用 `ZIMUserFullInfo.baseInfo.userAvatarUrl` 代替。
+
+<CodeGroup>
+```objc 新版本用法
+NSString *avatarUrl = userFullInfo.baseInfo.userAvatarUrl;
+```
+
+```objc 旧版本用法
+NSString *avatarUrl = userFullInfo.userAvatarUrl; // 已废弃
+```
+</CodeGroup>
+
+#### ZIMMessage.conversationSeq 替换为 messageSeq
+
+`ZIMMessage.conversationSeq` 已被移除，请使用 `ZIMMessage.messageSeq` 代替。
+
+<CodeGroup>
+```objc 新版本用法
+long long seq = message.messageSeq;
+```
+
+```objc 旧版本用法
+long long seq = message.conversationSeq; // 已移除
+```
+</CodeGroup>
+
+#### ZIMMessageDeletedInfo.isDeleteConversationAllMessage 移除
+
+`ZIMMessageDeletedInfo.isDeleteConversationAllMessage` 已被移除，请使用 `ZIMMessageDeletedInfo.messageDeleteType` 代替。
+
+<CodeGroup>
+```objc 新版本用法
+ZIMMessageDeleteType deleteType = deletedInfo.messageDeleteType;
+// 通过 deleteType 判断是单条删除还是全量删除
+```
+
+```objc 旧版本用法
+BOOL isDeleteAll = deletedInfo.isDeleteConversationAllMessage; // 已移除
+```
+</CodeGroup>
+
+#### ZIMGroupMemberInfo.memberAvatarUrl 移除
+
+`ZIMGroupMemberInfo.memberAvatarUrl` 已被移除，请使用 `ZIMGroupMemberInfo.userAvatarUrl` 代替。
+
+<CodeGroup>
+```objc 新版本用法
+NSString *avatarUrl = groupMemberInfo.userAvatarUrl;
+```
+
+```objc 旧版本用法
+NSString *avatarUrl = groupMemberInfo.memberAvatarUrl; // 已移除
+```
+</CodeGroup>
+
+#### ZIMGroupOperatedInfo 结构变更
+
+`ZIMGroupOperatedInfo.operatedUserInfo` 字段已被移除，其内部字段已平铺到 `ZIMGroupOperatedInfo`，可直接从 `ZIMGroupOperatedInfo` 中获取对应字段。
+
+<CodeGroup>
+```objc 新版本用法
+// 直接从 ZIMGroupOperatedInfo 获取字段
+NSString *operatorUserID = groupOperatedInfo.userID;
+NSString *operatorUserName = groupOperatedInfo.userName;
+NSString *operatorAvatarUrl = groupOperatedInfo.userAvatarUrl;
+```
+
+```objc 旧版本用法
+// operatedUserInfo 已移除
+NSString *operatorUserID = groupOperatedInfo.operatedUserInfo.userID;
+NSString *operatorUserName = groupOperatedInfo.operatedUserInfo.userName;
+```
+</CodeGroup>
+
+#### ZIMCallInvitationSentInfo.errorInvitees 替换
+
+`ZIMCallInvitationSentInfo.errorInvitees` 已被移除，请使用 `ZIMCallInvitationSentInfo.errorUserList` 代替，类型由 `NSArray<ZIMCallUserInfo *>` 变更为 `NSArray<ZIMErrorUserInfo *>`。
+
+<CodeGroup>
+```objc 新版本用法
+[[ZIM getInstance] callInviteWithInvitees:invitees
+                                   config:config
+                                 callback:^(NSString * _Nonnull callID,
+                                            ZIMCallInvitationSentInfo * _Nonnull info,
+                                            ZIMError * _Nonnull errorInfo) {
+    for (ZIMErrorUserInfo *errorUser in info.errorUserList) {
+        // errorUser.userID, errorUser.reason
+    }
+}];
+```
+
+```objc 旧版本用法
+// errorInvitees 已移除，请使用 errorUserList
+[[ZIM getInstance] callInviteWithInvitees:invitees
+                                   config:config
+                                 callback:^(NSString * _Nonnull callID,
+                                            ZIMCallInvitationSentInfo * _Nonnull info,
+                                            ZIMError * _Nonnull errorInfo) {
+    for (ZIMCallUserInfo *errorInvitee in info.errorInvitees) {
+        // errorInvitee.userID, errorInvitee.state
+    }
+}];
+```
+</CodeGroup>
+
+#### ZIMConversationChangeInfo 字段变更
+
+`ZIMConversationChangeInfo` 中的 `event` 属性（类型 `ZIMConversationEvent`）已被移除，请使用同结构下的 `action` 属性（类型 `ZIMConversationChangeAction`）代替。
+
+<CodeGroup>
+```objc 新版本用法
+- (void)zim:(ZIM *)zim
+    conversationChanged:(ZIMConversationChangeEventResult *)result {
+    for (ZIMConversationChangeInfo *changeInfo in result.infoList) {
+        ZIMConversationChangeAction action = changeInfo.action;
+        // 根据 action 处理会话变更
+    }
+}
+```
+
+```objc 旧版本用法
+- (void)zim:(ZIM *)zim
+    conversationChanged:(ZIMConversationChangeEventResult *)result {
+    for (ZIMConversationChangeInfo *changeInfo in result.infoList) {
+        ZIMConversationEvent event = changeInfo.event; // 已移除
+    }
+}
+```
+</CodeGroup>
+
+### 枚举值重命名
+
+以下枚举值在 3.0.0 中发生重命名，升级后请检查并替换代码中所有相关引用。
+
+#### ZIMGroupEvent
+
+`ZIMGroupEventKickout` 已重命名为 `ZIMGroupEventKickOut`。
+
+<CodeGroup>
+```objc 新版本用法
+if (event == ZIMGroupEventKickOut) {
+    // 群成员被踢出
+}
+```
+
+```objc 旧版本用法
+if (event == ZIMGroupEventKickout) { // 已重命名为 ZIMGroupEventKickOut
+    // 群成员被踢出
+}
+```
+</CodeGroup>
+
+#### ZIMGroupMemberEvent
+
+`ZIMGroupMemberEventKickedout` 已重命名为 `ZIMGroupMemberEventKickedOut`。
+
+<CodeGroup>
+```objc 新版本用法
+if (event == ZIMGroupMemberEventKickedOut) {
+    // 群成员被踢出
+}
+```
+
+```objc 旧版本用法
+if (event == ZIMGroupMemberEventKickedout) { // 已重命名为 ZIMGroupMemberEventKickedOut
+    // 群成员被踢出
+}
+```
+</CodeGroup>
+
+### ZIMMessage 属性变更
+
+`ZIMMessage` 及其子类的部分属性已移除 `readonly` 修饰符，现在支持读写操作。如果您的代码中有对这些属性只读特性的依赖（例如，子类中显式 synthesize 了只读属性），请检查相关逻辑是否需要调整。
+
+- - -
+
 ## 2.28.0 升级指南
 
 <Warning title="注意">
