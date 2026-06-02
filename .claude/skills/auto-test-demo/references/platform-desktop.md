@@ -5,17 +5,17 @@ Use for desktop example projects (Electron, native desktop apps).
 ## Connection
 
 ```bash
-# Connect to desktop session
-npx -y @midscene/computer@1 connect
-```
-
-## act() Function
-
-```bash
 act() {
   local prompt="$1"
+  set -o pipefail
   npx -y @midscene/computer@1 act --prompt "$prompt" 2>&1 | tee -a "$LOG_FILE"
+  local _ec=$?
+  set +o pipefail
+  return $_ec
 }
+
+# Connect to desktop session
+npx -y @midscene/computer@1 connect
 ```
 
 ## Disconnection
@@ -33,6 +33,7 @@ source ~/.zshrc 2>/dev/null || source ~/.bashrc 2>/dev/null || true
 
 REPORT_DIR="midscene_run"
 LOG_FILE="midscene_run/test_results.log"
+SCREENSHOT_DIR="midscene_run/screenshots"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -61,11 +62,18 @@ tc_fail() {
 
 act() {
   local prompt="$1"
+  set -o pipefail
   npx -y @midscene/computer@1 act --prompt "$prompt" 2>&1 | tee -a "$LOG_FILE"
+  local _ec=$?
+  set +o pipefail
+  return $_ec
 }
 
-mkdir -p "$REPORT_DIR/log" "$REPORT_DIR/report"
+mkdir -p "$REPORT_DIR/log" "$REPORT_DIR/report" "$SCREENSHOT_DIR"
 echo "Test Run - $(date)" > "$LOG_FILE"
+
+# Clean up stale sessions before connecting
+npx -y @midscene/computer@1 disconnect 2>/dev/null || true
 
 # Connect
 log "Connecting desktop..."
@@ -75,11 +83,16 @@ sleep 3
 # ===== TC-01: Test Case Name =====
 log_tc "01" "Test Case Name"
 R=$(act "Description of what to verify on the desktop screen.")
-if echo "$R" | grep -qi "EXPECTED_KEYWORD"; then
+EC=$?
+log "act result (exit=$EC): $R"
+if [ $EC -ne 0 ]; then
+  tc_fail "01" "Command execution failed (exit code $EC), see output above"
+elif echo "$R" | grep -qi "EXPECTED_KEYWORD"; then
   tc_pass "01" "Description"
 else
-  tc_fail "01" "Description"
+  tc_fail "01" "Expected result not found in output"
 fi
+npx -y @midscene/computer@1 take_screenshot 2>&1 | grep -o "Screenshot saved:.*" | awk '{print $NF}' | xargs -I{} cp {} "$SCREENSHOT_DIR/01-test-case-name.png" 2>/dev/null || true
 
 # ===== Summary =====
 log ""
