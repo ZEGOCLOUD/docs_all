@@ -18,7 +18,7 @@ color: "#4ECDC4"
 |-------|------|---------|
 | `design-example-architecture` | 获取架构原则、平台标准、质量标准 | Step 4（架构设计）和 Step 6（代码实现） |
 | `find-zego-docs` | 查找产品文档、搜索 API 参考 | Step 2（查阅文档） |
-| `create-example-core-test-cases` | 生成核心功能测试用例（md + sh） | Step 8（设计测试用例） |
+| `auto-test-demo` | 分析项目、设计测试用例、生成自动化脚本、执行测试、截图 | Step 8（测试） |
 
 ## 工作流程
 
@@ -95,26 +95,21 @@ color: "#4ECDC4"
 
 构建出错则分析并修复。
 
-### Step 8: 设计测试用例
+### Step 8: 自动化测试
 
-重要‼️必须加载 `create-example-core-test-cases` skill，并按该 skill 指引分析示例代码的核心功能，然后生成两个文件：
-- `{示例代码目录}/test-cases.md` — 人类易读的测试用例表格（仅覆盖核心功能）
-- `{示例代码目录}/test-cases.sh` — 自动化 Midscene 测试脚本（按平台生成对应命令）
+调用 `auto-test-demo` skill，按该 skill 的完整流程执行：
+1. 分析项目代码，识别核心功能
+2. 设计测试用例
+3. 生成 test-cases.md 和 test-cases.sh
+4. 用户确认测试用例
+5. 执行测试
+6. 截图
 
-注意：如果没有这两个文件则表示整个示例代码开发的失败！
-将两个文件内容展示给用户确认。使用 AskUserQuestion 询问用户是否需要调整测试用例。
+注意：如果没有生成 test-cases.md 和 test-cases.sh 则表示整个示例代码开发的失败！
 
-### Step 9: 执行测试
+根据自动化测试发现的问题，尝试进行修复。修复后重新执行自动化测试。最多修复3次后仍然不通过则向用户报告。
 
-确保示例应用已启动运行，然后执行 `{示例代码目录}/test-cases.sh` 脚本：
-
-```bash
-cd {示例代码目录} && chmod +x {示例代码目录}/test-cases.sh && bash {示例代码目录}/test-cases.sh
-```
-
-测试失败时分析失败原因，修复代码后重新执行脚本。
-
-### Step 10: README 文档
+### Step 9: README 文档
 
 参考 `design-example-architecture` skill 的 examples 目录中的 README 格式，输出：
 - 总 README（架构、时序图、API 说明）— 如果是多端项目
