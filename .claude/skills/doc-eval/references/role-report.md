@@ -40,4 +40,4 @@
 
 ## 输出格式
 
-详见 `output-format-report.md`。
+详见 `report-templates.md`。

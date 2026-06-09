@@ -1,90 +1,23 @@
 ---
 name: doc-eval
 description: "This skill should be used when the user wants to evaluate documentation quality from multiple perspectives. Triggers on: Review 文档、评测文档、评估文档、doc eval、文档评价、文档质量、文档评测。"
-version: 1.1.0
+version: 1.2.0
 ---
 
 # 文档质量多角色评测
 
-从不同用户角色视角评价技术文档质量，生成评分和改进建议，结果输出到飞书文档。
+从不同用户角色视角评价技术文档质量，生成评分和改进建议。默认先输出本地 Markdown 产物，并将最终报告写入飞书；如果用户或调用方明确要求只输出本地 Markdown，则不写飞书。
 
 ## 核心原则
 
-**文档类型决定参与角色**。不是所有角色都该评测所有文档。CTO 去客户端 API 文档里找计费模式是文档类型定位错误，不是文档质量问题。详见 `references/rubric.md` 的匹配矩阵。
+- **文档类型决定参与角色**。不是所有角色都该评测所有文档。CTO 去客户端 API 文档里找计费模式是文档类型定位错误，不是文档质量问题。详见 `references/rubric.md` 的匹配矩阵。
+- **开发者统一按"零经验开发者"定位**：没有任何 ZEGO 产品经验（RTC、IM、AI Agent、数字人等均未使用过），不熟悉实时通讯行业概念，依赖文档解释一切术语和概念。
 
-**开发者统一按"零经验开发者"定位**：没有任何 ZEGO 产品经验（RTC、IM、AI Agent、数字人等均未使用过），不熟悉实时通讯行业概念，依赖文档解释一切术语和概念。
+## 评测执行细则
 
-## 零经验开发者定位
+具体阅读规则、零经验开发者定位、MDX 复用处理、链接跟随、术语检查、准确性判断和问题写作要求见 `references/evaluation-execution.md`。
 
-所有开发者角色统一按"零经验开发者"定位：
-- **没有任何 ZEGO 产品经验**（RTC、IM、AI Agent、数字人等均未使用过）
-- **不熟悉实时通讯行业概念**（如房间、用户 ID、Token、鉴权、回调等）
-- **依赖文档解释一切术语和概念**
-- **不会猜测或假设行业惯例**
-- **了解自己角色应知技术**（如Android开发知道怎么用Android Studio创建项目，Web开发知道有npm、pnpm等包管理器可以安装依赖）
-
-这意味着：文档必须解释所有 ZEGO 特有概念和行业术语，不能假设读者已知。
-
-## 术语检查原则
-
-**动态识别，不依赖硬编码列表**
-
-各角色评测时动态识别文档中的术语，检查文档是否解释：
-1. 任何技术名词（如 SDK、API、Token、回调、鉴权）
-2. 任何 ZEGO 特有概念（如房间、StreamID、用户 ID）
-3. 任何行业特定术语（如推流、拉流、连麦）
-
-**判断标准**：
-- 文档是否首次出现该术语时提供解释
-- 解释是否清晰（能理解的文字描述，不是"就是xxx"）
-- 示例是否充分（代码示例、参数说明、返回值说明）
-
-**不要求解释的内容**：
-- 编程语言基础概念（如变量、函数、类）
-- Web/移动端通用概念（如 HTTP、JSON、Promise）
-
-## 文档复用语法说明
-
-文档中广泛使用跨平台内容复用机制，目的是保持多平台内容同步、降低维护成本。**这是正常的设计模式，不得将其评价为文档问题。**
-
-### 复用语法
-
-**导入并渲染：**
-```mdx
-import Content from '/core_products/aiagent/zh/android/quick-start.mdx'
-
-<Content platform="Web"/>
-```
-
-**源文件中的条件渲染：**
-```mdx
-这段内容所有平台都会展示。
-
-:::if{props.platform="Web"}
-这段内容仅在 platform="Web" 时展示。
-:::
-
-:::if{props.platform="Android"}
-这段内容仅在 platform="Android" 时展示。
-:::
-```
-
-### 评测时的处理方式
-
-1. **识别复用关系**：当文档包含 `import ... from '...'` 和 `<Content .../>` 时，说明该文档复用了另一个源文件
-2. **跟踪读取源文件**：必须读取 import 指向的源文件，不能只看当前文件
-3. **拼合完整内容**：将源文件中无条件渲染的内容 + 匹配当前平台条件的条件渲染内容，视为当前文档的完整内容
-4. **不评判语法本身**：不得将 `import`、`:::if{...}`、`props.platform` 等复用语法标记为"内容缺失"、"格式混乱"或"结构不清晰"
-
-### 常见误判场景（必须避免）
-
-| 误判 | 正确理解 |
-|------|----------|
-| "文档只有 import 语句，缺少实际内容" | 文档通过 import 复用了源文件的完整内容 |
-| "出现 :::if{...} 语法，影响阅读" | 这是条件渲染指令，最终渲染时只显示匹配条件的内容 |
-| "某个平台的操作步骤在本文档中找不到" | 可能是条件渲染内容，需检查源文件 |
-| "出现 `[sendSEI](@sendSEI)` 这样的无效链接" | 这是 ZEGO 文档的 API 短链接语法，由文档系统自动解析为可跳转的 API 文档链接，不是错误 |
-| "示例代码 `let appID = ;` 语法错误" | 这是故意的占位写法，让程序报错防止用户忘记填写。重点检查是否有注释说明如何获取该值，有注释说明则可接受，无注释说明则是文档问题 |
+执行角色评测的 subagent 必须读取该文件。
 
 ## 评测维度
 
@@ -95,7 +28,7 @@ import Content from '/core_products/aiagent/zh/android/quick-start.mdx'
 3. **前提条件** — 前置要求是否明确
 4. **参数/配置说明** — 参数含义、默认值、示例是否充分
 5. **可发现性** — 能否快速找到所需内容
-6. **准确性** — 信息是否与实际一致，有无过时内容。**禁止编造**：只能对照文档实际写的内容判断对错。不能把自己从外部知识引入的技术细节当作"文档应该说的"来评判。如果文档没提到某个技术细节（如加密算法），不能说"文档说的加密方式不对"——因为文档根本没说。只能评判文档**实际写了的内容**是否正确。
+6. **准确性** — 信息是否与实际一致，有无过时内容。准确性判断细则见 `references/evaluation-execution.md`。
 
 ## 问题严重程度
 
@@ -128,8 +61,26 @@ import Content from '/core_products/aiagent/zh/android/quick-start.mdx'
 
 确认以下信息（用户可能已提供，未提供的用 AskUserQuestion 补充）：
 
-- **文档路径**: 要评测的文档文件或目录路径
-- **产品名称**: 产品名
+- **文档路径**: 要评测的一个或多个文档文件/目录路径
+- **产品名称**: 产品名（跟文档路径至少填一个）
+- **目标平台**: 要评测哪个平台的文档（如 Web、Android、iOS、Flutter、React Native、Electron 等）
+- **测试范围**: 文档范围或功能范围（如快速开始、某个功能点、指定文档集合）
+- **运行日期**: 默认使用当前日期，格式 `YYYY-MM-DD`
+- **飞书写入模式**:
+  - `standalone-default`: `doc-eval` 独立运行，默认写飞书
+  - `local-only`: 用户或调用方明确要求不写飞书，只输出本地 Markdown
+
+**run-name** 固定格式：
+
+```text
+{product}-{platform}-{scope}-{date}
+```
+
+报告输出目录：
+
+```text
+doc-test-reports/{run-name}/doc-eval/
+```
 
 ### 2. 识别文档类型并匹配角色
 
@@ -145,152 +96,139 @@ import Content from '/core_products/aiagent/zh/android/quick-start.mdx'
 
 4. **告知用户**：展示匹配结果，让用户确认参与角色。例如："这是快速开始文档，匹配到的角色是：客户端开发(⭐⭐⭐)、服务端开发(⭐⭐⭐)、全栈开发(⭐⭐⭐)、CTO(⭐⭐)、ZEGO技术支持(⭐⭐)。产品经理和计费说明不匹配，不参与评测。"
 
-### 3. 创建飞书任务文件夹
+### 3. 准备本地产物目录
 
-在飞书知识库的「接入测试」节点下创建本次评测的文件夹。
+创建本地报告目录：
 
-父节点信息：
-- space_id: `7187666870011232257`
-- parent_node_token: `Bvy6wsTvjiLh7bkzOxVcwvyunTH`
-
-```bash
-lark-cli wiki nodes create --params '{"space_id":"7187666870011232257"}' --data '{"parent_node_token":"Bvy6wsTvjiLh7bkzOxVcwvyunTH","node_type":"origin","obj_type":"docx","title":"【YY-MM-DD 产品名-文档类型 接入测试】"}' --as user
+```text
+doc-test-reports/{run-name}/doc-eval/
 ```
 
-注意：`space_id` 是 path 参数，必须用 `--params` 传；body 参数用 `--data` 传。两者分开。
+阶段至少输出：
 
-记录返回的 node_token，后续文档都在这个节点下创建。
+```text
+doc-test-reports/{run-name}/doc-eval/doc-eval-summary.md
+doc-test-reports/{run-name}/doc-eval/role-*.md
+```
 
-### 4. 并行启动角色评测
+`run-index.md` 如存在，由调用方维护；`doc-eval` 不负责更新总索引。
 
-并行启动匹配到的 `general-purpose` agent，每个 agent：
+### 4. 执行评测并输出本地 Markdown（在 subagent 中执行）
+
+使用 Agent 工具启动 subagent，在独立上下文中完成角色评测和本地 Markdown 写入。**所有角色报告和汇总报告的完整文本不返回主会话**，只返回摘要文件路径、报告路径、综合评分和必要的飞书链接。
+
+**调用方式**：使用 Agent 工具，参数如下：
+- `subagent_type`: `"general-purpose"`
+- 每个需要评测的角色，启动一个对应的 `general-purpose` agent 处理。多个角色并行。
+- `prompt`: 告知 subagent 执行以下评测流程：
+
+**Subagent 内部流程**：
+
+#### 4a. 按不同角色要求进行评测
 
 1. 读取对应的角色定义文件（`references/role-*.md`）
 2. 读取评分标准（`references/rubric.md`）
-3. 读取报告格式（`references/output-format-role.md`）
-4. 完整阅读目标文档：
-   - **跟踪 MDX import**：遇到 `import Content from '/path/to/file.mdx'` + `<Content platform="xxx"/>` 时，必须读取源文件
-   - **拼合完整内容**：源文件中无条件渲染的内容 + 匹配当前 `platform` 条件的 `:::if{props.platform="xxx"}` 内容，构成当前文档的完整有效内容
-   - **不评判复用语法**：import 语句和 `:::if{...}` 条件渲染指令是正常的内容复用机制，不得将其标记为文档问题
-   - **跟随文档内所有链接**：文档中的链接是文档内容的一部分，必须跟随读取后才能判断信息是否缺失。不得声称"文档没有提供链接"或"文档没有说明 X"，除非实际跟随了链接并确认目标内容确实不包含所需信息。
+3. 读取评测执行细则（`references/evaluation-execution.md`）和报告格式（`references/report-templates-role.md`），按角色关注路径完整阅读目标文档并生成评测报告
+4. **按文档类型校准评判标准**：注意“按文档类型评判”规则。（比如：不在快速开始文档里期待计费说明）
+5. 逐维度评分并输出到角色报告文件
 
-     | 链接格式 | 示例 | 处理方式 |
-     |----------|------|---------|
-     | @ 短链 | `[sendSEI](@sendSEI)` | 用 `api-short-link-to-mdx` skill 解析到本地 API MDX 文件，读取 API 说明 |
-     | 相对路径 | `[快速开始](../02-Quick%20start.mdx)` | 基于当前 MDX 文件路径解析为本地文件路径，直接读取 |
-     | URL path | `[Token 鉴权](/real-time-video-web/communication/using-token-authentication)` | 用 `url-to-mdx` skill 解析到本地 MDX 文件并读取 |
-     | 完整 URL | `https://doc-zh.zego.im/...` | 用 `url-to-mdx` 尝试解析到本地文件；无法解析则用 Web 工具读取 |
-     | 页内锚点 | `#signature-sample-code` | 在当前文档中查找对应标题即可 |
+每个 agent 的 prompt 应包含：评测目标（文档路径列表、产品名称、目标平台、测试范围、文档类型、run-name、报告目录）和上述步骤指令。具体评测细节不要重复写在 prompt 中，要求 subagent 读取并遵循 `references/evaluation-execution.md` 和 `references/report-templates-role.md`。
 
-     **允许批评的角度**：
-     - 链接放置位置不明显（关键信息藏在不显眼的小字链接中）
-     - 需要跳转超过 2 层才能找到关键操作信息（信息过于分散）
-     - 链接文字不够描述性（如用"这里"而非"Token 鉴权指南"）
+每个 agent 还需在评测报告末尾生成**集成验证输入（可选）**，包括：
+- 建议构建验证关注点（按角色阅读路径提炼）
+- 可能阻塞构建验证的问题（🔴 问题汇总）
+- 需要用户准备的信息（账号、密钥、环境等）
 
-     **不允许**：声称"没有提供链接"或"没有说明"——如果文档有链接但 agent 没跟，这是 agent 的问题。
-5. 按角色的 Phase 1-6 走查
-6. **按文档类型校准评判标准**：注意"按文档类型评判"规则，不在快速开始文档里期待计费说明
-7. 逐维度评分并生成评测报告
+#### 4b. 写入角色报告本地文件
 
-每个 agent 的 prompt 应包含：评测目标（文档路径、产品名称、文档类型）和上述步骤指令。重点强调：**每个问题必须具体定位到文件和行号，必须引用原文，必须从角色视角解释为什么是问题，改进建议必须可操作（给出建议文案）。** 详见 `references/output-format-role.md` 的"关键要求"部分。
+每个角色评测完成后，写入：
 
-每个 agent 还需在评测报告末尾生成**集成测试简报**，包括：
-- 预期测试步骤（按角色阅读路径提炼的关键步骤）
-- 发现的阻塞点（🔴 问题汇总）
-- 环境前置条件（需要准备的账号、密钥、环境）
-
-### 5. 将角色报告写入飞书
-
-每个角色评测完成后，立即将报告写入飞书文档。分两步：
-
-**Step A: 创建空文档**（在任务文件夹下创建）
-```bash
-lark-cli docs +create --api-version v2 --parent-token {folder_node_token} --doc-format markdown --content "$(cat <<'EOF'
-# 【角色名】评测报告
-EOF
-)"
+```text
+doc-test-reports/{run-name}/doc-eval/role-{role-id}.md
 ```
 
-**Step B: 用 overwrite 写入完整内容**（`--content` 接收字符串，不是文件路径）
-```bash
-lark-cli docs +update --api-version v2 --doc {document_id} --command overwrite --doc-format markdown --content "$(cat <<'EOF'
-# 【角色名】评测报告
-... 完整报告 markdown 内容 ...
-EOF
-)"
-```
+不要把完整角色报告返回主会话。
 
-关键注意事项：
-- `--content` 直接接收字符串内容，**不能**用 `@-`（stdin）或 `@file.md`（文件路径）
-- 内容较长时用 `$(cat <<'EOF' ... EOF)` heredoc 包裹
-- `docs +create` 的 `--content` 参数必填，不能为空
-- 长文档可先 `+create` 建骨架，再用 `+update --command append` 分段追加
-- **文档标题从内容中的 `#`（h1）提取**：`+update --command overwrite` 会替换全部内容，如果新内容没有 `#` 标题（比如用了 `##`），文档标题会变成 "Untitled"。确保 overwrite 的内容第一行是 `# 标题`
-
-### 6. 生成汇总报告
+#### 4c. 生成汇总报告本地文件
 
 所有角色报告都完成后，启动一个 `general-purpose` agent 生成汇总报告。该 agent：
 
 1. 读取汇总分析方法（`references/role-report.md`）
-2. 读取汇总报告格式（`references/output-format-report.md`）
-3. 交叉对比各角色的评分和发现
-4. 识别共性问题、按优先级排序改进建议
-5. 生成汇总报告
+2. 读取汇总报告格式（`references/report-templates.md`）
+3. 读取本地角色报告文件：`doc-test-reports/{run-name}/doc-eval/role-*.md`
+4. 交叉对比各角色的评分和发现
+5. 识别共性问题、按优先级排序改进建议
+6. 生成汇总报告：`doc-test-reports/{run-name}/doc-eval/doc-eval-summary.md`
 
-prompt 中需包含所有角色的完整评测结果。
+不要把所有角色完整报告塞进 prompt 或返回主会话；汇总 agent 必须从本地文件读取角色报告。
 
-### 7. 将汇总报告写入飞书
+#### 4d. 按需写入飞书
 
-同 Step 5 的方式：先用 `docs +create` 创建文档，再用 `docs +update --command overwrite` 写入完整汇总内容。
+飞书写入策略：
 
-### 8. 输出结果
+| 模式 | 是否写飞书 | 说明 |
+|------|------------|------|
+| `standalone-default` | 是 | 默认就写入 |
+| `local-only` | 否 | 用户或调用方明确要求不写飞书 |
+
+仅当需要写飞书时，读取 `references/feishu-write.md` 并按其中说明创建飞书文件夹、写入角色报告和汇总报告。
+
+#### 4e. Subagent 最终返回给主会话的信息
+
+仅返回以下内容，不返回完整报告文本：
+
+```markdown
+## Result
+
+- status: completed / failed / blocked
+- summary_file: doc-test-reports/{run-name}/doc-eval/doc-eval-summary.md
+- detail_files:
+  - doc-test-reports/{run-name}/doc-eval/role-client-dev.md
+  - doc-test-reports/{run-name}/doc-eval/role-fullstack-dev.md
+- document_link: {飞书汇总报告链接或本地 doc-eval-summary.md 路径}
+- summary: 综合评分 X/5，发现 N 个问题，其中 M 个阻塞
+- next_action: continue / stop / needs_user_input
+```
+
+如果已写飞书，可额外返回：
+
+- 飞书任务文件夹链接
+- 各角色评测报告飞书链接
+- 汇总报告飞书链接
+
+**Subagent 完成后验证**：
+- ✅ `doc-eval-summary.md` 已生成
+- ✅ 参与角色的 `role-*.md` 已生成
+- ✅ 综合评分已返回
+- ✅ 如果执行了飞书写入，飞书链接列表已返回
+- ❌ 如果 subagent 失败或未返回本地文件路径，提示用户检查
+
+**注意**：subagent 在独立上下文中运行，主会话不保留角色报告和汇总报告的详细内容。所有评测结果通过本地 Markdown 文件保存；飞书只是独立运行时的默认发布目标。
+
+### 5. 输出结果
 
 向用户展示：
-- 任务文件夹飞书链接
-- 各角色评测报告链接
-- 汇总报告链接
+- 本地报告目录：`doc-test-reports/{run-name}/doc-eval/`
+- 文档评测摘要：`doc-test-reports/{run-name}/doc-eval/doc-eval-summary.md`
+- 各角色报告路径
 - 综合评分一句话总结
-
-### 9. 自动询问是否运行集成测试
-
-所有报告完成后，自动向用户展示集成测试提示：
-
-> 是否需要运行集成测试来验证这些问题？
->
-> 集成测试会：
-> - 模拟零经验开发者按文档操作
-> - 实际构建项目、编写代码
-> - 调用自动化测试技能验证功能
-> - 生成问题归类报告（📄文档问题/🔧代码实现问题/🏗️环境问题/🔗链接问题/📖概念缺失）
->
-> 输入 /doc-integration-test 开始，或跳过。
-
-如果用户确认，调用 doc-integration-test 技能，传入：目标文档路径、产品名称、飞书任务文件夹 node_token。
-
-## 输出格式
-
-- 角色报告格式: `references/output-format-role.md`
-- 汇总报告格式: `references/output-format-report.md`
+- 如果已写飞书，展示飞书任务文件夹、各角色报告和汇总报告链接
 
 ## 参考资源
 
 | 文件 | 用途 |
 |------|------|
 | `references/rubric.md` | 文档类型定义、角色匹配矩阵、评分标准、权重表、校准规则 |
+| `references/evaluation-execution.md` | subagent 执行评测时使用的阅读、链接、复用、术语、定位和问题写作细则 |
+| `references/feishu-write.md` | 需要写入飞书时使用的创建文件夹和写入文档说明 |
 | `references/role-cto.md` | CTO 角色画像、阅读路径、评分注意事项 |
 | `references/role-support.md` | ZEGO技术支持画像、阅读路径、评分注意事项 |
 | `references/role-client-dev.md` | 客户端开发画像、阅读路径、评分注意事项 |
 | `references/role-server-dev.md` | 服务端开发画像、阅读路径、评分注意事项 |
 | `references/role-fullstack-dev.md` | 全栈开发画像、阅读路径、评分注意事项 |
 | `references/role-report.md` | 汇总分析方法、交叉分析维度、优先级排序 |
-| `references/output-format-role.md` | 角色报告输出格式 |
-| `references/output-format-report.md` | 汇总报告输出格式 |
-
-## 工具脚本
-
-| 文件 | 用途 |
-|------|------|
-| `scripts/doc-link.sh` | 将文件相对路径+行号转换为 GitHub 可跳转链接（飞书报告中使用） |
+| `references/report-templates-role.md` | 角色报告输出格式 |
+| `references/report-templates.md` | 汇总报告输出格式 |
 
 ## 关联 Skills
 

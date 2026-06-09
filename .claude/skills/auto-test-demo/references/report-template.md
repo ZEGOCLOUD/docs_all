@@ -1,95 +1,224 @@
-# 自动化测试报告模板
+# 自动化测试输出模板
 
-测试执行完成后，按以下格式生成报告，写入 `examples/{项目名}/test-report.md`。
+本模板用于输出测试摘要、测试用例、测试脚本和完整测试报告。
+
+## 输出位置
+
+测试报告写入：
+
+```text
+doc-test-reports/{run-name}/auto-test/
+  test-cases.json
+  test-summary.md
+  test-cases.sh
+  test-report.md
+  test-results.jsonl
+  logs/
+  screenshots/
+```
+
+`run-name` 固定格式：
+
+```text
+{product}-{platform}-{scope}-{date}
+```
+
+## test-cases.sh 执行目录要求
+
+`test-cases.sh` 可以保存在报告目录，但执行时必须切到正确项目目录。
+
+脚本开头必须包含类似逻辑：
+
+```bash
+#!/bin/bash
+set +e
+set -o pipefail
+
+REPORT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$REPORT_DIR/../../.." && pwd)"
+PROJECT_DIR="$REPO_ROOT/doc-test-reports/{run-name}/examples/{demo-name}"
+
+cd "$PROJECT_DIR" || exit 1
+```
+
+不要假设用户会从项目目录手动执行脚本。
+
+## 关联前置问题链接要求
+
+自动化测试中如果关联到前置构建验证或文档评测问题，不能只写 `BUILD-001` 或 `DOC-001`。
+
+本地 Markdown 产物中，应写成相对链接：
 
 ```markdown
-# 自动化测试报告 - {项目名}
+[BUILD-001](../build-verification/build-issues.md#build-001-token-生成逻辑缺失)
+[DOC-001](../doc-eval/role-client-dev.md#doc-001-appid-获取路径缺失)
+```
 
-> 平台: {平台} | 日期: {YYYY-MM-DD} | 测试环境: {环境描述}
+如果关联问题只出现在前置阶段摘要中，可以链接到对应摘要文件：
+
+```markdown
+[BUILD-001](../build-verification/build-summary.md#build-001-token-生成逻辑缺失)
+[DOC-001](../doc-eval/doc-eval-summary.md#doc-001-appid-获取路径缺失)
+```
+
+写入飞书文档后，应改成飞书报告链接 + 问题 ID + 问题详情章节标题。若后续可以通过飞书 API 获取标题 block 链接，再升级为章节级飞书链接。
+
+## test-summary.md 模板
+
+```markdown
+# 自动化测试摘要
+
+## 基本信息
+
+| 字段 | 值 |
+|------|----|
+| 产品 | {product} |
+| 平台 | {platform} |
+| 范围 | {scope} |
+| 目标文档 | {doc_path_1}<br>{doc_path_2}<br>{...，可选} |
+| 示例项目目录 | doc-test-reports/{run-name}/examples/{demo-name} |
+| 报告目录 | doc-test-reports/{run-name}/ |
+| 测试日期 | {date} |
+
+## 阶段结论
+
+| 字段 | 值 |
+|------|----|
+| 状态 | completed / failed / blocked |
+| 总用例数 | N |
+| 通过 | N |
+| 失败 | N |
+| 跳过 | N |
+| 通过率 | X% |
+| 阻塞问题数 | N |
+| 一句话结论 | {一句话概括测试结果} |
+
+## 关键发现
+
+- {关键发现 1}
+- {关键发现 2}
+
+## 用例结果
+
+| 用例 ID | 用例名称 | 依赖 | 状态 | 截图 | 日志 | 关联问题 |
+|---------|----------|------|------|------|------|----------|
+| TC-001 | 登录 - Alice | - | passed | screenshots/TC-001.png | - | - |
+| TC-002 | 加入房间 | TC-001 | failed / skipped | screenshots/TC-002.png | logs/TC-002-console.log | TEST-001 |
+
+## 问题摘要
+
+| 问题 ID | 用例 ID | 截图/日志 | 类别 | 严重度 | 问题 | 关联前置问题 |
+|---------|---------|-----------|------|--------|------|--------------|
+| TEST-001 | TC-002 | screenshots/TC-002.png / logs/TC-002-console.log | 📄 文档问题 | 🔴 阻塞 | {一句话问题} | [BUILD-001](../build-verification/build-issues.md#build-001-token-生成逻辑缺失) |
+
+## 与前置阶段的关系
+
+| 当前问题 ID | 前置问题 ID | 关系 | 说明 |
+|-------------|-------------|------|------|
+| TEST-001 | [BUILD-001](../build-verification/build-issues.md#build-001-token-生成逻辑缺失) | 延续 / 复现 / 部分复现 / 未复现 / 新增 / 重复 | {说明} |
+
+## 修复与最终汇总提示
+
+| 项目 | 内容 |
+|------|------|
+| 是否需要修复后重测 | 是 / 否 |
+| 优先处理问题 | TEST-001 |
+| 建议操作 | {修复建议或下一步} |
+
+## 产物索引
+
+| 类型 | 路径 |
+|------|------|
+| 测试摘要 | test-summary.md |
+| 测试用例数据 | test-cases.json |
+| 测试脚本 | test-cases.sh |
+| 测试结果数据 | test-results.jsonl |
+| 完整测试报告 | test-report.md |
+| 截图目录 | screenshots/ |
+| 日志目录 | logs/ |
+```
+
+## test-report.md 模板
+
+```markdown
+# 自动化测试报告
+
+## 测试环境
+
+| 字段 | 值 |
+|------|----|
+| 操作系统 | {OS} |
+| 平台 | {Web/Android/iOS/Desktop/HarmonyOS} |
+| 浏览器/运行时 | {Chrome/Android/iOS 等} |
+| SDK 版本 | {SDK version} |
+| 必要包的版本 | {如Node.js version} |
+| 示例项目目录 | doc-test-reports/{run-name}/examples/{demo-name} |
 
 ## 测试概览
 
 | 指标 | 值 |
-|------|-----|
-| 总用例数 | {N} |
-| 通过 | {N} |
-| 失败 | {N} |
-| 通过率 | {N}% |
+|------|----|
+| 总用例数 | N |
+| 通过 | N |
+| 失败 | N |
+| 跳过 | N |
+| 通过率 | X% |
 
 ## 用例结果
 
-| 编号 | 用例名称 | 状态 | 类型 |
-|------|---------|------|------|
-| TC-01 | {名称} | ✅ 通过 | — |
-| TC-02 | {名称} | ❌ 失败 | 📄 文档问题 / 🔧 实现问题 |
-| ... | ... | ... | ... |
-
-**类型说明**：
-- 📄 **文档问题**：严格按文档描述实现，但因为文档本身有误、缺失、模糊而导致的失败
-- 🔧 **实现问题**：文档描述正确，但编码时偏离了文档要求（如自己发挥、遗漏步骤、理解错误）导致的失败
-- 通过的用例类型列标 `—`
+| 用例 ID | 用例名称 | 依赖 | 前提条件 | 状态 | 截图 | 问题 ID |
+|---------|----------|------|----------|------|------|---------|
+| TC-001 | {名称} | - | {前提条件} | passed | screenshots/TC-001.png | - |
+| TC-002 | {名称} | TC-001 | {前提条件} | failed / skipped | screenshots/TC-002.png | TEST-001 |
 
 ## 失败用例分析
 
-### TC-XX: {用例名称}
+### TEST-001 / TC-002: {用例名称}
 
-**失败表现**:
-{从截图或 act 输出描述表面现象，如"页面停留在登录界面，未跳转到主界面"、"消息未出现在聊天区域"等}
+- 类别：📄 文档问题 / 🔧 代码实现问题 / 🏗️ 环境问题 / 🔗 链接问题 / 📖 概念缺失
+- 严重度：🔴 阻塞 / 🟡 体验差 / 🟢 优化建议
+- 截图：screenshots/TC-002.png
+- 日志：logs/TC-002-console.log
+- 关联前置问题：[BUILD-001](../build-verification/build-issues.md#build-001-token-生成逻辑缺失) / [DOC-001](../doc-eval/role-client-dev.md#doc-001-appid-获取路径缺失) / 无
 
-**系统日志**:
-{粘贴浏览器 console / logcat / Xcode log 等系统级诊断输出的关键片段}
+**失败表现**
+
+{从截图或 act 输出描述表面现象。}
+
+**系统日志**
 
 ```log
-{日志原文}
+{主动采集到的 console / logcat / Xcode log 等关键片段。}
 ```
 
-**综合原因**:
-{结合失败表现和系统日志分析根因。如"console 报错 `TypeError: Cannot read property 'userID' of undefined`，结合截图可见登录按钮点击后页面未变化，说明登录回调中 userID 未正确传递，导致初始化失败，页面未跳转"}
+**综合原因**
 
-**建议修复方向**:
-{如"检查登录回调中 userID 参数是否正确赋值"、"检查 Token 是否过期"等}
+{必须结合失败表现和系统日志分析。不能只凭截图表面现象推断。}
 
----
+**建议修复方向**
 
-### TC-YY: {另一个失败用例名称}
-
-{同上格式}
+{具体建议。}
 
 ## 通过用例备注
 
-{如有通过但存在异常日志的用例，在此补充说明}
-
-## 环境信息
-
-- **操作系统**: {如 macOS 14.5 / Windows 11}
-- **浏览器/运行时**: {如 Chrome 126 / Android 14}
-- **SDK 版本**: {如 @zegocloud/zego-sdk 3.0.0}
-- **Node.js 版本**: {如 v20.11.0}
+{如有通过但存在异常日志的用例，在此补充。没有则写“无”。}
 ```
 
-## 关键要求
+## subagent 返回要求
 
-### Agent 必须主动采集系统日志
+完成后只返回：
 
-**测试框架不采集系统日志。** `@zegocloud/auto-web` 等 `@midscene/*` 工具只执行操作和截图，不采集浏览器 console、logcat 等系统级输出。midscene report HTML 中也不会包含 console 内容。
+```markdown
+## Result
 
-测试用例失败时，**agent 必须自己主动采集系统日志**，具体方式：
-
-| 平台 | Agent 采集方式 |
-|------|---------------|
-| Web | 使用 Chrome DevTools MCP 工具（`mcp__chrome-devtools__list_console_messages`）读取浏览器 console 消息 |
-| Android | 使用 Bash 执行 `adb logcat -d -s <包名>` 读取设备日志 |
-| iOS | 使用 Bash 执行 `xcrun simctl spawn booted log stream` 或读取 Xcode 日志 |
-| Desktop | 读取应用标准输出或日志文件 |
-| HarmonyOS | 使用 Bash 执行 `hdc hilog` 读取设备日志 |
-
-**采集时机**：每个用例执行完毕后，如果失败（exit code != 0），立即采集系统日志，再进入下一个用例。不要等所有用例跑完再统一采集（此时日志可能已被覆盖）。
-
-### 失败分析必须基于系统日志
-
-不允许仅凭截图表面现象推断原因。每个失败用例必须：
-1. 描述失败表现（看到了什么）
-2. 粘贴主动采集到的系统日志
-3. 结合两者给出综合原因
-
-如果主动采集后系统日志为空（如浏览器 console 无输出），说明应用代码可能未加载或未执行到关键路径，应如实记录"主动采集 console，无任何输出，应用可能未正确初始化"。
+- status: completed / failed / blocked
+- summary_file: doc-test-reports/{run-name}/auto-test/test-summary.md
+- detail_files:
+  - doc-test-reports/{run-name}/auto-test/test-cases.json
+  - doc-test-reports/{run-name}/auto-test/test-report.md
+  - doc-test-reports/{run-name}/auto-test/test-cases.sh
+  - doc-test-reports/{run-name}/auto-test/test-results.jsonl
+- document_link: doc-test-reports/{run-name}/auto-test/test-summary.md
+- summary: 总用例 N 个，通过 M 个，失败 K 个
+- next_action: continue / stop / needs_user_input
+```
