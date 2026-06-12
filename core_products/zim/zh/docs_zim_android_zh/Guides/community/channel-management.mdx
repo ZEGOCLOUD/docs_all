@@ -92,14 +92,19 @@ export const onCommunityChannelInfoUpdatedMap = {
 - 请参考 [使用 Token 鉴权](../../Users/Authentication.mdx) 实现用户鉴权登录。
 - 社群功能需要 ZIM SDK 3.0.0 及以上版本。
 - 社群功能为旗舰版功能，使用前请联系 ZEGO 技术支持开通。
+- 社群功能的 Token 生成方式与其他 ZIM 功能一致，无需额外权限声明。
 
 ### 频道类型说明
 
 | 类型 | 说明 | 加入方式 | 可见性 |
 |------|------|----------|--------|
-| GENERAL | 默认频道，创建社群时自动创建 | 自动加入 | 所有成员可见 |
-| PUBLIC | 公开频道 | 自动加入 | 所有成员可见 |
+| GENERAL | 默认频道，创建社群时自动创建，社群级别的 Tips 和通知会发在此频道 | 自动加入 | 所有成员可见 |
+| PUBLIC | 公开频道，需要创建社群之后再创建 | 自动加入 | 所有成员可见 |
 | PRIVATE | 私密频道 | 需要手动加入 | 仅已加入成员可见 |
+
+<Note title="说明">
+`GENERAL` 和 `PUBLIC` 功能完全一样，区别仅在于创建时机：`GENERAL` 在创建社群时自动创建，`PUBLIC` 需要在创建社群后手动创建。
+</Note>
 
 ## 创建频道
 
@@ -115,6 +120,14 @@ export const onCommunityChannelInfoUpdatedMap = {
 :::if{props.platform=undefined}
 <CodeGroup>
 ```java title="示例代码"
+import im.zego.zim.ZIM;
+import im.zego.zim.callback.ZIMCommunityChannelCreatedCallback;
+import im.zego.zim.entity.ZIMCommunityChannelCreateConfig;
+import im.zego.zim.entity.ZIMCommunityChannelFullInfo;
+import im.zego.zim.entity.ZIMCommunityChannelInfo;
+import im.zego.zim.entity.ZIMError;
+import im.zego.zim.enums.ZIMErrorCode;
+
 ZIMCommunityChannelInfo channelInfo = new ZIMCommunityChannelInfo();
 channelInfo.setChannelID("channel_001");    // 频道 ID，可自定义
 channelInfo.setChannelName("公告频道"); //最大长度300字符，可配置
@@ -783,7 +796,7 @@ try {
 
 调用 {getPlatformData(props,queryCommunityChannelListMap)} 接口，分页拉取指定社群中的所有频道列表。返回的频道对象 `ZIMCommunityChannel` 中的 `conversationID` 字段，即是后续收发消息时所需的会话 ID。
 
-分页规则与查询社群列表一致：首次将 `config.nextFlag` 设为 `0`，后续将返回的 `nextFlag` 传入下次请求，直到返回 `0` 为止。
+分页规则与查询社群列表一致：首次将 `config.nextFlag` 设为 `0`，后续将返回的 `nextFlag` 传入下次请求，直到返回 `0` 为止。`count` 取值范围 1-100，推荐值 20。
 
 :::if{props.platform=undefined}
 <CodeGroup>
@@ -876,13 +889,15 @@ try {
 
 调用 {getPlatformData(props,muteCommunityChannelsMap)} 接口，批量设置指定频道的禁言状态。禁言配置通过 {getPlatformData(props,ZIMCommunityChannelMuteConfigMap)} 传入。
 
+`channelIDs` 和 `communityID` 是接口方法的直接参数，非 config 配置字段。
+
 | 配置字段 | 说明 |
 |---------|------|
 | `mode` | 禁言范围。枚举值对照：`NONE`(0) = 不禁言、`NORMAL`(1) = 禁言普通成员、`ALL`(2) = 全员禁言、`CUSTOM`(3) = 自定义角色范围 |
 | `duration` | 禁言时长（秒），取值范围 1-2592001（约 30 天），或 `-1` 表示永久禁言 |
 | `roles` | 当 `mode` 为 `CUSTOM` 时，指定被禁言的角色列表 |
 
-操作失败的频道 ID 将通过 `errorChannelIDs` 返回。
+操作失败的频道 ID 将通过 `errorChannelIDs` 返回。详细操作请参考 [社群禁言](./community-mute.mdx)。
 
 :::if{props.platform=undefined}
 <CodeGroup>
@@ -952,7 +967,7 @@ zim_->muteCommunityChannels(true, channelIDs, communityID, config,
 const channelIDs = ['channel_001', 'channel_002'];
 const config: ZIMCommunityChannelMuteConfig = {
     duration: 3600,
-    mode: 1, // 1 = NORMAL，禁言普通成员
+    mode: 2, // 2 = ALL，全员禁言
 };
 
 zim.muteCommunityChannels(true, channelIDs, communityID, config)
@@ -997,8 +1012,8 @@ try {
 zim.setEventHandler(new ZIMEventHandler() {
     @Override
     public void onCommunityChannelListChanged(ZIM zim, ZIMCommunityChannelListChangedEventResult result) {
-        String communityID = result.communityID;
-        for (ZIMCommunityChannelChangeInfo changeInfo : result.changeInfoList) {
+        String communityID = result.getCommunityID();
+        for (ZIMCommunityChannelChangeInfo changeInfo : result.getChangeInfoList()) {
             // changeInfo.action：变更类型（创建 / 解散）
             // changeInfo.channel：变更的频道信息
         }
@@ -1069,8 +1084,8 @@ ZIMEventHandler.onCommunityChannelListChanged =
 zim.setEventHandler(new ZIMEventHandler() {
     @Override
     public void onCommunityChannelInfoUpdated(ZIM zim, ZIMCommunityChannelInfoUpdatedEventResult result) {
-        String communityID = result.communityID;
-        for (ZIMCommunityChannelFullInfoUpdateInfo updateInfo : result.updateInfoList) {
+        String communityID = result.getCommunityID();
+        for (ZIMCommunityChannelFullInfoUpdateInfo updateInfo : result.getUpdateInfoList()) {
             // updateInfo.channelInfo：更新后的频道完整信息
         }
     }

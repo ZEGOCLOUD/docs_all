@@ -21,6 +21,7 @@ import { getPlatformData } from "/snippets/utils-content-parser.js"
 - 请参考 [使用 Token 鉴权](../../Users/Authentication.mdx) 实现用户鉴权登录。
 - 社群功能需要 ZIM SDK 3.0.0 及以上版本。
 - 社群功能为旗舰版功能，使用前请联系 ZEGO 技术支持开通。
+- 社群功能的 Token 生成方式与其他 ZIM 功能一致，无需额外权限声明。
 
 ## 功能说明
 
@@ -32,10 +33,11 @@ import { getPlatformData } from "/snippets/utils-content-parser.js"
 
 | 配置字段 | 说明 |
 |---------|------|
-| `channelIDs` | 要设置的频道 ID 列表 |
 | `mode` | 禁言范围：`NONE`(0) 不禁言任何角色（用于解除禁言，isMute=true 且 mode=NONE 等价于取消禁言）、`NORMAL`(1) 禁言普通成员、`ALL`(2) 全员禁言、`CUSTOM`(3) 自定义角色范围 |
 | `roles` | 当 `mode` 为 `Custom` 时生效，指定被禁言的角色列表 |
 | `duration` | 禁言时长（秒），1-2592001 或 -1 表示永久禁言 |
+
+`channelIDs` 和 `communityID` 是接口方法的直接参数，非 config 配置字段。
 
 ## 示例代码
 
@@ -43,6 +45,14 @@ import { getPlatformData } from "/snippets/utils-content-parser.js"
 :::if{props.platform=undefined}
 <CodeGroup>
 ```java title="示例代码"
+import im.zego.zim.ZIM;
+import im.zego.zim.callback.ZIMCommunityChannelsMutedCallback;
+import im.zego.zim.entity.ZIMCommunityChannel;
+import im.zego.zim.entity.ZIMCommunityChannelMuteConfig;
+import im.zego.zim.entity.ZIMError;
+import im.zego.zim.enums.ZIMCommunityChannelMuteMode;
+import im.zego.zim.enums.ZIMErrorCode;
+
 ArrayList<String> channelIDs = new ArrayList<>();
 channelIDs.add("channel_1");
 channelIDs.add("channel_2");
@@ -56,7 +66,7 @@ config.setMode(ZIMCommunityChannelMuteMode.NORMAL); // 可选："NONE" | "NORMAL
 zim.muteCommunityChannels(true, channelIDs, communityID, config,
 	new ZIMCommunityChannelsMutedCallback() {
 		@Override
-		public void onCommunityChannelsMuted(String communityID, boolean isMute, ArrayList<String> channelIDs, ZIMError errorInfo) {
+		public void onCommunityChannelsMuted(String communityID, boolean isMute, ArrayList<String> errorChannelIDs, ZIMError errorInfo) {
 			if (errorInfo.code == ZIMErrorCode.SUCCESS) {
 				// 操作成功
 			}
@@ -75,7 +85,7 @@ ZIMCommunityChannelMuteConfig *config =
 config.duration = 3600;
 config.mode = ZIMCommunityChannelMuteModeNormal; // "1: Normal" | "2: All" | "3: Custom"
 
-[zim muteCommunityChannels:YES channelIDs:channelIDs communityID:communityID config:config callback:^(NSString * _Nonnull communityID, BOOL isMute, NSArray<NSString *> * _Nonnull channelIDs, ZIMError * _Nonnull errorInfo) {
+[zim muteCommunityChannels:YES channelIDs:channelIDs communityID:communityID config:config callback:^(NSString * _Nonnull communityID, BOOL isMute, NSArray<NSString *> * _Nonnull errorChannelIDs, ZIMError * _Nonnull errorInfo) {
 	if (errorInfo.code == ZIMErrorCodeSuccess) {
 		// 禁言设置成功
 	}
@@ -110,13 +120,13 @@ zim_->muteCommunityChannels(true, channelIDs, communityID, config,
 const channelIDs = ['channel_1', 'channel_2'];
 const config: ZIMCommunityChannelMuteConfig = {
 	duration: 3600,
-	mode: 1, // "1: Normal" | "2: All" | "3: Custom"
+	mode: 2, // "1: Normal" | "2: All" | "3: Custom"
 	// roles: [101, 102], // 当 mode = 'Custom' 时传入
 };
 
 zim.muteCommunityChannels(true, channelIDs, communityID, config)
 	.then((result: ZIMCommunityChannelsMutedResult) => {
-		// result.channelIDs 为操作结果
+		// result.errorChannelIDs 为操作失败的频道 ID 列表
 	})
 	.catch((err: ZIMError) => {
 		// 操作失败
@@ -159,6 +169,14 @@ try {
 | `currentMemberCount` | 当前频道成员数 |
 | `muteInfo` | 频道禁言信息，包含 `mode`、`expiredTime`、`roles` |
 
+### muteInfo 字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| mode | ZIMCommunityChannelMuteMode | 当前禁言模式：`NONE`(0)、`NORMAL`(1)、`ALL`(2)、`CUSTOM`(3) |
+| expiredTime | long | 禁言失效时间（毫秒），到期后自动解除禁言 |
+| roles | ArrayList&lt;Integer&gt; | 当前被禁言的角色列表，仅当 mode 为 `CUSTOM` 时有值 |
+
 :::if{props.platform=undefined}
 <CodeGroup>
 ```java title="示例代码"
@@ -172,7 +190,7 @@ zim.queryCommunityChannelsInfo(channelIDs, communityID,
         public void onCommunityChannelsInfoQueried(String communityID, ArrayList<ZIMCommunityChannelFullInfo> channelInfos, ArrayList<String> errorChannelIDs, ZIMError errorInfo) {
             if (errorInfo.code == ZIMErrorCode.SUCCESS) {
                 for (ZIMCommunityChannelFullInfo channelInfo : channelInfos) {
-                    ZIMCommunityChannelMuteInfo muteInfo = channelInfo.muteInfo;
+                    ZIMCommunityChannelMuteInfo muteInfo = channelInfo.getMuteInfo();
                     // muteInfo.mode : 当前频道禁言模式
                     // muteInfo.expiredTime : 禁言失效时间（毫秒）
                     // muteInfo.roles : 当前被禁言的角色列表
@@ -281,10 +299,10 @@ try {
 zim.setEventHandler(new ZIMEventHandler() {
     @Override
     public void onCommunityChannelInfoUpdated(ZIM zim, ZIMCommunityChannelInfoUpdatedEventResult result) {
-        String communityID = result.communityID;
-        for (ZIMCommunityChannelFullInfoUpdateInfo updateInfo : result.updateInfoList) {
-            ZIMCommunityChannelFullInfo channelInfo = updateInfo.channelInfo;
-            ZIMCommunityChannelMuteInfo muteInfo = channelInfo.muteInfo;
+        String communityID = result.getCommunityID();
+        for (ZIMCommunityChannelFullInfoUpdateInfo updateInfo : result.getUpdateInfoList()) {
+            ZIMCommunityChannelFullInfo channelInfo = updateInfo.getChannelInfo();
+            ZIMCommunityChannelMuteInfo muteInfo = channelInfo.getMuteInfo();
             // muteInfo.mode : 当前频道禁言模式
             // muteInfo.expiredTime : 禁言失效时间（毫秒）
             // muteInfo.roles : 当前被禁言的角色列表
