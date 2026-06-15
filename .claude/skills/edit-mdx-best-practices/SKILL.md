@@ -140,6 +140,33 @@ const code = "here";
 
 For highlighting, use `!mark`, `!focus`, or regex patterns (see `references/code-features.md`).
 
+### HTML/MDX Tags
+
+Tags must not only be properly closed — the opening tag, content, and closing tag must also follow a consistent line layout. Either everything is on one line, or each part occupies its own line.
+
+**Core rule:** When the opening tag and content are on the same line, the closing tag must also be on that same line.
+
+**Correct:**
+```html
+<p> 内容 </p>
+
+<p>
+内容
+</p>
+
+<p>
+内容</p>
+```
+
+**Incorrect:**
+```html
+<!-- ❌ Opening tag and content are on the same line, but the closing tag is on a new line -->
+<p> 内容
+</p>
+```
+
+Apply the same rule to other HTML/MDX tags (`<div>`, `<span>`, `<td>`,`<Warning>`, etc.), not just `<p>`.
+
 ## Reference Files
 
 For detailed usage, syntax, and examples, consult these reference files:
