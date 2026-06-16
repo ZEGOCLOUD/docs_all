@@ -100,7 +100,6 @@ const folder = { nodeToken, url };
 const documents = {
   "build-test-report": null,
   "doc-eval-summary": null,
-  "integration-summary": null,
   "doc-eval-role": {}
 };
 console.log(JSON.stringify({ runName, folder, documents }, null, 2));
@@ -130,7 +129,6 @@ NODE
 
 create_and_patch_manifest "build-test-report" "构建与自动化测试报告"
 create_and_patch_manifest "doc-eval-summary" "【文档评测报告】汇总报告"
-create_and_patch_manifest "integration-summary" "接入测试综合报告"
 
 if [ -n "$ROLE_FILES_PATTERN" ]; then
   # shellcheck disable=SC2086
