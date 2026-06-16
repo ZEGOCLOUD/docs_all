@@ -157,7 +157,7 @@ doc-test-reports/{run-name}/doc-eval/role-{role-id}.md
 2. 读取汇总报告格式（`references/report-templates.md`）
 3. 读取本地角色报告文件：`doc-test-reports/{run-name}/doc-eval/role-*.md`
 4. 交叉对比各角色的评分和发现
-5. 识别共性问题、按优先级排序改进建议
+5. 合并不同角色发现的重复问题，生成统一问题摘要和顺序一致的问题详情
 6. 生成汇总报告：`doc-test-reports/{run-name}/doc-eval/doc-eval-summary.md`
 
 不要把所有角色完整报告塞进 prompt 或返回主会话；汇总 agent 必须从本地文件读取角色报告。
