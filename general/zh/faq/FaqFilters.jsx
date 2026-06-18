@@ -4,7 +4,7 @@ const FilterContext = createContext();
 
 export const useFilters = () => useContext(FilterContext);
 
-export const FaqFilters = ({ children, productData, platformData, language = 'zh', initialProduct, initialPlatform, hideSelectors = false }) => {
+export const FaqFilters = ({ children, productData, platformData, instanceMap, language = 'zh', initialProduct, initialPlatform, hideSelectors = false }) => {
     // 根据语言设置默认值和文案
     const getDefaultValues = () => {
         if (language === 'en') {
@@ -48,6 +48,24 @@ export const FaqFilters = ({ children, productData, platformData, language = 'zh
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, []);
+
+    // 客户端读取 URL 查询参数做自动选中（仅在浏览器执行，SSG 阶段不跑，避免 hydration 不一致）：
+    //   ?instance=<id>  → 经 instanceMap 解析为该实例的 product/platform，自动选中（核心用法）
+    //   ?product= / ?platform= → 直接覆盖（兜底：手动指定任意值）
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const inst = params.get('instance');
+        if (inst && instanceMap && instanceMap[inst]) {
+            const { product: instProduct, platform: instPlatform } = instanceMap[inst];
+            if (instProduct) setProduct(instProduct);
+            if (instPlatform) setPlatform(instPlatform);
+            return;
+        }
+        const qProduct = params.get('product');
+        const qPlatform = params.get('platform');
+        if (qProduct) setProduct(qProduct);
+        if (qPlatform) setPlatform(qPlatform);
+    }, [instanceMap]);
 
     const dropdownWrapperStyle = {
         height: '36px',

@@ -33,6 +33,18 @@ if [ "$NEED_SETUP" = true ]; then
     fi
 fi
 
+# 从 docuo.config.*.json 重新生成 FAQ 维度（幂等）。改了 config 后，下次预览自动同步 FAQ 下拉/instanceMap。
+SCRIPT_DIR="$(dirname "$0")"
+if [ -f "$SCRIPT_DIR/.scripts/faq/generate_faq_dimensions.mjs" ] && command -v node &> /dev/null; then
+    echo -e "${BLUE}正在同步 FAQ 维度（docuo.config.*.json → faqDimensions.js）...${NC}"
+    if ! node "$SCRIPT_DIR/.scripts/faq/generate_faq_dimensions.mjs" >/dev/null; then
+        echo -e "${YELLOW}⚠ FAQ 维度生成失败，已跳过（不影响启动）。可手动排查：node .scripts/faq/generate_faq_dimensions.mjs${NC}"
+    fi
+    # 预生成 curl 可取的静态 JSON（每 instance 一个文件 → static/faq-instance/<id>.json）。依赖上面的维度。
+    echo -e "${BLUE}正在生成 FAQ 静态数据（static/faq-instance/*.json，供 curl 消费）...${NC}"
+    node "$SCRIPT_DIR/.scripts/faq/generate_static_faq.mjs" >/dev/null || echo -e "${YELLOW}⚠ FAQ 静态数据生成失败，已跳过。${NC}"
+fi
+
 # 解析命令行参数
 case "$1" in
     --zh)
