@@ -238,6 +238,38 @@ def extract_html_tags(content):
     in_code_block = False
     code_block_language = None
 
+    # 预处理：把跨多行的标签（如 <FaqFilters ... > 属性写在多行）合并成逻辑单行，
+    # 使下面的逐行正则能完整匹配到开放标签。只在非代码块区域合并。
+    # 合并规则：遇到 <tag 开头但本行没有 > 的行，向下合并直到出现 >。
+    merged_lines = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        if stripped.startswith('```'):
+            in_code_block = not in_code_block
+            merged_lines.append(line)
+            i += 1
+            continue
+        if in_code_block:
+            merged_lines.append(line)
+            i += 1
+            continue
+        # 非代码块：检测跨行标签起点（< 后跟字母，但本行内无 > 闭合）
+        if re.search(r'<(/?)[a-zA-Z]', line) and '>' not in line:
+            buf = line
+            j = i + 1
+            while j < len(lines) and '>' not in buf:
+                buf += ' ' + lines[j].strip()
+                j += 1
+            merged_lines.append(buf)
+            i = j
+        else:
+            merged_lines.append(line)
+            i += 1
+    lines = merged_lines
+    in_code_block = False  # 重置，下面会重新跟踪
+
     # 匹配HTML标签的正则表达式
     # 支持: <tag>, <tag attr="value">, </tag>, <tag/>, <tag attr="value"/>
     tag_pattern = re.compile(r'<(/?)([a-zA-Z][a-zA-Z0-9]*)[^>]*?(/?)>', re.IGNORECASE)

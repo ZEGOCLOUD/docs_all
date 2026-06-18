@@ -108,5 +108,20 @@ else
 	echo "未发现待提交的Markdown文件，跳过链接检查"
 fi
 
+# FAQ 维度自动同步（改了 config/overview 才跑，幂等，失败不阻断）
+# 触发文件：docuo.config.{zh,en}.json 或 general/{zh,en}/faq/overview.mdx
+faq_triggers=$(git diff --cached --name-only $against | grep -E '^(docuo\.config\.(zh|en)\.json|general/(zh|en)/faq/overview\.mdx)$')
+if [ -n "$faq_triggers" ]; then
+	echo "检测到 FAQ 数据源变更，自动同步维度..."
+	if node .scripts/faq/generate_faq_dimensions.mjs >/dev/null 2>&1 \
+		&& node .scripts/faq/generate_static_faq.mjs >/dev/null 2>&1; then
+		git add general/zh/faq/faqDimensions.js general/en/faq/faqDimensions.js static/faq-instance/
+		echo "✓ FAQ 维度已同步并加入本次提交"
+	else
+		echo "⚠ FAQ 维度生成失败，已跳过（不影响提交）"
+		echo "  可手动排查: node .scripts/faq/generate_faq_dimensions.mjs"
+	fi
+fi
+
 # If there are whitespace errors, print the offending file names and fail.
 # git diff-index --check --cached $against --
