@@ -20,13 +20,13 @@ import MessageSequenceDiagramCommon from '/core_products/zim/zh/snippets/Message
 
 * Android Studio 2021.1.1 或以上版本。
 
-- Android SDK 25、Android SDK Build-Tools 25.0.2、Android SDK Platform-Tools 25.x.x 或以上版本。
+- Android SDK Platform 31、Android SDK Build-Tools 30.0.3、Android SDK Platform-Tools 25.x.x 或以上版本。
 - Android 4.4 或以上版本的设备或模拟器（推荐使用真机）。
 - 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，获取到了接入 ZIM SDK 服务所需的 AppID、AppSign。ZIM 服务权限不是默认开启的，使用前，请先在 [ZEGO 控制台](https://console.zego.im) 自助开通 ZIM 服务（详情请参考 [项目管理 - 即时通讯](https://doc-zh.zego.im/console/service-configuration/im/activate-service)），若无法开通 ZIM 服务，请联系 ZEGO 技术支持开通。
 
 <Warning title="注意">
 
-`2.3.0 及以上`版本的 SDK，开始支持 “AppSign 鉴权”，同时仍支持 “Token 鉴权”，若您需要升级鉴权方式，可参考 [ZIM 如何从 AppSign 鉴权升级为 Token 鉴权](https://doc-zh.zego.im/faq/zim-token-upgrade)。
+`2.3.0 及以上`版本的 SDK，开始支持 “AppSign 鉴权”，同时仍支持 “Token 鉴权”，若您需要升级鉴权方式，可参考 [ZIM 如何从 AppSign 鉴权升级为 Token 鉴权](https://doc-zh.zego.im/faq/zim-token-upgrade)。「AppSign 鉴权」和「Token 鉴权」的区别请参考 [鉴权方式](https://doc-zh.zego.im/faq/zim-token-upgrade#%E9%89%B4%E6%9D%83%E6%96%B9%E5%BC%8F)。
 </Warning>
 
 
@@ -182,6 +182,11 @@ import MessageSequenceDiagramCommon from '/core_products/zim/zh/snippets/Message
 
 以下流程中，我们以客户端 A 和 B 的消息交互为例：
 
+<Warning title="注意">
+
+端到端联调需两台真机/模拟器，分别以不同 userID（如 userA/userB）同时登录；A 发消息时 conversationID 填 B 的 userID。
+</Warning>
+
 <Frame width="512" height="auto" caption="">
   <img src="https://doc-media.zego.im/sdk-doc/Pics/ZIM/quick_start_Implementation.png" />
 </Frame>
@@ -205,6 +210,12 @@ import im.zego.zim.ZIM;
 首先我们需要在 SDK 中创建 ZIM 实例，一个实例对应的是一个用户，表示一个用户以客户端的身份登录系统。
 
 例如，客户端 A、B 分别调用 [create](@create) 接口，传入在 [1 前提条件](#1-前提条件) 中获取到的 AppID、AppSign，创建了 A、B 的实例：
+
+<Note title="说明">
+
+以下代码假设您已在 Activity 中声明成员变量 `private ZIM zim;`，并通过 `getApplication()` 获取 application。
+</Note>
+
 ```java
 // 创建 ZIM 对象，传入 appID、appSign 与 Android 中的 Application
 // 请注意：ZIM 从 2.3.0 版本开始支持 AppSign 鉴权，SDK 也默认为 AppSign 鉴权，如果您需要切换鉴权方式：
@@ -238,9 +249,9 @@ zim.setEventHandler(new ZIMEventHandler() {
 });
 ```
 
-<a name="login"></a>
-
 详细的接口介绍，请参考 [onMessageReceived](@onMessageReceived)。
+
+<a name="login"></a>
 
 #### 4. 登录 ZIM
 
@@ -273,6 +284,11 @@ zim.login(userID, config, new ZIMLoggedInCallback() {
  });
 ```
 
+<Note title="说明">
+
+ZIMError.code 为非 0 时表示登录失败，参考 [ZIM 错误码](./SDK%20Error%20Codes/ZIM.mdx)。
+</Note>
+
 #### 5. 发送单聊消息
 
 客户端 A 登录成功后，可以向客户端 B 发送消息。
@@ -291,7 +307,7 @@ zim.login(userID, config, new ZIMLoggedInCallback() {
 
 // conversationID 为 消息需要发送的会话 ID
 // 单聊时，conversationID 即是对方的 userID；群组时，conversationID 即是群组的 groupID；房间时，conversationID 即是房间的 roomID
-String conversationID = "xxxx";
+String conversationID = "userB";
 
 ZIMTextMessage zimMessage = new ZIMTextMessage();
 zimMessage.message = "消息内容";
@@ -307,6 +323,7 @@ pushConfig.payload = "离线推送的扩展信息";
 config.pushConfig = pushConfig;
 
 // 在单聊场景中，ZIMConversationType 设置为 PEER
+// ZIMConversationType 枚举值：PEER（单聊）、GROUP（群组）、ROOM（房间）
 zim.sendMessage(zimMessage, conversationID, ZIMConversationType.PEER, config, new ZIMMessageSentCallback() {
     @Override
     public void onMessageAttached(ZIMMessage zimMessage){
@@ -332,7 +349,7 @@ zim.sendMessage(zimMessage, conversationID, ZIMConversationType.PEER, config, ne
 zim.setEventHandler(new ZIMEventHandler() {
     @Override
     public void onMessageReceived(ZIM zim, ZIMMessageReceivedEventResult result) {
-        List<ZIMMessage> messageList = result.messageList;
+        List<ZIMMessage> messageList = result.getMessageList();
       for (ZIMMessage zimMessage : messageList) {
           if (zimMessage instanceof ZIMTextMessage)
           {
