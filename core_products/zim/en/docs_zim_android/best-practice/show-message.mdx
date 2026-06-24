@@ -19,13 +19,13 @@ export const queryHistoryMessageMap = {
   'window': <a href='@queryHistoryMessage' target='_blank'>queryHistoryMessage</a>,
   'web': <a href='@queryHistoryMessage' target='_blank'>queryHistoryMessage</a>,
 }
-export const peerMessageReceivedMap= {
-  'Android': <a href='@onPeerMessageReceived' target='_blank'>onPeerMessageReceived</a>,
-  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onPeerMessageReceived.html' target='_blank'>onPeerMessageReceived</a>,
-  'iOS': <a href='/zim-ios/client-sdks/api-reference/protocol#zimpeermessagereceivedinfofromuserid' target='_blank'>peerMessageReceived</a>,
-  'mac': <a href='/zim-macos/client-sdks/api-reference/protocol#zimpeermessagereceivedinfofromuserid' target='_blank'>peerMessageReceived</a>,
-  'window': <a href='@onPeerMessageReceived' target='_blank'>onPeerMessageReceived</a>,
-  'web': <a href='@peerMessageReceived' target='_blank'>peerMessageReceived</a>,
+export const messageReceivedMap= {
+  'Android': <a href='@onMessageReceived' target='_blank'>onMessageReceived</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onMessageReceived.html' target='_blank'>onMessageReceived</a>,
+  'iOS': <a href='/zim-ios/client-sdks/api-reference/protocol#zimmessagereceivedeventresult' target='_blank'>messageReceived</a>,
+  'mac': <a href='/zim-macos/client-sdks/api-reference/protocol#zimmessagereceivedeventresult' target='_blank'>messageReceived</a>,
+  'window': <a href='@onMessageReceived' target='_blank'>onMessageReceived</a>,
+  'web': <a href='@messageReceived' target='_blank'>messageReceived</a>,
 }
 
 export const messageSentStatusChangedMap= {
@@ -71,7 +71,7 @@ sequenceDiagram
     participant MM as Message Manager
     participant UI as UI Layer
 
-    Note over SDK: onMessageQueried<br/>onPeerMessageReceived<br/>onMessageSentStatusChanged<br/>onMessageRevoked<br/>onMessageSent<br/>onMessageDeleted<br/>...
+    Note over SDK: onMessageQueried<br/>onMessageReceived<br/>onMessageSentStatusChanged<br/>onMessageRevoked<br/>onMessageSent<br/>onMessageDeleted<br/>...
 
     SDK->>MM: Push message events (Transaction)
 
@@ -377,40 +377,45 @@ zim.queryHistoryMessage(
 
 ### Get Real-time Received Messages and Render Them to the Chat Interface
 
-Listen to the {getPlatformData(props,peerMessageReceivedMap)} interface to get real-time received messages and render them to the chat interface.
+Listen to the {getPlatformData(props,messageReceivedMap)} interface to get real-time received messages and render them to the chat interface.
 
 :::if{props.platform=undefined}
 
 ```java
- public void onPeerMessageReceived(ZIM zim, List<ZIMMessage> messageList, 
-                                  ZIMMessageReceivedInfo info, String fromUserID) {
-    // Only process messages from the current conversation
-    if (!fromUserID.equals(myConversationID)) {
-        return; // Messages from non-current conversations are ignored
-    }
+ @Override
+ public void onMessageReceived(ZIM zim, ZIMMessageReceivedEventResult result) {
+     List<ZIMMessage> messageList = result.messageList;
+     ZIMMessageReceivedInfo info = result.info;
+     String conversationID = result.conversationID;
+     ZIMConversationType conversationType = result.conversationType;
+     // Only process messages from the current conversation
+     if (!conversationID.equals(myConversationID)) {
+         return; // Messages from non-current conversations are ignored
+     }
 
-    // Merge messages into message list
-    addMessage(messageList);
+     // Merge messages into message list
+     addMessage(messageList);
 
-    // Update UI, such as refreshing RecyclerView
-    runOnUiThread(() -> {
-        myAdapter.notifyDataSetChanged();
-        if (!myMessageList.isEmpty()) {
-            recyclerView.scrollToPosition(myMessageList.size() - 1);
-        }
-    });
-}
+     // Update UI, such as refreshing RecyclerView
+     runOnUiThread(() -> {
+         myAdapter.notifyDataSetChanged();
+         if (!myMessageList.isEmpty()) {
+             recyclerView.scrollToPosition(myMessageList.size() - 1);
+         }
+     });
+ }
 
 ```
 :::
 :::if{props.platform="iOS|mac"}
 ```oc
 
-- (void)zim:(ZIM *)zim
-    peerMessageReceived:(NSArray<ZIMMessage *> *)messageList
-                   info:(ZIMMessageReceivedInfo *)info
-             fromUserID:(NSString *)fromUserID{
-     if(fromUserID != myConversationID){
+- (void)zim:(ZIM *)zim messageReceivedWithResult:(ZIMMessageReceivedEventResult *)result {
+     NSArray<ZIMMessage *> *messageList = result.messageList;
+     ZIMMessageReceivedInfo *info = result.info;
+     NSString *conversationID = result.conversationID;
+     ZIMConversationType conversationType = result.conversationType;
+     if(conversationID != myConversationID){
          return;// Messages from non-current conversations are ignored
      }
      [self addMessage: messageList];
@@ -421,10 +426,13 @@ Listen to the {getPlatformData(props,peerMessageReceivedMap)} interface to get r
 :::if{props.platform="window"}
 ```cpp
 
-void onPeerMessageReceived(ZIM* zim, const std::vector<ZIMMessage>& messageList, 
-                           const ZIMMessageReceivedInfo& info, const std::string& fromUserID) {
+virtual void onMessageReceived(ZIM *zim, const ZIMMessageReceivedEventResult &result) override {
+    auto &messageList = result.messageList;
+    auto &info = result.info;
+    auto &conversationID = result.conversationID;
+    auto conversationType = result.conversationType;
     // Only process messages from the current conversation
-    if (fromUserID != myConversationID) {
+    if (conversationID != myConversationID) {
         return; // Messages from non-current conversations are ignored
     }
 
@@ -441,21 +449,17 @@ void onPeerMessageReceived(ZIM* zim, const std::vector<ZIMMessage>& messageList,
 :::if{props.platform="web"}
 ```ts
 
-function onPeerMessageReceived(
-    zim: ZIM,
-    messageList: ZIMMessage[],
-    info: ZIMMessageReceivedInfo,
-    fromUserID: string
-) {
+zim.on('messageReceived', function (zim, result) {
+    const { messageList, info, conversationID, conversationType } = result;
     // Only process messages from the current conversation
-    if (fromUserID !== myConversationID) return;
+    if (conversationID !== myConversationID) return;
 
     // Merge messages into message list
     addMessage(messageList);
 
     // Update UI, such as refreshing message list
     updateUI();
-}
+});
 
 
 ```
@@ -463,14 +467,13 @@ function onPeerMessageReceived(
 :::if{props.platform="Flutter"}
 ```dart
 
-void onPeerMessageReceived(
-    ZIM zim,
-    List<ZIMMessage> messageList,
-    ZIMMessageReceivedInfo info,
-    String fromUserID,
-) {
+ZIMEventHandler().onMessageReceived = (ZIM zim, ZIMMessageReceivedEventResult result) {
+  List<ZIMMessage> messageList = result.messageList;
+  ZIMMessageReceivedInfo info = result.info;
+  String conversationID = result.conversationID;
+  ZIMConversationType conversationType = result.conversationType;
   // Only process messages from the current conversation
-  if (fromUserID != myConversationID) return;
+  if (conversationID != myConversationID) return;
 
   // Merge messages into message list
   addMessage(messageList);
@@ -482,7 +485,7 @@ void onPeerMessageReceived(
       scrollController.jumpTo(scrollController.position.maxScrollExtent);
     }
   });
-}
+};
 ```
 :::
 
@@ -617,7 +620,7 @@ ZIM already sorts messages by `orderKey` in the results returned by each API or 
 
 In practice, the chat page message list is composed of multiple data sources merged together:
 - Historical messages (`queryHistoryMessage`)
-- Real-time received messages (`onPeerMessageReceived`)
+- Real-time received messages (`onMessageReceived`)
 - Message updates (status changes, recalls, edits, etc.)
 
 The client is the only layer that can access all data sources simultaneously. After merging, it needs to uniformly re-sort by `orderKey` to ensure:

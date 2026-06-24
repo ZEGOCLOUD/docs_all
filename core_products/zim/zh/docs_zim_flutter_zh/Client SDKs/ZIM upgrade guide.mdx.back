@@ -1,0 +1,1230 @@
+---
+articleID: 16129
+date: "2026-04-02"
+---
+
+# ZIM 升级指南
+
+- - -
+
+本文介绍 ZIM Flutter 平台 SDK 版本升级时的一些说明和注意事项。
+
+## 3.0.0 升级指南
+
+<Warning title="注意">
+
+本次版本（3.0.0）移除了废弃超过 1 年的接口及相关枚举值和字段，同时对部分接口新增了废弃标记。请参考以下说明完成迁移。
+</Warning>
+
+### 废弃接口删除
+
+#### ZIM 初始化接口（create）
+
+废弃的旧版 `create(int appID)` 接口已被移除，请使用接受 [ZIMAppConfig](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMAppConfig-class.html) 参数的 [create](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/create.html) 接口代替。
+
+<CodeGroup>
+```dart 新版本用法
+ZIMAppConfig appConfig = ZIMAppConfig();
+appConfig.appID = 12345678;
+appConfig.appSign = 'appSign';
+ZIM.create(appConfig);
+```
+
+```dart 旧版本用法
+// 旧版接口已移除
+ZIM.create(12345678);
+```
+</CodeGroup>
+
+#### ZIM 登录接口（login）
+
+废弃的旧版 `login(ZIMUserInfo, String token)` 接口已被移除，请使用接受 `userID` 和 [ZIMLoginConfig](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMLoginConfig-class.html) 参数的 [login](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/login.html) 接口代替。
+
+<CodeGroup>
+```dart 新版本用法
+ZIMLoginConfig loginConfig = ZIMLoginConfig();
+loginConfig.userName = 'userName';
+loginConfig.token = ''; // 若使用 Token 鉴权，请填写 Token
+loginConfig.isOfflineLogin = false;
+await ZIM.getInstance()!.login('userID', loginConfig);
+```
+
+```dart 旧版本用法
+// 旧版接口已移除
+ZIMUserInfo userInfo = ZIMUserInfo();
+userInfo.userID = 'userID';
+userInfo.userName = 'userName';
+await ZIM.getInstance()!.login(userInfo, '');
+```
+</CodeGroup>
+
+#### ZIM 消息发送接口（sendMessage）
+
+废弃的 `sendPeerMessage`、`sendRoomMessage`、`sendGroupMessage` 接口已被移除，请统一使用含 `notification` 参数的 [sendMessage](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/sendMessage.html) 接口代替。
+
+<CodeGroup>
+```dart 新版本用法
+ZIMTextMessage textMessage = ZIMTextMessage(message: 'Hello');
+ZIMMessageSendConfig config = ZIMMessageSendConfig();
+ZIMMessageSendNotification notification = ZIMMessageSendNotification();
+notification.onMessageAttached = (ZIMMessage message) {
+    // 消息发送前的业务逻辑
+};
+await ZIM.getInstance()!.sendMessage(
+    textMessage,
+    'toConversationID',
+    ZIMConversationType.peer,
+    config,
+    notification,
+);
+```
+
+```dart 旧版本用法
+// 旧版接口已移除，请迁移到 sendMessage 接口
+ZIMTextMessage textMessage = ZIMTextMessage(message: 'Hello');
+ZIMMessageSendConfig config = ZIMMessageSendConfig();
+// 旧版单聊消息发送
+await ZIM.getInstance()!.sendPeerMessage(textMessage, 'toUserID', config);
+// 旧版群聊消息发送
+await ZIM.getInstance()!.sendGroupMessage(textMessage, 'toGroupID', config);
+```
+</CodeGroup>
+
+#### ZIM 消息接收回调接口
+
+在 2.18.0 中已废弃的 `onReceivePeerMessage`、`onReceiveRoomMessage`、`onReceiveGroupMessage` 回调在本版本中正式移除，建议迁移至 [onMessageReceived](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onMessageReceived.html)。
+
+<CodeGroup>
+```dart 新版本用法
+ZIMEventHandler.onMessageReceived = (ZIM zim,
+    ZIMMessageReceivedEventResult result) {
+    List<ZIMMessage> messageList = result.messageList;
+    ZIMMessageReceivedInfo info = result.info;
+    String conversationID = result.conversationID;
+    ZIMConversationType conversationType = result.conversationType;
+    // 根据 conversationType 处理不同类型会话的消息
+};
+```
+
+```dart 旧版本用法（已移除）
+ZIMEventHandler.onReceivePeerMessage = (ZIM zim,
+    List<ZIMMessage> messageList, String fromUserID) {};
+ZIMEventHandler.onReceiveRoomMessage = (ZIM zim,
+    List<ZIMMessage> messageList, String fromRoomID) {};
+ZIMEventHandler.onReceiveGroupMessage = (ZIM zim,
+    List<ZIMMessage> messageList, String fromGroupID) {};
+```
+</CodeGroup>
+
+#### ZIM 呼叫邀请回调接口
+
+旧版 `onCallInvitationTimeout(zim, callID)`（仅 callID 参数）、`onCallInvitationRejected`、`onCallInvitationAccepted`、`onCallInviteesAnsweredTimeout` 回调已被移除，请使用新版 [onCallInvitationTimeout](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onCallInvitationTimeout.html) 和 [onCallUserStateChanged](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onCallUserStateChanged.html) 代替。
+
+<CodeGroup>
+```dart 新版本用法
+ZIMEventHandler.onCallInvitationTimeout = (ZIM zim,
+    ZIMCallInvitationTimeoutInfo info,
+    String callID) {
+    // info.mode 可区分普通模式/进阶模式
+};
+
+ZIMEventHandler.onCallUserStateChanged = (ZIM zim,
+    ZIMCallUserStateChangeInfo info,
+    String callID) {
+    // info.callUserList 包含状态变更的用户列表
+    // 可统一处理接受、拒绝、超时等状态变更
+};
+```
+
+```dart 旧版本用法
+// 旧版回调已移除，请迁移到 onCallInvitationTimeout 和 onCallUserStateChanged
+ZIMEventHandler.onCallInvitationTimeout = (ZIM zim, String callID) {};
+ZIMEventHandler.onCallInvitationRejected = (ZIM zim,
+    ZIMCallInvitationRejectedInfo info, String callID) {};
+ZIMEventHandler.onCallInvitationAccepted = (ZIM zim,
+    ZIMCallInvitationAcceptedInfo info, String callID) {};
+ZIMEventHandler.onCallInviteesAnsweredTimeout = (ZIM zim,
+    List<String> invitees, String callID) {};
+```
+</CodeGroup>
+
+#### importLocalMessages / exportLocalMessages 接口删除
+
+`importLocalMessages` 和 `exportLocalMessages` 接口已在 3.0.0 版本中暂时移除，且暂无替代接口。后续版本将重新开放该功能，请关注 SDK 更新日志。
+
+### 新增废弃接口（建议迁移）
+
+#### ZIM 消息接收回调接口
+
+`onPeerMessageReceived`、`onRoomMessageReceived`、`onGroupMessageReceived` 回调在本版本中新增废弃标记，当前仍可正常使用，但建议尽快迁移至 [onMessageReceived](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onMessageReceived.html)。
+
+<CodeGroup>
+```dart 建议使用（新接口）
+ZIMEventHandler.onMessageReceived = (ZIM zim,
+    ZIMMessageReceivedEventResult result) {
+    List<ZIMMessage> messageList = result.messageList;
+    ZIMMessageReceivedInfo info = result.info;
+    String conversationID = result.conversationID;
+    ZIMConversationType conversationType = result.conversationType;
+    // 根据 conversationType 处理不同类型会话的消息
+};
+```
+
+```dart 废弃接口（仍可用，建议迁移）
+ZIMEventHandler.onPeerMessageReceived = (ZIM zim,
+    List<ZIMMessage> messageList, ZIMMessageReceivedInfo info,
+    String fromUserID) {};
+ZIMEventHandler.onRoomMessageReceived = (ZIM zim,
+    List<ZIMMessage> messageList, ZIMMessageReceivedInfo info,
+    String fromRoomID) {};
+ZIMEventHandler.onGroupMessageReceived = (ZIM zim,
+    List<ZIMMessage> messageList, ZIMMessageReceivedInfo info,
+    String fromGroupID) {};
+```
+</CodeGroup>
+
+#### ZIMGroupConversation 废弃
+
+`ZIMGroupConversation` 类在 3.0.0 中已被废弃，其中的 `isDisabled` 和 `mutedExpiredTime` 字段请通过基类 `ZIMConversation` 的对应属性替代：
+
+| ZIMGroupConversation（已废弃） | ZIMConversation（替代属性） |
+|---|---|
+| `isDisabled` | `isConversationDisabled` |
+| `mutedExpiredTime` | `selfMutedExpiredTime` |
+
+<CodeGroup>
+```dart 新版本用法
+bool isDisabled = conversation.isConversationDisabled;
+int mutedExpiredTime = conversation.selfMutedExpiredTime;
+```
+
+```dart 旧版本用法（已废弃）
+ZIMGroupConversation groupConversation = conversation as ZIMGroupConversation;
+bool isDisabled = groupConversation.isDisabled;
+int mutedExpiredTime = groupConversation.mutedExpiredTime;
+```
+</CodeGroup>
+
+### 枚举值移除
+
+#### ZIMMessageType 枚举值移除
+
+`ZIMMessageType.system`（值为 30）已从枚举中移除，同时 `ZIMSystemMessage` 类也已被移除。如需发送系统级指令，请使用 [ZIMCommandMessage](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMCommandMessage-class.html) 代替。
+
+<CodeGroup>
+```dart 新版本用法
+// 使用 ZIMCommandMessage 代替 ZIMSystemMessage
+ZIMCommandMessage commandMessage = ZIMCommandMessage(
+    message: Uint8List.fromList('payload'.codeUnits),
+);
+await ZIM.getInstance()!.sendMessage(
+    commandMessage,
+    'toConversationID',
+    ZIMConversationType.peer,
+    ZIMMessageSendConfig(),
+    null,
+);
+```
+
+```dart 旧版本用法
+// ZIMMessageType.system 和 ZIMSystemMessage 已被移除
+ZIMSystemMessage systemMessage = ZIMSystemMessage();
+// ...
+```
+</CodeGroup>
+
+#### ZIMCallUserState 枚举值移除
+
+`ZIMCallUserState.offline`（值为 4）已从枚举中移除，请检查代码中是否有对该枚举值的判断并将其删除。
+
+```dart
+// 以下枚举值已移除，请检查并删除代码中对该值的引用
+// ZIMCallUserState.offline  （值为 4）
+```
+
+### 字段变更
+
+#### ZIMUserFullInfo.userAvatarUrl 废弃
+
+`ZIMUserFullInfo.userAvatarUrl` 已废弃，请使用 `ZIMUserFullInfo.baseInfo.userAvatarUrl` 代替。
+
+<CodeGroup>
+```dart 新版本用法
+String avatarUrl = userFullInfo.baseInfo.userAvatarUrl;
+```
+
+```dart 旧版本用法
+String avatarUrl = userFullInfo.userAvatarUrl; // 已废弃
+```
+</CodeGroup>
+
+#### ZIMMessage.conversationSeq 替换为 messageSeq
+
+`ZIMMessage.conversationSeq` 已被移除，请使用 `ZIMMessage.messageSeq` 代替。
+
+<CodeGroup>
+```dart 新版本用法
+int seq = message.messageSeq;
+```
+
+```dart 旧版本用法
+int seq = message.conversationSeq; // 已移除
+```
+</CodeGroup>
+
+#### ZIMMessageDeletedInfo.isDeleteConversationAllMessage 移除
+
+`ZIMMessageDeletedInfo.isDeleteConversationAllMessage` 已被移除，请使用 `ZIMMessageDeletedInfo.messageDeleteType` 代替。
+
+<CodeGroup>
+```dart 新版本用法
+ZIMMessageDeleteType deleteType = deletedInfo.messageDeleteType;
+// 通过 deleteType 判断是单条删除还是全量删除
+```
+
+```dart 旧版本用法
+bool isDeleteAll = deletedInfo.isDeleteConversationAllMessage; // 已移除
+```
+</CodeGroup>
+
+#### ZIMGroupMemberInfo.memberAvatarUrl 移除
+
+`ZIMGroupMemberInfo.memberAvatarUrl` 已被移除，请使用 `ZIMGroupMemberInfo.userAvatarUrl` 代替。
+
+<CodeGroup>
+```dart 新版本用法
+String avatarUrl = groupMemberInfo.userAvatarUrl;
+```
+
+```dart 旧版本用法
+String avatarUrl = groupMemberInfo.memberAvatarUrl; // 已移除
+```
+</CodeGroup>
+
+#### ZIMGroupOperatedInfo 结构变更
+
+`ZIMGroupOperatedInfo.operatedUserInfo` 字段已被移除，其内部字段已平铺到 `ZIMGroupOperatedInfo`，可直接从 `ZIMGroupOperatedInfo` 中获取对应字段。
+
+<CodeGroup>
+```dart 新版本用法
+// 直接从 ZIMGroupOperatedInfo 获取字段
+String operatorUserID = groupOperatedInfo.userID;
+String operatorUserName = groupOperatedInfo.userName;
+String operatorAvatarUrl = groupOperatedInfo.userAvatarUrl;
+```
+
+```dart 旧版本用法
+// operatedUserInfo 已移除
+String operatorUserID = groupOperatedInfo.operatedUserInfo.userID;
+String operatorUserName = groupOperatedInfo.operatedUserInfo.userName;
+```
+</CodeGroup>
+
+#### ZIMCallInvitationSentInfo.errorInvitees 替换
+
+`ZIMCallInvitationSentInfo.errorInvitees` 已被移除，请使用 `ZIMCallInvitationSentInfo.errorUserList` 代替，类型由 `List<ZIMCallUserInfo>` 变更为 `List<ZIMErrorUserInfo>`。
+
+<CodeGroup>
+```dart 新版本用法
+final result = await ZIM.getInstance()!.callInvite(invitees, config);
+for (final errorUser in result.info.errorUserList) {
+    // errorUser.userID, errorUser.reason
+}
+```
+
+```dart 旧版本用法
+// errorInvitees 已移除，请使用 errorUserList
+final result = await ZIM.getInstance()!.callInvite(invitees, config);
+for (final errorInvitee in result.info.errorInvitees) {
+    // errorInvitee.userID, errorInvitee.state
+}
+```
+</CodeGroup>
+
+#### ZIMConversationChangeInfo 字段变更
+
+`ZIMConversationChangeInfo` 中的 `event` 属性（类型 `ZIMConversationEvent`）已被移除，请使用同结构下的 `action` 属性（类型 `ZIMConversationChangeAction`）代替。
+
+<CodeGroup>
+```dart 新版本用法
+ZIMEventHandler.onConversationChanged = (ZIM zim,
+    ZIMConversationChangeEventResult result) {
+    for (ZIMConversationChangeInfo changeInfo in result.infoList) {
+        ZIMConversationChangeAction action = changeInfo.action;
+        // 根据 action 处理会话变更
+    }
+};
+```
+
+```dart 旧版本用法
+ZIMEventHandler.onConversationChanged = (ZIM zim,
+    ZIMConversationChangeEventResult result) {
+    for (ZIMConversationChangeInfo changeInfo in result.infoList) {
+        ZIMConversationEvent event = changeInfo.event; // 已移除
+    }
+};
+```
+</CodeGroup>
+
+### 枚举值重命名
+
+以下枚举值在 3.0.0 中发生重命名，升级后请检查并替换代码中所有相关引用。
+
+#### ZIMCallUserState
+
+`ZIMCallUserState.quited` 已重命名为 `ZIMCallUserState.quit`。
+
+<CodeGroup>
+```dart 新版本用法
+if (userState == ZIMCallUserState.quit) {
+    // 用户已退出呼叫
+}
+```
+
+```dart 旧版本用法
+if (userState == ZIMCallUserState.quited) { // 已重命名为 quit
+    // 用户已退出呼叫
+}
+```
+</CodeGroup>
+
+#### ZIMGroupEvent
+
+`ZIMGroupEvent.kickout` 已重命名为 `ZIMGroupEvent.kickOut`。
+
+<CodeGroup>
+```dart 新版本用法
+if (event == ZIMGroupEvent.kickOut) {
+    // 群成员被踢出
+}
+```
+
+```dart 旧版本用法
+if (event == ZIMGroupEvent.kickout) { // 已重命名为 kickOut
+    // 群成员被踢出
+}
+```
+</CodeGroup>
+
+#### ZIMGroupMemberEvent
+
+`ZIMGroupMemberEvent.kickedout` 已重命名为 `ZIMGroupMemberEvent.kickedOut`。
+
+<CodeGroup>
+```dart 新版本用法
+if (event == ZIMGroupMemberEvent.kickedOut) {
+    // 群成员被踢出
+}
+```
+
+```dart 旧版本用法
+if (event == ZIMGroupMemberEvent.kickedout) { // 已重命名为 kickedOut
+    // 群成员被踢出
+}
+```
+</CodeGroup>
+
+### 类名变更
+
+#### ZIMRoomAttributesOperatedCallResult
+
+`ZIMRoomAttributesOperatedCallResult` 已重命名为 `ZIMRoomAttributesOperatedResult`，请检查代码中对该类型的引用并替换。
+
+<CodeGroup>
+```dart 新版本用法
+ZIMRoomAttributesOperatedResult result =
+    await ZIM.getInstance()!.setRoomAttributes(attributes, roomID, config);
+```
+
+```dart 旧版本用法
+ZIMRoomAttributesOperatedCallResult result =
+    await ZIM.getInstance()!.setRoomAttributes(attributes, roomID, config); // 类名已更改
+```
+</CodeGroup>
+
+- - -
+
+## 2.28.0 升级指南
+
+<Warning title="注意">
+
+ZIM SDK 2.28.0 版本调整了部分接口的返回参数和事件回调触发的时机。从旧版本升级到 2.28.0 版本时，请您阅读以下指南。
+</Warning>
+
+### 接口定义变更
+
+<Steps>
+<Step title="addMessageReaction">
+[addMessageReaction](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/addMessageReaction.html) 变更为命名参数的接口定义。
+<CodeGroup>
+```dart 新版本定义 {2-6}
+Future<ZIMMessageReactionAddedResult> addMessageReaction(
+  {
+    required String reactionType,
+    required ZIMMessage message,
+    ZIMMessageReactionAddConfig? config,
+  }
+);
+```
+
+```dart 旧版本定义 {2,3}
+Future<ZIMMessageReactionAddedResult> addMessageReaction(
+  String reactionType, 
+  ZIMMessage message
+);
+```
+</CodeGroup>
+
+<CodeGroup>
+```dart 新版本用法 {2,3}
+final result = await zim.addMessageReaction(
+  reactionType: '❤️', 
+  message: message
+);
+```
+
+```dart 旧版本用法 {2,3}
+final result = await zim.addMessageReaction(
+  '❤️', 
+  message
+);
+```
+</CodeGroup>
+</Step>
+
+<Step title="deleteMessageReaction">
+[deleteMessageReaction](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/deleteMessageReaction.html) 变更为命名参数的接口定义。
+<CodeGroup>
+```dart 新版本定义 {2-5}
+Future<ZIMMessageReactionDeletedResult> deleteMessageReaction(
+  {
+    required String reactionType,
+    required ZIMMessage message
+  }
+);
+```
+
+```dart 旧版本定义 {2,3}
+Future<ZIMMessageReactionDeletedResult> deleteMessageReaction(
+  String reactionType, 
+  ZIMMessage message
+);
+```
+</CodeGroup>
+
+<CodeGroup>
+```dart 新版本用法 {2,3}
+final result = await zim.deleteMessageReaction(
+  reactionType: '❤️', 
+  message: message
+);
+```
+
+```dart 旧版本用法 {2,3}
+final result = await zim.deleteMessageReaction(
+  '❤️', 
+  message
+);
+```
+</CodeGroup>
+</Step>
+
+<Step title="pinMessage">
+[pinMessage](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/pinMessage.html) 变更为命名参数的接口定义。
+<CodeGroup>
+```dart 新版本定义
+Future<void> pinMessage(
+  {
+    required ZIMMessage message,
+    required bool isPinned,
+    ZIMMessagePinConfig? config,
+  }
+);
+```
+
+```dart 旧版本定义
+Future<void> pinMessage(
+  ZIMMessage message, 
+  bool isPinned
+);
+```
+</CodeGroup>
+
+<CodeGroup>
+```dart 新版本用法
+final result = await zim.pinMessage(
+  message: message, 
+  isPinned: true
+);
+```
+
+```dart 旧版本用法
+final result = await zim.pinMessage(
+  message, 
+  true
+);
+```
+</CodeGroup>
+</Step>
+
+<Step title="onMessageReactionsChanged">
+[onMessageReactionsChanged](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onMessageReactionsChanged.html) 的回调参数从 `reactions` 变为 `result`。
+<CodeGroup>
+```dart 新版本定义 {1}
+static void Function(ZIM zim, ZIMMessageReactionsChangedEventResult result)?
+      onMessageReactionsChanged;
+```
+
+```dart 旧版本定义 {1}
+static void Function(ZIM zim, List<ZIMMessageReaction> reactions)?
+      onMessageReactionsChanged;
+```
+</CodeGroup>
+
+<CodeGroup>
+```dart 新版本用法 {1,2}
+ZIMEventHandler.onMessageReactionsChanged = (zim, result) {
+    final changedReactions = result.reactions;
+};
+```
+
+```dart 旧版本用法 {1,2}
+ZIMEventHandler.onMessageReactionsChanged = (zim, reactions) {
+    final changedReactions = reactions;
+};
+```
+</CodeGroup>
+</Step>
+
+</Steps>
+
+
+### 事件回调时机变更
+
+<Warning title="注意">
+
+以下回调自 2.28.0 版本起触发时机有变化，建议开发者检查相应业务逻辑在升级 SDK 后是否受到影响。
+</Warning>
+
+<Steps>
+<Step title="onMessageReactionsChanged">
+[onMessageReactionsChanged](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onMessageReactionsChanged.html) 回调会在客户端调用 `addMessageReaction`、`deleteMessageReaction` 或 `deleteMessageAllReactions` 成功后触发。
+</Step>
+
+<Step title="onConversationChanged">
+[onConversationChanged](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onConversationChanged.html) 回调会在客户端调用 `deleteConversation` 成功后触发。
+</Step>
+
+<Step title="onConversationsAllDeleted">
+[onConversationsAllDeleted](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onConversationsAllDeleted.html) 回调会在客户端调用 `deleteAllConversations` 成功后触发。
+</Step>
+
+</Steps>
+
+
+## 2.23.0 升级指南
+
+<Warning title="注意">
+
+ZIM Flutter SDK 2.23.0 版本兼容修复了 Native 和 Web 平台的部分字段的类型错误的问题。从旧版本升级到该版本时，请您阅读以下指南。
+</Warning>
+
+
+### 接口类型变更
+
+| 字段              | 老版本类型 | 新版本类型 | 实际类型处理 |
+|------------------|------------|------------|------------|
+| `messageID`      | `int`      | `dynamic`  | Web 平台: String，其他平台：int
+| `localMessageID` | `int`      | `dynamic`  | Web 平台: String，其他平台：int
+| `fileLocalPath`  | `String`   | `dynamic`  | Web 平台: UInt8List，其他平台：String
+
+### 代码调用示例
+
+```dart 新版本用法 
+dynamic messageID = msg.messageID;
+dynamic localMessageID = msg.localMessageID;
+if (kIsWeb) {
+  String myMessageID = messageID as String;
+  String myLocalMessageID = localMessageID as String;
+} else {
+  int myMessageID = messageID as int;
+  int myLocalMessageID = localMessageID as int;
+}
+
+var fileLocalPath;
+if (kIsWeb) {
+  //  Web 平台：本地文件内容  
+  fileLocalPath = Uint8List.fromList([1, 2, 3]);
+} else {
+  //  其他平台：本地文件绝对路径  
+  fileLocalPath = '';
+}
+ZIMImageMessage imageMessage = ZIMImageMessage(fileLocalPath);
+```
+
+
+## 2.21.1 升级指南
+
+<Warning title="注意">
+
+ZIM Flutter SDK 2.21.1 版本对以往部分命名定义进行了订正和甄误，并修改了部分接口的用法。从旧版本升级到 2.21.1 版本时，请您阅读以下指南。
+</Warning>
+
+
+### 接口用法变更
+
+<Steps>
+<Step title="setAdvancedConfig">
+[setAdvancedConfig](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/setAdvancedConfig.html) 变更为同步接口。
+<CodeGroup>
+```dart 新版本用法 
+static void setAdvancedConfig(String key, String value);
+```
+
+```dart 旧版本用法
+static setAdvancedConfig(String key, String value) async;
+```
+</CodeGroup>
+
+</Step>
+<Step title="exportLocalMessages">
+[exportLocalMessages](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/exportLocalMessages.html) 的 [ZIMMessageExportingProgress](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMMessageExportingProgress.html) 参数变更为必选参数。
+<CodeGroup>
+```dart 新版本用法 {4}
+Future<void> exportLocalMessages(
+    String folderPath,
+    ZIMMessageExportConfig config,
+    ZIMMessageExportingProgress progress
+);
+```
+
+```dart 旧版本用法 {4}
+Future<void> exportLocalMessages(
+    String folderPath,
+    ZIMMessageExportConfig config, 
+    ZIMMessageExportingProgress? progress
+);
+```
+</CodeGroup>
+</Step>
+<Step title="importLocalMessages">
+[importLocalMessages](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/importLocalMessages.html) 的 [ZIMMessageImportingProgress](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMMessageImportingProgress.html) 参数变更为必选参数。
+<CodeGroup>
+```dart 新版本用法 {4}
+Future<void> importLocalMessages(
+    String folderPath,
+    ZIMMessageImportConfig config,
+    ZIMMessageImportingProgress progress
+);
+```
+
+```dart 旧版本用法 {4}
+Future<void> importLocalMessages(
+    String folderPath,
+    ZIMMessageImportConfig config,
+    ZIMMessageImportingProgress? progress
+);
+```
+</CodeGroup>
+</Step>
+<Step title="ZIMCustomMessage">
+[ZIMCustomMessage](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMCustomMessage-class.html) 构造方法的 [searchedContent](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMCustomMessage/searchedContent.html) 参数变更为必选参数。
+<CodeGroup>
+```dart 新版本用法 {4,6}
+ZIMCustomMessage customMessage = ZIMCustomMessage(
+    message: "message", 
+    // 无需对自定义消息进行关键字搜索时，searchedContent 设置为空字符串即可
+    searchedContent: "searchedContent" 
+);
+customMessage.subType = 100;
+```
+
+```dart 旧版本用法 {3,5}
+ZIMCustomMessage customMessage = ZIMCustomMessage(
+    message: "message",
+    subType: 100
+);
+customMessage.searchedContent = "searchContent";
+```
+</CodeGroup>
+</Step>
+</Steps>
+
+### 类名变更
+1. ~~ZIMReactionUserInfo~~ -> [ZIMMessageReactionUserInfo](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMMessageReactionUserInfo-class.html)
+2. ~~ZIMMessageReactionUsersQueryConfig~~ -> [ZIMMessageReactionUserQueryConfig](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMMessageReactionUserQueryConfig-class.html)
+
+
+### 类成员属性命名变更
+
+1. [ZIMMessage](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMMessage-class.html):  ~~mentionedUserIds~~ -> [mentionedUserIDs](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMMessage/mentionedUserIDs.html)
+2. [ZIMBlacklistUsersRemovedResult](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMBlacklistUsersRemovedResult-class.html):  ~~errorUserInfoArrayList~~ -> [errorUserList](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMBlacklistUsersRemovedResult/errorUserList.html)
+3. [ZIMGroupMutedResult](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMGroupMutedResult-class.html): ~~info~~ -> [mutedInfo](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMGroupMutedResult/mutedInfo.html)
+
+### 枚举命名变更
+
+1. [ZIMTipsMessageChangeInfoType](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMTipsMessageChangeInfoType.html):  ~~groupMemberMutedChanged~~ -> `groupMemberMuteChanged`
+2. [ZIMCallUserState](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMCallUserState.html):  ~~beCanceled~~ -> `beCancelled`
+
+
+
+### 错误码常量命名变更
+
+<Warning title="注意">
+为了保证您的项目在升级后能够正常运行，请检查项目中是否存在以下旧的错误码常量，并使用新错误码常量进行替换。
+</Warning>
+
+| 错误码  | 错误码常量名（旧）                               | 错误码常量名（新）                                                                                                                                                                                             |
+| ------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 6000009 | ~~commonModuleImServerDisconnect~~               | **[commonModuleIMServerDisconnect](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/commonModuleIMServerDisconnect-constant.html)**                                                         |
+| 6000012 | ~~commonModuleUserIsOperationLimit~~             | **[commonModuleUserInfoQueriedLimit](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/commonModuleUserInfoQueriedLimit-constant.html)**                                                     |
+| 6000013 | ~~commonModuleUnsupportedRequestOfCurrentMenu~~  | **[commonModuleUnsupportedRequest](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/commonModuleUnsupportedRequest-constant.html)**                                                         |
+| 6000204 | ~~messageModuleTargetDoseNotExist~~              | **[messageModuleTargetDoesNotExist](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/messageModuleTargetDoesNotExist-constant.html)**                                                       |
+| 6000276 | ~~messageModuleCallDoseNotExist~~                | **[messageModuleCallDoesNotExist](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/messageModuleCallDoesNotExist-constant.html)**                                                           |
+| 6000277 | ~~receiptReadError~~                             | **[messageModuleReceiptReadError](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/messageModuleReceiptReadError-constant.html)**                                                           |
+| 6000278 | ~~messageExceedsRevokeTime~~                     | **[messageModuleMessageExceedsRevokeTime](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/messageModuleMessageExceedsRevokeTime-constant.html)**                                           |
+| 6000279 | ~~messageHasBeenRevoked~~                        | **[messageModuleMessageHasBeenRevoked](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/messageModuleMessageHasBeenRevoked-constant.html)**                                                 |
+| 6000280 | ~~messageReactionTypeExisted~~                   | **[messageModuleMessageReactionTypeExisted](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/messageModuleMessageReactionTypeExisted-constant.html)**                                       |
+| 6000281 | ~~messageModeCallInviteUserDoesNotExist~~        | **[messageModuleCallInviteUserDoesNotExist](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/messageModuleCallInviteUserDoesNotExist-constant.html)**                                       |
+| 6000322 | ~~roomModuleTheRoomDoseNotExist~~                | **[roomModuleTheRoomDoesNotExist](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/roomModuleTheRoomDoesNotExist-constant.html)**                                                           |
+| 6000351 | ~~roomModuleRoomMemberAttributesKVExceedsLimit~~ | **[roomModuleTheTotalLengthOfRoomMemberAttributesExceedsLimit](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/roomModuleTheTotalLengthOfRoomMemberAttributesExceedsLimit-constant.html)** |
+| 6000507 | ~~groupModuleKickoutGroupMemberError~~           | **[groupModuleKickOutGroupMemberError](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/groupModuleKickOutGroupMemberError-constant.html)**                                                 |
+| 6000523 | ~~groupModuleGroupDoseNotExist~~                 | **[groupModuleGroupDoesNotExist](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/groupModuleGroupDoesNotExist-constant.html)**                                                             |
+| 6000526 | ~~groupModuleGroupAttributeDoseNotExist~~        | **[groupModuleGroupAttributeDoesNotExist](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/groupModuleGroupAttributeDoesNotExist-constant.html)**                                           |
+| 6000542 | ~~groupModuleGroupDataBaseError~~                | **[groupModuleForbidJoinGroupError](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/groupModuleForbidJoinGroupError-constant.html)**                                                       |
+| 6000603 | ~~conversationModuleConversationDoseNotExist~~   | **[conversationModuleConversationDoesNotExist](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/conversationModuleConversationDoesNotExist-constant.html)**                                 |
+| 6000809 | ~~friendOperationLimitExceeded~~                 | **[friendModuleFriendOperationLimitExceeded](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMErrorCode/friendModuleFriendOperationLimitExceeded-constant.html)**                                     |
+
+
+## 2.19.0 升级指南
+
+<Warning title="注意">
+
+从 2.19.0 版本开始，以下接口有重大变更，因此在从旧版本升级到 2.19.0 版本时，请您阅读以下指南。
+</Warning>
+
+### downloadMediaFile 及相关回调
+
+[downloadMediaFile](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/downloadMediaFile.html) 新增了 `config` 参数，可用于指定下载组合消息中的单个媒体内容。此参数为非可选，会导致编译报错，请参考本文档更新代码。
+
+
+<CodeGroup>
+```dart 2.19.0版本用法（下载组合消息指定媒体内容） {3-5,6}
+// 假设 multipleMessage.messageInfoList[0] 是文本消息，multipleMessage.messageInfoList[1] 是图片消息
+ZIMMultipleMessage multipleMessage = message as ZIMMultipleMessage;
+ZIMMediaDownloadConfig config = ZIMMediaDownloadConfig();
+// 指定下载图片消息
+config.messageInfoIndex = 1;
+
+zim.downloadMediaFile(multipleMessage, ZIMMediaFileType.originalFile, config, (ZIMMessage message, int currentFileSize, int totalFileSize) {
+    // 下载进度
+}).then((ZIMMessage message) {
+    // 下载完成
+}).catch((ZIMError errorInfo) {
+    // 下载失败
+});
+```
+
+```dart 2.19.0用法（下载多媒体消息） {3}
+ZIMImageMessage imageMessage = message as ZIMImageMessage;
+
+zim.downloadMediaFile(message, ZIMMediaFileType.originalFile, ZIMMediaDownloadConfig(), (ZIMMessage message, int currentFileSize, int totalFileSize) {
+    // 下载进度
+}).then((ZIMMessage message) {
+    // 下载完成
+}).catch((ZIMError errorInfo) {
+    // 下载失败
+});
+```
+
+```dart 旧版本用法 {3}
+ZIMImageMessage imageMessage = message as ZIMImageMessage;
+
+zim.downloadMediaFile(message, ZIMMediaFileType.originalFile, (ZIMMessage message, int currentFileSize, int totalFileSize) {
+    // 下载进度
+}).then((ZIMMessage message) {
+    // 下载完成
+}).catch((ZIMError errorInfo) {
+    // 下载失败
+});
+```
+</CodeGroup>
+
+### sendMediaMessage
+
+废弃 `sendMediaMessage` 接口。自 2.19.0 版本后，发送多媒体消息也使用 [sendMessage](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/sendMessage.html) 接口，减少开发者的维护成本。
+
+[ZIMMessageSendNotification](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMMessageSendNotification-class.html) 中，[onMediaUploadingProgress](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMMessageSendNotification/onMediaUploadingProgress.html) 回调方法的 `message` 参数类型从 `ZIMMessage` 变更为 `ZIMMediaMessage`，以确保仅媒体消息会被回调通知，开发者需要根据 IDE 的编译错误提示修正调用。(目前仅使用了 [replyMessage](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/replyMessage.html) 接口的开发者会受到需要解决编译报错的影响)
+
+<CodeGroup>
+```dart 2.19.0版本用法 {6,10,14}
+ZIMImageMessage imageMessage = ZIMImageMessage(fileLocalPath);
+
+ZIMMessageSendConfig config = ZIMMessageSendConfig();
+config.priority = ZIMMessagePriority.medium;
+
+ZIMMessageSendNotification notification = ZIMMessageSendNotification();
+notification.onMessageAttached = (ZIMMessage message) {
+    // 开发者可以监听这个回调执行消息发送前的业务逻辑
+};
+notification.onMessageUploadingProgress = (ZIMMediaMessage message, int currentFileSize, int totalFileSize) {
+    // 多媒体上传进度
+};
+
+zim.sendMessage(imageMessage, "TO_CONVERSATION_ID", ZIMConversationType.peer, config, notification).then((ZIMMessage message) {
+    // 消息发送结果
+}).catch((ZIMError errorInfo) {
+    // 消息发送失败
+});
+```
+
+```dart 旧版本用法 {6,10,14}
+ZIMImageMessage imageMessage = ZIMImageMessage(fileLocalPath);
+
+ZIMMessageSendConfig config = ZIMMessageSendConfig();
+config.priority = ZIMMessagePriority.medium;
+
+ZIMMediaMessageSendNotification notification = ZIMMediaMessageSendNotification();
+notification.onMessageAttached = (ZIMMessage message) {
+    // 开发者可以监听这个回调执行消息发送前的业务逻辑
+};
+notification.onMessageUploadingProgress = (ZIMMessage message, int currentFileSize, int totalFileSize) {
+    // 多媒体上传进度
+};
+
+zim.sendMediaMessage(imageMessage, "TO_CONVERSATION_ID", ZIMConversationType.peer, config, notification).then((ZIMMessage message) {
+    // 消息发送结果
+}).catch((ZIMError errorInfo) {
+    // 消息发送失败
+});
+```
+</CodeGroup>
+
+## 2.18.0 升级指南
+
+<Warning title="注意">
+
+从 2.18.0 版本开始，以下接口有重大变更，因此在从旧版本升级到 2.18.0 版本时，请您阅读以下指南。
+</Warning>
+
+### 单聊消息接收回调
+
+原单聊消息接收回调 `onReceivePeerMessage` 已被废弃，请使用 [onPeerMessageReceived](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onPeerMessageReceived.html) 代替。
+
+新回调支持以下功能：
+- 用户在线时，可通过此回调接收在线单聊消息。
+- 用户重新登录 ZIM SDK 后，可以通过此回调接收离线期间（最长7天）收到的所有单聊消息。
+
+```dart
+//新接口
+static void Function(ZIM zim, List<ZIMMessage> messageList,
+      ZIMMessageReceivedInfo info, String fromUserID)? onPeerMessageReceived;
+
+//老接口
+static void Function(
+          ZIM zim, List<ZIMMessage> messageList, String fromUserID)?
+      onReceivePeerMessage;
+```
+
+### 房间消息接收回调
+
+原房间消息接收回调 `onReceiveRoomMessage` 已被废弃，请使用 [onRoomMessageReceived](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onPeerMessageReceived.html) 代替。
+
+新回调支持以下功能：
+- 用户在线时，可通过此回调接收在线房间消息。
+- 用户从离线恢复到在线后，若仍在房间中，即可通过此回调接收离线期间内的所有房间消息。
+
+```dart
+//新接口
+static void Function(ZIM zim, List<ZIMMessage> messageList,
+      ZIMMessageReceivedInfo info, String fromRoomID)? onRoomMessageReceived;
+//老接口
+static void Function(
+          ZIM zim, List<ZIMMessage> messageList, String fromRoomID)?
+      onReceiveRoomMessage;
+```
+
+### 群组消息接收回调
+
+原群组消息接收回调 `onReceiveGroupMessage` 已被废弃，请使用 [onGroupMessageReceived](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onPeerMessageReceived.html) 代替。
+ 
+新回调支持以下功能：
+- 用户在线时，可通过此回调接收在线群组消息。
+- 用户重新登录 ZIM SDK 后，可以通过通过此回调接收离线期间（最长7天）收到的所有群聊消息。
+
+```dart
+//新接口
+static void Function(ZIM zim, List<ZIMMessage> messageList,
+      ZIMMessageReceivedInfo info, String fromGroupID)? onGroupMessageReceived;
+
+//老接口
+static void Function(
+          ZIM zim, List<ZIMMessage> messageList, String fromGroupID)?
+      onReceiveGroupMessage;
+```
+
+
+## 2.16.0 升级指南
+
+<Warning title="注意">
+
+请注意，从 2.16.0 版本开始，以下接口有重大变更，因此在从旧版本升级到 2.16.0 版本时，请您阅读以下指南。
+</Warning>
+
+#### 1. callCancel 效果变更
+
+<Note title="说明">
+以下变更仅对**进阶模式**呼叫邀请而言。
+</Note>
+
+
+在新版本的 [callCancel](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/callCancel.html) 中，如果参数 userIDs 包含一个 userID，则该接口将仅取消邀请该被叫用户。如果 userIDs 参数为空，则该接口将对所有被叫用户取消邀请。
+
+而对于旧版本的 `callCancel` 接口，无论参数 userIDs 是否为空，均视为对所有被叫用户取消邀请。
+
+由于旧版 ZIM SDK 不兼容单独取消逻辑，因此如果您既需要保留使用老版本 ZIM 实现的取消逻辑，又需要使用新版本的单独取消功能，请隔离新老版本 ZIM 之间的呼叫功能。
+
+<CodeGroup>
+```dart 2.16.0版本用法
+// 单独取消 userIdA 、userIdB
+List<String> invitees;  // 被邀请人列表
+invitees.add("userIdA","userIdB");  // 被邀请人 ID,
+String callid = "12352435";  // 呼叫 ID
+ZIMCallCancelConfig config = new ZIMCallCancelConfig();
+
+ZIM
+    .getInstance()
+    !.callCancel(invitees, callID, callCancelConfig)
+    .then((value) => {
+})
+    .catchError((onError) {});
+
+
+// invitees 传空数组取消整个呼叫邀请,当整个呼叫中所有被叫都未接受时可以调用成功  
+List<String> invitees;  // 被邀请人列表
+String callid = "12352435";  // 呼叫 ID
+ZIMCallCancelConfig config = new ZIMCallCancelConfig();
+
+ZIM
+    .getInstance()
+    !.callCancel(invitees, callID, callCancelConfig)
+    .then((value) => {
+})
+    .catchError((onError) {});
+```
+
+```dart 旧版本用法
+// 无论 userIDs 中是否传递 userID,均为取消整个呼叫，当整个呼叫中所有被叫都未接受时可以调用成功
+List<String> invitees;  // 被邀请人列表
+invitees.add("userIdA","userIdB");  // 被邀请人 ID,
+String callid = "12352435";  // 呼叫 ID
+ZIMCallCancelConfig config = new ZIMCallCancelConfig();
+
+ZIM
+    .getInstance()
+    !.callCancel(invitees, callID, callCancelConfig)
+    .then((value) => {
+})
+    .catchError((onError) {});
+
+
+// invitees 传空数组取消整个呼叫邀请,当整个呼叫中所有被叫都未接受时可以调用成功  
+List<String> invitees;  // 被邀请人列表
+String callid = "12352435";  // 呼叫 ID
+ZIMCallCancelConfig config = new ZIMCallCancelConfig();
+
+ZIM
+    .getInstance()
+    !.callCancel(invitees, callID, callCancelConfig)
+    .then((value) => {
+})
+    .catchError((onError) {});
+```
+
+</CodeGroup>
+
+## 2.13.0 升级指南
+
+<Warning title="注意">
+
+请注意，从 2.13.0 版本开始，以下接口有重大变更，因此在从旧版本升级到 2.13.0 版本时，请您阅读以下指南。
+</Warning>
+
+#### 1. login 方法变更
+
+旧版 `login` 接口被废弃，新版 [login](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/login.html) 接口支持通过 [ZIMLoginConfig](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMLoginConfig-class.html) 进行更多配置，如是否使用 Token 鉴权、是否离线登录。
+
+<CodeGroup>
+```dart 2.13.0版本用法
+try{
+    // 登录时，需要开发者 按照 "使用 Token 鉴权" 文档生成 token 即可
+    // userID 最大 32 字节的字符串。仅支持数字，英文字符 和 '!', '#', '$', '%', '&', '(', ')', '+', '-', ':', ';', '<', '=', '.', '>', '?', '@', '[', ']', '^', '_', '{', '}', '|', '~'。
+    // userName 最大 256 字节的字符串，无特殊字符限制。
+    ZIMLoginConfig loginConfig = ZIMLoginConfig();
+    //该用户的用户昵称，不填写代表不修改用户昵称
+    loginConfig.userName = 'userName';
+    //若使用 token 作为登录鉴权的方式，请填写该参数，否则无需填写
+    loginConfig.token = '';
+    // 本次登录是否为离线登录，详情请参考离线登录相关文档
+    loginConfig.isOfflineLogin = false;
+    await ZIM.getInstance()?.login('zego', loginConfig);
+    // 登录成功，编写登录成功的业务逻辑
+} on PlatformException catch(onError){
+    // 登录失败
+    //登录失败的错误码，请参考错误码文档进行处理
+    onError.code;
+    //登录失败的错误信息
+    onError.message;
+}
+```
+
+```dart 旧版本用法
+// 登录时，需要开发者 按照 "使用 Token 鉴权" 文档生成 token 即可
+// userID 最大 32 字节的字符串。仅支持数字，英文字符 和 '!', '#', '$', '%', '&', '(', ')', '+', '-', ':', ';', '<', '=', '.', '>', '?', '@', '[', ']', '^', '_', '{', '}', '|', '~'。
+// userName 最大 256 字节的字符串，无特殊字符限制。
+var userInfo = { userID: 'xxxx', userName: 'xxxx' };
+var token = '';
+
+zim.login(userInfo, token)
+.then(function () {
+    // 登录成功
+})
+.catch(function (err) {
+    // 登录失败
+});
+```
+</CodeGroup>
+
+
+## 2.9.0 升级指南
+
+<Warning title="注意">
+
+请注意，从 2.9.0 版本开始，以下接口有重大变更，因此在从旧版本升级到 2.9.0 版本时，请您阅读以下指南。
+</Warning>
+
+#### 1. onCallInvitationTimeout 方法变更
+
+[onCallInvitationTimeout](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onCallInvitationTimeout.html) 新增参数 `ZIMCallInvitationTimeoutInfo`，开发者需要在调用回调时补充此参数，否则代码无法编译通过。
+
+<CodeGroup>
+```dart 2.9.0版本用法
+ZIMEventHandler.onCallInvitationTimeout = (ZIM zim, ZIMCallInvitationTimeoutInfo info, String callID){
+
+};
+```
+
+```dart 旧版本用法
+ZIMEventHandler.onCallInvitationTimeout = (ZIM zim, String callID){
+
+};
+```
+</CodeGroup>
+
+
+## 2.3.0 升级指南
+
+<Warning title="注意">
+请注意，从 2.3.0 版本开始，API 接口有重大变更，因此在从旧版本升级到 2.3.0 版本时，请您阅读以下指南。
+</Warning>
+
+#### 1. [create](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/create.html) 方法变更
+
+将 [create](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/create.html) 方法从成员函数变为静态函数，并将返回值从 `Future<ZIM>` 更改为 `ZIM?`。
+
+当您使用 ZIM 时，请先调用此 API 接口。**此外，您应该删除关键字 `await`。**
+
+<CodeGroup>
+```dart 2.3.0版本用法
+ZIMAppConfig appConfig = ZIMAppConfig();
+appConfig.appID = 12345678;
+appConfig.appSign = 'abcdefg...';
+
+ZIM.create(appConfig);
+```
+
+```dart 旧版本用法
+await ZIM.getInstance().create(12345678);
+```
+</CodeGroup>
+
+#### 2. [getInstance](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/getInstance.html) 方法变更
+
+将 [getInstance](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/getInstance.html) 方法的返回值从 `ZIM` 改为 `ZIM?`，因此，请您注意处理空安全问题。
+
+每一个 API 接口都需要调整，下面展示其中一个 API 用法调整。
+
+<CodeGroup>
+```dart 2.3.0版本用法
+await ZIM.getInstance()!.login(userInfo, token);
+```
+
+```dart 旧版本用法
+await ZIM.getInstance().login(userInfo, token);
+```
+</CodeGroup>
+
+
+
+
+#### 3. 添加 ZIM 实例参数
+
+我们添加了 ZIM 实例参数作为回调参数。每一个回调都需要调整，下面只展示其中的一个回调。
+
+<CodeGroup>
+```dart 2.3.0版本用法
+ZIMEventHandler.onConnectionStateChanged = (zim, state, event, extendedData) {
+    // to do something...
+};
+```
+
+```dart 旧版本用法
+ZIMEventHandler.onConnectionStateChanged = (state, event, extendedData) {
+    // to do something...
+};
+```
+</CodeGroup>
+
+
+#### 4. 删除不必要的 Future 返回值
+
+我们删除了一些 API 接口中不必要的 Future 返回值，这样就不需要 `await` 返回值了。
+
+涉及到的接口有：[destroy](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/destroy.html)、[logout](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/logout.html)、[setLogConfig](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/setLogConfig.html)、[setCacheConfig](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/setCacheConfig.html)、[beginRoomAttributesBatchOperation](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/beginRoomAttributesBatchOperation.html)。
+
+<CodeGroup>
+```dart 2.3.0版本用法
+ZIM.setLogConfig(config);
+......
+
+ZIM.setCacheConfig(config);
+......
+
+ZIM.getInstance()!.beginRoomAttributesBatchOperation(roomID, config);
+......
+
+ZIM.getInstance()!.logout();
+......
+
+ZIM.getInstance()!.destroy();
+......
+```
+
+```dart 旧版本用法
+await ZIM.getInstance().setLogConfig(config);
+......
+
+await ZIM.getInstance().setCacheConfig(config);
+......
+
+await ZIM.getInstance().beginRoomAttributesBatchOperation(roomID, config);
+......
+
+await ZIM.getInstance().logout();
+......
+
+await ZIM.getInstance().destroy();
+......
+```
+</CodeGroup>
+  
