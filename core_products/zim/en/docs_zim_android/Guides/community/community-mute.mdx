@@ -1,0 +1,406 @@
+---
+date: "2026-05-22"
+---
+
+import { getPlatformData } from "/snippets/utils-content-parser.js"
+
+
+
+
+# Community mute
+
+<Note title="Note">
+The current Community mute feature only supports muting operations on channels within a Community. Community-level global muting is not yet supported.
+</Note>
+
+After a user logs in to the ZIM SDK, they can set the mute status of Community channels through `muteCommunityChannels`, supporting batch settings for multiple channels.
+
+## Prerequisites
+
+- Please refer to [Send and receive messages](../Messaging/Send%20and%20receive%20messages.mdx) to complete ZIM SDK integration, initialization, and user login.
+- Please refer to [Token-based authentication](../Users/Authentication.mdx) to implement user authentication login.
+- The Community feature requires ZIM SDK 3.0.0 or later.
+- The Community feature is part of the Premium plan. Please contact ZEGOCLOUD Technical Support to enable it before use.
+- The Token generation for the Community feature is consistent with other ZIM features, and no additional permission declarations are required.
+
+## Feature description
+
+- Supports batch setting the mute status for multiple channels. The mute configuration is specified through `ZIMCommunityChannelMuteConfig`.
+- `config.mode` determines the mute scope: `NONE` (no mute, used to unmute), `NORMAL` (mute ordinary members), `ALL` (mute everyone including admins and group owners), `CUSTOM` (custom role scope, controlled by `config.roles`).
+- `config.duration` specifies the mute duration in seconds, with a range of 1-2592001 (approximately 30 days), or `-1` for permanent muting.
+
+After successful setting, the result can be obtained through `ZIMCommunityChannelsMutedCallback`.
+
+| Configuration field | Description |
+|---------|------|
+| `mode` | Mute scope: `NONE`(0) unmute all roles (used to unmute; isMute=true with mode=NONE is equivalent to canceling mute), `NORMAL`(1) mute ordinary members, `ALL`(2) mute all members, `CUSTOM`(3) custom role scope |
+| `roles` | Takes effect when `mode` is `Custom`, specifying the list of roles to be muted |
+| `duration` | Mute duration (seconds), 1-2592001 or -1 for permanent muting |
+
+`channelIDs` and `communityID` are direct parameters of the API method, not config fields.
+
+### Mute mechanism description
+
+Community supports two mute dimensions, which can take effect simultaneously:
+
+| Dimension | API | Scope | Description |
+|------|------|----------|------|
+| **Channel mute** | `muteCommunityChannels` | Channel level | Mute specified channels, with the mute role scope controlled by `config.mode` |
+| **Member mute** | `muteCommunityMembers` | Member level | Mute specified members in specified channels (if left empty, applies to all channels) |
+
+- When a member's channel is set to muted and the member has not been individually muted, the channel mute configuration takes precedence.
+- When a member is individually muted, that member cannot send messages regardless of the channel's mute status.
+- For details on member muting, see [Community member management - Set member mute](./community-member-management.mdx).
+
+## Example code
+
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Example code"
+import im.zego.zim.ZIM;
+import im.zego.zim.callback.ZIMCommunityChannelsMutedCallback;
+import im.zego.zim.entity.ZIMCommunityChannel;
+import im.zego.zim.entity.ZIMCommunityChannelMuteConfig;
+import im.zego.zim.entity.ZIMError;
+import im.zego.zim.enums.ZIMCommunityChannelMuteMode;
+import im.zego.zim.enums.ZIMErrorCode;
+
+ArrayList<String> channelIDs = new ArrayList<>();
+channelIDs.add("channel_1");
+channelIDs.add("channel_2");
+
+ZIMCommunityChannelMuteConfig config = new ZIMCommunityChannelMuteConfig();
+config.setDuration(3600); // 1 hour, or -1 for permanent
+config.setMode(ZIMCommunityChannelMuteMode.NORMAL); // Optional: "NONE" | "NORMAL" | "ALL" | "CUSTOM". NONE is used to unmute
+// config.roles = new ArrayList<Integer>(); // Fill in the role list when mode = "CUSTOM"
+
+// isMute = true to mute, false to unmute
+zim.muteCommunityChannels(true, channelIDs, communityID, config,
+	new ZIMCommunityChannelsMutedCallback() {
+		@Override
+		public void onCommunityChannelsMuted(String communityID, boolean isMute, ArrayList<String> errorChannelIDs, ZIMError errorInfo) {
+			if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+				// Operation succeeded
+			}
+		}
+	});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Example code"
+NSArray *channelIDs = @[@"channel_1", @"channel_2"];
+
+ZIMCommunityChannelMuteConfig *config =
+	[[ZIMCommunityChannelMuteConfig alloc] init];
+config.duration = 3600;
+config.mode = ZIMCommunityChannelMuteModeNormal; // "0: None(unmute) | 1: Normal | 2: All | 3: Custom"
+
+[zim muteCommunityChannels:YES channelIDs:channelIDs communityID:communityID config:config callback:^(NSString * _Nonnull communityID, BOOL isMute, NSArray<NSString *> * _Nonnull errorChannelIDs, ZIMError * _Nonnull errorInfo) {
+	if (errorInfo.code == ZIMErrorCodenoneSuccess) {
+		// Mute set successfully
+	}
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Example code"
+std::vector<std::string> channelIDs = {"channel_1", "channel_2"};
+
+zim::ZIMCommunityChannelMuteConfig config;
+config.duration = 3600;
+config.mode = ZIM_COMMUNITY_CHANNEL_MUTE_MODE_NORMAL; // "1: Normal" | "2: All" | "3: Custom"
+
+zim_->muteCommunityChannels(true, channelIDs, communityID, config,
+	[=](const std::string &communityID,
+		bool isMute,
+		const std::vector<std::string> &mutedChannelIDs,
+		const zim::ZIMError &errorInfo) {
+		if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+			// Mute set successfully
+		}
+	});
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Example code"
+const channelIDs = ['channel_1', 'channel_2'];
+const config: ZIMCommunityChannelMuteConfig = {
+	duration: 3600,
+	mode: 2, // "1: Normal" | "2: All" | "3: Custom"
+	// roles: [101, 102], // Pass in when mode = 'Custom'
+};
+
+zim.muteCommunityChannels(true, channelIDs, communityID, config)
+	.then((result: ZIMCommunityChannelsMutedResult) => {
+		// result.errorChannelIDs is the list of channel IDs that failed
+	})
+	.catch((err: ZIMError) => {
+		// Operation failed
+	});
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Example code"
+List<String> channelIDs = ['channel_1', 'channel_2'];
+ZIMCommunityChannelMuteConfig config = ZIMCommunityChannelMuteConfig()
+  ..duration = 3600
+  ..mode = ZIMCommunityChannelMuteMode.normal; // "1: Normal" | "2: All" | "3: Custom"
+
+try {
+	await ZIM.getInstance()!.muteCommunityChannels(true, channelIDs, communityID, config);
+	// Mute set successfully
+} on PlatformException catch (onError) {
+	// Operation failed
+}
+```
+</CodeGroup>
+:::
+
+<Accordion title="Common error codes">
+
+| Error code | Description | Recommendation |
+|--------|------|----------|
+| 6001004 | Community does not exist | Verify that the communityID is correct |
+| 6001062 | Channel does not exist | Verify that the channelID is correct |
+| 6001065 | Cannot disband the default channel | The default channel does not support disbanding |
+| 6001007 | Community permission error | Verify that the current user is an admin or owner |
+
+</Accordion>
+
+## Query channel mute status
+
+Call the `queryCommunityChannelsInfo` API to batch query the full information of specified channels, including the current mute status.
+
+- `channelInfos` returns a list of `ZIMCommunityChannelFullInfo`, where `muteInfo` contains the channel mute information.
+- `errorChannelIDs` returns the list of channel IDs that failed the query.
+
+| Result field | Description |
+|---------|------|
+| `baseInfo` | Basic channel information |
+| `createTime` | Channel creation time |
+| `creatorUserID` | User ID of the channel creator |
+| `channelNotice` | Channel notice |
+| `channelAttributes` | Channel attributes dictionary |
+| `currentMemberCount` | Current number of channel members |
+| `muteInfo` | Channel mute information, including `mode`, `expiredTime`, and `roles` |
+
+### muteInfo field description
+
+| Field | Type | Description |
+|------|------|------|
+| mode | ZIMCommunityChannelMuteMode | Current mute mode: `NONE`(0), `NORMAL`(1), `ALL`(2), `CUSTOM`(3) |
+| expiredTime | long | Mute expiration time (milliseconds); mute is automatically lifted after expiration |
+| roles | ArrayList&lt;Integer&gt; | List of currently muted roles; only has a value when mode is `CUSTOM` |
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Example code"
+ArrayList<String> channelIDs = new ArrayList<>();
+channelIDs.add("channel_1");
+channelIDs.add("channel_2");
+
+zim.queryCommunityChannelsInfo(channelIDs, communityID,
+    new ZIMCommunityChannelsInfoQueriedCallback() {
+        @Override
+        public void onCommunityChannelsInfoQueried(String communityID, ArrayList<ZIMCommunityChannelFullInfo> channelInfos, ArrayList<String> errorChannelIDs, ZIMError errorInfo) {
+            if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+                for (ZIMCommunityChannelFullInfo channelInfo : channelInfos) {
+                    ZIMCommunityChannelMuteInfo muteInfo = channelInfo.getMuteInfo();
+                    // muteInfo.mode : Current channel mute mode
+                    // muteInfo.expiredTime : Mute expiration time (milliseconds)
+                    // muteInfo.roles : List of currently muted roles
+                }
+            }
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Example code"
+NSArray<NSString *> *channelIDs = @[@"channel_1", @"channel_2"];
+
+[zim queryCommunityChannelsInfoByChannelIDs:channelIDs communityID:communityID callback:^(NSString * _Nonnull communityID, NSArray<ZIMCommunityChannelFullInfo *> * _Nonnull channelInfos, NSArray<NSString *> * _Nonnull errorChannelIDs, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodenoneSuccess) {
+        for (ZIMCommunityChannelFullInfo *channelInfo in channelInfos) {
+            ZIMCommunityChannelMuteInfo *muteInfo = channelInfo.muteInfo;
+            // muteInfo.mode : Current channel mute mode
+            // muteInfo.expiredTime : Mute expiration time (milliseconds)
+            // muteInfo.roles : List of currently muted roles
+        }
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Example code"
+std::vector<std::string> channelIDs = {"channel_1", "channel_2"};
+
+zim_->queryCommunityChannelsInfo(channelIDs, communityID,
+    [=](const std::string &communityID,
+        const std::vector<zim::ZIMCommunityChannelFullInfo> &channelInfos,
+        const std::vector<std::string> &errorChannelIDs,
+        const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            for (const auto &channelInfo : channelInfos) {
+                const zim::ZIMCommunityChannelMuteInfo &muteInfo = channelInfo.muteInfo;
+                // muteInfo.mode : Current channel mute mode
+                // muteInfo.expiredTime : Mute expiration time (milliseconds)
+                // muteInfo.roles : List of currently muted roles
+            }
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Example code"
+const channelIDs = ['channel_1', 'channel_2'];
+
+zim.queryCommunityChannelsInfo(channelIDs, communityID)
+    .then((result: ZIMCommunityChannelsInfoQueriedResult) => {
+        const { channelInfos } = result;
+        channelInfos.forEach((channelInfo) => {
+            const muteInfo = channelInfo.muteInfo;
+            // muteInfo.mode : Current channel mute mode
+            // muteInfo.expiredTime : Mute expiration time (milliseconds)
+            // muteInfo.roles : List of currently muted roles
+        });
+    })
+    .catch((err: ZIMError) => {
+        // Query failed
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Example code"
+List<String> channelIDs = ['channel_1', 'channel_2'];
+
+try {
+    ZIMCommunityChannelsInfoQueriedResult result =
+        await ZIM.getInstance()!.queryCommunityChannelsInfoByChannelIDs(channelIDs, communityID);
+    for (final channelInfo in result.channelInfos) {
+        final muteInfo = channelInfo.muteInfo;
+        // muteInfo.mode : Current channel mute mode
+        // muteInfo.expiredTime : Mute expiration time (milliseconds)
+        // muteInfo.roles : List of currently muted roles
+    }
+} on PlatformException catch (onError) {
+    // Query failed
+}
+```
+</CodeGroup>
+:::
+
+## Listen for channel mute change events
+
+When channel information (name, avatar, notice, attributes, mute status, etc.) changes, the SDK triggers a channel information update callback. You can obtain the `channelInfo.muteInfo` from `updateInfoList` through this callback to determine the current mute mode and muted roles of a channel.
+
+- `communityID`: The Community ID that triggered the update.
+- `updateInfoList`: The list of updated full channel information.
+- `channelInfo.muteInfo`: Contains mute status information such as `mode`, `expiredTime`, and `roles`.
+
+> Due to the large scale of Communities, the SDK may only push channel information change notifications to active users. If no push is received, you can proactively fetch the latest channel information through `queryCommunityChannelsInfo`.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Example code"
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onCommunityChannelInfoUpdated(ZIM zim, ZIMCommunityChannelInfoUpdatedEventResult result) {
+        String communityID = result.getCommunityID();
+        for (ZIMCommunityChannelFullInfoUpdateInfo updateInfo : result.getUpdateInfoList()) {
+            ZIMCommunityChannelFullInfo channelInfo = updateInfo.getChannelInfo();
+            ZIMCommunityChannelMuteInfo muteInfo = channelInfo.getMuteInfo();
+            // muteInfo.mode : Current channel mute mode
+            // muteInfo.expiredTime : Mute expiration time (milliseconds)
+            // muteInfo.roles : List of currently muted roles
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Example code"
+- (void)zim:(ZIM *)zim communityChannelInfoUpdatedWithResult:(ZIMCommunityChannelInfoUpdatedEventResult *)result {
+    NSString *communityID = result.communityID;
+    for (ZIMCommunityChannelFullInfoUpdateInfo *updateInfo in result.updateInfoList) {
+        ZIMCommunityChannelFullInfo *channelInfo = updateInfo.channelInfo;
+        ZIMCommunityChannelMuteInfo *muteInfo = channelInfo.muteInfo;
+        // muteInfo.mode : Current channel mute mode
+        // muteInfo.expiredTime : Mute expiration time (milliseconds)
+        // muteInfo.roles : List of currently muted roles
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Example code"
+void onCommunityChannelInfoUpdated(zim::ZIM *zim,
+    const zim::ZIMCommunityChannelInfoUpdatedEventResult &result) override {
+    std::string communityID = result.communityID;
+    for (const auto &updateInfo : result.updateInfoList) {
+        // updateInfo contains the updated full channel information, accessible via updateInfo.channelInfo.
+        // channelInfo.muteInfo contains the current channel mute status.
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Example code"
+zim.on('communityChannelInfoUpdated', (zim, result) => {
+    const communityID = result.communityID;
+    result.updateInfoList.forEach((updateInfo) => {
+        const channelInfo = updateInfo.channelInfo;
+        const muteInfo = channelInfo.muteInfo;
+        // muteInfo.mode : Current channel mute mode
+        // muteInfo.expiredTime : Mute expiration time (milliseconds)
+        // muteInfo.roles : List of currently muted roles
+    });
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Example code"
+ZIMEventHandler.onCommunityChannelInfoUpdated =
+    (ZIM zim, ZIMCommunityChannelInfoUpdatedEventResult result) {
+    for (final updateInfo in result.updateInfoList) {
+        final channelInfo = updateInfo.channelInfo;
+        final muteInfo = channelInfo.muteInfo;
+        // muteInfo.mode : Current channel mute mode
+        // muteInfo.expiredTime : Mute expiration time (milliseconds)
+        // muteInfo.roles : List of currently muted roles
+    }
+};
+```
+</CodeGroup>
+:::
+
+
+
+## Related references
+
+- [ZIM error codes](../../SDK%20Error%20Codes/ZIM.mdx)
