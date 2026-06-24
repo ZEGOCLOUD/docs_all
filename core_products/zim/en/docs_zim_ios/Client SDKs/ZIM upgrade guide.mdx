@@ -832,3 +832,489 @@ open func callReject(withCallID callID: String, config: ZIMCallRejectConfig, cal
 // new interface
 open func callReject(with callID: String, config: ZIMCallRejectConfig, callback: @escaping ZIMCallRejectionSentCallback)
 ```
+
+## Upgrade Guide for 3.0.0
+
+<Warning title="Warning">
+
+This version (3.0.0) removes APIs that have been deprecated for over 1 year, along with related enum values and fields, and adds deprecation markers to some APIs. Please refer to the following instructions to complete the migration.
+</Warning>
+
+### Removed deprecated APIs
+
+#### ZIM initialization API (create)
+
+The deprecated old `createWithAppID:` API has been removed. Please use the [createWithAppConfig:](@createWithAppConfig:) API that accepts [ZIMAppConfig](@ZIMAppConfig) instead.
+
+<CodeGroup>
+```objc New version usage
+ZIMAppConfig *appConfig = [[ZIMAppConfig alloc] init];
+appConfig.appID = 12345678;
+appConfig.appSign = @"appSign";
+ZIM *zim = [ZIM createWithAppConfig:appConfig];
+```
+
+```objc Old version usage
+// Old API has been removed
+ZIM *zim = [ZIM createWithAppID:12345678];
+```
+</CodeGroup>
+
+#### ZIM login API (login)
+
+The deprecated old `loginWithUserInfo:callback:` and `loginWithUserInfo:token:callback:` APIs have been removed. Please use the [loginWithUserID:config:callback:](@loginWithUserID:config:callback:) API that accepts `userID` and [ZIMLoginConfig](@ZIMLoginConfig) instead.
+
+<CodeGroup>
+```objc New version usage
+ZIMLoginConfig *loginConfig = [[ZIMLoginConfig alloc] init];
+loginConfig.userName = @"userName";
+loginConfig.token = @""; // Fill in the token if using token authentication
+loginConfig.isOfflineLogin = NO;
+[[ZIM getInstance] loginWithUserID:@"userID"
+                            config:loginConfig
+                          callback:^(ZIMError * _Nonnull errorInfo) {
+    // Login result
+}];
+```
+
+```objc Old version usage
+// Old API has been removed
+ZIMUserInfo *userInfo = [[ZIMUserInfo alloc] init];
+userInfo.userID = @"userID";
+userInfo.userName = @"userName";
+[[ZIM getInstance] loginWithUserInfo:userInfo
+                               token:@""
+                            callback:^(ZIMError * _Nonnull errorInfo) {
+    // Login result
+}];
+```
+</CodeGroup>
+
+#### ZIM message sending API (sendMessage)
+
+The deprecated `sendPeerMessage:toUserID:config:callback:`, `sendRoomMessage:toRoomID:config:callback:`, `sendGroupMesage:toGroupID:config:callback:`, and old `sendMediaMessage` APIs have been removed. Please use the [sendMessage:toConversationID:conversationType:config:notification:callback:](@sendMessage:toConversationID:conversationType:config:notification:callback:) API with the `notification` parameter instead.
+
+<CodeGroup>
+```objc New version usage
+ZIMTextMessage *textMessage = [[ZIMTextMessage alloc] initWithMessage:@"Hello"];
+ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
+notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
+    // Business logic before message is sent
+};
+[[ZIM getInstance] sendMessage:textMessage
+              toConversationID:@"toConversationID"
+              conversationType:ZIMConversationTypePeer
+                        config:config
+                  notification:notification
+                      callback:^(ZIMMessage * _Nonnull message,
+                                 ZIMError * _Nonnull errorInfo) {
+    // Message sent result
+}];
+```
+
+```objc Old version usage
+// Old APIs have been removed, please migrate to sendMessage with notification parameter
+ZIMTextMessage *textMessage = [[ZIMTextMessage alloc] initWithMessage:@"Hello"];
+ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+// Old 1v1 chat message sending
+[[ZIM getInstance] sendPeerMessage:textMessage
+                          toUserID:@"toUserID"
+                            config:config
+                          callback:^(ZIMMessage * _Nonnull message,
+                                     ZIMError * _Nonnull errorInfo) {}];
+// Old group chat message sending
+[[ZIM getInstance] sendGroupMesage:textMessage
+                         toGroupID:@"toGroupID"
+                            config:config
+                          callback:^(ZIMMessage * _Nonnull message,
+                                     ZIMError * _Nonnull errorInfo) {}];
+```
+</CodeGroup>
+
+#### ZIM media file download API (downloadMediaFile)
+
+The deprecated old `downloadMediaFileWithMessage:fileType:progress:callback:` (without `config` parameter) API has been removed. Please use the new [downloadMediaFileWithMessage:fileType:config:progress:callback:](@downloadMediaFileWithMessage:fileType:config:progress:callback:) API with the [ZIMMediaDownloadConfig](@ZIMMediaDownloadConfig) parameter instead.
+
+<CodeGroup>
+```objc New version usage
+ZIMImageMessage *imageMessage = (ZIMImageMessage *)message;
+ZIMMediaDownloadConfig *config = [[ZIMMediaDownloadConfig alloc] init];
+[[ZIM getInstance] downloadMediaFileWithMessage:imageMessage
+                                       fileType:ZIMMediaFileTypeOriginalFile
+                                         config:config
+                                       progress:^(ZIMMessage * _Nonnull message,
+                                                  unsigned long long currentFileSize,
+                                                  unsigned long long totalFileSize) {
+    // Download progress
+}
+                                       callback:^(ZIMMessage * _Nonnull message,
+                                                  ZIMError * _Nonnull errorInfo) {
+    // Download complete
+}];
+```
+
+```objc Old version usage
+// Old API has been removed, please migrate to the new version with config parameter
+ZIMMediaMessage *imageMessage = (ZIMMediaMessage *)message;
+[[ZIM getInstance] downloadMediaFileWithMessage:imageMessage
+                                       fileType:ZIMMediaFileTypeOriginalFile
+                                       progress:^(ZIMMediaMessage * _Nonnull message,
+                                                  unsigned long long currentFileSize,
+                                                  unsigned long long totalFileSize) {
+    // Download progress
+}
+                                       callback:^(ZIMMediaMessage * _Nonnull message,
+                                                  ZIMError * _Nonnull errorInfo) {
+    // Download complete
+}];
+```
+</CodeGroup>
+
+#### ZIM message receive callback APIs
+
+The `zim:receivePeerMessage:fromUserID:`, `zim:receiveRoomMessage:fromRoomID:`, and `zim:receiveGroupMessage:fromGroupID:` callbacks deprecated in 2.18.0 have been officially removed in this version. It is recommended to migrate to [zim:messageReceivedWithResult:](@messageReceivedWithResult:).
+
+<CodeGroup>
+```objc New version usage
+- (void)zim:(ZIM *)zim
+    messageReceivedWithResult:(ZIMMessageReceivedEventResult *)result {
+    NSArray<ZIMMessage *> *messageList = result.messageList;
+    ZIMMessageReceivedInfo *info = result.info;
+    NSString *conversationID = result.conversationID;
+    ZIMConversationType conversationType = result.conversationType;
+    // Handle messages for different conversation types based on conversationType
+}
+```
+
+```objc Old version usage (removed)
+- (void)zim:(ZIM *)zim
+    receivePeerMessage:(NSArray<ZIMMessage *> *)messageList
+            fromUserID:(NSString *)fromUserID {}
+- (void)zim:(ZIM *)zim
+    receiveRoomMessage:(NSArray<ZIMMessage *> *)messageList
+            fromRoomID:(NSString *)fromRoomID {}
+- (void)zim:(ZIM *)zim
+    receiveGroupMessage:(NSArray<ZIMMessage *> *)messageList
+            fromGroupID:(NSString *)fromGroupID {}
+```
+</CodeGroup>
+
+#### ZIM call invitation callback APIs
+
+The old `zim:callInvitationTimeout:` (with only callID parameter), `zim:callInvitationRejected:callID:`, `zim:callInvitationAccepted:callID:`, and `zim:callInviteesAnsweredTimeout:callID:` callbacks have been removed. Please use the new [callInvitationTimeout:callID:](@callInvitationTimeout:callID:) and [callUserStateChanged:callID:](@callUserStateChanged:callID:) instead.
+
+<CodeGroup>
+```objc New version usage
+- (void)zim:(ZIM *)zim
+    callInvitationTimeout:(ZIMCallInvitationTimeoutInfo *)info
+                   callID:(NSString *)callID {
+    // info.mode can distinguish between normal mode and advanced mode
+}
+
+- (void)zim:(ZIM *)zim
+    callUserStateChanged:(ZIMCallUserStateChangeInfo *)info
+                  callID:(NSString *)callID {
+    // info.callUserList contains the list of users whose status changed
+    // You can uniformly handle accept, reject, timeout, and other status changes
+}
+```
+
+```objc Old version usage
+// Old callbacks have been removed, please migrate to callInvitationTimeout:callID: and callUserStateChanged:callID:
+- (void)zim:(ZIM *)zim
+    callInvitationTimeout:(NSString *)callID {}
+
+- (void)zim:(ZIM *)zim
+    callInvitationRejected:(ZIMCallInvitationRejectedInfo *)info
+                    callID:(NSString *)callID {}
+
+- (void)zim:(ZIM *)zim
+    callInvitationAccepted:(ZIMCallInvitationAcceptedInfo *)info
+                    callID:(NSString *)callID {}
+
+- (void)zim:(ZIM *)zim
+    callInviteesAnsweredTimeout:(NSArray<NSString *> *)invitees
+                         callID:(NSString *)callID {}
+```
+</CodeGroup>
+
+#### importLocalMessages / exportLocalMessages APIs removed
+
+The `importLocalMessages` and `exportLocalMessages` APIs have been temporarily removed in version 3.0.0, and there is no replacement API at this time. This functionality will be re-enabled in future versions. Please follow the SDK release notes for updates.
+
+### Newly deprecated APIs (recommended to migrate)
+
+#### ZIM message receive callback APIs
+
+The `zim:peerMessageReceived:info:fromUserID:`, `zim:roomMessageReceived:info:fromRoomID:`, and `zim:groupMessageReceived:info:fromGroupID:` callbacks have been marked as deprecated in this version. They can still be used normally at present, but it is recommended to migrate to [zim:messageReceivedWithResult:](@messageReceivedWithResult:) as soon as possible.
+
+<CodeGroup>
+```objc Recommended (new API)
+- (void)zim:(ZIM *)zim
+    messageReceivedWithResult:(ZIMMessageReceivedEventResult *)result {
+    NSArray<ZIMMessage *> *messageList = result.messageList;
+    ZIMMessageReceivedInfo *info = result.info;
+    NSString *conversationID = result.conversationID;
+    ZIMConversationType conversationType = result.conversationType;
+    // Handle messages for different conversation types based on conversationType
+}
+```
+
+```objc Deprecated API (still usable, recommended to migrate)
+- (void)zim:(ZIM *)zim
+    peerMessageReceived:(NSArray<ZIMMessage *> *)messageList
+                   info:(ZIMMessageReceivedInfo *)info
+             fromUserID:(NSString *)fromUserID {}
+- (void)zim:(ZIM *)zim
+    roomMessageReceived:(NSArray<ZIMMessage *> *)messageList
+                   info:(ZIMMessageReceivedInfo *)info
+             fromRoomID:(NSString *)fromRoomID {}
+- (void)zim:(ZIM *)zim
+    groupMessageReceived:(NSArray<ZIMMessage *> *)messageList
+                    info:(ZIMMessageReceivedInfo *)info
+             fromGroupID:(NSString *)fromGroupID {}
+```
+</CodeGroup>
+
+#### ZIMGroupConversation deprecated
+
+The `ZIMGroupConversation` class has been deprecated in 3.0.0. The `isDisabled` and `mutedExpiredTime` properties should be replaced with the corresponding properties of the base class `ZIMConversation`:
+
+| ZIMGroupConversation (deprecated) | ZIMConversation (replacement property) |
+|---|---|
+| `isDisabled` | `isConversationDisabled` |
+| `mutedExpiredTime` | `selfMutedExpiredTime` |
+
+<CodeGroup>
+```objc New version usage
+BOOL isDisabled = conversation.isConversationDisabled;
+long long mutedExpiredTime = conversation.selfMutedExpiredTime;
+```
+
+```objc Old version usage (deprecated)
+ZIMGroupConversation *groupConversation = (ZIMGroupConversation *)conversation;
+BOOL isDisabled = groupConversation.isDisabled;
+long long mutedExpiredTime = groupConversation.mutedExpiredTime;
+```
+</CodeGroup>
+
+### Enum value removals
+
+#### ZIMMessageType enum value removed
+
+`ZIMMessageTypeSystem` (value 30) has been removed from the `ZIMMessageType` enum, and the `ZIMSystemMessage` class has also been removed. If you need to send system-level commands, please use [ZIMCommandMessage](@ZIMCommandMessage) instead.
+
+<CodeGroup>
+```objc New version usage
+// Use ZIMCommandMessage instead of ZIMSystemMessage
+ZIMCommandMessage *commandMessage = [[ZIMCommandMessage alloc] init];
+commandMessage.message = [@"payload" dataUsingEncoding:NSUTF8StringEncoding];
+[[ZIM getInstance] sendMessage:commandMessage
+              toConversationID:@"toConversationID"
+              conversationType:ZIMConversationTypePeer
+                        config:[[ZIMMessageSendConfig alloc] init]
+                  notification:nil
+                      callback:^(ZIMMessage * _Nonnull message,
+                                 ZIMError * _Nonnull errorInfo) {}];
+```
+
+```objc Old version usage
+// ZIMMessageTypeSystem and ZIMSystemMessage have been removed
+ZIMSystemMessage *systemMessage = [[ZIMSystemMessage alloc] init];
+// ...
+```
+</CodeGroup>
+
+#### ZIMCallUserState enum value removed
+
+`ZIMCallUserStateOffline` (value 4) has been removed from the `ZIMCallUserState` enum. Please check your code for any references to this enum value and remove them.
+
+```objc
+// The following enum value has been removed, please check and remove references to this value in your code
+// ZIMCallUserStateOffline  (value 4)
+```
+
+### Field changes
+
+#### ZIMUserFullInfo.userAvatarUrl deprecated
+
+`ZIMUserFullInfo.userAvatarUrl` has been deprecated. Please use `ZIMUserFullInfo.baseInfo.userAvatarUrl` instead.
+
+<CodeGroup>
+```objc New version usage
+NSString *avatarUrl = userFullInfo.baseInfo.userAvatarUrl;
+```
+
+```objc Old version usage
+NSString *avatarUrl = userFullInfo.userAvatarUrl; // Deprecated
+```
+</CodeGroup>
+
+#### ZIMMessage.conversationSeq replaced with messageSeq
+
+`ZIMMessage.conversationSeq` has been removed. Please use `ZIMMessage.messageSeq` instead.
+
+<CodeGroup>
+```objc New version usage
+long long seq = message.messageSeq;
+```
+
+```objc Old version usage
+long long seq = message.conversationSeq; // Removed
+```
+</CodeGroup>
+
+#### ZIMMessageDeletedInfo.isDeleteConversationAllMessage removed
+
+`ZIMMessageDeletedInfo.isDeleteConversationAllMessage` has been removed. Please use `ZIMMessageDeletedInfo.messageDeleteType` instead.
+
+<CodeGroup>
+```objc New version usage
+ZIMMessageDeleteType deleteType = deletedInfo.messageDeleteType;
+// Determine whether it is a single deletion or a full deletion through deleteType
+```
+
+```objc Old version usage
+BOOL isDeleteAll = deletedInfo.isDeleteConversationAllMessage; // Removed
+```
+</CodeGroup>
+
+#### ZIMGroupMemberInfo.memberAvatarUrl removed
+
+`ZIMGroupMemberInfo.memberAvatarUrl` has been removed. Please use `ZIMGroupMemberInfo.userAvatarUrl` instead.
+
+<CodeGroup>
+```objc New version usage
+NSString *avatarUrl = groupMemberInfo.userAvatarUrl;
+```
+
+```objc Old version usage
+NSString *avatarUrl = groupMemberInfo.memberAvatarUrl; // Removed
+```
+</CodeGroup>
+
+#### ZIMGroupOperatedInfo structure change
+
+The `ZIMGroupOperatedInfo.operatedUserInfo` field has been removed. Its internal fields have been flattened into `ZIMGroupOperatedInfo`, and can be accessed directly from `ZIMGroupOperatedInfo`.
+
+<CodeGroup>
+```objc New version usage
+// Get fields directly from ZIMGroupOperatedInfo
+NSString *operatorUserID = groupOperatedInfo.userID;
+NSString *operatorUserName = groupOperatedInfo.userName;
+NSString *operatorAvatarUrl = groupOperatedInfo.userAvatarUrl;
+```
+
+```objc Old version usage
+// operatedUserInfo has been removed
+NSString *operatorUserID = groupOperatedInfo.operatedUserInfo.userID;
+NSString *operatorUserName = groupOperatedInfo.operatedUserInfo.userName;
+```
+</CodeGroup>
+
+#### ZIMCallInvitationSentInfo.errorInvitees replaced
+
+`ZIMCallInvitationSentInfo.errorInvitees` has been removed. Please use `ZIMCallInvitationSentInfo.errorUserList` instead. The type has changed from `NSArray<ZIMCallUserInfo *>` to `NSArray<ZIMErrorUserInfo *>`.
+
+<CodeGroup>
+```objc New version usage
+[[ZIM getInstance] callInviteWithInvitees:invitees
+                                   config:config
+                                 callback:^(NSString * _Nonnull callID,
+                                            ZIMCallInvitationSentInfo * _Nonnull info,
+                                            ZIMError * _Nonnull errorInfo) {
+    for (ZIMErrorUserInfo *errorUser in info.errorUserList) {
+        // errorUser.userID, errorUser.reason
+    }
+}];
+```
+
+```objc Old version usage
+// errorInvitees has been removed, please use errorUserList
+[[ZIM getInstance] callInviteWithInvitees:invitees
+                                   config:config
+                                 callback:^(NSString * _Nonnull callID,
+                                            ZIMCallInvitationSentInfo * _Nonnull info,
+                                            ZIMError * _Nonnull errorInfo) {
+    for (ZIMCallUserInfo *errorInvitee in info.errorInvitees) {
+        // errorInvitee.userID, errorInvitee.state
+    }
+}];
+```
+</CodeGroup>
+
+#### ZIMConversationChangeInfo field change
+
+The `event` property (type `ZIMConversationEvent`) in `ZIMConversationChangeInfo` has been removed. Please use the `action` property (type `ZIMConversationChangeAction`) in the same structure instead.
+
+<CodeGroup>
+```objc New version usage
+- (void)zim:(ZIM *)zim
+    conversationChanged:(ZIMConversationChangeEventResult *)result {
+    for (ZIMConversationChangeInfo *changeInfo in result.infoList) {
+        ZIMConversationChangeAction action = changeInfo.action;
+        // Handle conversation changes based on action
+    }
+}
+```
+
+```objc Old version usage
+- (void)zim:(ZIM *)zim
+    conversationChanged:(ZIMConversationChangeEventResult *)result {
+    for (ZIMConversationChangeInfo *changeInfo in result.infoList) {
+        ZIMConversationEvent event = changeInfo.event; // Removed
+    }
+}
+```
+</CodeGroup>
+
+### Enum value renames
+
+The following enum values have been renamed in 3.0.0. After upgrading, please check and replace all related references in your code.
+
+#### ZIMGroupEvent
+
+`ZIMGroupEventKickout` has been renamed to `ZIMGroupEventKickOut`.
+
+<CodeGroup>
+```objc New version usage
+if (event == ZIMGroupEventKickOut) {
+    // Group member was kicked out
+}
+```
+
+```objc Old version usage
+if (event == ZIMGroupEventKickout) { // Renamed to ZIMGroupEventKickOut
+    // Group member was kicked out
+}
+```
+</CodeGroup>
+
+#### ZIMGroupMemberEvent
+
+`ZIMGroupMemberEventKickedout` has been renamed to `ZIMGroupMemberEventKickedOut`.
+
+<CodeGroup>
+```objc New version usage
+if (event == ZIMGroupMemberEventKickedOut) {
+    // Group member was kicked out
+}
+```
+
+```objc Old version usage
+if (event == ZIMGroupMemberEventKickedout) { // Renamed to ZIMGroupMemberEventKickedOut
+    // Group member was kicked out
+}
+```
+</CodeGroup>
+
+### ZIMMessage property changes
+
+Some properties of `ZIMMessage` and its subclasses have had the `readonly` modifier removed and now support read and write operations. If your code depends on the read-only nature of these properties (for example, if subclasses explicitly synthesize read-only properties), please check whether the related logic needs to be adjusted.
+
+### setRoomMembersAttributes behavior change
+
+Starting from version 3.0.0, when setting room member attributes via [setRoomMembersAttributes](@setRoomMembersAttributes), if `isDeleteAfterOwnerLeft` is `false`, the room member attributes will not be deleted when the user leaves the room. In versions 2.x.x, attributes were first deleted when the user left the room and then restored when the user returned.
+
+- - -
