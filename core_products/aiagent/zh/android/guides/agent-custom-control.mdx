@@ -1,0 +1,776 @@
+---
+date: '2026-06-22'
+---
+# 智能体自定义控制
+
+智能体自定义控制允许客户端通过 **ZEGO Express SDK** 房间信令直接发起智能体实例控制请求，无需依赖服务端 API 调用。
+
+通过该功能，开发者可以在客户端侧实现以下控制能力：
+
+- **主动调用 TTS**：让智能体用语音朗读一段文本，适合播报固定话术（如欢迎语、提醒等）。
+- **主动调用 LLM**：给智能体一段文本，让其基于 LLM 推理并回复，适合需要结合上下文的主动发言场景。
+- **打断智能体**：立即打断智能体当前正在进行的 TTS/LLM 流程。
+- **控制聆听**：在对讲机模式下，控制智能体开始或停止聆听指定用户。
+
+典型使用场景包括：
+- 播报欢迎语、超时提醒等固定话术。
+- 冷场时主动发起话题，提升交互体验。
+- 触发关键节点时打断智能体并立刻播报重要内容。
+
+适用版本：v2.13.0 及以上。
+
+## 前提条件
+
+已参考[快速开始](./../quick-start.mdx)完成基本流程。
+
+## 使用方式
+
+### 方式一：通过开源组件实现（推荐）
+
+使用 [ZEGO AI Agent Action 客户端套件](https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/agentaction)，可快速集成智能体自定义控制能力。
+
+该套件支持 Web、Android、iOS Swift、iOS Objective-C、Flutter 五大平台，对外统一暴露以下方法：
+
+- `sendAgentInstanceTTS`
+- `sendAgentInstanceLLM`
+- `interruptAgentInstance`
+- `startListening`
+- `stopListening`
+
+#### 集成步骤
+
+1. 将目标平台下的 `agentaction/` 目录拷贝到自己的项目中。
+2. 创建 Client 实例。
+3. 在 Sender 中调用 Express `callExperimentalAPI`，将套件生成的 `formatedJson` 透传入。
+4. 在 `onRecvExperimentalAPI` 回调中，将响应内容转交给套件的 `handleRoomChannelMessage` 方法。
+
+<Steps>
+<Step title="引入套件">
+将目标平台下的 <code>agentaction/</code> 目录拷贝到自己的项目中。各平台目录结构如下：
+<CodeGroup>
+```text (Web)
+agentaction/web/
+```
+```text (Android)
+agentaction/android/
+```
+```text (iOS Swift)
+agentaction/ios_swift/
+```
+```text (iOS Objective-C)
+agentaction/ios_oc/
+```
+```text (Flutter)
+agentaction/flutter/
+```
+</CodeGroup>
+</Step>
+<Step title="创建 Client 实例">
+在应用初始化时创建套件的 Client 实例。
+<CodeGroup>
+```javascript (Web)
+import { AgentActionClient } from './agentaction';
+
+const client = new AgentActionClient();
+```
+```java (Android)
+import com.zego.aiagent.agentaction.AgentActionClient;
+
+AgentActionClient client = new AgentActionClient();
+```
+```swift (iOS Swift)
+import AgentAction
+
+let client = AgentActionClient()
+```
+```objectivec (iOS Objective-C)
+#import <AgentAction/AgentActionClient.h>
+
+AgentActionClient *client = [[AgentActionClient alloc] init];
+```
+```dart (Flutter)
+import 'package:agentaction/agent_action_client.dart';
+
+final client = AgentActionClient();
+```
+</CodeGroup>
+</Step>
+<Step title="发送控制请求">
+通过 Express SDK 的 <code>callExperimentalAPI</code> 发送房间通道消息。
+<CodeGroup>
+```javascript (Web)
+// 主动调用 TTS 示例
+const formatedJson = client.sendAgentInstanceTTS({
+  text: '你好呀，欢迎使用 ZEGO AI Agent 服务',
+  addHistory: true,
+  priority: 'Medium',
+  samePriorityOption: 'ClearAndInterrupt'
+});
+
+zg.callExperimentalAPI({
+  roomID: 'room_001',
+  toUserIDList: ['<AgentUserId>'],
+  ...JSON.parse(formatedJson)
+});
+
+// 主动调用 LLM 示例
+const formatedJson = client.sendAgentInstanceLLM({
+  text: '现在用户一段时间没有说话了，请主动说一句话',
+  priority: 'Medium',
+  samePriorityOption: 'ClearAndInterrupt'
+});
+
+zg.callExperimentalAPI({
+  roomID: 'room_001',
+  toUserIDList: ['<AgentUserId>'],
+  ...JSON.parse(formatedJson)
+});
+
+// 打断智能体示例
+const formatedJson = client.interruptAgentInstance();
+
+zg.callExperimentalAPI({
+  roomID: 'room_001',
+  toUserIDList: ['<AgentUserId>'],
+  ...JSON.parse(formatedJson)
+});
+```
+```java (Android)
+// 主动调用 TTS 示例
+String formatedJson = client.sendAgentInstanceTTS(
+    "你好呀，欢迎使用 ZEGO AI Agent 服务",
+    true, "Medium", "ClearAndInterrupt"
+);
+
+engine.callExperimentalAPI(new JSONObject(formatedJson));
+
+// 主动调用 LLM 示例
+String formatedJson = client.sendAgentInstanceLLM(
+    "现在用户一段时间没有说话了，请主动说一句话",
+    "Medium", "ClearAndInterrupt"
+);
+
+engine.callExperimentalAPI(new JSONObject(formatedJson));
+
+// 打断智能体示例
+String formatedJson = client.interruptAgentInstance();
+engine.callExperimentalAPI(new JSONObject(formatedJson));
+```
+```swift (iOS Swift)
+// 主动调用 TTS 示例
+let formatedJson = client.sendAgentInstanceTTS(
+    text: "你好呀，欢迎使用 ZEGO AI Agent 服务",
+    addHistory: true,
+    priority: .medium,
+    samePriorityOption: .clearAndInterrupt
+)
+
+ZegoExpressEngine.shared().callExperimentalAPI(formatedJson)
+
+// 主动调用 LLM 示例
+let formatedJson = client.sendAgentInstanceLLM(
+    text: "现在用户一段时间没有说话了，请主动说一句话",
+    priority: .medium,
+    samePriorityOption: .clearAndInterrupt
+)
+
+ZegoExpressEngine.shared().callExperimentalAPI(formatedJson)
+
+// 打断智能体示例
+let formatedJson = client.interruptAgentInstance()
+ZegoExpressEngine.shared().callExperimentalAPI(formatedJson)
+```
+```objectivec (iOS Objective-C)
+// 主动调用 TTS 示例
+NSString *formatedJson = [client sendAgentInstanceTTSWithText:@"你好呀，欢迎使用 ZEGO AI Agent 服务"
+                                                         addHistory:YES
+                                                           priority:@"Medium"
+                                               samePriorityOption:@"ClearAndInterrupt"];
+
+[[ZegoExpressEngine sharedEngine] callExperimentalAPI:formatedJson];
+
+// 主动调用 LLM 示例
+NSString *formatedJson = [client sendAgentInstanceLLMWithText:@"现在用户一段时间没有说话了，请主动说一句话"
+                                                         priority:@"Medium"
+                                               samePriorityOption:@"ClearAndInterrupt"];
+
+[[ZegoExpressEngine sharedEngine] callExperimentalAPI:formatedJson];
+
+// 打断智能体示例
+NSString *formatedJson = [client interruptAgentInstance];
+[[ZegoExpressEngine sharedEngine] callExperimentalAPI:formatedJson];
+```
+```dart (Flutter)
+// 主动调用 TTS 示例
+final formatedJson = client.sendAgentInstanceTTS(
+  text: '你好呀，欢迎使用 ZEGO AI Agent 服务',
+  addHistory: true,
+  priority: 'Medium',
+  samePriorityOption: 'ClearAndInterrupt',
+);
+
+ZegoExpressEngine.shared.callExperimentalAPI(formatedJson);
+
+// 主动调用 LLM 示例
+final formatedJson = client.sendAgentInstanceLLM(
+  text: '现在用户一段时间没有说话了，请主动说一句话',
+  priority: 'Medium',
+  samePriorityOption: 'ClearAndInterrupt',
+);
+
+ZegoExpressEngine.shared.callExperimentalAPI(formatedJson);
+
+// 打断智能体示例
+final formatedJson = client.interruptAgentInstance();
+ZegoExpressEngine.shared.callExperimentalAPI(formatedJson);
+```
+</CodeGroup>
+
+<Warning title="注意">
+其中 <code>&lt;AgentUserId&gt;</code> 为占位值，实际取值因场景而异，详见下方「AgentUserId 说明」章节。
+</Warning>
+</Step>
+<Step title="接收响应">
+在 Express SDK 的 <code>onRecvExperimentalAPI</code> 回调中，将响应内容转交给套件处理。
+<CodeGroup>
+```javascript (Web)
+zg.on('onRecvRoomChannelMessage', result => {
+    const { msgContent } = result;
+    client.handleRoomChannelMessage(msgContent);
+});
+```
+```java (Android)
+engine.setEventHandler(new IZegoEventHandler() {
+    @Override
+    public void onRecvRoomChannelMessage(String roomID, JSONObject params) {
+        try {
+            String msgContent = params.getString("msg_content");
+            client.handleRoomChannelMessage(msgContent);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+});
+```
+```swift (iOS Swift)
+ZegoExpressEngine.shared().setEventHandler(self)
+
+func onRecvExperimentalAPI(_ params: [AnyHashable: Any]?) {
+    guard let params = params else { return }
+    guard let msgContent = params["msg_content"] as? String else { return }
+    client.handleRoomChannelMessage(msgContent)
+}
+```
+```objectivec (iOS Objective-C)
+[ZegoExpressEngine sharedEngine].eventHandler = self;
+
+- (void)onRecvExperimentalAPI:(NSDictionary *)params {
+    NSString *msgContent = params[@"msg_content"];
+    [client handleRoomChannelMessage:msgContent];
+}
+```
+```dart (Flutter)
+ZegoExpressEngine.onRoomChannelMessageReceived = (String roomID, Map<String, dynamic> params) {
+  final msgContent = params['msg_content'] as String?;
+  if (msgContent != null) {
+    client.handleRoomChannelMessage(msgContent);
+  }
+};
+```
+</CodeGroup>
+</Step>
+</Steps>
+
+详细集成方式请参考各平台 Demo：[Web](https://github.com/ZEGOCLOUD/ai_agent_quick_start/blob/master/agentaction/web/demo/README.md) | [Android](https://github.com/ZEGOCLOUD/ai_agent_quick_start/blob/master/agentaction/android/demo/README.md) | [iOS Swift](https://github.com/ZEGOCLOUD/ai_agent_quick_start/blob/master/agentaction/ios_swift/README.md) | [iOS Objective-C](https://github.com/ZEGOCLOUD/ai_agent_quick_start/blob/master/agentaction/ios_oc/README.md) | [Flutter](https://github.com/ZEGOCLOUD/ai_agent_quick_start/blob/master/agentaction/flutter/demo/README.md)。
+
+### 方式二：自定义实现
+
+如果不想使用开源套件，也可以自行实现智能体控制。其原理是：客户端通过 ZEGO Express SDK 的 `callExperimentalAPI` 发送房间通道消息（msg_type=20）到服务端，服务端处理后通过房间通道消息（msg_type=22）返回响应。
+
+#### 消息协议
+
+客户端通过房间信令支持以下 5 类控制能力：
+
+| Action | 能力描述 | 对应服务端接口 |
+| --- | --- | --- |
+| `SendAgentInstanceTTS` | 主动调用 TTS，让智能体朗读一段文本。 | [自定义调用 TTS](/aiagent-server/api-reference/agent-instance-control/send-agent-instance-tts) |
+| `SendAgentInstanceLLM` | 主动调用 LLM，让智能体基于文本推理并回复。 | [自定义调用 LLM](/aiagent-server/api-reference/agent-instance-control/send-agent-instance-llm) |
+| `InterruptAgentInstance` | 打断智能体，停止当前 TTS/LLM 流程。 | [打断智能体实例](/aiagent-server/api-reference/agent-instance-control/interrupt-agent-instance) |
+| `StartListening` | 智能体开始聆听指定用户。 | [智能体开始聆听](/aiagent-server/api-reference/agent-instance-control/start-listening) |
+| `StopListening` | 智能体结束聆听指定用户。 | [智能体结束聆听](/aiagent-server/api-reference/agent-instance-control/stop-listening) |
+
+**消息类型：**
+
+| 消息类型 | 取值 | 方向 | 说明 |
+| --- | --- | --- | --- |
+| 请求 | `20` | 客户端 → 服务端 | 客户端发起控制请求。 |
+| 响应 | `22` | 服务端 → 客户端 | 服务端返回处理响应。 |
+
+**消息体结构（msg_content）：**
+
+```json
+{
+    "Action": "SendAgentInstanceTTS",
+    "Seq": "client_A:web_01:1",
+    "Params": {
+        "Key": "Value"
+    }
+}
+```
+
+| 字段 | 类型 | 是否必选 | 描述 |
+| --- | --- | --- | --- |
+| Action | String | 是 | 控制动作名，对应上表中的 5 类 Action。 |
+| Seq | String | 是 | 业务链路追踪标识，由客户端生成，需保证同房间多用户/多端场景下唯一。推荐格式 `user_id:device_id:local_seq`。 |
+| Params | Object | 是 | 不同 Action 的具体参数。 |
+
+#### Action 参数
+
+> `Priority` 默认 `Medium`；`SamePriorityOption` 默认 `ClearAndInterrupt`；TTS `AddHistory` 默认 `true`；LLM `AddQuestionToHistory` 默认 `false`，`AddAnswerToHistory` 默认 `true`。
+
+以下 Tab 包含各 Action 的参数说明、发送请求示例及接收响应格式。
+
+<Tabs titleSize="h3">
+<Tab title="SendAgentInstanceTTS">
+
+主动调用 TTS，让智能体用语音朗读一段文本。
+
+##### 参数
+
+| 参数 | 类型 | 是否必选 | 描述 |
+| --- | --- | --- | --- |
+| Text | String | 是 | 用于 TTS 的文本内容，最大不超过 300 个字符。 |
+| AddHistory | Boolean | 否 | 是否将文本消息记录在会话消息历史之中，作为上下文输入给 LLM。默认值为 `true`。 |
+| Priority | String | 否 | 任务优先级，默认为 `Medium`。可选值：`Low`、`Medium`、`High`。 |
+| SamePriorityOption | String | 否 | 相同优先级时的打断策略，默认为 `ClearAndInterrupt`。可选值：`ClearAndInterrupt`、`Enqueue`。 |
+| InterruptMode | Number | 否 | 打断模式。 |
+| EnqueueUserSpeech | Boolean | 否 | 是否排队用户语音。 |
+
+##### 请求示例
+
+```json
+{
+    "Action": "SendAgentInstanceTTS",
+    "Seq": "client_A:web_01:1",
+    "Params": {
+        "Text": "你好",
+        "AddHistory": true,
+        "Priority": "Medium",
+        "SamePriorityOption": "ClearAndInterrupt"
+    }
+}
+```
+
+##### 发送请求
+
+客户端调用 Express `callExperimentalAPI` 向指定 `AgentUserId` 发送房间通道消息（msg_type=20）：
+
+<CodeGroup>
+```json (Android / iOS 原生端)
+{
+    "method": "liveroom.room.send_room_channel_message",
+    "params": {
+        "room_id": "room_001",
+        "msg_type": 20,
+        "msg_content": "{\"Action\":\"SendAgentInstanceTTS\",\"Seq\":\"client_A:web_01:1\",\"Params\":{\"Text\":\"你好\",\"AddHistory\":true,\"Priority\":\"Medium\",\"SamePriorityOption\":\"ClearAndInterrupt\"}}",
+        "user_list": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+```json (Web 端)
+{
+    "method": "sendRoomChannelMessage",
+    "params": {
+        "roomID": "room_001",
+        "msgType": 20,
+        "msgContent": "{\"Action\":\"SendAgentInstanceTTS\",\"Seq\":\"client_A:web_01:1\",\"Params\":{\"Text\":\"你好\",\"AddHistory\":true,\"Priority\":\"Medium\",\"SamePriorityOption\":\"ClearAndInterrupt\"}}",
+        "toUserIDList": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+</CodeGroup>
+
+##### 接收响应
+
+客户端在 `onRecvExperimentalAPI` 回调中接收响应（msg_type=22）：
+
+```json
+{
+    "Action": "SendAgentInstanceTTS",
+    "Seq": "client_A:web_01:1",
+    "Code": 0,
+    "Message": "success",
+    "RequestId": "8916619579948490296",
+    "Data": {
+        "Round": 1481651956
+    }
+}
+```
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| Action | String | 原请求 Action。 |
+| Seq | String | 原请求 Seq，客户端据此关联请求。 |
+| Code | Int | 处理结果码，0 表示成功。 |
+| Message | String | 处理结果说明，失败时包含错误信息。 |
+| RequestId | String | 服务端返回的请求 ID。 |
+| Data | Object | 响应数据。 |
+| Data.Round | Int64 | 本轮 Round。 |
+
+</Tab>
+<Tab title="SendAgentInstanceLLM">
+
+主动调用 LLM，让智能体基于文本推理并回复。
+
+##### 参数
+
+| 参数 | 类型 | 是否必选 | 描述 |
+| --- | --- | --- | --- |
+| Text | String | 是 | 发送给 LLM 服务的文本内容。 |
+| Content | String | 否 | LLM 输入内容。 |
+| SystemPrompt | String | 否 | 本次对话的临时智能体系统提示词。 |
+| AddQuestionToHistory | Boolean | 否 | 是否把问题加入到上下文。默认值为 `false`。 |
+| AddAnswerToHistory | Boolean | 否 | 是否把答案加入到上下文。默认值为 `true`。 |
+| Priority | String | 否 | 任务优先级，默认为 `Medium`。可选值：`Low`、`Medium`、`High`。 |
+| SamePriorityOption | String | 否 | 相同优先级时的打断策略，默认为 `ClearAndInterrupt`。可选值：`ClearAndInterrupt`、`Enqueue`。 |
+| EnqueueUserSpeech | Boolean | 否 | 是否排队用户语音。 |
+
+##### 请求示例
+
+```json
+{
+    "Action": "SendAgentInstanceLLM",
+    "Seq": "client_A:web_01:1",
+    "Params": {
+        "Text": "今天天气怎么样？"
+    }
+}
+```
+
+##### 发送请求
+
+客户端调用 Express `callExperimentalAPI` 向指定 `AgentUserId` 发送房间通道消息（msg_type=20）：
+
+<CodeGroup>
+```json (Android / iOS 原生端)
+{
+    "method": "liveroom.room.send_room_channel_message",
+    "params": {
+        "room_id": "room_001",
+        "msg_type": 20,
+        "msg_content": "{\"Action\":\"SendAgentInstanceLLM\",\"Seq\":\"client_A:web_01:1\",\"Params\":{\"Text\":\"今天天气怎么样？\"}}",
+        "user_list": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+```json (Web 端)
+{
+    "method": "sendRoomChannelMessage",
+    "params": {
+        "roomID": "room_001",
+        "msgType": 20,
+        "msgContent": "{\"Action\":\"SendAgentInstanceLLM\",\"Seq\":\"client_A:web_01:1\",\"Params\":{\"Text\":\"今天天气怎么样？\"}}",
+        "toUserIDList": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+</CodeGroup>
+
+##### 接收响应
+
+客户端在 `onRecvExperimentalAPI` 回调中接收响应（msg_type=22）：
+
+```json
+{
+    "Action": "SendAgentInstanceLLM",
+    "Seq": "client_A:web_01:1",
+    "Code": 0,
+    "Message": "Succeed",
+    "RequestId": "1843985617336143872",
+    "Data": {
+        "Round": 158422001
+    }
+}
+```
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| Action | String | 原请求 Action。 |
+| Seq | String | 原请求 Seq，客户端据此关联请求。 |
+| Code | Int | 处理结果码，0 表示成功。 |
+| Message | String | 处理结果说明，失败时包含错误信息。 |
+| RequestId | String | 服务端返回的请求 ID。 |
+| Data | Object | 响应数据。 |
+| Data.Round | Int64 | 本轮 Round。 |
+
+</Tab>
+<Tab title="InterruptAgentInstance">
+
+打断智能体，停止当前 TTS/LLM 流程。
+
+##### 参数
+
+无需额外参数。
+
+##### 请求示例
+
+```json
+{
+    "Action": "InterruptAgentInstance",
+    "Seq": "client_A:web_01:1",
+    "Params": {}
+}
+```
+
+##### 发送请求
+
+客户端调用 Express `callExperimentalAPI` 向指定 `AgentUserId` 发送房间通道消息（msg_type=20）：
+
+<CodeGroup>
+```json (Android / iOS 原生端)
+{
+    "method": "liveroom.room.send_room_channel_message",
+    "params": {
+        "room_id": "room_001",
+        "msg_type": 20,
+        "msg_content": "{\"Action\":\"InterruptAgentInstance\",\"Seq\":\"client_A:web_01:1\",\"Params\":{}}",
+        "user_list": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+```json (Web 端)
+{
+    "method": "sendRoomChannelMessage",
+    "params": {
+        "roomID": "room_001",
+        "msgType": 20,
+        "msgContent": "{\"Action\":\"InterruptAgentInstance\",\"Seq\":\"client_A:web_01:1\",\"Params\":{}}",
+        "toUserIDList": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+</CodeGroup>
+
+##### 接收响应
+
+客户端在 `onRecvExperimentalAPI` 回调中接收响应（msg_type=22）：
+
+```json
+{
+    "Action": "InterruptAgentInstance",
+    "Seq": "client_A:web_01:1",
+    "Code": 0,
+    "Message": "success",
+    "RequestId": "6952809118452315328",
+    "Data": {
+        "Round": 158422001
+    }
+}
+```
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| Action | String | 原请求 Action。 |
+| Seq | String | 原请求 Seq，客户端据此关联请求。 |
+| Code | Int | 处理结果码，0 表示成功。 |
+| Message | String | 处理结果说明，失败时包含错误信息。 |
+| RequestId | String | 服务端返回的请求 ID。 |
+| Data | Object | 响应数据。 |
+| Data.Round | Int64 | 本轮 Round。 |
+
+</Tab>
+<Tab title="StartListening">
+
+在对讲机模式下，让智能体开始聆听指定用户。
+
+##### 参数
+
+| 参数 | 类型 | 是否必选 | 描述 |
+| --- | --- | --- | --- |
+| UserId | String | 否 | 聆听目标用户。不传时使用默认监听目标。 |
+
+##### 请求示例
+
+```json
+{
+    "Action": "StartListening",
+    "Seq": "client_A:web_01:1",
+    "Params": {
+        "UserId": "user_123"
+    }
+}
+```
+
+##### 发送请求
+
+客户端调用 Express `callExperimentalAPI` 向指定 `AgentUserId` 发送房间通道消息（msg_type=20）：
+
+<CodeGroup>
+```json (Android / iOS 原生端)
+{
+    "method": "liveroom.room.send_room_channel_message",
+    "params": {
+        "room_id": "room_001",
+        "msg_type": 20,
+        "msg_content": "{\"Action\":\"StartListening\",\"Seq\":\"client_A:web_01:1\",\"Params\":{\"UserId\":\"user_123\"}}",
+        "user_list": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+```json (Web 端)
+{
+    "method": "sendRoomChannelMessage",
+    "params": {
+        "roomID": "room_001",
+        "msgType": 20,
+        "msgContent": "{\"Action\":\"StartListening\",\"Seq\":\"client_A:web_01:1\",\"Params\":{\"UserId\":\"user_123\"}}",
+        "toUserIDList": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+</CodeGroup>
+
+##### 接收响应
+
+客户端在 `onRecvExperimentalAPI` 回调中接收响应（msg_type=22）：
+
+```json
+{
+    "Action": "StartListening",
+    "Seq": "client_A:web_01:1",
+    "Code": 0,
+    "Message": "success",
+    "RequestId": "8916619579948490296",
+    "Data": {
+        "Round": 158422001
+    }
+}
+```
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| Action | String | 原请求 Action。 |
+| Seq | String | 原请求 Seq，客户端据此关联请求。 |
+| Code | Int | 处理结果码，0 表示成功。 |
+| Message | String | 处理结果说明，失败时包含错误信息。 |
+| RequestId | String | 服务端返回的请求 ID。 |
+| Data | Object | 响应数据。 |
+| Data.Round | Int64 | 本轮 Round。 |
+
+</Tab>
+<Tab title="StopListening">
+
+在对讲机模式下，让智能体结束聆听指定用户。
+
+##### 参数
+
+| 参数 | 类型 | 是否必选 | 描述 |
+| --- | --- | --- | --- |
+| UserId | String | 否 | 结束聆听的用户。不传时停止当前监听。 |
+
+##### 请求示例
+
+```json
+{
+    "Action": "StopListening",
+    "Seq": "client_A:web_01:1",
+    "Params": {
+        "UserId": "user_123"
+    }
+}
+```
+
+##### 发送请求
+
+客户端调用 Express `callExperimentalAPI` 向指定 `AgentUserId` 发送房间通道消息（msg_type=20）：
+
+<CodeGroup>
+```json (Android / iOS 原生端)
+{
+    "method": "liveroom.room.send_room_channel_message",
+    "params": {
+        "room_id": "room_001",
+        "msg_type": 20,
+        "msg_content": "{\"Action\":\"StopListening\",\"Seq\":\"client_A:web_01:1\",\"Params\":{\"UserId\":\"user_123\"}}",
+        "user_list": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+```json (Web 端)
+{
+    "method": "sendRoomChannelMessage",
+    "params": {
+        "roomID": "room_001",
+        "msgType": 20,
+        "msgContent": "{\"Action\":\"StopListening\",\"Seq\":\"client_A:web_01:1\",\"Params\":{\"UserId\":\"user_123\"}}",
+        "toUserIDList": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+</CodeGroup>
+
+##### 接收响应
+
+客户端在 `onRecvExperimentalAPI` 回调中接收响应（msg_type=22）：
+
+```json
+{
+    "Action": "StopListening",
+    "Seq": "client_A:web_01:1",
+    "Code": 0,
+    "Message": "success",
+    "RequestId": "8916619579948490296",
+    "Data": {
+        "Round": 158422001
+    }
+}
+```
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| Action | String | 原请求 Action。 |
+| Seq | String | 原请求 Seq，客户端据此关联请求。 |
+| Code | Int | 处理结果码，0 表示成功。 |
+| Message | String | 处理结果说明，失败时包含错误信息。 |
+| RequestId | String | 服务端返回的请求 ID。 |
+| Data | Object | 响应数据。 |
+| Data.Round | Int64 | 本轮 Round。 |
+
+</Tab>
+</Tabs>
+
+### 注意事项
+
+#### AgentUserId 说明
+
+数字人通话场景下，后端用于接收房间信令的目标 userID 与普通 1V1 智能体场景不同，客户端必须按以下规则决定目标 userID：
+
+| 场景 | 目标 userID 取值 |
+| --- | --- |
+| 普通智能体（通过[创建智能体实例](/aiagent-server/api-reference/agent-instance-management/create-agent-instance)创建） | 接口响应中 `RTC.AgentUserId` 字段的值 |
+| 数字人智能体（通过[创建数字人 Agent 实例](/aiagent-server/api-reference/agent-instance-management/create-digital-human-agent-instance)创建） | `ai_agent_<AgentInstanceId>`（AgentInstanceId 取自接口响应） |
+
+#### Web 端与原生端协议差异
+
+| 差异点 | Android / iOS 原生端 | Web 端 |
+| --- | --- | --- |
+| 发送方法名 | `liveroom.room.send_room_channel_message` | `sendRoomChannelMessage` |
+| 接收回调方法名 | `liveroom.room.on_recive_room_channel_message` | `onRecvRoomChannelMessage` |
+| 房间 ID 字段 | `room_id` | `roomID` |
+| 接收方列表字段 | `user_list` | `toUserIDList` |
+
+#### 链路追踪与重发去重
+
+- `Seq` 由客户端按 `user_id:device_id:local_seq` 格式生成。
+- 客户端按 `Seq` 维护请求表，对同一 `Seq` 的多个响应只处理第一个有效响应。
+- 业务幂等由服务端处理，客户端无需关心。
