@@ -1,0 +1,801 @@
+---
+date: '2026-06-22'
+---
+# 智能体自定义控制
+
+智能体自定义控制允许客户端通过 **ZEGO Express SDK** 房间信令直接发起智能体实例控制请求，无需依赖服务端 API 调用。
+
+通过该功能，开发者可以在客户端侧实现以下控制能力：
+
+- **主动调用 TTS**：让智能体用语音朗读一段文本，适合播报固定话术（如欢迎语、提醒等）。
+- **主动调用 LLM**：给智能体一段文本，让其基于 LLM 推理并回复，适合需要结合上下文的主动发言场景。
+- **打断智能体**：立即打断智能体当前正在进行的 TTS/LLM 流程。
+- **控制聆听**：在对讲机模式下，控制智能体开始或停止聆听指定用户。
+
+典型使用场景包括：
+- 播报欢迎语、超时提醒等固定话术。
+- 冷场时主动发起话题，提升交互体验。
+- 触发关键节点时打断智能体并立刻播报重要内容。
+
+适用版本：v2.13.0 及以上。
+
+## 前提条件
+
+已参考[快速开始](./../quick-start.mdx)完成基本流程。
+
+## 使用方式
+
+### 方式一：通过开源组件实现（推荐）
+
+使用 [ZEGO AI Agent Action 客户端套件](https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/agentaction)，可快速集成智能体自定义控制能力。
+
+该套件支持 Web、Android、iOS Swift、iOS Objective-C、Flutter 五大平台，对外统一暴露以下方法：
+
+- `sendAgentInstanceTTS`
+- `sendAgentInstanceLLM`
+- `interruptAgentInstance`
+- `startListening`
+- `stopListening`
+
+#### 集成步骤
+
+1. 将目标平台下的 `agentaction/` 目录拷贝到自己的项目中。
+2. 创建 Client 实例。
+3. 在 Sender 中调用 Express `callExperimentalAPI`，将套件生成的 `formatedJson` 透传入。
+4. 在 `onRecvExperimentalAPI` 回调中，将响应内容转交给套件的 `handleRoomChannelMessage` 方法。
+
+<Steps>
+<Step title="引入套件">
+将目标平台下的 <code>agentaction/</code> 目录拷贝到自己的项目中。各平台目录结构如下：
+- Web：agentaction/web/
+- Android：agentaction/android/
+- iOS Swift：agentaction/ios_swift/
+- iOS Objective-C：agentaction/ios_oc/
+- Flutter：agentaction/flutter/
+</Step>
+<Step title="创建 Client 实例">
+在应用初始化时创建套件的 Client 实例。
+<CodeGroup>
+```js Web
+import ZegoAIAgentAction from './agentaction';
+
+// zg 为已创建的 ZegoExpressEngine 实例
+const client = new ZegoAIAgentAction.ZegoAIAgentActionClient({
+  roomId: 'room_001',
+  userId: 'client_A',
+  agentUserId: '<AgentUserId>',
+  // sender：把套件组装好的 formatedJson 透传给 Express
+  sender: async (params, formatedJson) => {
+    try {
+      await zg.callExperimentalAPI(formatedJson);
+      return { errorCode: ZegoAIAgentAction.ErrorCodes.SUCCESS, seq: params.seq };
+    } catch (e) {
+      return { errorCode: ZegoAIAgentAction.ErrorCodes.SEND_FAILED, seq: params.seq };
+    }
+  },
+  onResponse: (response) => console.log('recv', response.action, response.code),
+  onError: (error) => console.error('error', error.action, error.code)
+});
+```
+```Java Android
+import com.zego.agentaction.AIAgentActionProto;
+import com.zego.agentaction.ZegoAIAgentActionClient;
+import com.zego.agentaction.ZegoAIAgentActionDefines;
+
+// engine 为已创建的 ZegoExpressEngine 实例
+ZegoAIAgentActionClient client = new ZegoAIAgentActionClient(
+    "room_001",          // roomId
+    "<AgentUserId>",     // agentUserId
+    "client_A",          // userId
+    null,                // agentInstanceId，数字人场景必传，其它传 null
+    false,               // isDigitalHuman
+    null,                // deviceId，传 null 由套件自动生成
+    5000,                // timeoutMs（ms）
+    (params, formatedJson, callback) -> {        // Sender
+        try {
+            engine.callExperimentalAPI(formatedJson);
+            callback.onResult(new ZegoAIAgentActionClient.ZegoAIAgentActionSendResult(
+                ZegoAIAgentActionDefines.ErrorCodes.SUCCESS, params.seq));
+        } catch (Throwable t) {
+            callback.onResult(new ZegoAIAgentActionClient.ZegoAIAgentActionSendResult(
+                ZegoAIAgentActionDefines.ErrorCodes.SEND_FAILED, params.seq));
+        }
+    },
+    response -> { /* onResponse */ },
+    error -> { /* onError */ });
+```
+```swift title="iOS Swift"
+import ZegoAIAgentAction
+
+let client = ZegoAIAgentActionClient(
+    roomId: "room_001",
+    agentUserId: "<AgentUserId>",
+    userId: "client_A",
+    timeoutMs: 5000,
+    sender: { params, formatedJson, callback in
+        do {
+            _ = try ZegoExpressEngine.shared()?.callExperimentalAPI(formatedJson)
+            callback(ZegoAIAgentActionSendResult(errorCode: ZegoAIAgentActionErrorCodes.success, seq: params.seq))
+        } catch {
+            callback(ZegoAIAgentActionSendResult(errorCode: ZegoAIAgentActionErrorCodes.sendFailed, seq: params.seq))
+        }
+    },
+    onResponse: { response in /* ... */ },
+    onError: { error in /* ... */ }
+)
+```
+```objectivec title="iOS Objective-C"
+#import <ZegoAIAgentActionObjC/ZegoAIAgentActionObjC.h>
+
+// 1) 实现 Sender 协议：内部把 formatedJson 透传给 Express
+@interface AgentActionSender : NSObject <ZegoAIAgentActionOCSender>
+@end
+@implementation AgentActionSender
+- (void)sendAgentAction:(ZegoAIAgentActionOCSendParams *)params
+           formatedJson:(NSString *)formatedJson
+             completion:(void (^)(ZegoAIAgentActionOCSendResult *))completion {
+    @try {
+        [[ZegoExpressEngine sharedEngine] callExperimentalAPI:formatedJson];
+        completion([[ZegoAIAgentActionOCSendResult alloc] initWithErrorCode:ZegoAIAgentActionErrorCodes.success seq:params.seq]);
+    } @catch (NSException *e) {
+        completion([[ZegoAIAgentActionOCSendResult alloc] initWithErrorCode:ZegoAIAgentActionErrorCodes.sendFailed seq:params.seq]);
+    }
+}
+@end
+
+// 2) 构造 Client
+ZegoAIAgentActionOCClient *client =
+    [[ZegoAIAgentActionOCClient alloc] initWithRoomId:@"room_001"
+                                          agentUserId:@"<AgentUserId>"
+                                               userId:@"client_A"
+                                      agentInstanceId:nil        // 数字人场景必传，其它传 nil
+                                         isDigitalHuman:NO
+                                             deviceId:nil
+                                            timeoutMs:5000
+                                               sender:[AgentActionSender new]
+                                           onResponse:^(ZegoAIAgentActionOCResponse *r) { /* ... */ }
+                                              onError:^(ZegoAIAgentActionOCError *e) { /* ... */ }];
+```
+```dart Flutter
+import 'package:zego_ai_agent_action/zego_ai_agent_action.dart';
+
+final client = ZegoAIAgentActionClient(
+  roomId: 'room_001',
+  agentUserId: '<AgentUserId>',
+  userId: 'client_A',
+  sender: (params, formatedJson) async {
+    try {
+      await ZegoExpressEngine.instance.callExperimentalAPI(formatedJson);
+      return ZegoAIAgentActionSendResult(errorCode: ZegoAIAgentActionErrorCodes.success, seq: params.seq);
+    } catch (e) {
+      return ZegoAIAgentActionSendResult(errorCode: ZegoAIAgentActionErrorCodes.sendFailed, seq: params.seq);
+    }
+  },
+  onResponse: (response) { /* ... */ },
+  onError: (error) { /* ... */ },
+);
+```
+</CodeGroup>
+
+各端构造器参数说明如下。Android / OC 因语言不支持默认参数，需显式传入全部参数（普通智能体场景下，数字人相关参数传空值即可）。
+
+|参数名-150px | 描述 | 示例值|
+| --- | --- | --- |
+| roomId | 业务房间 ID，与 ZEGO 音视频房间 ID 一致。 | `room_001` |
+| agentUserId | 目标智能体 userID。普通智能体取 `rtcInfo.agentUserId`；数字人场景由套件按 `ai_agent_<agentInstanceId>` 自动计算，此参数被忽略。 | `<AgentUserId>` |
+| userId | 当前终端用户 ID，用于生成本地链路追踪 Seq。 | `client_A` |
+| agentInstanceId | 智能体实例 ID。数字人场景必传；普通场景 Android / OC 必填（传 `null` / `nil`），Swift / Flutter 可省略（默认 nil），Web 无此参数。 | `null`（数字人传实例 ID） |
+| isDigitalHuman | 是否数字人通话，决定是否走 `ai_agent_<instanceId>` 拼接规则。普通场景传 `false` / `NO` 或省略。 | `false`（数字人传 `true`） |
+| deviceId | 设备 ID，用于构造 Seq；传空由套件自动生成。 | `null`（传空自动生成） |
+| timeoutMs | 单次请求默认超时（ms），默认 5000。 | `5000` |
+| sender | 业务实现的发送回调，把套件组装好的 `formatedJson` 透传给 Express `callExperimentalAPI`。 | 无固定取值，见上方各端 sender 实现 |
+| onResponse | 全局响应回调，每次收到 PaaS 响应时触发（可选）。 | 无固定取值，见上方各端 onResponse 实现 |
+| onError | 全局错误回调，发送失败 / 超时 / 主动取消时触发（可选）。 | 无固定取值，见上方各端 onError 实现 |
+
+</Step>
+<Step title="发送控制请求">
+按需调用对应的接口以发送控制请求（以 sendAgentInstanceTTS 为例）：
+<CodeGroup>
+```js Web
+// 主动调用 TTS 示例
+const tts = new ZegoAIAgentAction.Protobuf.SendAgentInstanceTTSParams();
+tts.setText('你好呀，欢迎使用 ZEGO AI Agent 服务');
+tts.setAddHistory(true);
+tts.setPriority('Medium');
+tts.setSamePriorityOption('ClearAndInterrupt');
+client.sendAgentInstanceTTS(tts).then(r => console.log('TTS ok', r.seq));
+
+// 主动调用 LLM 示例
+const llm = new ZegoAIAgentAction.Protobuf.SendAgentInstanceLLMParams();
+llm.setText('现在用户一段时间没有说话了，请主动说一句话');
+client.sendAgentInstanceLLM(llm).then(r => console.log('LLM ok', r.seq));
+
+// 打断智能体示例
+client.interruptAgentInstance().then(r => console.log('Interrupt ok', r.seq));
+```
+```Java Android
+// 主动调用 TTS 示例
+AIAgentActionProto.SendAgentInstanceTTSParams tts =
+    AIAgentActionProto.SendAgentInstanceTTSParams.newBuilder()
+        .setText("你好呀，欢迎使用 ZEGO AI Agent 服务")
+        .setAddHistory(true)
+        .setPriority("Medium")
+        .setSamePriorityOption("ClearAndInterrupt")
+        .build();
+client.sendAgentInstanceTTS(tts, new ZegoAIAgentActionClient.Completion() {
+    @Override public void onSuccess(ZegoAIAgentActionClient.ZegoAIAgentActionResponse r) { /* 成功 */ }
+    @Override public void onError(ZegoAIAgentActionClient.ZegoAIAgentActionError e) { /* 失败 */ }
+});
+
+// 主动调用 LLM 示例
+AIAgentActionProto.SendAgentInstanceLLMParams llm =
+    AIAgentActionProto.SendAgentInstanceLLMParams.newBuilder()
+        .setText("现在用户一段时间没有说话了，请主动说一句话")
+        .build();
+client.sendAgentInstanceLLM(llm, completion);
+
+// 打断智能体示例
+client.interruptAgentInstance(completion);
+```
+```swift title="iOS Swift"
+// 主动调用 TTS 示例
+var tts = ZegoSendAgentInstanceTTSParams()
+tts.text = "你好呀，欢迎使用 ZEGO AI Agent 服务"
+tts.addHistory = true
+tts.priority = "Medium"
+tts.samePriorityOption = "ClearAndInterrupt"
+client.sendAgentInstanceTTS(tts) { result in
+    switch result {
+    case .success(let r): print("TTS ok", r.seq)
+    case .failure(let e): print("TTS err", e.code, e.message)
+    }
+}
+
+// 主动调用 LLM 示例
+var llm = ZegoSendAgentInstanceLLMParams()
+llm.text = "现在用户一段时间没有说话了，请主动说一句话"
+client.sendAgentInstanceLLM(llm) { _ in }
+
+// 打断智能体示例
+client.interruptAgentInstance { _ in }
+```
+```objectivec title="iOS Objective-C"
+// 主动调用 TTS 示例
+SendAgentInstanceTTSParams *tts = [SendAgentInstanceTTSParams message];
+tts.text = @"你好呀，欢迎使用 ZEGO AI Agent 服务";
+tts.addHistory = YES;
+tts.priority = @"Medium";
+tts.samePriorityOption = @"ClearAndInterrupt";
+[client sendAgentInstanceTTSWithParams:tts
+                             timeoutMs:nil
+                            completion:^(ZegoAIAgentActionOCResponse * _Nullable r,
+                                         ZegoAIAgentActionOCError * _Nullable e) {
+    if (e) { /* 失败 */ return; }
+    /* 成功 */
+}];
+
+// 主动调用 LLM 示例
+SendAgentInstanceLLMParams *llm = [SendAgentInstanceLLMParams message];
+llm.text = @"现在用户一段时间没有说话了，请主动说一句话";
+[client sendAgentInstanceLLMWithParams:llm timeoutMs:nil completion:completion];
+
+// 打断智能体示例
+[client interruptAgentInstanceWithTimeoutMs:nil completion:completion];
+```
+```dart Flutter
+// 主动调用 TTS 示例
+final tts = SendAgentInstanceTTSParams(
+  text: '你好呀，欢迎使用 ZEGO AI Agent 服务',
+  addHistory: true,
+  priority: 'Medium',
+  samePriorityOption: 'ClearAndInterrupt',
+);
+await client.sendAgentInstanceTTS(tts);
+
+// 主动调用 LLM 示例
+final llm = SendAgentInstanceLLMParams(text: '现在用户一段时间没有说话了，请主动说一句话');
+await client.sendAgentInstanceLLM(llm);
+
+// 打断智能体示例
+await client.interruptAgentInstance();
+```
+</CodeGroup>
+
+<Warning title="注意">
+其中 <code>&lt;AgentUserId&gt;</code> 为占位值，实际取值因场景而异，详见下方「AgentUserId 说明」章节。
+</Warning>
+</Step>
+<Step title="接收响应">
+将 ZEGO Express SDK 的 `onRecvExperimentalAPI` 回调中的数据直接透传给给套件处理。
+<CodeGroup>
+```js Web
+// 监听 Express 实验性 API 回调，把响应内容转交给套件解析
+zg.on('recvExperimentalAPI', (payload) => {
+    client.handleRoomChannelMessage(payload);
+});
+
+// 部分 Web Express 版本需显式开启房间通道消息接收
+zg.callExperimentalAPI({ method: 'onRecvRoomChannelMessage', params: {} });
+```
+```Java Android
+// 创建 engine 时覆写 onRecvExperimentalAPI，把回调内容转交给套件
+ZegoExpressEngine.createEngine(profile, appContext, new IZegoEventHandler() {
+    @Override
+    public void onRecvExperimentalAPI(String content) {
+        client.handleRoomChannelMessage(content);
+    }
+});
+```
+```swift title="iOS Swift"
+// 在 ZegoExpressEventHandler 中实现
+func onRecvExperimentalAPI(_ content: String) {
+    _ = client.handleRoomChannelMessage(content: content)
+}
+```
+```objectivec title="iOS Objective-C"
+// 在 ZegoExpressEventHandler 中实现
+- (void)onRecvExperimentalAPI:(NSString *)content {
+    [client handleRoomChannelMessageWithContent:content];
+}
+```
+```dart Flutter
+ZegoExpressEngine.onRecvExperimentalAPI = (content) {
+  client.handleRoomChannelMessage(content);
+};
+```
+</CodeGroup>
+</Step>
+</Steps>
+
+详细集成方式请参考各平台 Demo：[Web](https://github.com/ZEGOCLOUD/ai_agent_quick_start/blob/master/agentaction/web/demo/README.md) | [Android](https://github.com/ZEGOCLOUD/ai_agent_quick_start/blob/master/agentaction/android/demo/README.md) | [iOS Swift](https://github.com/ZEGOCLOUD/ai_agent_quick_start/blob/master/agentaction/ios_swift/README.md) | [iOS Objective-C](https://github.com/ZEGOCLOUD/ai_agent_quick_start/blob/master/agentaction/ios_oc/README.md) | [Flutter](https://github.com/ZEGOCLOUD/ai_agent_quick_start/blob/master/agentaction/flutter/demo/README.md)。
+
+### 方式二：自定义实现
+
+如果不想使用开源套件，也可以自行实现智能体控制。其原理是：客户端通过 ZEGO Express SDK 的 `callExperimentalAPI` 发送房间通道消息（msg_type=20）到服务端，服务端处理后通过房间通道消息（msg_type=22）返回响应，客户端通过 `onRecvExperimentalAPI` 接收响应。
+
+#### 调用 callExperimentalAPI 接口发送指令
+
+以下展示各平台使用 ZEGO Express SDK 发送控制指令。完整可运行的示例代码请参考 [ai_agent_quick_start (agentaction)](https://github.com/ZEGOCLOUD/ai_agent_quick_start/tree/master/agentaction)。
+
+使用 Express SDK 的 `callExperimentalAPI` 发送房间通道消息（msg_type=20），各平台调用方式如下：
+
+<Tabs>
+<Tab title="Android / iOS / Flutter">
+
+Android、iOS 和 Flutter 端的 `callExperimentalAPI` 调用方式一致，`method` 参数使用 `liveroom.room.send_room_channel_message`。传入 JSON 字符串格式的请求体：
+
+```json
+{
+    "method": "liveroom.room.send_room_channel_message",
+    "params": {
+        "room_id": "room_001",
+        "msg_type": 20,
+        "msg_content": "{\"Action\":\"SendAgentInstanceTTS\",\"Seq\":\"client_A:web_01:1\",\"Params\":{\"Text\":\"你好\"}}",
+        "user_list": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+</Tab>
+<Tab title="Web">
+
+Web 端 `method` 参数使用 `sendRoomChannelMessage` ，字段命名采用驼峰格式。传入 JSON 字符串格式的请求体：
+
+<Warning title="注意"> Web 端发送没有回调，发送成功与否通过 `callExperimentalAPI` 是否抛错来判断，业务结果需等待智能体回包或超时。</Warning>
+
+```json
+{
+    "method": "sendRoomChannelMessage",
+    "params": {
+        "roomID": "room_001",
+        "msgType": 20,
+        "msgContent": "{\"Action\":\"SendAgentInstanceTTS\",\"Seq\":\"client_A:web_01:1\",\"Params\":{\"Text\":\"你好\"}}",
+        "toUserIDList": ["<agent_user_id>"],
+        "seq": 1
+    }
+}
+```
+</Tab>
+</Tabs>
+
+##### params.user_list 参数
+
+Android、iOS和 Flutter 端的 `user_list`，Web 端的 `toUserIDList`，均为目标智能体 userID（只传一个）。
+
+<Warning title="注意">
+数字人通话场景下，传递给 user_list（toUserIDList） 的目标智能体 userID 与普通 1V1 智能体场景不同，客户端必须按以下规则传递：
+
+| 场景 | 目标智能体 userID 取值 |
+| --- | --- |
+| 普通智能体（通过[创建智能体实例](/aiagent-server/api-reference/agent-instance-management/create-agent-instance)创建） | 与接口请求参数的 `RTC.AgentUserId` 字段的值相同。比如 `agent_123456` |
+| 数字人智能体（通过[创建数字人 Agent 实例](/aiagent-server/api-reference/agent-instance-management/create-digital-human-agent-instance)创建） | 按照`ai_agent_<AgentInstanceId>`模板生成。AgentInstanceId就是响应参数中的 Data.AgentInstanceId。比如 `ai_agent_1912122918452641792` |
+
+
+</Warning>
+
+##### params.msg_content 参数
+
+其中 `msg_content` 为 JSON 字符串，包含以下字段：
+
+|字段-100px | 类型 | 描述|
+| --- | --- | --- |
+| Action | String | 操作类型，如 `SendAgentInstanceTTS`、`SendAgentInstanceLLM`、`InterruptAgentInstance`、`StartListening`、`StopListening`。请参考 [Action](#action) |
+| Seq | String | 业务链路追踪标识，由客户端生成，需保证同房间多用户/多端场景下唯一。推荐格式 `user_id:device_id:local_seq`。在 onRecvExperimentalAPI 将原样返回。|
+| Params | Object | 各 Action 对应的参数。请参考 [Params](#params) |
+
+
+###### Action
+
+callExperimentalAPI 接口的 msg_content 参数中，JSON 字符串的 Params 字段如下。客户端通过房间信令支持以下 5 类控制能力：
+
+| Action | 能力描述 | 对应服务端接口 |
+| --- | --- | --- |
+| `SendAgentInstanceTTS` | 主动调用 TTS，让智能体朗读一段文本。 | [自定义调用 TTS](/aiagent-server/api-reference/agent-instance-control/send-agent-instance-tts) |
+| `SendAgentInstanceLLM` | 主动调用 LLM，让智能体基于文本推理并回复。 | [自定义调用 LLM](/aiagent-server/api-reference/agent-instance-control/send-agent-instance-llm) |
+| `InterruptAgentInstance` | 打断智能体，停止当前 TTS/LLM 流程。 | [打断智能体实例](/aiagent-server/api-reference/agent-instance-control/interrupt-agent-instance) |
+| `StartListening` | 智能体开始聆听指定用户。 | [智能体开始聆听](/aiagent-server/api-reference/agent-instance-control/start-listening) |
+| `StopListening` | 智能体结束聆听指定用户。 | [智能体结束聆听](/aiagent-server/api-reference/agent-instance-control/stop-listening) |
+
+###### Params
+
+callExperimentalAPI 接口的 msg_content 参数中，JSON 字符串的 Params 字段每个 Action 都会对应不同的选项。以下每个 Tab 对应不同的 Action 的 Params 说明：
+
+<Tabs titleSize="p">
+<Tab title="SendAgentInstanceTTS">
+
+主动调用 TTS，让智能体用语音朗读一段文本。
+
+**参数**
+
+| 参数 | 类型 | 是否必选 | 描述 |
+| --- | --- | --- | --- |
+| Text | String | 是 | 用于 TTS 的文本内容，最大不超过 300 个字符。 |
+| AddHistory | Boolean | 否 | 是否将文本消息记录在会话消息历史之中，作为上下文输入给 LLM。默认值为 `true`。 |
+| Priority | String | 否 | 任务优先级，默认为 `Medium`。可选值：`Low`、`Medium`、`High`。 |
+| SamePriorityOption | String | 否 | 相同优先级时的打断策略，默认为 `ClearAndInterrupt`。可选值：`ClearAndInterrupt`、`Enqueue`。 |
+| InterruptMode | Number | 否 | 打断模式。 |
+| EnqueueUserSpeech | Boolean | 否 | 是否排队用户语音。 |
+
+**请求示例**
+
+```json
+{
+    "Action": "SendAgentInstanceTTS",
+    "Seq": "client_A:web_01:1",
+    "Params": {
+        "Text": "你好",
+        "AddHistory": true,
+        "Priority": "Medium",
+        "SamePriorityOption": "ClearAndInterrupt"
+    }
+}
+```
+
+</Tab>
+<Tab title="SendAgentInstanceLLM">
+
+主动调用 LLM，让智能体基于文本推理并回复。
+
+**参数**
+
+| 参数 | 类型 | 是否必选 | 描述 |
+| --- | --- | --- | --- |
+| Text | String | 是 | 发送给 LLM 服务的文本内容。 |
+| Content | String | 否 | LLM 输入内容。 |
+| SystemPrompt | String | 否 | 本次对话的临时智能体系统提示词。 |
+| AddQuestionToHistory | Boolean | 否 | 是否把问题加入到上下文。默认值为 `false`。 |
+| AddAnswerToHistory | Boolean | 否 | 是否把答案加入到上下文。默认值为 `true`。 |
+| Priority | String | 否 | 任务优先级，默认为 `Medium`。可选值：`Low`、`Medium`、`High`。 |
+| SamePriorityOption | String | 否 | 相同优先级时的打断策略，默认为 `ClearAndInterrupt`。可选值：`ClearAndInterrupt`、`Enqueue`。 |
+| EnqueueUserSpeech | Boolean | 否 | 是否排队用户语音。 |
+
+**请求示例**
+
+```json
+{
+    "Action": "SendAgentInstanceLLM",
+    "Seq": "client_A:web_01:1",
+    "Params": {
+        "Text": "今天天气怎么样？"
+    }
+}
+```
+
+**发送请求**
+
+客户端调用 Express `callExperimentalAPI` 向指定 `AgentUserId` 发送房间通道消息（msg_type=20）：
+
+<CodeGroup>
+```json title="Android/iOS/Flutter"
+{
+    "method": "liveroom.room.send_room_channel_message",
+    "params": {
+        "room_id": "room_001",
+        "msg_type": 20,
+        "msg_content": "{\"Action\":\"SendAgentInstanceLLM\",\"Seq\":\"client_A:web_01:1\",\"Params\":{\"Text\":\"今天天气怎么样？\"}}",
+        "user_list": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+```json (Web 端)
+{
+    "method": "sendRoomChannelMessage",
+    "params": {
+        "roomID": "room_001",
+        "msgType": 20,
+        "msgContent": "{\"Action\":\"SendAgentInstanceLLM\",\"Seq\":\"client_A:web_01:1\",\"Params\":{\"Text\":\"今天天气怎么样？\"}}",
+        "toUserIDList": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+</CodeGroup>
+
+</Tab>
+<Tab title="InterruptAgentInstance">
+
+打断智能体，停止当前 TTS/LLM 流程。
+
+**参数**
+
+无需额外参数。
+
+**请求示例**
+
+```json
+{
+    "Action": "InterruptAgentInstance",
+    "Seq": "client_A:web_01:1",
+    "Params": {}
+}
+```
+
+**发送请求**
+
+客户端调用 Express `callExperimentalAPI` 向指定 `AgentUserId` 发送房间通道消息（msg_type=20）：
+
+<CodeGroup>
+```json title="Android/iOS/Flutter"
+{
+    "method": "liveroom.room.send_room_channel_message",
+    "params": {
+        "room_id": "room_001",
+        "msg_type": 20,
+        "msg_content": "{\"Action\":\"InterruptAgentInstance\",\"Seq\":\"client_A:web_01:1\",\"Params\":{}}",
+        "user_list": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+```json (Web 端)
+{
+    "method": "sendRoomChannelMessage",
+    "params": {
+        "roomID": "room_001",
+        "msgType": 20,
+        "msgContent": "{\"Action\":\"InterruptAgentInstance\",\"Seq\":\"client_A:web_01:1\",\"Params\":{}}",
+        "toUserIDList": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+</CodeGroup>
+
+</Tab>
+<Tab title="StartListening">
+
+在对讲机模式下，让智能体开始聆听指定用户。
+
+**参数**
+
+| 参数 | 类型 | 是否必选 | 描述 |
+| --- | --- | --- | --- |
+| UserId | String | 否 | 聆听目标用户。不传时使用默认监听目标。 |
+
+**请求示例**
+
+```json
+{
+    "Action": "StartListening",
+    "Seq": "client_A:web_01:1",
+    "Params": {
+        "UserId": "user_123"
+    }
+}
+```
+
+**发送请求**
+
+客户端调用 Express `callExperimentalAPI` 向指定 `AgentUserId` 发送房间通道消息（msg_type=20）：
+
+<CodeGroup>
+```json title="Android/iOS/Flutter"
+{
+    "method": "liveroom.room.send_room_channel_message",
+    "params": {
+        "room_id": "room_001",
+        "msg_type": 20,
+        "msg_content": "{\"Action\":\"StartListening\",\"Seq\":\"client_A:web_01:1\",\"Params\":{\"UserId\":\"user_123\"}}",
+        "user_list": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+```json (Web 端)
+{
+    "method": "sendRoomChannelMessage",
+    "params": {
+        "roomID": "room_001",
+        "msgType": 20,
+        "msgContent": "{\"Action\":\"StartListening\",\"Seq\":\"client_A:web_01:1\",\"Params\":{\"UserId\":\"user_123\"}}",
+        "toUserIDList": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+</CodeGroup>
+
+</Tab>
+<Tab title="StopListening">
+
+在对讲机模式下，让智能体结束聆听指定用户。
+
+**参数**
+
+| 参数 | 类型 | 是否必选 | 描述 |
+| --- | --- | --- | --- |
+| UserId | String | 否 | 结束聆听的用户。不传时停止当前监听。 |
+
+**请求示例**
+
+```json
+{
+    "Action": "StopListening",
+    "Seq": "client_A:web_01:1",
+    "Params": {
+        "UserId": "user_123"
+    }
+}
+```
+
+**发送请求**
+
+客户端调用 Express `callExperimentalAPI` 向指定 `AgentUserId` 发送房间通道消息（msg_type=20）：
+
+<CodeGroup>
+```json title="Android/iOS/Flutter"
+{
+    "method": "liveroom.room.send_room_channel_message",
+    "params": {
+        "room_id": "room_001",
+        "msg_type": 20,
+        "msg_content": "{\"Action\":\"StopListening\",\"Seq\":\"client_A:web_01:1\",\"Params\":{\"UserId\":\"user_123\"}}",
+        "user_list": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+```json (Web 端)
+{
+    "method": "sendRoomChannelMessage",
+    "params": {
+        "roomID": "room_001",
+        "msgType": 20,
+        "msgContent": "{\"Action\":\"StopListening\",\"Seq\":\"client_A:web_01:1\",\"Params\":{\"UserId\":\"user_123\"}}",
+        "toUserIDList": ["<AgentUserId>"],
+        "seq": 1
+    }
+}
+```
+</CodeGroup>
+
+</Tab>
+</Tabs>
+
+#### 监听 onRecvExperimentalAPI 接收响应
+
+服务端处理完成后，通过房间通道消息（msg_type=22）下发响应，客户端在 ZEGO Express SDK 的 `onRecvExperimentalAPI` 回调中接收。回调内容为 JSON 字符串（原生端）或对象（Web 端），其中 `msg_content`/`msgContent` 本身又是一层 JSON 字符串，需**二次解析**才能得到响应体，最后通过响应体中的 `Seq` 关联回原始请求。
+
+<Tabs>
+<Tab title="Android / iOS / Flutter">
+
+原生端在创建 `ZegoExpressEngine` 时实现 `onRecvExperimentalAPI(String content)` 回调，`content` 为 JSON 字符串（字段采用 snake_case），结构与发送时一致：
+
+```json
+{
+    "method": "liveroom.room.on_recive_room_channel_message",
+    "params": {
+        "room_id": "room_001",
+        "msg_type": 22,
+        "msg_content": "{\"Action\":\"SendAgentInstanceTTS\",\"Seq\":\"client_A:web_01:1\",\"Code\":0,\"Message\":\"success\",\"RequestId\":\"8916619579948490296\",\"Data\":{\"Round\":1481651956}}"
+    }
+}
+```
+
+以 Android（Java）为例，从 `params.msg_content` 二次解析出响应体：
+
+```java
+ZegoExpressEngine.createEngine(profile, appContext, new IZegoEventHandler() {
+    @Override
+    public void onRecvExperimentalAPI(String content) {
+        try {
+            JSONObject data = new JSONObject(content);
+            // 仅处理业务响应回调（msg_type=22）
+            if (!"liveroom.room.on_recive_room_channel_message".equals(data.optString("method"))) {
+                return;
+            }
+            JSONObject params = data.optJSONObject("params");
+            if (params == null || params.optInt("msg_type", -1) != 22) {
+                return;
+            }
+            // msg_content 为嵌套 JSON 字符串，需二次解析得到响应体
+            JSONObject resp = new JSONObject(params.optString("msg_content"));
+            String seq = resp.optString("Seq");
+            int code = resp.optInt("Code");
+            // 按 seq 关联回原始请求；code == 0 表示成功，其余为业务错误码
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+});
+```
+
+iOS（Objective-C / Swift）与 Flutter 的解析逻辑一致：先判断 `method` 为 `liveroom.room.on_recive_room_channel_message`，再从 `params.msg_content` 二次解析出响应体，按 `Seq` 关联请求。
+
+</Tab>
+<Tab title="Web">
+
+Web 端通过 `zg.on('recvExperimentalAPI', payload => {...})` 事件接收，`payload` 为对象（字段采用 camelCase）。`payload.msgContent` 同样是嵌套 JSON 字符串，需二次解析。部分 Web Express 版本需先显式开启房间通道消息接收：
+
+```json
+{
+    "method": "onRecvRoomChannelMessage",
+    "content": {
+        "roomID": "room_001",
+        "msgType": 22,
+        "msgContent": "{\"Action\":\"SendAgentInstanceTTS\",\"Seq\":\"client_A:web_01:1\",\"Code\":0,\"Message\":\"success\",\"RequestId\":\"8916619579948490296\",\"Data\":{\"Round\":1481651956}}"
+    }
+}
+```
+
+```javascript
+// 部分 Web Express 版本需显式开启房间通道消息接收
+zg.callExperimentalAPI({ method: 'onRecvRoomChannelMessage', params: {} });
+
+// 监听实验性 API 回调，解析响应
+zg.on('recvExperimentalAPI', (payload) => {
+    if (payload.method !== 'onRecvRoomChannelMessage') {
+        return;
+    }
+    const body = payload.content || payload.params;
+    if (body.msgType !== 22) {
+        return;
+    }
+    // msgContent 为嵌套 JSON 字符串，需二次解析得到响应体
+    const resp = JSON.parse(body.msgContent);
+    const { Seq, Code, Message } = resp;
+    // 按 Seq 关联回原始请求；Code === 0 表示成功，其余为业务错误码
+});
+```
+
+</Tab>
+</Tabs>
+
+
+### 注意事项
+
+#### Web 端与原生端协议差异
+
+| 差异点 | Android / iOS 原生端 | Web 端 |
+| --- | --- | --- |
+| 发送方法名 | `liveroom.room.send_room_channel_message` | `sendRoomChannelMessage` |
+| 接收回调方法名 | `liveroom.room.on_recive_room_channel_message` | `onRecvRoomChannelMessage` |
+| 房间 ID 字段 | `room_id` | `roomID` |
+| 接收方列表字段 | `user_list` | `toUserIDList` |
+
+#### 链路追踪与重发去重
+
+- `Seq` 由客户端按 `user_id:device_id:local_seq` 格式生成。
+- 客户端按 `Seq` 维护请求表，对同一 `Seq` 的多个响应只处理第一个有效响应。
+- 业务幂等由服务端处理，客户端无需关心。
