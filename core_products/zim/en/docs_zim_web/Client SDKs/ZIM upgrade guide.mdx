@@ -8,6 +8,207 @@ date: "2026-04-02"
 
 This document describes notes and considerations when upgrading the ZIM Web SDK version.
 
+## Upgrade Guide for 3.0.0
+
+<Warning title="Warning">
+
+This version (3.0.0) removes some interfaces that have been deprecated for over a year, and adds deprecation markers to some events. Please refer to the following instructions to complete the migration.
+</Warning>
+
+### Removed interfaces
+
+#### ZIM initialization interface (create)
+
+The deprecated legacy `create(appID: number)` interface has been removed. Please use the [create](@create) interface that accepts a [ZIMAppConfig](@ZIMAppConfig) parameter instead.
+
+<CodeGroup>
+```typescript New usage
+const appConfig: ZIMAppConfig = {
+    appID: 12345678,
+    appSign: 'appSign',
+};
+ZIM.create(appConfig);
+```
+
+```typescript Legacy usage
+// Legacy interface removed
+ZIM.create(12345678);
+```
+</CodeGroup>
+
+#### ZIM login interface (login)
+
+The deprecated legacy `login(userInfo: ZIMUserInfo, token: string)` interface has been removed. Please use the [login](@login) interface that accepts `userID` and a [ZIMLoginConfig](@ZIMLoginConfig) parameter instead.
+
+<CodeGroup>
+```typescript New usage
+const loginConfig: ZIMLoginConfig = {
+    userName: 'userName',
+    token: '', // If using Token authentication, fill in the Token
+    isOfflineLogin: false,
+};
+await zim.login('userID', loginConfig);
+```
+
+```typescript Legacy usage
+// Legacy interface removed
+const userInfo: ZIMUserInfo = { userID: 'userID', userName: 'userName' };
+await zim.login(userInfo, '');
+```
+</CodeGroup>
+
+#### ZIM message receive callback interface
+
+The `receivePeerMessage`, `receiveRoomMessage`, and `receiveGroupMessage` events deprecated in 2.18.0 have been formally removed in this version. Migrate to [messageReceived](@messageReceived).
+
+<CodeGroup>
+```typescript New usage
+zim.on('messageReceived', (zim: ZIM, result: ZIMMessageReceivedEventResult) => {
+    const { messageList, info, conversationID, conversationType } = result;
+    // Handle messages of different conversation types based on conversationType
+});
+```
+
+```typescript Legacy usage (removed)
+zim.on('receivePeerMessage', (zim: ZIM, data: ZIMEventOfReceiveConversationMessageResult) => {});
+zim.on('receiveRoomMessage', (zim: ZIM, data: ZIMEventOfReceiveConversationMessageResult) => {});
+zim.on('receiveGroupMessage', (zim: ZIM, data: ZIMEventOfReceiveConversationMessageResult) => {});
+```
+</CodeGroup>
+
+#### ZIM call invitation callback interface
+
+The legacy `callInvitationRejected`, `callInvitationAccepted`, and `callInviteesAnsweredTimeout` events have been removed. Please use the [callUserStateChanged](@callUserStateChanged) event instead. The callback parameters of the `callInvitationTimeout` event have also been updated with an additional `ZIMCallInvitationTimeoutInfo` parameter.
+
+<CodeGroup>
+```typescript New usage
+zim.on('callUserStateChanged', (zim: ZIM, result: ZIMCallUserStateChangedEventResult) => {
+    const { callUserList, callID } = result;
+    // callUserList contains the list of users whose state has changed
+    // Accept, reject, and timeout state changes can be handled uniformly
+});
+```
+
+```typescript Legacy usage
+// Legacy callbacks removed, please migrate to callUserStateChanged
+zim.on('callInvitationRejected', (zim: ZIM, data: ZIMEventOfCallInvitationRejectedResult) => {});
+zim.on('callInvitationAccepted', (zim: ZIM, data: ZIMEventOfCallInvitationAcceptedResult) => {});
+zim.on('callInviteesAnsweredTimeout', (zim: ZIM, data: ZIMEventOfCallInviteesAnsweredTimeoutResult) => {});
+```
+</CodeGroup>
+
+#### importLocalMessages / exportLocalMessages interface removal
+
+The `importLocalMessages` and `exportLocalMessages` interfaces have been temporarily removed in 3.0.0 with no replacement yet. This feature will be re-introduced in a later version. Please follow the SDK release notes for updates.
+
+### Newly deprecated interfaces (recommended migration)
+
+#### ZIM message receive callback interface
+
+The `peerMessageReceived`, `roomMessageReceived`, and `groupMessageReceived` events have been marked as deprecated in this version. They still work, but we recommend migrating to [messageReceived](@messageReceived) as soon as possible.
+
+<CodeGroup>
+```typescript Recommended (new event)
+zim.on('messageReceived', (zim: ZIM, result: ZIMMessageReceivedEventResult) => {
+    const { messageList, info, conversationID, conversationType } = result;
+    // Handle messages of different conversation types based on conversationType
+});
+```
+
+```typescript Deprecated (still works, recommended to migrate)
+zim.on('peerMessageReceived', (zim: ZIM, data: ZIMConversationMessageReceivedEventResult) => {});
+zim.on('roomMessageReceived', (zim: ZIM, data: ZIMConversationMessageReceivedEventResult) => {});
+zim.on('groupMessageReceived', (zim: ZIM, data: ZIMConversationMessageReceivedEventResult) => {});
+```
+</CodeGroup>
+
+#### ZIMGroupConversation deprecation
+
+`ZIMGroupConversation` has been deprecated in 3.0.0. The `isDisabled` and `mutedExpiredTime` fields should be replaced with the corresponding properties of the base class `ZIMConversation`:
+
+| ZIMGroupConversation (deprecated) | ZIMConversation (replacement) |
+|---|---|
+| `isDisabled` | `isConversationDisabled` |
+| `mutedExpiredTime` | `selfMutedExpiredTime` |
+
+<CodeGroup>
+```typescript New usage
+const isDisabled: boolean = conversation.isConversationDisabled;
+const mutedExpiredTime: number = conversation.selfMutedExpiredTime;
+```
+
+```typescript Legacy usage (deprecated)
+const groupConversation = conversation as ZIMGroupConversation;
+const isDisabled: boolean = groupConversation.isDisabled;
+const mutedExpiredTime: number = groupConversation.mutedExpiredTime;
+```
+</CodeGroup>
+
+### Field changes
+
+#### ZIMConversationChangeInfo field change
+
+The `event` property (of type `ZIMConversationEvent`) in `ZIMConversationChangeInfo` has been removed. Please use the `action` property (of type `ZIMConversationChangeAction`) in the same structure instead.
+
+<CodeGroup>
+```typescript New usage
+zim.on('conversationChanged', (zim: ZIM, result: ZIMConversationChangedEventResult) => {
+    result.infoList.forEach(changeInfo => {
+        const action: ZIMConversationChangeAction = changeInfo.action;
+        // Handle conversation changes based on action
+    });
+});
+```
+
+```typescript Legacy usage
+zim.on('conversationChanged', (zim: ZIM, result: ZIMConversationChangedEventResult) => {
+    result.infoList.forEach(changeInfo => {
+        const event: ZIMConversationEvent = changeInfo.event; // removed
+    });
+});
+```
+</CodeGroup>
+
+### TypeScript interface rename
+
+All TypeScript interfaces prefixed with `ZIMEventOf` in `ZIMEventHandler.ts` have been renamed according to a unified convention:
+
+**Naming rule**: `ZIMEventOf<Name>Result` → `ZIM<Name>EventResult`
+
+**Typical examples**:
+
+| Legacy name | New name |
+|---|---|
+| `ZIMEventOfConversationMessageReceivedResult` | `ZIMConversationMessageReceivedEventResult` |
+| `ZIMEventOfCallInvitationRejectedResult` | `ZIMCallInvitationRejectedEventResult` |
+| `ZIMEventOfCallInvitationAcceptedResult` | `ZIMCallInvitationAcceptedEventResult` |
+| `ZIMEventOfCallInviteesAnsweredTimeoutResult` | `ZIMCallInviteesAnsweredTimeoutEventResult` |
+
+<Note title="Impact scope">
+
+This change is **transparent to most developers and requires no code modification**. Reason: The callback parameter type of `zim.on(eventName, callback)` is automatically inferred by TypeScript based on the event name, no need to explicitly reference these interface names.
+
+Only when you have **explicitly annotated** `ZIMEventOf*` type names in your code will TypeScript compilation errors occur. Just rename the types according to the table above.
+</Note>
+
+### Enum value rename
+
+#### ZIMGroupMessageNotificationStatus
+
+`ZIMGroupMessageNotificationStatus.Disturb` has been renamed to `ZIMGroupMessageNotificationStatus.DoNotDisturb`. Please check and replace all references in your code.
+
+<CodeGroup>
+```typescript New usage
+const status = ZIMGroupMessageNotificationStatus.DoNotDisturb;
+```
+
+```typescript Legacy usage
+const status = ZIMGroupMessageNotificationStatus.Disturb; // renamed to DoNotDisturb
+```
+</CodeGroup>
+
+- - -
+
 ## Upgrade Guide for 2.28.0
 
 <Warning title="Warning">
