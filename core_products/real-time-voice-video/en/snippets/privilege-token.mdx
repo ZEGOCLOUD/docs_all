@@ -1,0 +1,118 @@
+To further improve security, the Privilege Token exposes two privilege bits for Room ID and Stream ID, allowing verification of the Room ID for login and Stream ID for publishing. In this case, the "payload" field needs to be generated according to the following privilege bit verification rules:
+
+| payload Field | Type | Required | Description |
+|------|------|------|------|
+| room_id | string | Yes | Room ID, used for strong verification of the room ID involved in the API calls |
+| privilege | object | Yes | Privilege bit switch list; the key is the privilege type (1 for login, 2 for publish), and the value indicates whether the privilege is granted (1 for granted, 0 for denied) |
+| stream_id_list | string[] \| null | No | Stream ID list, used for strong verification of publishable stream IDs. If null, stream ID verification is not performed |
+
+**privilege field examples:**
+
+| Token Generation Scenario | privilege Value |
+|------|------|
+| The token only allows room login, not publishing | \{"1": 1, "2": 0\} |
+| The token allows both room login and publishing | \{"1": 1, "2": 1\} |
+| The token does not allow room login or publishing | \{"1": 0, "2": 0\} |
+
+<CodeGroup>
+```typescript title="Payload type definition for Privilege Token"
+type RtcRoomPayload = {
+    /**
+     * Room ID (required); used for strong verification of the room ID
+     */
+    room_id: string;
+    /**
+     * Privilege bit switch list; used for strong verification of API operation permissions
+     * privilege field key values:
+     *   1 - Login privilege (loginRoom)
+     *   2 - Publish privilege (publishStream)
+     * privilege field values:
+     *   1 - Granted
+     *   0 - Denied
+     */
+    privilege: {
+        1?: 0 | 1;
+        2?: 0 | 1;
+        [key: number]: 0 | 1;
+    };
+    /**
+     * Stream list; used for strong verification of stream IDs; can be null or string[]
+     * If null, stream ID verification is not performed
+     * If string[], strong verification is performed on stream IDs. A malicious user with a publishable token cannot publish if the stream ID does not match.
+     */
+    stream_id_list: string[] | null;
+};
+```
+```json title="Payload parameter example for Privilege Token"
+{
+    "room_id": "your_room_id", // Perform fine-grained privilege verification on this room ID
+    "privilege": {
+        "1": 1, // Allow using this token to log in to the room
+        "2": 1 // Allow using this token to publish streams
+    },
+    "stream_id_list": ["your_stream_id"] // This token can only publish streams named your_stream_id
+}
+```
+```go title="Sample code for generating Privilege Token"
+package main
+import (
+    "encoding/json"
+    "fmt"
+    "github.com/zegoim/zego_server_assistant/token/go/src/token04"
+)
+/*
+Privilege token generation example code
+*/
+//Token business extension: Privilege authentication attributes
+type RtcRoomPayLoad struct {
+    RoomId       string      `json:"room_id"`        //Room ID (required); used for strong verification of the room ID
+    Privilege    map[int]int `json:"privilege"`      //Privilege bit switch list; used for strong verification of API operation permissions
+    StreamIdList []string    `json:"stream_id_list"` //Stream list; used for strong verification of stream IDs; can be empty, if empty, stream ID verification is not performed
+}
+func main() {
+    var appId uint32 = 1                               // Digital ID assigned by Zego, unique identifier for each developer
+    roomId := "demo"                                   // Room ID
+    userId := "demo"                                   // User ID
+    serverSecret := "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" // Key for AES encryption when generating the token
+    var effectiveTimeInSeconds int64 = 3600            // Token effective duration, unit: seconds
+
+    //Refer to github.com/zegoim/zego_server_assistant/token/go/src/token04/token04.go for definitions
+    ////Privilege bit definitions
+    //const (
+    //	PrivilegeKeyLogin   = 1 // Login privilege bit authentication
+    //	PrivilegeKeyPublish = 2 // Publish privilege bit authentication
+    //)
+    ////Privilege switch definitions
+    //const (
+    //	PrivilegeEnable     = 1 // Privilege granted
+    //	PrivilegeDisable    = 0 // Privilege denied
+    //)
+    //Business privilege authentication configuration, multiple privilege bits can be configured
+    privilege := make(map[int]int)
+    privilege[token04.PrivilegeKeyLogin] = token04.PrivilegeEnable    // Has room login privilege
+    privilege[token04.PrivilegeKeyPublish] = token04.PrivilegeDisable // No publish privilege
+    //Token business extension configuration
+    payloadData := &RtcRoomPayLoad{
+	RoomId:       roomId,
+	Privilege:    privilege,
+	StreamIdList: nil,
+    }
+    payload, err := json.Marshal(payloadData)
+    if err != nil {
+	fmt.Println(err)
+	return
+    }
+    //Generate token
+    token, err := token04.GenerateToken04(appId, userId, serverSecret, effectiveTimeInSeconds, string(payload))
+    if err != nil {
+	fmt.Println(err)
+	return
+    }
+    fmt.Println(token)
+}
+```
+</CodeGroup>
+
+<Warning title="Note">
+When generating a Privilege Token, you must pass in "RoomId".
+</Warning>

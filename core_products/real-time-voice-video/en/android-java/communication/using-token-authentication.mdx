@@ -6,85 +6,110 @@ date: '2026-03-06'
 
 ---
 
-
 ## Introduction
 
-<Video src="https://www.youtube.com/embed/CuRq8wucobU"/>
-
-To avoid unauthorized service access or operations, ZEGOCLOUD uses digital Tokens to verify user identity, control and validate user privileges. You will need to pass a Token when you log in to a room. 
-
-Currently, ZEGOCLOUD supports validating the following: 
-- **User identity**: check users' identity by validating the Token.
-- **User privileges**: 
-    - Room login privilege: check users' privilege to log in to a room by validating the room ID contained in the Token.
-    - Stream publishing privilege: check users' privilege to publish streams in a room by validating the ID of the published stream contained in the Token.
+Authentication is the process of verifying whether a user has permission to access the system, to avoid security risks caused by missing or improper access control. ZEGO authenticates users through Token (including Basic Token and Privilege Token).
 
 
-To improve business security, we recommend you enable the room login and stream publishing privilege validation for all scenarios. In particular: 
-
-- In cases where your app provides different types of rooms dedicated to different users, such as general rooms and member-only rooms, it is necessary to validate a user's privilege to enter a room.
-- In a voice chat room, it is necessary to prevent users who are not on the speaker seats from speaking in the room. 
-- In voice games such as Werewolf, it is necessary to prevent the scenario that when the app is hacked, the hacker can use different user IDs to log in to the same room to cheat in the game. 
+|Authentication Method|Description|Use Cases|
+|-|-|-|
+|[Basic Token](/real-time-video-android-java/communication/using-token-authentication)|Developers must include a Token parameter when logging into a room to verify user legitimacy.|Basic Token is the fundamental capability of Token, used for simple permission verification scenarios. In most cases, generating this Token is sufficient.|
+|[Privilege Token](/real-time-video-android-java/communication/using-token-authentication)|To further improve security, Room ID and Stream ID privilege bits are exposed, allowing verification of the Room ID for login and Stream ID for publishing.|Common use cases for Room ID and Stream ID privilege bits include:<ul><li>Distinguishing between regular and premium rooms, requiring control over non-premium users entering premium rooms.</li><li>In voice chat rooms or live streaming shows, ensuring that publishing users match on-mic users to prevent "ghost mic" phenomenon, where users hear audio from someone not on-mic.</li><li>In speaking games like Werewolf, preventing the app from being cracked by hackers who could log in with other user IDs to the same room and access game information for cheating, affecting normal users' experience.</li></ul>|
 
 
 ## Prerequisites
 
-
-Before you start to implement user privilege authentication in your app, make sure you complete the following steps:
-
-1. If you need the Room ID and Published stream ID authentication feature, contact ZEGOCLOUD Technical Support to enable it. 
-
-2. Integrate the Video Call SDK and implement the basic video feature. For details, refer to [Quick start](!Quick_start_Integrate_Implementation).
-
-
-## Understand the process
-
-
-Your app clients request Tokens from your app server and provide the Token for privilege validation when logging in to a room. 
-
-The following diagram shows the process of room login privilege validation:
-
-
-<img src="https://doc-media.zego.im/sdk-doc/doc/video/zegocloud/KeyConceptIntro-Token-flowchart.jpg" />
-
-
-1. Your app client requests a Token from your app server.
-2. Your app server generates a Token and passes it to the client.
-3. Your app client logs in to a room with userID, roomID, and the Token.
-4. The ZEGOCLOUD SDK sends the Token to the ZEGO server for validation.
-5. The ZEGOCLOUD server returns the validation result to the ZEGO Express SDK.
-6. The ZEGOCLOUD SDK returns the validation result to the app client. If the validation passes, the user logs in to the room successfully; otherwise, the login fails.
-
-
-
-## Get the AppID and ServerSecret
-
-Go to [ZEGOCLOUD Admin Console](https://console.zegocloud.com) to get the App ID and ServerSecret of your project. 
-
-
-
-
-## Generate a Token on your app server (recommended)
-
-After getting your AppID and ServerSecret, you can define the validation rules on your app server or client based on your business requirements. 
-
-Upon request from your app clients, your app server generates Tokens and sends the Tokens to the corresponding app clients. 
-
-ZEGOCLOUD provides an open-source [Token generator](https://github.com/ZEGOCLOUD/zego_server_assistant) plug-in on GitHub, which you can use to generate Tokens on your app server using different programming languages such as Go, C++, Java, Python, PHP,.NET, and Node.js.
-
-Currently, the Token generator we provided supports generating the following two Tokens:
-
-- **User identity Token**: to check user identity, you can pass null to the `payload` field.
-- **User privilege Token**: to check user privileges by validating the room ID and the ID of the published stream, the `payload` field needs to be generated based on the following validation rules:
-    - Validate room login privilege only: to check users' privilege to log in to a room, but not to check their privilege to publish streams in a room.
-    - Validate stream publishing privilege only: to check users' privilege to publish streams in a room, but not to check their privilege to log in to a room.
-    - Validate both room login and stream publishing privileges: to check users' privilege to log in to a room and also their privilege to publish streams in a room.
-
 <Warning title="Warning">
-
-- For business security, you must generate Tokens on your app server; Otherwise, there is a risk of ServerSecret being stolen.
-- For the ZEGO Express SDK 2.17.0 or later, use the `token04` of the [Token generator](https://github.com/ZEGOCLOUD/zego_server_assistant) to generate a Token.
+- Only ZEGO Express SDK version 2.17.0 and later supports Token authentication as described in this document.
+- If you have integrated a ZEGO Express SDK version earlier than 2.17.0 (using AppSign authentication) and want to upgrade to version 2.17.0 with Token authentication, please refer to the [How to upgrade from AppSign authentication to Token authentication](/faq/express-token-upgrade) document for more information about AppSign and Token authentication.
 </Warning>
+
+
+## Process Overview
+
+#### Scenario 1: Login Room Scenario
+
+When using Token authentication, developers need to generate a Token first, then carry the Token to log in to a room. The ZEGO server verifies users with the Token.
+
+The following describes the process using Token to determine whether a user can log in to a room:
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant DevServer
+    participant ZEGOSDK
+    participant ZEGOServer
+
+    Client->>DevServer: 1 Request Token
+    DevServer-->>Client: 2 Generate and return Token
+    Client->>ZEGOSDK: 3 Login to room with userID, roomID, and Token
+    ZEGOSDK->>ZEGOServer: 4 Verify Token
+    ZEGOServer-->>ZEGOSDK: 5 Verification passed
+    ZEGOSDK-->>Client: 6 Room login successful
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/token_uml.png" /></Frame>
+*/}
+
+1. The client initiates a Token request.
+2. The Token is generated on the developer's server and returned to the client.
+3. The client carries the obtained Token along with userID and roomID to log in to the corresponding room.
+4. The ZEGO SDK automatically sends the Token to the ZEGO server for verification.
+5. The ZEGO server returns the verification result to the ZEGO SDK.
+6. The ZEGO SDK returns the verification result directly to the client. Clients without permission will fail to log in.
+
+#### Scenario 2: Login to a Large-Scale Audio/Video Range Scene
+
+ <Accordion title="Generate Token and login to a large-scale audio/video range scene" defaultOpen="false">
+When using Token authentication, developers need to generate a Token first, then carry the Token to log in to a scene. The ZEGO server verifies users with the Token.
+
+The following describes the process using Token to determine whether a user can log in to a scene:
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant DevServer
+    participant ZEGOSDK
+    participant ZEGOServer
+    Client->>DevServer: 1 Request Token
+    DevServer-->>Client: 2 Generate and return Token
+    Client->>ZEGOSDK: 3 Login to scene with userID, sceneID, and Token
+    ZEGOSDK->>ZEGOServer: 4 Verify Token
+    ZEGOServer-->>ZEGOSDK: 5 Verification passed
+    ZEGOSDK-->>Client: 6 Scene login successful
+```
+{/*
+<Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/QuickStart/token_rangescene_uml.png" /></Frame>
+*/}
+
+1. The client initiates a Token request.
+2. The Token is generated on the developer's server and returned to the client.
+3. The client carries the obtained Token along with userID and sceneID to log in to the corresponding scene.
+4. The ZEGO SDK automatically sends the Token to the ZEGO server for verification.
+5. The ZEGO server returns the verification result to the ZEGO SDK.
+6. The ZEGO SDK returns the verification result directly to the client. Clients without permission will fail to log in.
+</Accordion>
+
+
+## Generate and Use Token
+
+This section describes in detail how developers can generate Tokens on the server, how to use Tokens, and how to handle Token expiration.
+
+### 1 Get AppID and ServerSecret
+
+To generate a Token, you need the unique identifier AppID and the ServerSecret of your project. Please obtain them from the "Project Information" section in [Console - Project Management](/console/project-info).
+
+After obtaining the AppID and ServerSecret, developers can generate Tokens on their server according to their business needs. The client sends a Token request to the developer's server, and the developer's server generates the Token and returns it to the client.
+
+
+
+### 2 Generate Token on the Server
+
+import GenerateTemporaryToken from '/snippets/common/en/token/generate-temporary-token.mdx'
+
+<GenerateTemporaryToken />
+
+ZEGO provides an open-source zego_server_assistant plugin on GitHub/Gitee. Please use the "token04" version in the plugin to generate Tokens. The plugin supports Go, C++, Java, Objective-C, Python, PHP, .NET, and Node.js:
 
 <table>
   <tbody><tr>
@@ -154,118 +179,463 @@ Currently, the Token generator we provided supports generating the following two
   </tr>
 </tbody></table>
 
+Taking Go as an example, developers can follow these steps to use zego_server_assistant to generate a Token:
 
-
-Take Go language as an example, you can do the following steps to generate a Token：
-
-1. go get github.com/ZEGOCLOUD/zego_server_assistant.
-2. **import** `github.com/ZEGOCLOUD/zego_server_assistant/token/go/src/token04`.
-3. Call the `GenerateToken04` method to generate a Token.
-
-The following code shows how to generate a user identity Token:
-
-
-```go
-package main
-
-import (
-    "fmt"
-    "github.com/ZEGOCLOUD/zego_server_assistant/token/go/src/token04"
-)
-
-/*
-Sample code for generating a user identity Token: 
-*/
-
-func main() {
-    var appId uint32 = 1
-    userId := "demo"
-    serverSecret := "fa94dd0f974cf2e293728a526b028271"
-    var effectiveTimeInSeconds int64 = 3600
-    var payload string = ""
-
-    token, err := token04.GenerateToken04(appId, userId, serverSecret, effectiveTimeInSeconds, payload)
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
-    fmt.Println(token)
-}
-```
-
-The following code shows how to generate a user privilege Token:
-
-```go
-package main
-
-import (
-    "encoding/json"
-    "fmt"
-    "github.com/ZEGOCLOUD/zego_server_assistant/token/go/src/token04"
-)
-
-/*
-Sample code for generating a user privilege Token:
- */
-
-
-//Token-based business logic: RTC room-related authentication property 
-type RtcRoomPayLoad struct {
-    RoomId       string      `json:"room_id"`           //Room ID: used to to validate the room.
-    Privilege    map[int]int `json:"privilege"`         //User privilege authentication control list: used to validate user privileges 
-    StreamIdList []string    `json:"stream_id_list"`    //Stream list: used to validate the stream. This value can be null, and no stream will be validated if it is null.
-}
-
-func main() {
-    var appId uint32 = 1
-    roomId := "demo"
-    userId := "demo"
-    serverSecret := "fa94dd0f974cf2e293728a526b028271"
-    var effectiveTimeInSeconds int64 = 3600
-    privilege := make(map[int]int)
-    privilege[token04.PrivilegeKeyLogin] = token04.PrivilegeEnable
-    privilege[token04.PrivilegeKeyPublish] = token04.PrivilegeEnable
-
-    payloadData := &RtcRoomPayLoad{
-        RoomId:       roomId,
-        Privilege:    privilege,
-        StreamIdList: nil,
-    }
-
-    payload, err := json.Marshal(payloadData)
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
-
-    token, err := token04.GenerateToken04(appId, userId, serverSecret, effectiveTimeInSeconds, string(payload))
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
-    fmt.Println(token)
-}
-```
-
-## How to get a temporary Token
-
-To make it easier for you to try and test the user authentication feature, [ZEGOCLOUD Admin Console](https://console.zegocloud.com) provides a tool for generating temporary Tokens, which you can use directly in a testing environment. In production, you must generate Tokens on your app server.
-
-
-
-## Generate a Token on the client
-
-
-If you can't generate the Token on your app server, you can try to generate it on your client. 
+1. Use the command `git clone https://github.com/zegoim/zego_server_assistant` to obtain the dependency package.
+2. In your code, import the plugin via `import "github.com/zegoim/zego_server_assistant/token/go/src/token04"`.
+3. Call the GenerateToken04 method provided by the plugin to generate a Token.
 
 
 <Warning title="Warning">
 
-When your app is ready to go live, remember not to generate the Token on your client; Otherwise, there is a risk of the ServerSecret being exposed.
+
+The Range Scene module does not yet support Privilege Token.
 </Warning>
 
-ZEGOCLOUD provides an open-source [Token generator](https://github.com/ZEGOCLOUD/zego_server_assistant) plug-in on GitHub, which you can use to generate Tokens on your app server using different programming languages such as C++ and Java.
+<a id="tab_item1"></a>
+<Tabs>
+<Tab title="Generate Basic Token">
+When generating a Basic Token, pass an empty string for the "payload" field. The sample code is as follows:
 
+```go
+package main
+import (
+    "fmt"
+    "github.com/zegoim/zego_server_assistant/token/go/src/token04"
+)
+/*
+Sample code for generating a Basic Token
+*/
+func main() {
+    var appId uint32 = 1    // Numeric ID assigned by Zego, unique identifier for each developer
+    userId := "demo"   // User ID
+    serverSecret := "fa94dd0f974cf2e293728a526b028271"  // AES encryption key used when obtaining the token
+    var effectiveTimeInSeconds int64 = 3600    // Valid duration of the token, in seconds
+    var payload string = ""   // Token authentication extension, leave empty for Basic Token
+    // Generate token
+    token, err := token04.GenerateToken04(appId, userId, serverSecret, effectiveTimeInSeconds, payload)
+    if err != nil {
+	fmt.Println(err)
+	return
+    }
+    fmt.Println(token)
+}
+```
+</Tab>
+<Tab title="Generate Privilege Token">
+
+import PrivilegeContent from '/core_products/real-time-voice-video/en/snippets/privilege-token.mdx'
+
+<PrivilegeContent />
+
+</Tab>
+</Tabs>
+
+<Warning title="Warning">
+
+When running the Token generation Java source code, if you encounter a "java.security.InvalidKeyException:illegal Key Size" exception, please refer to the [related FAQ document](/faq/java-token-key-size-error) for a solution.
+</Warning>
+
+
+### 3 Use Token
+
+#### Scenario 1: Login Room Scenario
+
+The user carries the obtained Token along with user and roomID information to log in to the corresponding room through the [loginRoom](@loginRoom) interface.
+
+<Warning title="Warning">
+
+The userID used when calling the [loginRoom](@loginRoom) interface to log in must be the same as the userID used when "Generating Token on the Server".
+</Warning>
+
+:::if{props.platform="android|undefined"}
+```java
+String roomID = "xxx" // The ID of the room to log in to
+ZegoUser user = new ZegoUser("xxxx");
+ZegoRoomConfig config = new ZegoRoomConfig();
+config.token = "xxxxxxxxxx"; // Obtain from the developer's server
+engine.loginRoom(roomID, user, config);
+```
+:::
+
+:::if{props.platform="oc"}
+```objc
+NSString *roomID = @"xxx"; // The ID of the room to log in to
+ZegoUser *user = [ZegoUser userWithUserID:@"xxxx"];
+ZegoRoomConfig *config = [[ZegoRoomConfig alloc] init];
+config.token = @"xxxxxxxx"; // Obtain from the developer's server
+
+[[ZegoExpressEngine sharedEngine] loginRoom:roomID user:user config:config];
+```
+:::
+
+:::if{props.platform="cpp"}
+```cpp
+std::string roomID = 'xxx'; // The ID of the room to log in to
+ZegoUser user;
+user.userID = 'xxxx';
+user.userName = 'xxxx';
+ZegoRoomConfig config;
+config.token = 'xxxxxxxxxx' // Obtain from the developer's server
+engine->loginRoom(roomID, user, config);
+```
+:::
+
+:::if{props.platform="web"}
+```javascript
+let roomID = 'xxx' // The ID of the room to log in to
+let token = 'xxxxxxxxxx' // Obtain from the developer's server
+let user = {userID : 'xxxx'} // Unique user identifier in the room
+let loginResult = await zg.loginRoom(roomID, token, user) // Log in to the room
+```
+:::
+
+:::if{props.platform="c#"}
+```cs
+string roomID = "xxx"; // The ID of the room to log in to
+ZegoUser user = new ZegoUser();
+user.userID = "xxxx";
+user.userName = "xxxx";
+ZegoRoomConfig config = new ZegoRoomConfig();
+config.token = "xxxxxxxxxx"; // Obtain from the developer's server
+engine.LoginRoom(roomID, user, config);
+```
+:::
+
+:::if{props.platform="electron"}
+```js
+zgEngine.loginRoom('roomID', { userID: 'zego', userName: zego}, config = {token: 'xxxx'});
+```
+:::
+
+:::if{props.platform="flutter"}
+```dart
+var config = ZegoRoomConfig.defaultConfig();
+config.token = 'your_token';
+var user = ZegoUser('your_userID', 'your_userName');
+ZegoExpressEngine.instance.loginRoom('your_roomID', user, config: config);
+```
+:::
+
+:::if{props.platform="cocos"}
+```ts
+let roomConfig = new ZegoRoomConfig()
+roomConfig.token = 'xxxxxxxx' // Obtain from the developer's server
+
+// Log in to the room
+this.engine.loginRoom('your_room_id', new ZegoUser('user_id'), roomConfig)
+```
+:::
+
+:::if{props.platform="rn"}
+```javascript
+let roomID = "xxx" // The ID of the room to log in to
+let user = {userID: "xxxx", userName: "xxxx"};
+let roomConfig = {token: "xxxxxxxxxx"}; // Obtain from the developer's server
+ZegoExpressEngine.instance().loginRoom(roomID, user, config);
+```
+:::
+
+If developers need to modify privilege bits after logging in to a room, they can also call the [renewToken](@renewToken) interface to update the Token. After the update, it will affect the permission for the next room login and stream publishing. Previously successful room logins and stream publishing will not be affected.
+
+
+:::if{props.platform="android|undefined"}
+```java
+String token = getToken(); // Re-obtain Token from the developer's server
+engine.renewToken(roomID, token);
+```
+:::
+
+:::if{props.platform="oc"}
+```objc
+NSString *token = [MyToken getToken]; // Re-obtain Token from the developer's server
+[[ZegoExpressEngine sharedEngine] renewToken:token roomID:roomID];
+```
+:::
+
+:::if{props.platform="cpp"}
+```cpp
+std::string token = getToken(); // Re-obtain Token from the developer's server
+engine->renewToken(token);
+```
+:::
+
+:::if{props.platform="web"}
+```javascript
+let token = await getToken(); // Re-obtain Token from the developer's server
+zg.renewToken(token);
+```
+:::
+
+:::if{props.platform="c#"}
+```cs
+string token = getToken(); // Re-obtain Token from the developer's server
+engine.RenewToken(token);
+```
+:::
+
+:::if{props.platform="electron"}
+```js
+zgEngine.renewToken(roomID = 'roomID', token = 'xxxx');
+```
+:::
+
+:::if{props.platform="flutter"}
+```dart
+ZegoExpressEngine.instance.renewToken('your_roomID', 'new_token');
+```
+:::
+
+:::if{props.platform="cocos"}
+```ts
+let token = 'xxxxxxxx' // Re-obtain Token from the developer's server
+this.engine.renewToken('your_room_id', token)
+```
+:::
+
+:::if{props.platform="rn"}
+```javascript
+let token = getToken(); // Re-obtain Token from the developer's server
+ZegoExpressEngine.instance().renewToken(roomID, token);
+```
+:::
+
+#### Scenario 2: Login to a Large-Scale Audio/Video Range Scene
+
+<Accordion title="Use Token to login to a large-scale audio/video range scene" defaultOpen="false">
+The user carries the obtained Token along with user and sceneID information to log in to the corresponding scene.
+
+<Warning title="Warning">
+
+
+The userID used when calling the [loginScene](@loginScene) interface to log in must be the same as the userID used when "Generating Token on the Server".
+</Warning>
+
+:::if{props.platform="android|undefined"}
+```java
+long sceneID = 123L; // The ID of the scene to log in to
+ZegoUser user = new ZegoUser("xxxx");
+ZegoSceneParam config = new ZegoSceneParam();
+param.sceneID = sceneID;
+param.user = user;
+param.token = @"xxxxxxxx"; // Obtain from the developer's server
+
+rangeScene.loginScene(param, new IZegoRangeSceneLoginSceneCallback() {
+    @Override
+    public void onLoginSceneCallback(int errorCode, ZegoSceneConfig config) {
+    }
+});
+```
+:::
+
+:::if{props.platform="oc"}
+```objc
+long long sceneID = 123; // The ID of the scene to log in to
+ZegoUser *user = [ZegoUser userWithUserID:@"xxxx"];
+ZegoSceneParam *param = [[ZegoSceneParam alloc] init];
+param.sceneID = sceneID;
+param.user = user;
+param.token = @"xxxxxxxx"; // Obtain from the developer's server
+
+[rangeScene loginScene:param callback:^(int errorCode, ZegoSceneConfig * _Nonnull config) {}];
+```
+:::
+
+:::if{props.platform="cpp"}
+```cpp
+long long sceneID = 123; // The ID of the scene to log in to
+ZegoUser user;
+user.userID = 'xxxx';
+user.userName = 'xxxx';
+ZegoSceneParam param;
+param.sceneID = sceneID;
+param.user = user;
+param.token = @"xxxxxxxx"; // Obtain from the developer's server
+
+rangeScene->loginScene(param, [](int errorCode, const ZegoSceneConfig &config) {});
+```
+:::
+</Accordion>
+
+### 4 Token Expiration Handling
+
+<Warning title="Warning">
+
+Token expiration may cause issues such as abnormal publishing and playing. Please strictly follow the instructions below to handle expired Tokens promptly.
+</Warning>
+
+#### Scenario 1: Login Room Scenario
+
+30 seconds before Token expiration, the SDK will notify through the [onRoomTokenWillExpire](@onRoomTokenWillExpire) callback. After Token expiration, attempting to log in to a room will result in error code `1002078` (Token expired) received through `onDebugError` or `onRoomStateChanged`.
+
+After receiving the Token-about-to-expire callback or the Token expired error code, developers need to obtain a new valid Token from their server and call the SDK's [renewToken](@renewToken) interface to update the Token.
+
+If you have integrated **ZEGO Express SDK version 2.17.0 or later**, and do not call the [renewToken](@renewToken) interface to update the Token after it expires, the following behavior will occur when the permission expires:
+  - Users who have already logged in will not be kicked out of the room.
+  - Currently successful publishing and playing will not be affected. However, after stopping publishing, you will not be able to publish again unless you update the Token.
+
+
+<Note title="Note">
+ZEGO also provides another Token expiration handling mode, which can be configured by contacting ZEGO technical support:
+  - Users who have already logged in will be kicked out of the room, and they can only log in again after updating the Token.
+  - Currently successful publishing will be stopped.
+</Note>
+
+
+:::if{props.platform="android|undefined"}
+```java
+@Override
+public void onRoomTokenWillExpire(String roomID, int remainTimeInSecond){
+    String token = getToken(); // Re-obtain Token from the developer's server
+    engine.renewToken(roomID, token);
+}
+```
+:::
+
+:::if{props.platform="oc"}
+```objc
+- (void)onRoomTokenWillExpire:(int)remainTimeInSecond roomID:(NSString *)roomID {
+    NSString *token = [MyToken getToken]; // Re-obtain Token from the developer's server
+
+    [[ZegoExpressEngine sharedEngine] renewToken:token roomID:roomID];
+}
+```
+:::
+
+:::if{props.platform="cpp"}
+```cpp
+void onRoomTokenWillExpire(const std::string& /*roomID*/, int /*remainTimeInSecond*/) override {
+    std::string token = getToken(); // Re-obtain Token from the developer's server
+    engine->renewToken(roomID, token);
+}
+```
+:::
+
+:::if{props.platform="web"}
+```javascript
+zg.on('tokenWillExpire',(roomID: string)=>{
+    let token = await getToken(); // Re-obtain Token from the developer's server
+    zg.renewToken(token);
+});
+```
+:::
+
+:::if{props.platform="c#"}
+```cs
+void OnRoomTokenWillExpire(string roomID, int remainTimeInSecond){
+    string token = getToken(); // Re-obtain Token from the developer's server
+    engine.RenewToken(roomID, token);
+}
+```
+:::
+
+:::if{props.platform="electron"}
+```js
+zgEngine.on("onRoomTokenWillExpire", res=>
+{
+    zgEngine.renewToken(roomID = TheRoomID, token = 'xxxx');
+});
+```
+:::
+
+:::if{props.platform="flutter"}
+```dart
+ZegoExpressEngine.onRoomTokenWillExpire = (String roomID, int remainTimeInSecond) {
+    String token = getToken(); // Re-obtain Token from the developer's server
+    ZegoExpressEngine.instance.renewToken(roomID, token);
+  };
+```
+:::
+
+:::if{props.platform="cocos"}
+```ts
+onRoomTokenWillExpire(roomID: string, remainTimeInSecond: number): void {
+  let token = 'xxxxxxxx' // Re-obtain Token from the developer's server
+  this.engine.renewToken('your_room_id', token)
+}
+```
+:::
+
+:::if{props.platform="rn"}
+```javascript
+ZegoExpressEngine.instance().on("roomTokenWillExpire", (roomID, remainTimeInSecond)=>{
+    let token = getToken(); // Re-obtain Token from the developer's server
+    ZegoExpressEngine.instance().renewToken(roomID, token);
+});
+```
+:::
+
+#### Scenario 2: Range Scene Module
+
+<Accordion title="Token expiration handling in a large-scale audio/video range scene" defaultOpen="false">
+:::if{props.platform="oc"}
+30 seconds before Token expiration, the SDK will notify through the [rangeScene](/real-time-video-ios-oc/client-sdk/api-reference/class#rangescenetokenwillexpire-zegorangesceneeventhandler-class) callback. After Token expiration, attempting to log in to a room will result in error code `1002078` (Token expired) received through `onDebugError` or `onRoomStateChanged`.
+
+After receiving the Token-about-to-expire callback or the Token expired error code, developers need to obtain a new valid Token from their server and call the SDK's [renewToken](@renewToken) interface to update the Token. If not handled, the Token expiration mechanism is as follows:
+:::
+
+:::if{props.platform="android|undefined"}
+30 seconds before Token expiration, the SDK will notify through the [onSceneTokenWillExpire](@onSceneTokenWillExpire) callback. After Token expiration, attempting to log in to a room will result in error code `1002078` (Token expired) received through `onDebugError` or `onRoomStateChanged`.
+
+After receiving the Token-about-to-expire callback or the Token expired error code, developers need to obtain a new valid Token from their server and call the SDK's [renewToken](@renewToken) interface to update the Token. If not handled, the Token expiration mechanism is as follows:
+:::
+
+:::if{props.platform="cpp"}
+30 seconds before Token expiration, the SDK will notify through the [onSceneTokenWillExpire](@onSceneTokenWillExpire) callback. After Token expiration, attempting to log in to a room will result in error code `1002078` (Token expired) received through `onDebugError` or `onRoomStateChanged`.
+
+After receiving the Token-about-to-expire callback or the Token expired error code, developers need to obtain a new valid Token from their server and call the SDK's [renewToken](@renewToken) interface to update the Token. If not handled, the Token expiration mechanism is as follows:
+:::
+
+- Users who have already logged in will not be kicked out of the scene.
+- Currently successful publishing and playing will not be affected, but the user's next publishing or playing operation will be affected.
+
+
+
+:::if{props.platform="android|undefined"}
+```java
+public void onSceneTokenWillExpire(ZegoRangeScene rangeScene, int remainTimeInSecond) {
+    super.onSceneTokenWillExpire(rangeScene, remainTimeInSecond);
+    String token = getToken(); // Re-obtain Token from the developer's server
+    // Switch threads before calling renewToken
+    rangeScene.renewToken(token);
+}
+```
+:::
+
+:::if{props.platform="oc"}
+```objc
+- (void)rangeScene:(ZegoRangeScene *)rangeScene tokenWillExpire:(int)remainTimeInSecond {
+    NSString *token = [MyToken getToken]; // Re-obtain Token from the developer's server
+    // Switch threads before calling renewToken
+    [rangeScene renewToken:token];
+}
+```
+:::
+
+:::if{props.platform="cpp"}
+```cpp
+void RangeScene::onSceneTokenWillExpire(IZegoRangeScene *rangeScene, int remainTimeInSecond) {
+    std::string token = getToken(); // Re-obtain Token from the developer's server
+    // Switch threads before calling renewToken
+    rangeScene->renewToken(token);
+}
+```
+:::
+</Accordion>
+
+## Other
+
+<Accordion title="Generate and use Token on the client (not recommended)" defaultOpen="false">
+If you are unable to deliver Tokens from the server during development, you can temporarily generate Tokens using client-side code, and complete the integration with the server later.
+
+<Warning title="Warning">
+
+- Do not generate Tokens on the client when your app goes live, otherwise your ServerSecret will be exposed to risk.
+- For security, it is strongly recommended to generate Tokens on the server, otherwise there is a risk of ServerSecret being stolen.
+</Warning>
+
+
+The following table lists the language-specific reference information for generating Tokens on the client using the zego_server_assistant plugin:
 
 <table>
   <tbody><tr>
@@ -288,223 +658,20 @@ ZEGOCLOUD provides an open-source [Token generator](https://github.com/ZEGOCLOUD
   </tr>
 </tbody></table>
 
+To generate Tokens on the client, please refer to [Use Token](#3-use-token).
 
-## Use a Token 
+If the Token expires, please refer to [Token Expiration Handling](#4-token-expiration-handling).
+</Accordion>
 
+## API Reference
 
-When logging in to a room, you need to pass the Token, user, and roomID to the `loginRoom` method. Otherwise, the login will fail.
-
-<Warning title="Warning">
-
-The userID you used  for room login (`loginRoom`) must be the same with that of you used for generating Tokens. 
-</Warning>
-
-:::if{props.platform="android|undefined"}
-```java
-String roomID = "xxx" // The room ID of the room to log in to.
-ZegoUser user = new ZegoUser("xxxx");
-ZegoRoomConfig config = new ZegoRoomConfig();
-config.token = "xxxxxxxxxx"; // The Token you get from your app server. 
-engine.loginRoom(roomID, user, config);
-```
-:::
-
-:::if{props.platform="oc"}
-```objc
-NSString *roomID = @"xxx"; // The room ID of the room to log in to.
-ZegoUser *user = [ZegoUser userWithUserID:@"xxxx"];
-ZegoRoomConfig *config = [[ZegoRoomConfig alloc] init];
-config.token = @"xxxxxxxx"; // The Token you get from your app server. 
-
-[[ZegoExpressEngine sharedEngine] loginRoom:roomID user:user config:config];
-```
-:::
-
-:::if{props.platform="swift"}
-```swift
-let roomID: String = "xxx" // The room ID of the room to log in to.
-let user = ZegoUser(userID: "xxxx")
-let config = ZegoRoomConfig()
-config.token = "xxxxxxx" // The Token you get from your app server.
-ZegoExpressEngine.shared().loginRoom(roomID, user: user, config: config)
-```
-:::
-
-:::if{props.platform="cpp"}
-```cpp
-std::string roomID = 'xxx'; // The room ID of the room to log in to.
-ZegoUser user;
-user.userID = 'xxxx';
-user.userName = 'xxxx';
-ZegoRoomConfig config;
-config.token = 'xxxxxxxxxx' // The Token you get from your app server. 
-engine->loginRoom(roomID, user, config);
-```
-:::
-
-:::if{props.platform="web"}
-```javascript
-let roomID = 'xxx' // The room ID of the room to log in to.
-let token = 'xxxxxxxxxx' // The Token you get from your app server. 
-let user = {userID : 'xxxx'} // The unique identifier of the user.
-let loginResult = await zg.loginRoom(roomID, token, user) //login room
-```
-:::
-
-:::if{props.platform="c#"}
-```c#
-string roomID = "xxx"; // roomID to login
-ZegoUser user = new ZegoUser();
-user.userID = "xxxx";
-user.userName = "xxxx";
-ZegoRoomConfig config = new ZegoRoomConfig();
-config.token = "xxxxxxxxxx"; // Token from your app server
-engine.LoginRoom(roomID, user, config);
-```
-:::
-
-:::if{props.platform="electron"}
-```js
-zgEngine.loginRoom('roomID', { userID: 'zego', userName: zego}, config = {token: 'xxxx'});
-```
-:::
-
-If you need to modify the stream publishing privilege of a user after the user logged in to a room, call the [`renewToken`](@renewToken) method to renew the Token. The updated privileges will take effect for the next stream publishing, but will not affect the current streams being published (if any).
+| Method | Description |
+|-------|--------|
+| [loginRoom](@loginRoom) | Login to a room |
+| [renewToken](@renewToken) | Update Token |
+| [onRoomTokenWillExpire](@onRoomTokenWillExpire) | Token expiration callback |
 
 
-:::if{props.platform="android|undefined"}
-```java
-String token = getToken(); // Request a new Token from app server.
-engine.renewToken(roomID, token);
-```
-:::
+## Related Documents
 
-:::if{props.platform="oc"}
-```objc
-NSString *token = [MyToken getToken]; // Request a new Token from app server.
-[[ZegoExpressEngine sharedEngine] renewToken:token roomID:roomID];
-```
-:::
-:::if{props.platform="swift"}
-```swift
-let token: String = MyToken.getToken()// Request a new Token from app server.
-ZegoExpressEngine.shared().renewToken(token, roomID: roomID)
-```
-:::
-
-:::if{props.platform="cpp"}
-```cpp
-std::string token = getToken(); // Request a new Token from app server.
-[[ZegoExpressEngine sharedEngine] renewToken:
-engine->renewToken(token);
-```
-:::
-
-:::if{props.platform="web"}
-```javascript
-let token = await getToken(); // Request a new Token from app server.
-zg.renewToken(token); 
-```
-:::
-
-:::if{props.platform="c#"}
-```c#
-string token = "xxxxxxxxxx"; // Get a new token
-engine.RenewToken(token);
-```
-:::
-
-:::if{props.platform="electron"}
-```js
-zgEngine.renewToken(roomID = 'roomID', token = 'xxxx');
-```
-:::
-## Renew a Token
-
-30 seconds before a Token expires, the SDK sends out a notification through the {props.platform === "web" ? <a target="_blank" href="@tokenWillExpire">tokenWillExpire</a> : <a target="_blank" href="@onRoomTokenWillExpire">onRoomTokenWillExpire</a>} callback.
-
-Upon receiving this callback, you need to get a new Token from your app server first, and then pass the new token to the [renewToken](@renewToken) method. 
-If the Token is not renewed, different SDK versions handle the Token expiration differently:
-
-
-- If the version of the ZEGO Express SDK you integrated is **2.8.0 - 2.12.0**, and when your Token is expired: 
-    - Users won't be kicked out of the room.
-    - The streams currently being published will not be affected. However, it will affect the user's next stream publishing operation.
-    
-- If the version of the ZEGO Express SDK you integrated is **2.13.0 or later**, and when your Token is expired: 
-    - When the Token has expired, you can contact Technical Support for configuring additional privilege requirements. After configured:
-        - Users will be kicked out of the room, and can't log in to the room again.
-        - The streams currently being published will be stopped. And the next stream publishing operation can't be started.
-    - When the Token has expired, and you didn't contact Technical Support for configuring additional privilege requirements:
-        - Users won't be kicked out of the room.
-        - The streams currently being published will not be affected. However, it will affect the user's next stream publishing operation.
-
-
-<Note title="Note">
-
-If you enabled the room login privilege authentication (by validating the roomID), you must pass a new Token when logging in to a room. 
-</Note>
-
-:::if{props.platform="android|undefined"}
-```java
-@Override
-public void onRoomTokenWillExpire(String roomID, int remainTimeInSecond){
-    String token = getToken(); // Request a new Token from app server.
-    engine.renewToken(roomID, token);
-}
-```
-:::
-:::if{props.platform="oc"}
-```objc
-- (void)onRoomTokenWillExpire:(int)remainTimeInSecond roomID:(NSString *)roomID {
-    NSString *token = [MyToken getToken]; // Request a new Token from app server.
-    
-    [[ZegoExpressEngine sharedEngine] renewToken:token roomID:roomID];
-}
-```
-:::
-
-:::if{props.platform="swift"}
-```swift
-func onRoomTokenWillExpire(_ remainTimeInSecond: Int32, roomID: String) {
-      let token:String = MyToken.getToken()// Request a new Token from app server.
-      ZegoExpressEngine.shared().renewToken(token, roomID: roomID)
-}
-```
-:::
-
-:::if{props.platform="cpp"}
-```cpp
-void onRoomTokenWillExpire(const std::string& /*roomID*/, int /*remainTimeInSecond*/) override {
-    std::string token = getToken(); // Request a new Token from app server.
-    engine->renewToken(roomID, token);
-}
-```
-:::
-
-:::if{props.platform="web"}
-```javascript
-zg.on('tokenWillExpire',(roomID: string)=>{
-    let token = await getToken(); // Request a new token from app server.
-    zg.renewToken(token);
-});
-```
-:::
-
-:::if{props.platform="c#"}
-```c#
-void OnRoomTokenWillExpire(string roomID, int remainTimeInSecond){
-    string token = "xxxxxxxxxx"; // Get a new token
-    engine.RenewToken(roomID, token);
-}
-```
-:::
-
-:::if{props.platform="electron"}
-```js
-zgEngine.on("onRoomTokenWillExpire", res=>
-{
-    zgEngine.renewToken(roomID = TheRoomID, token = 'xxxx');
-});
-```
-:::
+[How to prevent ghost mic or room bombing in audio/video interactions?](/faq/room-bombing-prevention)
