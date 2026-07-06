@@ -8,6 +8,207 @@ articleID: 12817
 
 本文介绍 ZIM Web/小程序 SDK 版本升级时的一些说明和注意事项。
 
+## 3.0.0 升级指南
+
+<Warning title="注意">
+
+本次版本（3.0.0）移除了部分超过 1 年的接口，同时对部分事件新增了废弃标记。请参考以下说明完成迁移。
+</Warning>
+
+### 废弃接口删除
+
+#### ZIM 初始化接口（create）
+
+废弃的旧版 `create(appID: number)` 接口已被移除，请使用接受 [ZIMAppConfig](@ZIMAppConfig) 参数的 [create](@create) 接口代替。
+
+<CodeGroup>
+```typescript 新版本用法
+const appConfig: ZIMAppConfig = {
+    appID: 12345678,
+    appSign: 'appSign',
+};
+ZIM.create(appConfig);
+```
+
+```typescript 旧版本用法
+// 旧版接口已移除
+ZIM.create(12345678);
+```
+</CodeGroup>
+
+#### ZIM 登录接口（login）
+
+废弃的旧版 `login(userInfo: ZIMUserInfo, token: string)` 接口已被移除，请使用接受 `userID` 和 [ZIMLoginConfig](@ZIMLoginConfig) 参数的 [login](@login) 接口代替。
+
+<CodeGroup>
+```typescript 新版本用法
+const loginConfig: ZIMLoginConfig = {
+    userName: 'userName',
+    token: '', // 若使用 Token 鉴权，请填写 Token
+    isOfflineLogin: false,
+};
+await zim.login('userID', loginConfig);
+```
+
+```typescript 旧版本用法
+// 旧版接口已移除
+const userInfo: ZIMUserInfo = { userID: 'userID', userName: 'userName' };
+await zim.login(userInfo, '');
+```
+</CodeGroup>
+
+#### ZIM 消息接收回调接口
+
+在 2.18.0 中已废弃的 `receivePeerMessage`、`receiveRoomMessage`、`receiveGroupMessage` 事件在本版本中正式移除，建议迁移至 [messageReceived](@messageReceived)。
+
+<CodeGroup>
+```typescript 新版本用法
+zim.on('messageReceived', (zim: ZIM, result: ZIMMessageReceivedEventResult) => {
+    const { messageList, info, conversationID, conversationType } = result;
+    // 根据 conversationType 处理不同类型会话的消息
+});
+```
+
+```typescript 旧版本用法（已移除）
+zim.on('receivePeerMessage', (zim: ZIM, data: ZIMEventOfReceiveConversationMessageResult) => {});
+zim.on('receiveRoomMessage', (zim: ZIM, data: ZIMEventOfReceiveConversationMessageResult) => {});
+zim.on('receiveGroupMessage', (zim: ZIM, data: ZIMEventOfReceiveConversationMessageResult) => {});
+```
+</CodeGroup>
+
+#### ZIM 呼叫邀请回调接口
+
+旧版 `callInvitationRejected`、`callInvitationAccepted`、`callInviteesAnsweredTimeout` 事件已被移除，请使用 [callUserStateChanged](@callUserStateChanged) 事件代替。`callInvitationTimeout` 事件的回调参数也已更新，新增了 `ZIMCallInvitationTimeoutInfo` 参数。
+
+<CodeGroup>
+```typescript 新版本用法
+zim.on('callUserStateChanged', (zim: ZIM, result: ZIMCallUserStateChangedEventResult) => {
+    const { callUserList, callID } = result;
+    // callUserList 包含状态变更的用户列表
+    // 可统一处理接受、拒绝、超时等状态变更
+});
+```
+
+```typescript 旧版本用法
+// 旧版回调已移除，请迁移到 callUserStateChanged
+zim.on('callInvitationRejected', (zim: ZIM, data: ZIMEventOfCallInvitationRejectedResult) => {});
+zim.on('callInvitationAccepted', (zim: ZIM, data: ZIMEventOfCallInvitationAcceptedResult) => {});
+zim.on('callInviteesAnsweredTimeout', (zim: ZIM, data: ZIMEventOfCallInviteesAnsweredTimeoutResult) => {});
+```
+</CodeGroup>
+
+#### importLocalMessages / exportLocalMessages 接口删除
+
+`importLocalMessages` 和 `exportLocalMessages` 接口已在 3.0.0 版本中暂时移除，且暂无替代接口。后续版本将重新开放该功能，请关注 SDK 更新日志。
+
+### 新增废弃接口（建议迁移）
+
+#### ZIM 消息接收回调接口
+
+`peerMessageReceived`、`roomMessageReceived`、`groupMessageReceived` 事件在本版本中新增废弃标记，当前仍可正常使用，但建议尽快迁移至 [messageReceived](@messageReceived)。
+
+<CodeGroup>
+```typescript 建议使用（新事件）
+zim.on('messageReceived', (zim: ZIM, result: ZIMMessageReceivedEventResult) => {
+    const { messageList, info, conversationID, conversationType } = result;
+    // 根据 conversationType 处理不同类型会话的消息
+});
+```
+
+```typescript 废弃事件（仍可用，建议迁移）
+zim.on('peerMessageReceived', (zim: ZIM, data: ZIMConversationMessageReceivedEventResult) => {});
+zim.on('roomMessageReceived', (zim: ZIM, data: ZIMConversationMessageReceivedEventResult) => {});
+zim.on('groupMessageReceived', (zim: ZIM, data: ZIMConversationMessageReceivedEventResult) => {});
+```
+</CodeGroup>
+
+#### ZIMGroupConversation 废弃
+
+`ZIMGroupConversation` 在 3.0.0 中已被废弃，其中的 `isDisabled` 和 `mutedExpiredTime` 字段请通过基类 `ZIMConversation` 的对应属性替代：
+
+| ZIMGroupConversation（已废弃） | ZIMConversation（替代属性） |
+|---|---|
+| `isDisabled` | `isConversationDisabled` |
+| `mutedExpiredTime` | `selfMutedExpiredTime` |
+
+<CodeGroup>
+```typescript 新版本用法
+const isDisabled: boolean = conversation.isConversationDisabled;
+const mutedExpiredTime: number = conversation.selfMutedExpiredTime;
+```
+
+```typescript 旧版本用法（已废弃）
+const groupConversation = conversation as ZIMGroupConversation;
+const isDisabled: boolean = groupConversation.isDisabled;
+const mutedExpiredTime: number = groupConversation.mutedExpiredTime;
+```
+</CodeGroup>
+
+### 字段变更
+
+#### ZIMConversationChangeInfo 字段变更
+
+`ZIMConversationChangeInfo` 中的 `event` 属性（类型 `ZIMConversationEvent`）已被移除，请使用同结构下的 `action` 属性（类型 `ZIMConversationChangeAction`）代替。
+
+<CodeGroup>
+```typescript 新版本用法
+zim.on('conversationChanged', (zim: ZIM, result: ZIMConversationChangedEventResult) => {
+    result.infoList.forEach(changeInfo => {
+        const action: ZIMConversationChangeAction = changeInfo.action;
+        // 根据 action 处理会话变更
+    });
+});
+```
+
+```typescript 旧版本用法
+zim.on('conversationChanged', (zim: ZIM, result: ZIMConversationChangedEventResult) => {
+    result.infoList.forEach(changeInfo => {
+        const event: ZIMConversationEvent = changeInfo.event; // 已移除
+    });
+});
+```
+</CodeGroup>
+
+### 类型接口名称变更
+
+`ZIMEventHandler.ts` 中所有以 `ZIMEventOf` 为前缀的 TypeScript interface 已按统一规范重命名：
+
+**命名规则**：`ZIMEventOf<Name>Result` → `ZIM<Name>EventResult`
+
+**典型示例**：
+
+| 旧类型名 | 新类型名 |
+|---|---|
+| `ZIMEventOfConversationMessageReceivedResult` | `ZIMConversationMessageReceivedEventResult` |
+| `ZIMEventOfCallInvitationRejectedResult` | `ZIMCallInvitationRejectedEventResult` |
+| `ZIMEventOfCallInvitationAcceptedResult` | `ZIMCallInvitationAcceptedEventResult` |
+| `ZIMEventOfCallInviteesAnsweredTimeoutResult` | `ZIMCallInviteesAnsweredTimeoutEventResult` |
+
+<Note title="影响范围说明">
+
+此变更**对绝大多数开发者透明，无需任何代码改动**。原因：`zim.on(eventName, callback)` 的回调参数类型由 TypeScript 根据事件名自动推导，无需显式引用这些接口名称。
+
+仅当您在代码中**显式标注**了 `ZIMEventOf*` 类型名称时，才会出现 TypeScript 编译报错，按上表完成类型名替换即可。
+</Note>
+
+### 枚举值重命名
+
+#### ZIMGroupMessageNotificationStatus
+
+`ZIMGroupMessageNotificationStatus.Disturb` 已重命名为 `ZIMGroupMessageNotificationStatus.DoNotDisturb`，请检查代码中所有相关引用并替换。
+
+<CodeGroup>
+```typescript 新版本用法
+const status = ZIMGroupMessageNotificationStatus.DoNotDisturb;
+```
+
+```typescript 旧版本用法
+const status = ZIMGroupMessageNotificationStatus.Disturb; // 已重命名为 DoNotDisturb
+```
+</CodeGroup>
+
+- - -
+
 ## 2.28.0 升级指南
 
 <Warning title="注意">
