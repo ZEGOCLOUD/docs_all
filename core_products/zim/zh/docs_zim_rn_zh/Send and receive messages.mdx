@@ -1,6 +1,6 @@
 ---
 articleID: 15339
-date: '2026-03-30'
+date: "2026-06-24"
 ---
 
 import MessageSequenceDiagramJS from '/core_products/zim/zh/snippets/MessageSequenceDiagramJSzh.mdx'
@@ -21,14 +21,14 @@ import MarkSendMessageEvent from '/core_products/zim/zh/snippets/SendMessageEven
 
     - React Native 0.60.0 或以上版本。
     - iOS 11.0 或以上版本的 iOS 设备或模拟器（推荐使用真机）。
-    - Android 4.0.3 或以上版本的 Android 设备或模拟器（推荐使用真机），如果为真机，请开启“允许调试”选项。
+    - Android 4.4 或以上版本的 Android 设备或模拟器（推荐使用真机），如果为真机，请开启“允许调试”选项。
     - iOS / Android 设备已经连接到 Internet。
     - 配置 VS Code 开发环境，可在应用商店中搜索 “React Native Tools” 扩展并下载。
 - 已在 [ZEGO 控制台](https://console.zego.im) 创建项目，获取到了接入 ZIM SDK 服务所需的 AppID、AppSign。ZIM 服务权限不是默认开启的，使用前，请先在 [ZEGO 控制台](https://console.zego.im) 自助开通 ZIM 服务（详情请参考 [项目管理 - 即时通讯](https://doc-zh.zego.im/console/service-configuration/im/activate-service)），若无法开通 ZIM 服务，请联系 ZEGO 技术支持开通。
 
 <Warning title="注意">
 
-`2.3.0 及以上`版本的 SDK，开始支持 “AppSign 鉴权”，同时仍支持 “Token 鉴权”，若您需要升级鉴权方式，可参考 [ZIM 如何从 AppSign 鉴权升级为 Token 鉴权](https://doc-zh.zego.im/faq/zim-token-upgrade)。
+`2.3.0 及以上`版本的 SDK，开始支持 “AppSign 鉴权”，同时仍支持 “Token 鉴权”，若您需要升级鉴权方式，可参考 [ZIM 如何从 AppSign 鉴权升级为 Token 鉴权](https://doc-zh.zego.im/faq/zim-token-upgrade)。「AppSign 鉴权」和「Token 鉴权」的区别请参考 [鉴权方式](https://doc-zh.zego.im/faq/zim-token-upgrade#%E9%89%B4%E6%9D%83%E6%96%B9%E5%BC%8F)。
 </Warning>
 
 
@@ -83,6 +83,11 @@ import MarkSendMessageEvent from '/core_products/zim/zh/snippets/SendMessageEven
     ```
 3. 进入 iOS 根目录，并执行 `pod install` 命令安装依赖。
 
+<Note title="说明">
+
+Android 平台在 RN 0.60+ 版本下支持 autolinking 自动注册原生模块，无需手动修改 MainApplication 文件。
+</Note>
+
 完成如上操作即可在项目中通过 javascript 或 typescript (推荐) 来使用 `zego-zim-react-native` SDK。
 
 ## 3 实现基本收发消息
@@ -115,7 +120,10 @@ import MarkSendMessageEvent from '/core_products/zim/zh/snippets/SendMessageEven
 
 // 静态同步方法，创建 zim 实例，传入 AppID 和 AppSign
 // create 方法仅第一次调用时会创建 ZIM 实例，后续调用会返回 null。
-const config: ZIMAppConfig = { appID: 0, appSign: '' };
+const config: ZIMAppConfig = {
+    appID: 0, // TODO: 替换为你在 ZEGO 控制台获取的 AppID
+    appSign: '', // TODO: 替换为你在 ZEGO 控制台获取的 AppSign（Token 鉴权模式可留空）
+};
 ZIM.create(config);
 // 通过 getInstance 获取单实例，避免热更新导致 create 多次创建返回 null。
 const zim = ZIM.getInstance();
@@ -133,21 +141,20 @@ zim.on('error', (zim: ZIM, errorInfo: ZIMError) => {
 });
 
 // 注册监听“网络连接状态变更”的回调
-zim.on('connectionStateChanged', (zim: ZIM, data: ZIMEventOfConnectionStateChangedResult) => {
+zim.on('connectionStateChanged', (zim: ZIM, data: ZIMConnectionStateChangedEventResult) => {
     console.log('connectionStateChanged', data);
 });
 
 // 注册监听“收到单聊消息”的回调
-zim.on('peerMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
+zim.on('peerMessageReceived', (zim: ZIM, data: ZIMConversationMessageReceivedEventResult) => {
     console.log('peerMessageReceived', data);
 });
 
 // 注册监听“Token 即将过期”的回调
-zim.on('tokenWillExpire', (zim: ZIM, data: ZIMEventOfTokenWillExpireResult) => {
+zim.on('tokenWillExpire', (zim: ZIM, data: ZIMTokenWillExpireEventResult) => {
     console.log('tokenWillExpire', data);
     // 可以在这里调用 renewToken 接口来更新 token
-    // 新 token 生成可以参考上文
-    zim.renewToken(token)
+    zim.renewToken(data.token)
         .then((res: ZIMTokenRenewedResult) => {
             // 更新成功
         })
@@ -158,6 +165,8 @@ zim.on('tokenWillExpire', (zim: ZIM, data: ZIMEventOfTokenWillExpireResult) => {
 ```
 
 详细的接口介绍，请参考 [connectionStateChanged](@connectionStateChanged)、[peerMessageReceived](@peerMessageReceived)、[tokenWillExpire](@tokenWillExpire)。
+
+`tokenWillExpire` 回调仅在 Token 鉴权模式下触发，新 token 可通过开发者服务端使用 ServerSecret 生成，详情请参考 [使用 Token 鉴权](./Guides/Users/Authentication.mdx)。
 
 <a id="login"></a>
 
@@ -171,7 +180,7 @@ zim.on('tokenWillExpire', (zim: ZIM, data: ZIMEventOfTokenWillExpireResult) => {
 
 - “userID”、“userName” 支持开发者自定义规则生成。建议开发者将 “userID” 设置为一个有意义的值，可将其与自己的业务账号系统进行关联。
 - `2.3.0` 或以上版本的 SDK，默认鉴权方式为 “AppSign 鉴权”，登录 ZIM 时Token 传入空字符串即可。
-- 如果您使用的是 “Token 鉴权”，请参考 [使用 Token 鉴权](./../docs_zim_android_zh/Guides/Users/Authentication.mdx) 文档，获取 Token 后，并在登录 ZIM 时传入 Token，鉴权通过后才能登录成功。
+- 如果您使用的是 “Token 鉴权”，请参考 [使用 Token 鉴权](./Guides/Users/Authentication.mdx) 文档，获取 Token 后，并在登录 ZIM 时传入 Token，鉴权通过后才能登录成功。
 </Warning>
 
 ```typescript
@@ -182,6 +191,7 @@ const config: ZIMLoginConfig = {
     userName: 'xxxx',
     token: '',
     customStatus: '',
+    customStatusDuration: 0,
     isOfflineLogin: false,
 }
 
@@ -197,6 +207,11 @@ zim.login(userID, config)
         // 登录失败
     });
 ```
+
+<Note title="说明">
+
+回调错误码请参考 [ZIM 错误码](./SDK%20Error%20Codes/ZIM.mdx)。
+</Note>
 
 #### 5. 发送消息
 
@@ -220,7 +235,10 @@ const config: ZIMMessageSendConfig = {
     priority: 1, // 设置消息优先级，取值为 低：1（默认），中：2，高：3
 };
 
-const messageTextObj: ZIMMessage = { type: 1, message: 'xxxx' };
+const messageTextObj: ZIMTextMessage = {
+  type: ZIMMessageType.Text, // = 1，文本消息
+  message: 'xxxx',
+};
 const notification: ZIMMessageSendNotification = {
     onMessageAttached: (message: ZIMMessage) => {
         // todo: Loading
@@ -236,6 +254,11 @@ zim.sendMessage(messageTextObj, toConversationID, conversationType, config, noti
     });
 ```
 
+<Note title="说明">
+
+回调错误码请参考 [ZIM 错误码](./SDK%20Error%20Codes/ZIM.mdx)。
+</Note>
+
 #### 6. 接收消息
 
 客户端 B 登录 ZIM 后，将会收到在 [on](@on) 回调中设置的 [peerMessageReceived](@peerMessageReceived) 监听接口，收到客户端 A 发送过来的消息。
@@ -243,7 +266,7 @@ zim.sendMessage(messageTextObj, toConversationID, conversationType, config, noti
 
 ```typescript 
 // 注册监听“收到单聊消息”的回调
-zim.on('peerMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
+zim.on('peerMessageReceived', (zim: ZIM, data: ZIMConversationMessageReceivedEventResult) => {
     console.log('peerMessageReceived', data);
 });
 ```

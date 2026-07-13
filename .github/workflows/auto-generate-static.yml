@@ -1,0 +1,92 @@
+# PR 合并到 main 分支时自动重新生成静态 JSON（FAQ 维度 + instanceGroups），
+# 作为本地 pre-commit hook 的兜底：本地漏跑 hook（没装 setup.sh / --no-verify）时，
+# 合并进 main 后由本 workflow 强制把产物同步到最新。
+#
+# 触发条件：本 PR 改了 docuo.config.*.json 或 general/*/faq/overview.mdx 才跑生成；
+#           纯文档 PR 直接跳过，不白跑。
+
+name: 自动生成静态 JSON
+
+on:
+  pull_request_target:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write  # 回写 main 需要
+  pull-requests: read  # 读取 PR 变更文件需要
+
+jobs:
+  generate-static:
+    # 仅合并到 main 分支时执行
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: 检出 main 分支
+        uses: actions/checkout@v4
+        with:
+          ref: main  # pull_request_target 需要明确指定检出 main 分支
+          fetch-depth: 0
+          token: ${{ secrets.PUSH_TOKEN }}
+
+      - name: 初始化 Node 环境
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 获取当前 PR 变更的文件
+        id: changed-files
+        run: |
+          # 使用 GitHub API 直接获取 PR 的变更文件
+          CHANGED_FILES=$(gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path')
+          echo "CHANGED_FILES<<EOF" >> $GITHUB_ENV
+          echo "$CHANGED_FILES" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: 判断是否需要生成（改了 config / overview 才跑）
+        id: check
+        run: |
+          # 与本地 pre-commit hook 的触发条件保持一致
+          NEED=0
+          while IFS= read -r f; do
+            case "$f" in
+              docuo.config.zh.json|docuo.config.en.json|general/zh/faq/overview.mdx|general/en/faq/overview.mdx)
+                NEED=1
+                break
+                ;;
+            esac
+          done <<< "$CHANGED_FILES"
+          if [ "$NEED" -eq 1 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "检测到 config/overview 变更，将重新生成静态 JSON"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "本 PR 未改动 config/overview，跳过生成"
+          fi
+
+      - name: 重新生成静态 JSON
+        if: steps.check.outputs.run == 'true'
+        run: |
+          # 三个生成脚本都跑（幂等）：FAQ 维度 → FAQ 静态 JSON → instanceGroups
+          node .scripts/faq/generate_faq_dimensions.mjs
+          node .scripts/faq/generate_static_faq.mjs
+          node .scripts/config/generate_instance_groups.mjs
+
+      - name: 提交生成产物
+        if: steps.check.outputs.run == 'true'
+        run: |
+          # 只 add 脚本产物，其它一概不动
+          git add general/zh/faq/faqDimensions.js general/en/faq/faqDimensions.js
+          git add static/faq-instance/ static/sys-config/
+
+          if git diff --cached --quiet; then
+            echo "产物已是最新，无需提交（本地 hook 已跑过）"
+          else
+            git config --global user.email shyshii@zego.im
+            git config --global user.name auto-generate-static
+            git commit -m "Generate static json --- pr/${{ github.event.pull_request.number }}"
+            git push https://${{ secrets.PUSH_TOKEN }}@github.com/ZEGOCLOUD/docs_all.git main
+            echo "已提交并推送生成产物"
+          fi

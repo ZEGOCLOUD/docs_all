@@ -3,7 +3,7 @@ name: report-doc-test-in-feishu
 description: >
   Use this skill when the user needs to publish a ZEGO documentation access-test run to Feishu:
   create fixed report documents under the access-test Feishu node, correct doc-eval reports using
-  build and auto-test results, write build/test and final integration reports, upload source/test
+  build and auto-test results, write build/test and corrected doc-eval summary reports, upload source/test
   artifacts and screenshots, and return Feishu links. Triggers on: "写入飞书接入测试报告",
   "发布接入测试报告", "report-doc-test-in-feishu", "飞书报告", "生成飞书报告", or when
   make-integration-test reaches its Feishu publishing stage.
@@ -56,7 +56,6 @@ version: 1.0.0
 doc-test-reports/{run-name}/feishu-report-manifest.json
 doc-test-reports/{run-name}/feishu-report-links.md
 doc-test-reports/{run-name}/build-test-report.md
-doc-test-reports/{run-name}/integration-summary.md
 doc-test-reports/{run-name}/doc-eval-corrected/
 ```
 
@@ -67,7 +66,6 @@ doc-test-reports/{run-name}/doc-eval-corrected/
 | build-test-report | `构建与自动化测试报告` | build-verification + auto-test |
 | doc-eval-summary | `【文档评测报告】汇总报告` | doc-eval + build-verification + auto-test |
 | doc-eval-role | `【文档评测报告】{role-name}` | 对应 role report + build-verification + auto-test |
-| integration-summary | `接入测试综合报告` | 校正后 doc-eval + build-test-report |
 
 角色报告枚举按本地 `doc-eval/role-*.md` 文件决定。常见角色 ID：`role-cto`、`role-support`、`role-client-dev`、`role-server-dev`、`role-fullstack-dev`。
 
@@ -97,6 +95,7 @@ node .claude/skills/report-doc-test-in-feishu/scripts/prepare-feishu-report-cont
 - 将文档评测汇总报告 `角色评分` 表格中的本地角色报告路径替换为 manifest 中的飞书链接。
 - 在 `角色评分` 表格后追加：`**请阅读各角色详细报告文档并评论问题解决方案！**`
 - 将 `build-verification/build-issues.md` 合并到 `build-test-report.md` 的 `关键问题` 后，作为 `问题详情` 章节。
+- 校验校正后的文档评测汇总报告必须包含固定章节、不能包含废弃章节，并且 `问题摘要` 与 `问题详情` 的问题 ID 一一对应。
 
 然后写入飞书：
 
@@ -229,6 +228,16 @@ doc-test-reports/{run-name}/doc-eval-corrected/role-*.md
 - build/test 复现的问题要链接回原 doc-eval 问题。
 - build/test 新增且属于文档质量的问题，要加入校正后 summary。
 - 不把 demo 实现问题、设备问题、SDK 测试产物问题错误归咎为文档问题。
+- 校正后的 `doc-eval-corrected/doc-eval-summary.md` 是最终主报告，必须让读者一次看完核心结论，不再另建“接入测试综合报告”。
+- 汇总报告的 `角色评分` 标题：有构建或自动化测试校正时写 `## 角色评分（校正后）`；没有校正时写 `## 角色评分`。
+- `角色评分` 中“综合评分”统一改为“加权平均分”；不保留“加权维度评分”表格；各维度评分用无序列表表达。
+- 汇总报告保留 `问题摘要`，但必须把角色评测、构建验证和自动化测试中的文档问题、集成过程问题、非文档归因问题合并到同一个摘要表，不再拆成独立表格。
+- 汇总报告新增固定 `问题详情` 章节，并与 `问题摘要` 顺序严格一致。
+- `问题详情` 每一项尽量照搬各角色报告中的问题详情描述；只允许为了合并重复问题、增加角色字段、增加构建/测试证据和校正结论做必要整理。
+- `问题详情` 中必须在 `定位` 之前增加 `角色` 字段；同一问题由多个角色发现时，角色写多个。
+- 各角色重复发现的同一问题要合并为一个摘要项和一个详情项；`角色` 字段记录所有相关角色。
+- 构建验证和自动化测试新增的问题要合并进 `问题摘要` 和 `问题详情`，不要单独保留“集成验证新增文档问题”。
+- 汇总报告不要包含：`集成验证校正记录`、`集成验证校正`、`集成验证新增文档问题`、`非文档问题说明`、`共性问题`、`改进建议排序`、`产物索引`、`加权维度评分`、`接入测试综合报告`。
 
 写入飞书：
 
@@ -236,33 +245,7 @@ doc-test-reports/{run-name}/doc-eval-corrected/role-*.md
 2. 角色报告：对每个 `doc-test-reports/{run-name}/doc-eval-corrected/role-*.md`，用文件名去掉 `.md` 得到 `role-id`，从 manifest 读取 `documents["doc-eval-role"][role-id].docId`，将该角色 Markdown 写入对应飞书文档。
 3. 每个文档写入后，从 manifest 读取对应 `url`，用于生成 `feishu-report-links.md`。
 
-### Step 4: 生成接入测试综合报告
-
-读取校正后的 doc-eval 报告和 `build-test-report.md`，生成：
-
-```text
-doc-test-reports/{run-name}/integration-summary.md
-```
-
-写入前必须先运行 `validate-report-locations.js`，发现定位问题就修复本地 Markdown；通过后再运行 `prepare-feishu-report-content.js`，确保本地 H1 与 manifest 中的飞书文档标题一致。
-
-综合报告只做整体说明：
-
-- 各阶段结果
-- 真实接入结论
-- 最终优先级问题
-- 建议动作和责任归属
-- 飞书报告和附件索引
-
-不要在综合报告里替代各阶段报告的完整细节。
-
-写入飞书：
-
-1. 从 manifest 读取 `documents["integration-summary"].docId`。
-2. 调用 `scripts/write-feishu-markdown.sh --doc-id "{doc_id}" --file "doc-test-reports/{run-name}/integration-summary.md"`。
-3. 从 manifest 读取 `documents["integration-summary"].url`，后续写入 `feishu-report-links.md` 和 `run-index.md`。
-
-### Step 5: 回写索引和返回结果
+### Step 4: 回写索引和返回结果
 
 写出：
 
@@ -275,7 +258,7 @@ doc-test-reports/{run-name}/feishu-report-links.md
 - `doc-eval`：校正后 summary 飞书链接
 - `build-verification`：构建与自动化测试报告飞书链接
 - `auto-test`：构建与自动化测试报告飞书链接
-- `integration-summary`：接入测试综合报告飞书链接
+- `report-publish`：校正后 summary 飞书链接
 
 最终只返回：
 
@@ -288,7 +271,6 @@ doc-test-reports/{run-name}/feishu-report-links.md
 - doc_eval_summary: {url}
 - doc_eval_roles:
   - {role-id}: {url}
-- integration_summary: {url}
 - local_links_file: doc-test-reports/{run-name}/feishu-report-links.md
 - summary: {一句话说明发布结果}
 - next_action: continue / stop / needs_user_input
