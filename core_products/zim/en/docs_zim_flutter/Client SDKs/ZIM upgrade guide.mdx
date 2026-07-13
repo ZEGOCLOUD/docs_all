@@ -1,6 +1,6 @@
 ---
 articleID: 15086
-date: "2026-04-02"
+date: "2026-07-06"
 ---
 
 # ZIM Upgrade Guide
@@ -10,9 +10,444 @@ date: "2026-04-02"
 This article introduces some instructions and precautions when upgrading the In-app Chat Flutter SDK.
 
 
+## 3.0.0 Upgrade Guide
+
+<Warning title="Warning">
+
+This version (3.0.0) removes interfaces and their related enum values and fields that have been deprecated for over a year, and adds deprecation markers to some interfaces. Please refer to the following instructions to complete the migration.
+</Warning>
+
+### Removed interfaces
+
+#### ZIM initialization interface (create)
+
+The deprecated legacy `create(int appID)` interface has been removed. Please use the [create](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/create.html) interface that accepts a [ZIMAppConfig](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMAppConfig-class.html) parameter instead.
+
+<CodeGroup>
+```dart New usage
+ZIMAppConfig appConfig = ZIMAppConfig();
+appConfig.appID = 12345678;
+appConfig.appSign = 'appSign';
+ZIM.create(appConfig);
+```
+
+```dart Legacy usage
+// Legacy interface removed
+ZIM.create(12345678);
+```
+</CodeGroup>
+
+#### ZIM login interface (login)
+
+The deprecated legacy `login(ZIMUserInfo, String token)` interface has been removed. Please use the [login](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/login.html) interface that accepts `userID` and a [ZIMLoginConfig](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMLoginConfig-class.html) parameter instead.
+
+<CodeGroup>
+```dart New usage
+ZIMLoginConfig loginConfig = ZIMLoginConfig();
+loginConfig.userName = 'userName';
+loginConfig.token = ''; // If using Token authentication, fill in the Token
+loginConfig.isOfflineLogin = false;
+await ZIM.getInstance()!.login('userID', loginConfig);
+```
+
+```dart Legacy usage
+// Legacy interface removed
+ZIMUserInfo userInfo = ZIMUserInfo();
+userInfo.userID = 'userID';
+userInfo.userName = 'userName';
+await ZIM.getInstance()!.login(userInfo, '');
+```
+</CodeGroup>
+
+#### ZIM message send interface (sendMessage)
+
+The deprecated `sendPeerMessage`, `sendRoomMessage`, and `sendGroupMessage` interfaces have been removed. Please use the [sendMessage](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/sendMessage.html) interface with the `notification` parameter instead.
+
+<CodeGroup>
+```dart New usage
+ZIMTextMessage textMessage = ZIMTextMessage(message: 'Hello');
+ZIMMessageSendConfig config = ZIMMessageSendConfig();
+ZIMMessageSendNotification notification = ZIMMessageSendNotification();
+notification.onMessageAttached = (ZIMMessage message) {
+    // Business logic before sending
+};
+await ZIM.getInstance()!.sendMessage(
+    textMessage,
+    'toConversationID',
+    ZIMConversationType.peer,
+    config,
+    notification,
+);
+```
+
+```dart Legacy usage
+// Legacy interfaces removed, please migrate to sendMessage
+ZIMTextMessage textMessage = ZIMTextMessage(message: 'Hello');
+ZIMMessageSendConfig config = ZIMMessageSendConfig();
+// Legacy 1-on-1 message send
+await ZIM.getInstance()!.sendPeerMessage(textMessage, 'toUserID', config);
+// Legacy group message send
+await ZIM.getInstance()!.sendGroupMessage(textMessage, 'toGroupID', config);
+```
+</CodeGroup>
+
+#### ZIM message receive callback interface
+
+The `onReceivePeerMessage`, `onReceiveRoomMessage`, and `onReceiveGroupMessage` callbacks deprecated in 2.18.0 have been formally removed in this version. Migrate to [onMessageReceived](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onMessageReceived.html).
+
+<CodeGroup>
+```dart New usage
+ZIMEventHandler.onMessageReceived = (ZIM zim,
+    ZIMMessageReceivedEventResult result) {
+    List<ZIMMessage> messageList = result.messageList;
+    ZIMMessageReceivedInfo info = result.info;
+    String conversationID = result.conversationID;
+    ZIMConversationType conversationType = result.conversationType;
+    // Handle messages of different conversation types based on conversationType
+};
+```
+
+```dart Legacy usage (removed)
+ZIMEventHandler.onReceivePeerMessage = (ZIM zim,
+    List<ZIMMessage> messageList, String fromUserID) {};
+ZIMEventHandler.onReceiveRoomMessage = (ZIM zim,
+    List<ZIMMessage> messageList, String fromRoomID) {};
+ZIMEventHandler.onReceiveGroupMessage = (ZIM zim,
+    List<ZIMMessage> messageList, String fromGroupID) {};
+```
+</CodeGroup>
+
+#### ZIM call invitation callback interface
+
+The legacy `onCallInvitationTimeout(zim, callID)` (with only the callID parameter), `onCallInvitationRejected`, `onCallInvitationAccepted`, and `onCallInviteesAnsweredTimeout` callbacks have been removed. Please use the new [onCallInvitationTimeout](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onCallInvitationTimeout.html) and [onCallUserStateChanged](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onCallUserStateChanged.html) instead.
+
+<CodeGroup>
+```dart New usage
+ZIMEventHandler.onCallInvitationTimeout = (ZIM zim,
+    ZIMCallInvitationTimeoutInfo info,
+    String callID) {
+    // info.mode distinguishes between normal mode and advanced mode
+};
+
+ZIMEventHandler.onCallUserStateChanged = (ZIM zim,
+    ZIMCallUserStateChangeInfo info,
+    String callID) {
+    // info.callUserList contains the list of users whose state has changed
+    // Accept, reject, and timeout state changes can be handled uniformly
+};
+```
+
+```dart Legacy usage
+// Legacy callbacks removed, please migrate to onCallInvitationTimeout and onCallUserStateChanged
+ZIMEventHandler.onCallInvitationTimeout = (ZIM zim, String callID) {};
+ZIMEventHandler.onCallInvitationRejected = (ZIM zim,
+    ZIMCallInvitationRejectedInfo info, String callID) {};
+ZIMEventHandler.onCallInvitationAccepted = (ZIM zim,
+    ZIMCallInvitationAcceptedInfo info, String callID) {};
+ZIMEventHandler.onCallInviteesAnsweredTimeout = (ZIM zim,
+    List<String> invitees, String callID) {};
+```
+</CodeGroup>
+
+#### importLocalMessages / exportLocalMessages interface removal
+
+The `importLocalMessages` and `exportLocalMessages` interfaces have been temporarily removed in 3.0.0 with no replacement yet. This feature will be re-introduced in a later version. Please follow the SDK release notes for updates.
+
+### Newly deprecated interfaces (recommended migration)
+
+#### ZIM message receive callback interface
+
+The `onPeerMessageReceived`, `onRoomMessageReceived`, and `onGroupMessageReceived` callbacks have been marked as deprecated in this version. They still work, but we recommend migrating to [onMessageReceived](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onMessageReceived.html) as soon as possible.
+
+<CodeGroup>
+```dart Recommended (new interface)
+ZIMEventHandler.onMessageReceived = (ZIM zim,
+    ZIMMessageReceivedEventResult result) {
+    List<ZIMMessage> messageList = result.messageList;
+    ZIMMessageReceivedInfo info = result.info;
+    String conversationID = result.conversationID;
+    ZIMConversationType conversationType = result.conversationType;
+    // Handle messages of different conversation types based on conversationType
+};
+```
+
+```dart Deprecated (still works, recommended to migrate)
+ZIMEventHandler.onPeerMessageReceived = (ZIM zim,
+    List<ZIMMessage> messageList, ZIMMessageReceivedInfo info,
+    String fromUserID) {};
+ZIMEventHandler.onRoomMessageReceived = (ZIM zim,
+    List<ZIMMessage> messageList, ZIMMessageReceivedInfo info,
+    String fromRoomID) {};
+ZIMEventHandler.onGroupMessageReceived = (ZIM zim,
+    List<ZIMMessage> messageList, ZIMMessageReceivedInfo info,
+    String fromGroupID) {};
+```
+</CodeGroup>
+
+#### ZIMGroupConversation deprecation
+
+The `ZIMGroupConversation` class has been deprecated in 3.0.0. The `isDisabled` and `mutedExpiredTime` fields should be replaced with the corresponding properties of the base class `ZIMConversation`:
+
+| ZIMGroupConversation (deprecated) | ZIMConversation (replacement) |
+|---|---|
+| `isDisabled` | `isConversationDisabled` |
+| `mutedExpiredTime` | `selfMutedExpiredTime` |
+
+<CodeGroup>
+```dart New usage
+bool isDisabled = conversation.isConversationDisabled;
+int mutedExpiredTime = conversation.selfMutedExpiredTime;
+```
+
+```dart Legacy usage (deprecated)
+ZIMGroupConversation groupConversation = conversation as ZIMGroupConversation;
+bool isDisabled = groupConversation.isDisabled;
+int mutedExpiredTime = groupConversation.mutedExpiredTime;
+```
+</CodeGroup>
+
+### Enum value removal
+
+#### ZIMMessageType enum value removal
+
+`ZIMMessageType.system` (value 30) has been removed from the enum, and the `ZIMSystemMessage` class has also been removed. To send system-level commands, please use [ZIMCommandMessage](https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMCommandMessage-class.html) instead.
+
+<CodeGroup>
+```dart New usage
+// Use ZIMCommandMessage instead of ZIMSystemMessage
+ZIMCommandMessage commandMessage = ZIMCommandMessage(
+    message: Uint8List.fromList('payload'.codeUnits),
+);
+await ZIM.getInstance()!.sendMessage(
+    commandMessage,
+    'toConversationID',
+    ZIMConversationType.peer,
+    ZIMMessageSendConfig(),
+    null,
+);
+```
+
+```dart Legacy usage
+// ZIMMessageType.system and ZIMSystemMessage have been removed
+ZIMSystemMessage systemMessage = ZIMSystemMessage();
+// ...
+```
+</CodeGroup>
+
+#### ZIMCallUserState enum value removal
+
+`ZIMCallUserState.offline` (value 4) has been removed from the enum. Please check your code for any references to this value and remove them.
+
+```dart
+// The following enum value has been removed. Check and remove references to it in your code.
+// ZIMCallUserState.offline  (value 4)
+```
+
+### Field changes
+
+#### ZIMUserFullInfo.userAvatarUrl deprecation
+
+`ZIMUserFullInfo.userAvatarUrl` has been deprecated. Please use `ZIMUserFullInfo.baseInfo.userAvatarUrl` instead.
+
+<CodeGroup>
+```dart New usage
+String avatarUrl = userFullInfo.baseInfo.userAvatarUrl;
+```
+
+```dart Legacy usage
+String avatarUrl = userFullInfo.userAvatarUrl; // deprecated
+```
+</CodeGroup>
+
+#### ZIMMessage.conversationSeq replaced by messageSeq
+
+`ZIMMessage.conversationSeq` has been removed. Please use `ZIMMessage.messageSeq` instead.
+
+<CodeGroup>
+```dart New usage
+int seq = message.messageSeq;
+```
+
+```dart Legacy usage
+int seq = message.conversationSeq; // removed
+```
+</CodeGroup>
+
+#### ZIMMessageDeletedInfo.isDeleteConversationAllMessage removal
+
+`ZIMMessageDeletedInfo.isDeleteConversationAllMessage` has been removed. Please use `ZIMMessageDeletedInfo.messageDeleteType` instead.
+
+<CodeGroup>
+```dart New usage
+ZIMMessageDeleteType deleteType = deletedInfo.messageDeleteType;
+// Use deleteType to determine whether it is a single deletion or a full deletion
+```
+
+```dart Legacy usage
+bool isDeleteAll = deletedInfo.isDeleteConversationAllMessage; // removed
+```
+</CodeGroup>
+
+#### ZIMGroupMemberInfo.memberAvatarUrl removal
+
+`ZIMGroupMemberInfo.memberAvatarUrl` has been removed. Please use `ZIMGroupMemberInfo.userAvatarUrl` instead.
+
+<CodeGroup>
+```dart New usage
+String avatarUrl = groupMemberInfo.userAvatarUrl;
+```
+
+```dart Legacy usage
+String avatarUrl = groupMemberInfo.memberAvatarUrl; // removed
+```
+</CodeGroup>
+
+#### ZIMGroupOperatedInfo structure change
+
+The `operatedUserInfo` field in `ZIMGroupOperatedInfo` has been removed. Its internal fields have been flattened to `ZIMGroupOperatedInfo`, and you can obtain the corresponding fields directly from `ZIMGroupOperatedInfo`.
+
+<CodeGroup>
+```dart New usage
+// Get fields directly from ZIMGroupOperatedInfo
+String operatorUserID = groupOperatedInfo.userID;
+String operatorUserName = groupOperatedInfo.userName;
+String operatorAvatarUrl = groupOperatedInfo.userAvatarUrl;
+```
+
+```dart Legacy usage
+// operatedUserInfo removed
+String operatorUserID = groupOperatedInfo.operatedUserInfo.userID;
+String operatorUserName = groupOperatedInfo.operatedUserInfo.userName;
+```
+</CodeGroup>
+
+#### ZIMCallInvitationSentInfo.errorInvitees replacement
+
+`ZIMCallInvitationSentInfo.errorInvitees` has been removed. Please use `ZIMCallInvitationSentInfo.errorUserList` instead. The type has changed from `List<ZIMCallUserInfo>` to `List<ZIMErrorUserInfo>`.
+
+<CodeGroup>
+```dart New usage
+final result = await ZIM.getInstance()!.callInvite(invitees, config);
+for (final errorUser in result.info.errorUserList) {
+    // errorUser.userID, errorUser.reason
+}
+```
+
+```dart Legacy usage
+// errorInvitees removed, please use errorUserList
+final result = await ZIM.getInstance()!.callInvite(invitees, config);
+for (final errorInvitee in result.info.errorInvitees) {
+    // errorInvitee.userID, errorInvitee.state
+}
+```
+</CodeGroup>
+
+#### ZIMConversationChangeInfo field change
+
+The `event` property (of type `ZIMConversationEvent`) in `ZIMConversationChangeInfo` has been removed. Please use the `action` property (of type `ZIMConversationChangeAction`) in the same structure instead.
+
+<CodeGroup>
+```dart New usage
+ZIMEventHandler.onConversationChanged = (ZIM zim,
+    ZIMConversationChangeEventResult result) {
+    for (ZIMConversationChangeInfo changeInfo in result.infoList) {
+        ZIMConversationChangeAction action = changeInfo.action;
+        // Handle conversation changes based on action
+    }
+};
+```
+
+```dart Legacy usage
+ZIMEventHandler.onConversationChanged = (ZIM zim,
+    ZIMConversationChangeEventResult result) {
+    for (ZIMConversationChangeInfo changeInfo in result.infoList) {
+        ZIMConversationEvent event = changeInfo.event; // removed
+    }
+};
+```
+</CodeGroup>
+
+### Enum value rename
+
+The following enum values were renamed in 3.0.0. After the upgrade, check and replace all related references in your code.
+
+#### ZIMCallUserState
+
+`ZIMCallUserState.quited` has been renamed to `ZIMCallUserState.quit`.
+
+<CodeGroup>
+```dart New usage
+if (userState == ZIMCallUserState.quit) {
+    // The user has quit the call
+}
+```
+
+```dart Legacy usage
+if (userState == ZIMCallUserState.quited) { // renamed to quit
+    // The user has quit the call
+}
+```
+</CodeGroup>
+
+#### ZIMGroupEvent
+
+`ZIMGroupEvent.kickout` has been renamed to `ZIMGroupEvent.kickOut`.
+
+<CodeGroup>
+```dart New usage
+if (event == ZIMGroupEvent.kickOut) {
+    // A group member was kicked out
+}
+```
+
+```dart Legacy usage
+if (event == ZIMGroupEvent.kickout) { // renamed to kickOut
+    // A group member was kicked out
+}
+```
+</CodeGroup>
+
+#### ZIMGroupMemberEvent
+
+`ZIMGroupMemberEvent.kickedout` has been renamed to `ZIMGroupMemberEvent.kickedOut`.
+
+<CodeGroup>
+```dart New usage
+if (event == ZIMGroupMemberEvent.kickedOut) {
+    // A group member was kicked out
+}
+```
+
+```dart Legacy usage
+if (event == ZIMGroupMemberEvent.kickedout) { // renamed to kickedOut
+    // A group member was kicked out
+}
+```
+</CodeGroup>
+
+### Class name change
+
+#### ZIMRoomAttributesOperatedCallResult
+
+`ZIMRoomAttributesOperatedCallResult` has been renamed to `ZIMRoomAttributesOperatedResult`. Please check and replace references to this type in your code.
+
+<CodeGroup>
+```dart New usage
+ZIMRoomAttributesOperatedResult result =
+    await ZIM.getInstance()!.setRoomAttributes(attributes, roomID, config);
+```
+
+```dart Legacy usage
+ZIMRoomAttributesOperatedCallResult result =
+    await ZIM.getInstance()!.setRoomAttributes(attributes, roomID, config); // class name changed
+```
+</CodeGroup>
+
+- - -
+
 ## 2.28.0 Upgrade Guide
 
-<Warning title="Note">
+<Warning title="Warning">
 
 ZIM SDK 2.28.0 has adjusted the return parameters of some interfaces and the timing of event callback triggers. When upgrading from an older version to 2.28.0, please read the following guide.
 </Warning>
@@ -167,7 +602,7 @@ ZIMEventHandler.onMessageReactionsChanged = (zim, reactions) {
 
 ### Event callback timing changes
 
-<Warning title="Note">
+<Warning title="Warning">
 
 The following callbacks have changes in their trigger timing starting from version 2.28.0. Developers are advised to check the corresponding business logic to determine whether it is affected after upgrading the SDK.
 </Warning>

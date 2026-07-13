@@ -133,16 +133,20 @@ fi
 
 echo ""
 
+# 配置共享 Git Hooks（让 git 从被追踪的 .hooks/ 目录读 hook，全员一致）
+# 一次性配置：clone 后跑一次 setup 即永久生效，无需再手动复制 hook 到 .git/hooks/
+if [ -d ".hooks" ]; then
+    git config core.hooksPath .hooks
+    echo -e "${GREEN}✓ 已配置 Git Hooks（core.hooksPath=.hooks）${NC}"
+else
+    echo -e "${YELLOW}⚠ 未找到 .hooks 目录，跳过 Git Hooks 配置${NC}"
+fi
+echo ""
+
 # 以下步骤仅在 --dev 模式下执行
 if [ "$DEV_MODE" = true ]; then
-	# 3. 复制 Git Hooks
-	echo -e "${YELLOW}3. 复制 Git Hooks...${NC}"
-	cp -f .hooks/* .git/hooks/
-	echo -e "${GREEN}✓ Git Hooks 复制成功${NC}"
-	echo ""
-
-	# 4. 提醒安装 VS Code 插件
-	echo -e "${YELLOW}4. 推荐的 VS Code 插件:${NC}"
+	# 3. 提醒安装 VS Code 插件
+	echo -e "${YELLOW}3. 推荐的 VS Code 插件:${NC}"
 	echo -e "${BLUE}请安装以下插件以获得更好的开发体验:${NC}"
 	echo ""
 	echo -e "${GREEN}• Docuo:${NC} https://marketplace.visualstudio.com/items?itemName=spreading-docuo.docuo"
@@ -152,8 +156,8 @@ if [ "$DEV_MODE" = true ]; then
 	echo -e "${GREEN}• GitHub Pull Request:${NC} https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-pull-request-github"
 	echo ""
 
-	# 5. 提醒查看详细使用说明
-	echo -e "${YELLOW}5. 详细使用说明:${NC}"
+	# 4. 提醒查看详细使用说明
+	echo -e "${YELLOW}4. 详细使用说明:${NC}"
 	echo -e "${BLUE}请查看详细的使用指南:${NC}"
 	echo -e "${GREEN}https://zegocloud.feishu.cn/wiki/G3stwqUPYinrVEkkWkFctzdTnwb${NC}"
 	echo ""

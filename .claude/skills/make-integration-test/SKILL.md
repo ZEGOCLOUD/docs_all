@@ -29,7 +29,6 @@ doc-test-reports/{run-name}/
     {demo-name}/
   build-test-report.md
   doc-eval-corrected/
-  integration-summary.md
   feishu-report-manifest.json
   feishu-report-links.md
 ```
@@ -215,7 +214,7 @@ doc-test-reports/{run-name}/examples/{demo-name}/
 1. 判断失败类型：
    - **测试环境或测试脚本问题**：例如设备未启动、浏览器会话残留、端口冲突、测试目标连接失败。由主会话修复环境、调整 `test-cases.json` 的 `runtime.*Commands` 或重新生成测试脚本。
    - **demo 实现问题**：例如按文档构建出的 demo 代码有实现遗漏、初始化错误、UI 无法触发核心流程。由主会话直接修复 `doc-test-reports/{run-name}/examples/{demo-name}/`；修复依据必须来自目标文档、构建验证报告和自动化测试失败分析。
-   - **文档/SDK/测试产物问题**：如果失败原因是文档缺失、SDK 行为异常、测试产物不可用或用户资料不足，可以搜索整个工作区找到必要文档说明后修复，但是要记录为最终综合报告的问题证据。
+   - **文档/SDK/测试产物问题**：如果失败原因是文档缺失、SDK 行为异常、测试产物不可用或用户资料不足，可以搜索整个工作区找到必要文档说明后修复，但是要记录为最终主报告的问题证据。
 2. 如果执行了环境、脚本或 demo 修复，主会话先执行必要的编译/运行验证。
 3. 把本轮失败原因、修复内容、验证结果写入：
 
@@ -257,11 +256,10 @@ doc-test-reports/{run-name}/auto-test/repair-attempts.md
 
 只有在 `report-doc-test-in-feishu` 无法从 run 目录推断时，才补充传入产品、平台、范围、日期、`demo-name`、目标文档列表、已有飞书节点或实际 `midscene_run` 路径。
 
-`report-doc-test-in-feishu` 必须完成三类飞书报告：
+`report-doc-test-in-feishu` 必须完成两类飞书报告，并把最终结论集中到 `【文档评测报告】汇总报告`：
 
 1. **构建与自动化测试报告**：根据 build-verification 和 auto-test 生成并写入飞书，同时上传自动化测试报告压缩包、截图、源码压缩包。
-2. **校正后的 doc-eval 报告**：根据 build-verification 和 auto-test 校正 doc-eval 本地 Markdown，然后创建并写入各角色报告和 summary 飞书文档。
-3. **接入测试综合报告**：根据校正后的 doc-eval 报告和构建与自动化测试报告，生成整体阶段结果、接入评估和改进建议。
+2. **校正后的 doc-eval 报告**：根据 build-verification 和 auto-test 校正 doc-eval 本地 Markdown，然后创建并写入各角色报告和 summary 飞书文档。`【文档评测报告】汇总报告` 是最终主报告，必须合并角色评分、问题摘要、问题详情、构建/测试新增或校正问题。
 
 要求 report subagent 只返回：
 
@@ -274,7 +272,6 @@ doc-test-reports/{run-name}/auto-test/repair-attempts.md
 - doc_eval_summary: {url}
 - doc_eval_roles:
   - {role-id}: {url}
-- integration_summary: {url}
 - local_links_file: doc-test-reports/{run-name}/feishu-report-links.md
 - summary: {一句话说明发布结果}
 - next_action: continue / stop / needs_user_input

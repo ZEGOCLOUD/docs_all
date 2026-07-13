@@ -10,7 +10,8 @@ Prepare local Markdown reports before writing them to Feishu:
 - align report H1 titles with Feishu skeleton titles in manifest;
 - replace role report links in doc-eval summary with Feishu URLs from manifest;
 - add the required role-report review note;
-- merge build-verification/build-issues.md into build-test-report.md as "问题详情".
+- merge build-verification/build-issues.md into build-test-report.md as "问题详情";
+- validate the corrected doc-eval summary's required sections and issue ID alignment.
 
 Run validate-report-locations.js first. This script does not fix invalid source locations.`);
 }
@@ -120,6 +121,86 @@ function replaceOrInsertSection(content, sectionTitle, sectionMarkdown, afterHea
   return insertBeforeNextH2(content, afterHeadingPattern, section);
 }
 
+function sectionBody(content, headingRe) {
+  const match = content.match(headingRe);
+  if (!match || match.index == null) return "";
+  const start = match.index + match[0].length;
+  const rest = content.slice(start);
+  const next = rest.match(/\n##\s+/);
+  const end = next && next.index != null ? start + next.index : content.length;
+  return content.slice(start, end);
+}
+
+function failSummaryValidation(errors) {
+  if (errors.length === 0) return;
+  console.error("Corrected doc-eval summary validation failed. Fix the local Markdown before Feishu publishing.");
+  for (const error of errors) console.error(`- ${error}`);
+  process.exit(2);
+}
+
+function validateCorrectedSummary(content, file) {
+  const errors = [];
+  const required = [
+    [/^##\s+总体结论\s*$/m, "## 总体结论"],
+    [/^##\s+角色评分(?:（校正后）)?\s*$/m, "## 角色评分 或 ## 角色评分（校正后）"],
+    [/^##\s+问题摘要\s*$/m, "## 问题摘要"],
+    [/^##\s+问题详情\s*$/m, "## 问题详情"],
+  ];
+
+  for (const [re, label] of required) {
+    if (!re.test(content)) errors.push(`${file} missing required section: ${label}`);
+  }
+
+  const forbidden = [
+    "集成验证校正记录",
+    "集成验证校正",
+    "集成验证新增文档问题",
+    "非文档问题说明",
+    "共性问题",
+    "改进建议排序",
+    "产物索引",
+    "加权维度评分",
+    "接入测试综合报告",
+  ];
+  for (const title of forbidden) {
+    const re = new RegExp(`^##\\s+${escapeRegExp(title)}\\s*$`, "m");
+    if (re.test(content)) errors.push(`${file} contains retired section: ## ${title}`);
+  }
+
+  const summaryBody = sectionBody(content, /\n##\s+问题摘要\s*\n/);
+  const detailBody = sectionBody(content, /\n##\s+问题详情\s*\n/);
+  const summaryIds = [];
+  for (const line of summaryBody.split(/\r?\n/)) {
+    const m = line.match(/^\|\s*((?:DOC|BUILD|TEST|FS|CS|P\d|DOC-N)-[A-Za-z0-9_-]+)\s*\|/i);
+    if (m) summaryIds.push(m[1]);
+  }
+
+  const detailBlocks = new Map();
+  const detailHeadingRe = /^###\s+((?:DOC|BUILD|TEST|FS|CS|P\d|DOC-N)-[A-Za-z0-9_-]+)[^\n]*$/gim;
+  const matches = Array.from(detailBody.matchAll(detailHeadingRe));
+  for (let i = 0; i < matches.length; i += 1) {
+    const current = matches[i];
+    const next = matches[i + 1];
+    const start = current.index == null ? 0 : current.index + current[0].length;
+    const end = next && next.index != null ? next.index : detailBody.length;
+    detailBlocks.set(current[1], detailBody.slice(start, end));
+  }
+
+  for (const id of summaryIds) {
+    if (!detailBlocks.has(id)) errors.push(`${file} summary issue ${id} missing matching detail heading`);
+  }
+  for (const id of detailBlocks.keys()) {
+    if (!summaryIds.includes(id)) errors.push(`${file} detail issue ${id} is not listed in problem summary`);
+  }
+  for (const [id, block] of detailBlocks.entries()) {
+    if (!/^\s*-\s*角色\s*[:：]\s*\S+/m.test(block)) {
+      errors.push(`${file} detail issue ${id} missing required "- 角色：" field`);
+    }
+  }
+
+  failSummaryValidation(errors);
+}
+
 function demoteBuildIssues(content) {
   const lines = content.split(/\r?\n/);
   let skippedFirstH1 = false;
@@ -204,12 +285,9 @@ function prepareDocEvalSummary() {
     content = insertAfterTableFollowingHeading(content, /\n##\s+角色评分[^\n]*\n/, note);
   }
 
-  write(summary, content);
-}
+  validateCorrectedSummary(content, summary);
 
-function prepareIntegrationSummary() {
-  const title = documents["integration-summary"] && documents["integration-summary"].title;
-  normalizeH1(path.join(runDir, "integration-summary.md"), title);
+  write(summary, content);
 }
 
 function prepareRoleReports() {
@@ -227,4 +305,3 @@ function prepareRoleReports() {
 prepareBuildReport();
 prepareDocEvalSummary();
 prepareRoleReports();
-prepareIntegrationSummary();

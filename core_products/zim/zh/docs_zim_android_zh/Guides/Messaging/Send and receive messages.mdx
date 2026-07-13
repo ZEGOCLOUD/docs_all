@@ -1,6 +1,6 @@
 ---
 articleID: 11594
-date: "2026-05-25"
+date: "2026-07-06"
 ---
 
 import MarkMessageType from '/core_products/zim/zh/snippets/MessageType.mdx'
@@ -20,7 +20,7 @@ import {
     conversationChangedMap,
     disableUnreadMessageCountMap,
     downloadMediaFileMap,
-    groupMessageReceivedMap,
+    messageReceivedMap,
     isMentionAllMap,
     mentionedInfoListMap,
     mentionedUserIDsMap,
@@ -28,10 +28,8 @@ import {
     multipleMediaUploadingProgressMap,
     onMediaDownloadingProgressMap,
     onMediaUploadingProgressMap,
-    peerMessageReceivedMap,
     queryConversationListMap,
     queryConversationMap,
-    roomMessageReceivedMap,
     sendMessageMap,
     setEventHandlerMap,
 } from "/snippets/zim/const-link.mdx"
@@ -72,14 +70,14 @@ ZIM SDK 支持单聊消息、群组消息、房间消息等的收发，以及查
 
 <div>
 :::if{props.platform="undefined|iOS|mac|win|flutter|Web|miniprogram|rn|uniapp"}
-1. 客户端 A、B 分别创建自己的 ZIM 实例，并注册 {getPlatformData(props,setEventHandlerMap)} 监听的 {getPlatformData(props,peerMessageReceivedMap)} 回调接口，用于接收单聊消息通知。
+1. 客户端 A、B 分别创建自己的 ZIM 实例，并注册 {getPlatformData(props,setEventHandlerMap)} 监听的 {getPlatformData(props,messageReceivedMap)} 回调接口，用于接收单聊消息通知。
 :::
 :::if{props.platform="UTS"}
-1. 客户端 A、B 分别创建自己的 ZIM 实例，并监听 {getPlatformData(props,peerMessageReceivedMap)} 回调接口，用于接收单聊消息通知。
+1. 客户端 A、B 分别创建自己的 ZIM 实例，并监听 {getPlatformData(props,messageReceivedMap)} 回调接口，用于接收单聊消息通知。
 :::
 2. 客户端 A、B 分别登录 ZIM SDK。
 3. 客户端 A 调用 {getPlatformData(props,sendMessageMap)} 接口，设置 `conversationType` 为 `ZIMConversationType.Peer` 发送一条单聊消息到客户端 B。
-4. 客户端 B 将通过 {getPlatformData(props,peerMessageReceivedMap)} 回调接口，收到客户端 A 的消息。
+4. 客户端 B 将通过 {getPlatformData(props,messageReceivedMap)} 回调接口，收到客户端 A 的消息。
 </div>
 
 <Warning title="注意">
@@ -2240,7 +2238,7 @@ try {
 
     // 提醒会话内所有其他用户查看消息
     bool isMentionAll = true;
-    message.isMentionAll(isMentionAll);
+    message.setIsMentionAll(isMentionAll);
 
     ZIMMessageSendConfig config = ZIMMessageSendConfig();
     //设置消息优先级
@@ -2274,10 +2272,7 @@ try {
 - 开发者可以通过相关回调接收消息通知。
 </div>
 :::
-- 接收消息时：
-  + 单聊消息（Peer 类型），通过 {getPlatformData(props, peerMessageReceivedMap)} 回调接收。
-  + 房间消息（Room 类型），通过 {getPlatformData(props, roomMessageReceivedMap)} 回调接收。
-  + 群组消息（Group 类型），通过 {getPlatformData(props, groupMessageReceivedMap)} 回调接收。
+- 接收消息时，通过 {getPlatformData(props, messageReceivedMap)} 回调接收所有类型的消息（单聊、群组、房间），并通过 conversationType 区分消息来源。
 - 接收消息时，收到的消息类型是基类 {getPlatformData(props,ZIMMessageMap)} 。开发者需要根据其中的 `type`（具体请参考 {getPlatformData(props,ZIMMessageTypeMap)} ）字段，判断消息类型，然后强转基类为具体的子类。
 - 接收消息时，可以使用消息的 orderkey 来实现排序；即 orderkey 越大，消息的时间越新。接收到消息后，会自动更新消息未读数量。
 </Warning>
@@ -2286,8 +2281,11 @@ try {
 ```java
 zim.setEventHandler(new ZIMEventHandler() {
     @Override
-    public void onPeerMessageReceived(ZIM zim, ArrayList<ZIMMessage> messageList, ZIMMessageReceivedInfo info, String fromUserID) {
-        // 收到单聊消息的回调
+    public void onMessageReceived(ZIM zim, ZIMMessageReceivedEventResult result) {
+        List<ZIMMessage> messageList = result.messageList;
+        ZIMMessageReceivedInfo info = result.info;
+        String conversationID = result.conversationID;
+        ZIMConversationType conversationType = result.conversationType;
         
         ZIMMediaDownloadConfig config = new ZIMMediaDownloadConfig();
 
@@ -2344,16 +2342,6 @@ zim.setEventHandler(new ZIMEventHandler() {
            } 
         }
     }
-
-    @Override
-    public void onGroupMessageReceived(ZIM zim, ArrayList<ZIMMessage> messageList, ZIMMessageReceivedInfo info, String fromGroupID) {
-        // 收到群组消息的回调
-    }
-
-    @Override
-    public void onRoomMessageReceived(ZIM zim, ArrayList<ZIMMessage> messageList, ZIMMessageReceivedInfo info, String fromRoomID) {
-        // 收到房间消息的回调
-    }
 });
 ```
 :::
@@ -2362,11 +2350,10 @@ zim.setEventHandler(new ZIMEventHandler() {
 //注册 ZIMEventHander 回调
 [zim setEventHandler:self];
 
-// 收到单聊消息的回调
-- (void)zim:(ZIM *)zim
-    peerMessageReceived:(NSArray<ZIMMessage *> *)messageList
-            info:(ZIMMessageReceivedInfo *)info
-            fromUserID:(NSString *)fromUserID {
+// 接收消息的回调
+- (void)zim:(ZIM *)zim messageReceivedWithResult:(ZIMMessageReceivedEventResult *)result {
+    NSArray<ZIMMessage *> *messageList = result.messageList;
+    ZIMConversationType conversationType = result.conversationType;
                 
     ZIMMediaDownloadConfig *config = [[ZIMMediaDownloadConfig alloc] init];
 
@@ -2410,28 +2397,15 @@ zim.setEventHandler(new ZIMEventHandler() {
     }        
 }
 
-// 收到群组消息的回调
-- (void)zim:(ZIM *)zim
-    groupMessageReceived:(NSArray<ZIMMessage *> *)messageList
-            info:(ZIMMessageReceivedInfo *)info
-            fromGroupID:(NSString *)fromGroupID{
-}
 
-// 收到房间消息的回调
-- (void)zim:(ZIM *)zim
-    roomMessageReceived:(NSArray<ZIMMessage *> *)messageList
-            info:(ZIMMessageReceivedInfo *)info
-            fromRoomID:(NSString *)fromRoomID{
-}
 ```
 :::
 :::if{props.platform="win"}
 ```cpp
-// 收到单聊消息的回调
-void onPeerMessagedReceived(ZIM *zim*,
-                         const std::vector<std::shared_ptr<ZIMMessage>> & messageList,
-                         const ZIMMessageReceivedInfo & info,
-                         const std::string &fromUserID) {
+// 接收消息的回调
+virtual void onMessageReceived(ZIM *zim, const ZIMMessageReceivedEventResult &result) override {
+    auto &messageList = result.messageList;
+    auto conversationType = result.conversationType;
 
     zim::ZIMMediaDownloadConfig download_config;
 
@@ -2498,27 +2472,16 @@ void onPeerMessagedReceived(ZIM *zim*,
     }
 }
 
-// 收到群组消息的回调
-void onGroupMessagedReceived(ZIM *zim*,
-                         const std::vector<std::shared_ptr<ZIMMessage>> & messageList,
-                         const ZIMMessageReceivedInfo & info,
-                         const std::string &fromGroupID) {
-}
 
-// 收到房间消息的回调
-void onRoomMessagedReceived(ZIM *zim*,
-                         const std::vector<std::shared_ptr<ZIMMessage>> & messageList,
-                         const ZIMMessageReceivedInfo & info,
-                         const std::string &fromRoomID) {
-}
 ```
 :::
 
 :::if{props.platform="Web|miniprogram"}
 ```typescript
-// 收到单消息的回调
-zim.on('peerMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
-    data.messageList.forEach((msg) => {
+// 接收消息的回调
+zim.on('messageReceived', function (zim, result) {
+    const { messageList, conversationType } = result;
+    messageList.forEach((msg) => {
         if (msg.type == 2) {
             // 信令消息，这里以 JSON 字符串 为例，将 Uint8Array 消息内容转为 JSON 字符串
             const uint8Array = msg.message;
@@ -2550,25 +2513,18 @@ zim.on('peerMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageRece
         }
     })
 });
-
-// 收到群组消息的回调
-zim.on('groupMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
-});
-
-// 收到房间消息的回调
-zim.on('roomMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
-});
 ```
 :::
 
 :::if{props.platform="rn|uniapp|harmonyos"}
 ```typescript
-// 收到单消息的回调
-zim.on('peerMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
+// 接收消息的回调
+zim.on('messageReceived', function (zim, result) {
+    const { messageList, conversationType } = result;
     
     const config: ZIMMediaDownloadConfig = {messageInfoIndex: 0};
 
-    data.messageList.forEach((msg) => {
+    messageList.forEach((msg) => {
         if (msg.type == 2) {
             // 信令消息，这里以 JSON 字符串 为例，将 Uint8Array 消息内容转为 JSON 字符串
             const uint8Array = msg.message;
@@ -2606,26 +2562,19 @@ zim.on('peerMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageRece
         }
     })
 });
-
-// 收到群组消息的回调
-zim.on('groupMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
-});
-
-// 收到房间消息的回调
-zim.on('roomMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
-});
 ```
 :::
 
 :::if{props.platform="UTS"}
 <CodeGroup>
 ```typescript title="UTS 插件"
-// 收到单聊消息的回调
-zim.onPeerMessageReceived((data) => {
+// 接收消息的回调
+zim.onMessageReceived((zim, result) => {
+    const { messageList, conversationType } = result;
     
     const config: ZIMMediaDownloadConfig = {messageInfoIndex: 0};
 
-    data.messageList.forEach((msg) => {
+    messageList.forEach((msg) => {
         if (msg.type == 2) {
             // 信令消息，这里以 JSON 字符串 为例，将 Uint8Array 消息内容转为 JSON 字符串
             const byteArr = msg.message;
@@ -2670,22 +2619,15 @@ zim.onPeerMessageReceived((data) => {
         }
     })
 });
-
-// 收到群组消息的回调
-zim.onGroupMessageReceived((data) => {
-});
-
-// 收到房间消息的回调
-zim.onRoomMessageReceived((data) => {
-});
 ```
 ```typescript title="原生插件"
-// 收到单消息的回调
-zim.on('peerMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
+// 接收消息的回调
+zim.on('messageReceived', function (zim, result) {
+    const { messageList, conversationType } = result;
     
     const config: ZIMMediaDownloadConfig = {messageInfoIndex: 0};
 
-    data.messageList.forEach((msg) => {
+    messageList.forEach((msg) => {
         if (msg.type == 2) {
             // 信令消息，这里以 JSON 字符串 为例，将 Uint8Array 消息内容转为 JSON 字符串
             const uint8Array = msg.message;
@@ -2723,20 +2665,14 @@ zim.on('peerMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageRece
         }
     })
 });
-
-// 收到群组消息的回调
-zim.on('groupMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
-});
-
-// 收到房间消息的回调
-zim.on('roomMessageReceived', (zim: ZIM, data: ZIMEventOfConversationMessageReceivedResult) => {
-});
 ```
 </CodeGroup>
 :::
 :::if{props.platform="flutter"}
 ```dart
-ZIMEventHandler.onPeerMessageReceived = (zim, messageList, info, fromUserID) {
+ZIMEventHandler().onMessageReceived = (ZIM zim, ZIMMessageReceivedEventResult result) {
+    List<ZIMMessage> messageList = result.messageList;
+    ZIMConversationType conversationType = result.conversationType;
     
     ZIMMediaDownloadConfig config = ZIMMediaDownloadConfig();
 
@@ -2793,13 +2729,7 @@ ZIMEventHandler.onPeerMessageReceived = (zim, messageList, info, fromUserID) {
     }
 };
 
-ZIMEventHandler.onGroupMessageReceived = (zim, messageList, info, fromGroupID) {
-    //收到群聊消息触发此处
-};
 
-ZIMEventHandler.onRoomMessageReceived = (zim, messageList, info, fromGroupID) {
-  //收到房间消息触发此处
-};
 ```
 :::
 
@@ -2914,7 +2844,7 @@ void onConversationChanged(
 :::
 :::if{props.platform="Web|miniprogram|rn|uniapp|harmonyos"}
 ```typescript
-zim.on('conversationChanged', (zim: ZIM, data: ZIMEventOfConversationChangedResult) => {
+zim.on('conversationChanged', (zim: ZIM, data: ZIMConversationChangedEventResult) => {
     console.log(data.info.mentionInfoList);
 });
 ```
@@ -2927,7 +2857,7 @@ zim.onConversationChanged((data) => {
 });
 ```
 ```typescript title="原生插件"
-zim.on('conversationChanged', (zim: ZIM, data: ZIMEventOfConversationChangedResult) => {
+zim.on('conversationChanged', (zim: ZIM, data: ZIMConversationChangedEventResult) => {
     console.log(data.info.mentionInfoList);
 });
 ```
@@ -3016,28 +2946,28 @@ List<String> userIds = message.mentionedUserIDs;
 会话内所有用户都可以调用 {getPlatformData(props,isMentionAllMap)} 参数，确认消息是否为全员提醒消息。
 :::if{props.platform=undefined}
 ```java
-boolean isMentionAll = message.isMentionAll();
+boolean isMentionAll = message.getIsMentionAll();
 ```
 :::
 
 :::if{props.platform="iOS|mac"}
 ```objc
-BOOL isMentionAll = message.isMentionAll;
+BOOL isMentionAll = message.getIsMentionAll;
 ```
 :::
 :::if{props.platform="win"}
 ```cpp
-boolean isMentionAll = message.isMentionAll;
+boolean isMentionAll = message.getIsMentionAll;
 ```
 :::
 :::if{props.platform="Web|miniprogram|rn|uniapp|UTS|harmonyos"}
 ```typescript
-const isMentionAll = message.isMentionAll;
+const isMentionAll = message.getIsMentionAll;
 ```
 :::
 :::if{props.platform="flutter"}
 ```dart
-bool isMentionAll = message.isMentionAll;
+bool isMentionAll = message.getIsMentionAll;
 ```
 :::
 
@@ -3090,7 +3020,7 @@ virtual void onBroadcastMessageReceived(ZIM * /*zim*/, const std::shared_ptr<ZIM
 :::if{props.platform="Web|miniprogram|rn|uniapp|harmonyos"}
 ```typescript
 // 用户接收全员推送消息
-zim.on('broadcastMessageReceived', (zim: ZIM, data: ZIMEventOfBroadcastMessageReceivedResult) => {
+zim.on('broadcastMessageReceived', (zim: ZIM, data: ZIMBroadcastMessageReceivedEventResult) => {
     console.log(data.message);
 });
 ```
@@ -3105,7 +3035,7 @@ zim.onBroadcastMessageReceived((data) => {
 ```
 ```typescript title="原生插件"
 // 用户接收全员推送消息
-zim.on('broadcastMessageReceived', (zim: ZIM, data: ZIMEventOfBroadcastMessageReceivedResult) => {
+zim.on('broadcastMessageReceived', (zim: ZIM, data: ZIMBroadcastMessageReceivedEventResult) => {
     console.log(data.message);
 });
 ```
@@ -3465,7 +3395,7 @@ void onMessageSentStatusChanged(zim::ZIM *zim, const std::vector<ZIMMessageSentS
 :::if{props.platform="Web|miniprogram|rn|uniapp|harmonyos"}
 ```typescript
 // 监听消息状态
-zim.on('messageSentStatusChanged', (zim: ZIM, data: ZIMEventOfMessageSentStatusChangedResult) => {
+zim.on('messageSentStatusChanged', (zim: ZIM, data: ZIMMessageSentStatusChangedEventResult) => {
     data.infos.forEach((info) => {
         console.warn(info.message, info.status);
     });  
@@ -3484,7 +3414,7 @@ zim.onMessageSentStatusChanged((data) => {
 ```
 ```typescript title="原生插件"
 // 监听消息状态
-zim.on('messageSentStatusChanged', (zim: ZIM, data: ZIMEventOfMessageSentStatusChangedResult) => {
+zim.on('messageSentStatusChanged', (zim: ZIM, data: ZIMMessageSentStatusChangedEventResult) => {
     data.infos.forEach((info) => {
         console.warn(info.message, info.status);
     });  

@@ -1,0 +1,406 @@
+---
+date: "2026-06-24"
+---
+
+import { getPlatformData } from "/snippets/utils-content-parser.js"
+
+
+
+
+# 社群禁言
+
+<Note title="说明">
+当前社群禁言功能仅支持对社群内的频道进行禁言操作，暂不支持社群级别的全局禁言。
+</Note>
+
+用户登录 ZIM SDK 后，可通过 `muteCommunityChannels` 设置社群频道禁言状态，支持对多个频道批量设置。
+
+## 前提条件
+
+- 请参考 [实现基本消息收发](../Messaging/Send%20and%20receive%20messages.mdx) 完成 ZIM SDK 获取、初始化和用户登录。
+- 请参考 [使用 Token 鉴权](../Users/Authentication.mdx) 实现用户鉴权登录。
+- 社群功能需要 ZIM SDK 3.0.0 及以上版本。
+- 社群功能为旗舰版功能，使用前请联系 ZEGO 技术支持开通。
+- 社群功能的 Token 生成方式与其他 ZIM 功能一致，无需额外权限声明。
+
+## 功能说明
+
+- 支持批量设置多个频道禁言状态，禁言配置通过 `ZIMCommunityChannelMuteConfig` 指定。
+- `config.mode` 可以决定禁言范围：`NONE`（不禁言，用于解除禁言）、`NORMAL`（禁言普通成员）、`ALL`（禁言包括管理员和群主在内的所有人）、`CUSTOM`（自定义角色范围，此时由 `config.roles` 控制）。
+- `config` 内填写 `duration` 指定禁言时长，单位秒，取值范围 1-2592001（约 30 天），或 `-1` 表示永久禁言。
+
+设置成功后，可通过 `ZIMCommunityChannelsMutedCallback` 获取结果。
+
+| 配置字段 | 说明 |
+|---------|------|
+| `mode` | 禁言范围：`NONE`(0) 不禁言任何角色（用于解除禁言，isMute=true 且 mode=NONE 等价于取消禁言）、`NORMAL`(1) 禁言普通成员、`ALL`(2) 全员禁言、`CUSTOM`(3) 自定义角色范围 |
+| `roles` | 当 `mode` 为 `Custom` 时生效，指定被禁言的角色列表 |
+| `duration` | 禁言时长（秒），1-2592001 或 -1 表示永久禁言 |
+
+`channelIDs` 和 `communityID` 是接口方法的直接参数，非 config 配置字段。
+
+### 禁言机制说明
+
+社群支持两种禁言维度，二者可叠加生效：
+
+| 维度 | 接口 | 作用范围 | 说明 |
+|------|------|----------|------|
+| **频道禁言** | `muteCommunityChannels` | 频道级别 | 对指定频道设置禁言，通过 `config.mode` 控制禁言角色范围 |
+| **成员禁言** | `muteCommunityMembers` | 成员级别 | 对指定成员在指定频道（留空则对所有频道生效）设置禁言 |
+
+- 当成员所在频道被设为禁言，且该成员也未被单独设为禁言时，以频道禁言配置为准。
+- 当成员被单独设为禁言后，无论频道是否禁言，该成员都无法发送消息。
+- 成员禁言的详细说明请参见 [社群成员管理 - 设置成员禁言](./community-member-management.mdx)。
+
+## 示例代码
+
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+import im.zego.zim.ZIM;
+import im.zego.zim.callback.ZIMCommunityChannelsMutedCallback;
+import im.zego.zim.entity.ZIMCommunityChannel;
+import im.zego.zim.entity.ZIMCommunityChannelMuteConfig;
+import im.zego.zim.entity.ZIMError;
+import im.zego.zim.enums.ZIMCommunityChannelMuteMode;
+import im.zego.zim.enums.ZIMErrorCode;
+
+ArrayList<String> channelIDs = new ArrayList<>();
+channelIDs.add("channel_1");
+channelIDs.add("channel_2");
+
+ZIMCommunityChannelMuteConfig config = new ZIMCommunityChannelMuteConfig();
+config.setDuration(3600); // 1 小时，或 -1 为永久
+config.setMode(ZIMCommunityChannelMuteMode.NORMAL); // 可选："NONE" | "NORMAL" | "ALL" | "CUSTOM"。NONE 用于解除禁言
+// config.roles = new ArrayList<Integer>(); // 当 mode = "CUSTOM" 时填写角色列表
+
+// isMute = true 为禁言，false 为解除禁言
+zim.muteCommunityChannels(true, channelIDs, communityID, config,
+	new ZIMCommunityChannelsMutedCallback() {
+		@Override
+		public void onCommunityChannelsMuted(String communityID, boolean isMute, ArrayList<String> errorChannelIDs, ZIMError errorInfo) {
+			if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+				// 操作成功
+			}
+		}
+	});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+NSArray *channelIDs = @[@"channel_1", @"channel_2"];
+
+ZIMCommunityChannelMuteConfig *config =
+	[[ZIMCommunityChannelMuteConfig alloc] init];
+config.duration = 3600;
+config.mode = ZIMCommunityChannelMuteModeNormal; // "0: None(解除禁言) | 1: Normal | 2: All | 3: Custom"
+
+[zim muteCommunityChannels:YES channelIDs:channelIDs communityID:communityID config:config callback:^(NSString * _Nonnull communityID, BOOL isMute, NSArray<NSString *> * _Nonnull errorChannelIDs, ZIMError * _Nonnull errorInfo) {
+	if (errorInfo.code == ZIMErrorCodenoneSuccess) {
+		// 禁言设置成功
+	}
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+std::vector<std::string> channelIDs = {"channel_1", "channel_2"};
+
+zim::ZIMCommunityChannelMuteConfig config;
+config.duration = 3600;
+config.mode = ZIM_COMMUNITY_CHANNEL_MUTE_MODE_NORMAL; // "1: Normal" | "2: All" | "3: Custom"
+
+zim_->muteCommunityChannels(true, channelIDs, communityID, config,
+	[=](const std::string &communityID,
+		bool isMute,
+		const std::vector<std::string> &mutedChannelIDs,
+		const zim::ZIMError &errorInfo) {
+		if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+			// 禁言设置成功
+		}
+	});
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+const channelIDs = ['channel_1', 'channel_2'];
+const config: ZIMCommunityChannelMuteConfig = {
+	duration: 3600,
+	mode: 2, // "1: Normal" | "2: All" | "3: Custom"
+	// roles: [101, 102], // 当 mode = 'Custom' 时传入
+};
+
+zim.muteCommunityChannels(true, channelIDs, communityID, config)
+	.then((result: ZIMCommunityChannelsMutedResult) => {
+		// result.errorChannelIDs 为操作失败的频道 ID 列表
+	})
+	.catch((err: ZIMError) => {
+		// 操作失败
+	});
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+List<String> channelIDs = ['channel_1', 'channel_2'];
+ZIMCommunityChannelMuteConfig config = ZIMCommunityChannelMuteConfig()
+  ..duration = 3600
+  ..mode = ZIMCommunityChannelMuteMode.normal; // "1: Normal" | "2: All" | "3: Custom"
+
+try {
+	await ZIM.getInstance()!.muteCommunityChannels(true, channelIDs, communityID, config);
+	// 禁言设置成功
+} on PlatformException catch (onError) {
+	// 操作失败
+}
+```
+</CodeGroup>
+:::
+
+<Accordion title="常见错误码">
+
+| 错误码 | 说明 | 处理建议 |
+|--------|------|----------|
+| 6001004 | 社群不存在 | 确认 communityID 是否正确 |
+| 6001062 | 频道不存在 | 确认 channelID 是否正确 |
+| 6001065 | 无法解散默认频道 | 默认频道不支持解散操作 |
+| 6001007 | 社群权限错误 | 确认当前用户是否为管理员或所有者 |
+
+</Accordion>
+
+## 查询频道禁言状态
+
+调用 `queryCommunityChannelsInfo` 接口，批量查询指定频道的完整信息，可获取频道的当前禁言状态。
+
+- `channelInfos` 返回 `ZIMCommunityChannelFullInfo` 列表，其中 `muteInfo` 包含频道禁言信息。
+- `errorChannelIDs` 返回查询失败的频道 ID 列表。
+
+| 结果字段 | 说明 |
+|---------|------|
+| `baseInfo` | 频道基本信息 |
+| `createTime` | 频道创建时间 |
+| `creatorUserID` | 频道创建者用户 ID |
+| `channelNotice` | 频道公告 |
+| `channelAttributes` | 频道属性字典 |
+| `currentMemberCount` | 当前频道成员数 |
+| `muteInfo` | 频道禁言信息，包含 `mode`、`expiredTime`、`roles` |
+
+### muteInfo 字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| mode | ZIMCommunityChannelMuteMode | 当前禁言模式：`NONE`(0)、`NORMAL`(1)、`ALL`(2)、`CUSTOM`(3) |
+| expiredTime | long | 禁言失效时间（毫秒），到期后自动解除禁言 |
+| roles | ArrayList&lt;Integer&gt; | 当前被禁言的角色列表，仅当 mode 为 `CUSTOM` 时有值 |
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+ArrayList<String> channelIDs = new ArrayList<>();
+channelIDs.add("channel_1");
+channelIDs.add("channel_2");
+
+zim.queryCommunityChannelsInfo(channelIDs, communityID,
+    new ZIMCommunityChannelsInfoQueriedCallback() {
+        @Override
+        public void onCommunityChannelsInfoQueried(String communityID, ArrayList<ZIMCommunityChannelFullInfo> channelInfos, ArrayList<String> errorChannelIDs, ZIMError errorInfo) {
+            if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+                for (ZIMCommunityChannelFullInfo channelInfo : channelInfos) {
+                    ZIMCommunityChannelMuteInfo muteInfo = channelInfo.getMuteInfo();
+                    // muteInfo.mode : 当前频道禁言模式
+                    // muteInfo.expiredTime : 禁言失效时间（毫秒）
+                    // muteInfo.roles : 当前被禁言的角色列表
+                }
+            }
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+NSArray<NSString *> *channelIDs = @[@"channel_1", @"channel_2"];
+
+[zim queryCommunityChannelsInfoByChannelIDs:channelIDs communityID:communityID callback:^(NSString * _Nonnull communityID, NSArray<ZIMCommunityChannelFullInfo *> * _Nonnull channelInfos, NSArray<NSString *> * _Nonnull errorChannelIDs, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodenoneSuccess) {
+        for (ZIMCommunityChannelFullInfo *channelInfo in channelInfos) {
+            ZIMCommunityChannelMuteInfo *muteInfo = channelInfo.muteInfo;
+            // muteInfo.mode : 当前频道禁言模式
+            // muteInfo.expiredTime : 禁言失效时间（毫秒）
+            // muteInfo.roles : 当前被禁言的角色列表
+        }
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+std::vector<std::string> channelIDs = {"channel_1", "channel_2"};
+
+zim_->queryCommunityChannelsInfo(channelIDs, communityID,
+    [=](const std::string &communityID,
+        const std::vector<zim::ZIMCommunityChannelFullInfo> &channelInfos,
+        const std::vector<std::string> &errorChannelIDs,
+        const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            for (const auto &channelInfo : channelInfos) {
+                const zim::ZIMCommunityChannelMuteInfo &muteInfo = channelInfo.muteInfo;
+                // muteInfo.mode : 当前频道禁言模式
+                // muteInfo.expiredTime : 禁言失效时间（毫秒）
+                // muteInfo.roles : 当前被禁言的角色列表
+            }
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+const channelIDs = ['channel_1', 'channel_2'];
+
+zim.queryCommunityChannelsInfo(channelIDs, communityID)
+    .then((result: ZIMCommunityChannelsInfoQueriedResult) => {
+        const { channelInfos } = result;
+        channelInfos.forEach((channelInfo) => {
+            const muteInfo = channelInfo.muteInfo;
+            // muteInfo.mode : 当前频道禁言模式
+            // muteInfo.expiredTime : 禁言失效时间（毫秒）
+            // muteInfo.roles : 当前被禁言的角色列表
+        });
+    })
+    .catch((err: ZIMError) => {
+        // 查询失败
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+List<String> channelIDs = ['channel_1', 'channel_2'];
+
+try {
+    ZIMCommunityChannelsInfoQueriedResult result =
+        await ZIM.getInstance()!.queryCommunityChannelsInfoByChannelIDs(channelIDs, communityID);
+    for (final channelInfo in result.channelInfos) {
+        final muteInfo = channelInfo.muteInfo;
+        // muteInfo.mode : 当前频道禁言模式
+        // muteInfo.expiredTime : 禁言失效时间（毫秒）
+        // muteInfo.roles : 当前被禁言的角色列表
+    }
+} on PlatformException catch (onError) {
+    // 查询失败
+}
+```
+</CodeGroup>
+:::
+
+## 监听频道禁言变化事件
+
+当频道资料（名称、头像、公告、属性、禁言状态等）发生变化时，SDK 会触发频道信息更新回调。可通过该回调获取 `updateInfoList` 中的 `channelInfo.muteInfo`，判断频道当前的禁言模式与禁言角色。
+
+- `communityID`：触发更新的社群 ID。
+- `updateInfoList`：变更后的频道完整信息列表。
+- `channelInfo.muteInfo`：包含 `mode`、`expiredTime`、`roles` 等禁言状态信息。
+
+> 由于社群规模较大，SDK 可能只向活跃用户推送频道信息变化通知。若未收到推送，可通过 `queryCommunityChannelsInfo` 主动拉取最新频道信息。
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onCommunityChannelInfoUpdated(ZIM zim, ZIMCommunityChannelInfoUpdatedEventResult result) {
+        String communityID = result.getCommunityID();
+        for (ZIMCommunityChannelFullInfoUpdateInfo updateInfo : result.getUpdateInfoList()) {
+            ZIMCommunityChannelFullInfo channelInfo = updateInfo.getChannelInfo();
+            ZIMCommunityChannelMuteInfo muteInfo = channelInfo.getMuteInfo();
+            // muteInfo.mode : 当前频道禁言模式
+            // muteInfo.expiredTime : 禁言失效时间（毫秒）
+            // muteInfo.roles : 当前被禁言的角色列表
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+- (void)zim:(ZIM *)zim communityChannelInfoUpdatedWithResult:(ZIMCommunityChannelInfoUpdatedEventResult *)result {
+    NSString *communityID = result.communityID;
+    for (ZIMCommunityChannelFullInfoUpdateInfo *updateInfo in result.updateInfoList) {
+        ZIMCommunityChannelFullInfo *channelInfo = updateInfo.channelInfo;
+        ZIMCommunityChannelMuteInfo *muteInfo = channelInfo.muteInfo;
+        // muteInfo.mode : 当前频道禁言模式
+        // muteInfo.expiredTime : 禁言失效时间（毫秒）
+        // muteInfo.roles : 当前被禁言的角色列表
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+void onCommunityChannelInfoUpdated(zim::ZIM *zim,
+    const zim::ZIMCommunityChannelInfoUpdatedEventResult &result) override {
+    std::string communityID = result.communityID;
+    for (const auto &updateInfo : result.updateInfoList) {
+        // updateInfo 包含更新后的频道完整信息，可通过 updateInfo.channelInfo 获取。
+        // channelInfo.muteInfo 包含当前频道的禁言状态。
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+zim.on('communityChannelInfoUpdated', (zim, result) => {
+    const communityID = result.communityID;
+    result.updateInfoList.forEach((updateInfo) => {
+        const channelInfo = updateInfo.channelInfo;
+        const muteInfo = channelInfo.muteInfo;
+        // muteInfo.mode : 当前频道禁言模式
+        // muteInfo.expiredTime : 禁言失效时间（毫秒）
+        // muteInfo.roles : 当前被禁言的角色列表
+    });
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+ZIMEventHandler.onCommunityChannelInfoUpdated =
+    (ZIM zim, ZIMCommunityChannelInfoUpdatedEventResult result) {
+    for (final updateInfo in result.updateInfoList) {
+        final channelInfo = updateInfo.channelInfo;
+        final muteInfo = channelInfo.muteInfo;
+        // muteInfo.mode : 当前频道禁言模式
+        // muteInfo.expiredTime : 禁言失效时间（毫秒）
+        // muteInfo.roles : 当前被禁言的角色列表
+    }
+};
+```
+</CodeGroup>
+:::
+
+
+
+## 相关参考
+
+- [ZIM 错误码](../../SDK%20Error%20Codes/ZIM.mdx)

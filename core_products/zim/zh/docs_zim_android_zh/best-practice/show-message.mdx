@@ -1,5 +1,5 @@
 ---
-date: "2026-04-21"
+date: "2026-06-24"
 ---
 import { getPlatformData } from "/snippets/utils-content-parser.js"
 
@@ -19,13 +19,13 @@ export const queryHistoryMessageMap = {
   'window': <a href='@queryHistoryMessage' target='_blank'>queryHistoryMessage</a>,
   'web': <a href='@queryHistoryMessage' target='_blank'>queryHistoryMessage</a>,
 }
-export const peerMessageReceivedMap= {
-  'Android': <a href='@onPeerMessageReceived' target='_blank'>onPeerMessageReceived</a>,
-  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onPeerMessageReceived.html' target='_blank'>onPeerMessageReceived</a>,
-  'iOS': <a href='/zim-ios/client-sdks/api-reference/protocol#zimpeermessagereceivedinfofromuserid' target='_blank'>peerMessageReceived</a>,
-  'mac': <a href='/zim-macos/client-sdks/api-reference/protocol#zimpeermessagereceivedinfofromuserid' target='_blank'>peerMessageReceived</a>,
-  'window': <a href='@onPeerMessageReceived' target='_blank'>onPeerMessageReceived</a>,
-  'web': <a href='@peerMessageReceived' target='_blank'>peerMessageReceived</a>,
+export const messageReceivedMap= {
+  'Android': <a href='@onMessageReceived' target='_blank'>onMessageReceived</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onMessageReceived.html' target='_blank'>onMessageReceived</a>,
+  'iOS': <a href='/zim-ios/client-sdks/api-reference/protocol#zimmessagereceived' target='_blank'>messageReceived</a>,
+  'mac': <a href='/zim-macos/client-sdks/api-reference/protocol#zimmessagereceived' target='_blank'>messageReceived</a>,
+  'window': <a href='@onMessageReceived' target='_blank'>onMessageReceived</a>,
+  'web': <a href='@messageReceived' target='_blank'>messageReceived</a>,
 }
 
 export const messageSentStatusChangedMap= {
@@ -71,7 +71,7 @@ sequenceDiagram
     participant MM as Message Manager
     participant UI as UI Layer
 
-    Note over SDK: onMessageQueried<br/>onPeerMessageReceived<br/>onMessageSentStatusChanged<br/>onMessageRevoked<br/>onMessageSent<br/>onMessageDeleted<br/>...
+    Note over SDK: onMessageQueried<br/>onMessageReceived<br/>onMessageSentStatusChanged<br/>onMessageRevoked<br/>onMessageSent<br/>onMessageDeleted<br/>...
 
     SDK->>MM: 推送消息事件 (Transaction)
 
@@ -371,15 +371,20 @@ zim.queryHistoryMessage(
 
 ### 获取实时接收的消息并渲染到聊天界面
 
-监听 {getPlatformData(props,peerMessageReceivedMap)} 接口获取实时接收的消息，并渲染到聊天界面。
+监听 {getPlatformData(props,messageReceivedMap)} 接口获取实时接收的消息，并渲染到聊天界面。
 
 :::if{props.platform=undefined}
 
 ```java
-public void onPeerMessageReceived(ZIM zim, List<ZIMMessage> messageList, 
-                                  ZIMMessageReceivedInfo info, String fromUserID) {
+@Override
+public void onMessageReceived(ZIM zim, ZIMMessageReceivedEventResult result) {
+    List<ZIMMessage> messageList = result.messageList;
+    ZIMMessageReceivedInfo info = result.info;
+    String conversationID = result.conversationID;
+    ZIMConversationType conversationType = result.conversationType;
+
     // 只处理当前会话的消息
-    if (!fromUserID.equals(myConversationID)) {
+    if (!conversationID.equals(myConversationID)) {
         return; // 非当前会话的消息忽略
     }
 
@@ -400,25 +405,31 @@ public void onPeerMessageReceived(ZIM zim, List<ZIMMessage> messageList,
 :::if{props.platform="iOS|mac"}
 ```oc
 
-- (void)zim:(ZIM *)zim
-    peerMessageReceived:(NSArray<ZIMMessage *> *)messageList
-                   info:(ZIMMessageReceivedInfo *)info
-             fromUserID:(NSString *)fromUserID{
-     if(fromUserID != myConversationID){
-         return;// 非当前会话收到的聊天消息，忽略
-     }
-     [self addMessage: messageList];
-     // update UI
- }
+- (void)zim:(ZIM *)zim messageReceivedWithResult:(ZIMMessageReceivedEventResult *)result {
+    NSArray<ZIMMessage *> *messageList = result.messageList;
+    ZIMMessageReceivedInfo *info = result.info;
+    NSString *conversationID = result.conversationID;
+    ZIMConversationType conversationType = result.conversationType;
+
+    if(conversationID != myConversationID){
+        return;// 非当前会话收到的聊天消息，忽略
+    }
+    [self addMessage: messageList];
+    // update UI
+}
 ```
 :::
 :::if{props.platform="window"}
 ```cpp
 
-void onPeerMessageReceived(ZIM* zim, const std::vector<ZIMMessage>& messageList, 
-                           const ZIMMessageReceivedInfo& info, const std::string& fromUserID) {
+virtual void onMessageReceived(ZIM *zim, const ZIMMessageReceivedEventResult &result) override {
+    auto &messageList = result.messageList;
+    auto &info = result.info;
+    auto &conversationID = result.conversationID;
+    auto conversationType = result.conversationType;
+
     // 只处理当前会话消息
-    if (fromUserID != myConversationID) {
+    if (conversationID != myConversationID) {
         return; // 非当前会话消息忽略
     }
 
@@ -435,21 +446,17 @@ void onPeerMessageReceived(ZIM* zim, const std::vector<ZIMMessage>& messageList,
 :::if{props.platform="web"}
 ```ts
 
-function onPeerMessageReceived(
-    zim: ZIM,
-    messageList: ZIMMessage[],
-    info: ZIMMessageReceivedInfo,
-    fromUserID: string
-) {
+zim.on('messageReceived', function (zim, result) {
+    const { messageList, info, conversationID, conversationType } = result;
     // 只处理当前会话消息
-    if (fromUserID !== myConversationID) return;
+    if (conversationID !== myConversationID) return;
 
     // 合并消息到消息列表
     addMessage(messageList);
 
     // 更新 UI，例如重新渲染消息列表
     updateUI();
-}
+});
 
 
 ```
@@ -457,14 +464,14 @@ function onPeerMessageReceived(
 :::if{props.platform="Flutter"}
 ```dart
 
-void onPeerMessageReceived(
-    ZIM zim,
-    List<ZIMMessage> messageList,
-    ZIMMessageReceivedInfo info,
-    String fromUserID,
-) {
+ZIMEventHandler().onMessageReceived = (ZIM zim, ZIMMessageReceivedEventResult result) {
+  List<ZIMMessage> messageList = result.messageList;
+  ZIMMessageReceivedInfo info = result.info;
+  String conversationID = result.conversationID;
+  ZIMConversationType conversationType = result.conversationType;
+
   // 只处理当前会话消息
-  if (fromUserID != myConversationID) return;
+  if (conversationID != myConversationID) return;
 
   // 合并消息到消息列表
   addMessage(messageList);
@@ -476,7 +483,7 @@ void onPeerMessageReceived(
       scrollController.jumpTo(scrollController.position.maxScrollExtent);
     }
   });
-}
+};
 ```
 :::
 
@@ -612,7 +619,7 @@ ZIM 在每个 API 或事件的返回结果中，已按 `orderKey` 对消息完�
 
 实际应用中，聊天页面的消息列表由多个数据源合并构成：
 - 历史消息（`queryHistoryMessage`）
-- 实时接收消息（`onPeerMessageReceived`）
+- 实时接收消息（`onMessageReceived`）
 - 消息更新（状态变更、撤回、编辑等）
 
 客户端是唯一能同时获取所有数据源的层级，需在合并后统一按 `orderKey` 重新排序，以确保：

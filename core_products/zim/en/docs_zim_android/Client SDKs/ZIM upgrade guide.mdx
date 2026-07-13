@@ -1,6 +1,6 @@
 ---
 articleID: 14167
-date: "2026-04-02"
+date: "2026-06-24"
 ---
 # ZIM upgrade Guide
 
@@ -24,7 +24,1154 @@ export const ZIMMessageReactionUserListQueriedCallbackMap = {
 
 This article provides some instructions and considerations for upgrading the ZIM SDK for {getPlatformData(props,platformMap)} version.
 
-:::if{props.platform="undefined|window"}
+## 3.0.0 Upgrade Guide
+
+<Warning title="Warning">
+
+This version (3.0.0) removes APIs that have been deprecated for over 1 year, along with related enum values and fields, and adds deprecation markers to some APIs. Please refer to the following instructions to complete the migration.
+</Warning>
+
+### Removed deprecated APIs
+
+#### ZIM initialization API (create)
+
+The deprecated old `create(appID, application)` API has been removed. Please use the [create](@create) API that accepts [ZIMAppConfig](@-ZIMAppConfig) instead.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java New version usage
+ZIMAppConfig appConfig = new ZIMAppConfig();
+appConfig.appID = 12345678L;
+appConfig.appSign = "appSign";
+ZIM zim = ZIM.create(appConfig, application);
+```
+
+```java Old version usage
+// Old API has been removed
+ZIM zim = ZIM.create(12345678L, application);
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp New version usage
+ZIMAppConfig appConfig;
+appConfig.appID = 12345678;
+appConfig.appSign = "appSign";
+ZIM *zim = ZIM::create(appConfig);
+```
+
+```cpp Old version usage
+// Old API has been removed
+ZIM *zim = ZIM::create(12345678);
+```
+</CodeGroup>
+:::
+
+#### ZIM login API (login)
+
+The deprecated old `login(ZIMUserInfo, token, callback)` API has been removed. Please use the [login](@login) API that accepts `userID` and [ZIMLoginConfig](@-ZIMLoginConfig) instead.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java New version usage
+ZIMLoginConfig loginConfig = new ZIMLoginConfig();
+loginConfig.userName = "userName";
+loginConfig.token = ""; // Fill in the token if using token authentication
+loginConfig.isOfflineLogin = false;
+zim.login("userID", loginConfig, new ZIMLoggedInCallback() {
+    @Override
+    public void onLoggedIn(ZIMError error) {
+        // Login result
+    }
+});
+```
+
+```java Old version usage
+// Old API has been removed
+ZIMUserInfo userInfo = new ZIMUserInfo();
+userInfo.userID = "userID";
+userInfo.userName = "userName";
+zim.login(userInfo, "", new ZIMLoggedInCallback() {
+    @Override
+    public void onLoggedIn(ZIMError error) {
+        // Login result
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp New version usage
+ZIMLoginConfig loginConfig;
+loginConfig.userName = "userName";
+loginConfig.token = ""; // Fill in the token if using token authentication
+loginConfig.isOfflineLogin = false;
+zim->login("userID", loginConfig, [=](const ZIMError &errorInfo) {
+    // Login result
+});
+```
+
+```cpp Old version usage
+// Old API has been removed
+ZIMUserInfo userInfo;
+userInfo.userID = "userID";
+userInfo.userName = "userName";
+zim->login(userInfo, [=](const ZIMError &errorInfo) {
+    // Login result
+});
+```
+</CodeGroup>
+:::
+
+#### ZIM message sending API (sendMessage)
+
+The deprecated `sendPeerMessage`, `sendRoomMessage`, `sendGroupMessage`, and old `sendMessage` API (without [ZIMMessageSendNotification](@-ZIMMessageSendNotification) parameter) have been removed. Please use the [sendMessage](@sendMessage) API with the `notification` parameter instead.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java New version usage
+ZIMTextMessage textMessage = new ZIMTextMessage("Hello");
+ZIMMessageSendConfig config = new ZIMMessageSendConfig();
+ZIMMessageSendNotification notification = new ZIMMessageSendNotification();
+notification.onMessageAttached = message -> {
+    // Business logic before message is sent
+};
+zim.sendMessage(textMessage, "toConversationID", ZIMConversationType.PEER,
+    config, notification, new ZIMMessageSentFullCallback() {
+        @Override
+        public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {
+            // Message sent result
+        }
+        @Override
+        public void onMessageAttached(ZIMMessage message) {}
+    });
+```
+
+```java Old version usage
+// Old APIs have been removed, please migrate to sendMessage with notification parameter
+ZIMTextMessage textMessage = new ZIMTextMessage("Hello");
+ZIMMessageSendConfig config = new ZIMMessageSendConfig();
+// Old 1v1 chat message sending
+zim.sendPeerMessage(textMessage, "toUserID", config,
+    new ZIMMessageSentCallback() {
+        @Override
+        public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {}
+    });
+// Old group chat message sending
+zim.sendGroupMessage(textMessage, "toGroupID", config,
+    new ZIMMessageSentCallback() {
+        @Override
+        public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {}
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp New version usage
+auto textMessage = std::make_shared<ZIMTextMessage>();
+textMessage->message = "Hello";
+ZIMMessageSendConfig config;
+auto notification = std::make_shared<ZIMMessageSendNotification>();
+notification->onMessageAttached = [=](const std::shared_ptr<ZIMMessage> &message) {
+    // Business logic before message is sent
+};
+zim->sendMessage(textMessage, "toConversationID",
+    ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER, config, notification,
+    [=](const std::shared_ptr<ZIMMessage> &message, const ZIMError &errorInfo) {
+        // Message sent result
+    });
+```
+
+```cpp Old version usage
+// Old APIs have been removed, please migrate to the new sendMessage API
+auto textMessage = std::make_shared<ZIMTextMessage>();
+textMessage->message = "Hello";
+ZIMMessageSendConfig config;
+// Old 1v1 chat message sending
+zim->sendPeerMessage(textMessage.get(), "toUserID", config,
+    [=](const std::shared_ptr<ZIMMessage> &message, const ZIMError &errorInfo) {});
+// Old group chat message sending
+zim->sendGroupMessage(textMessage.get(), "toGroupID", config,
+    [=](const std::shared_ptr<ZIMMessage> &message, const ZIMError &errorInfo) {});
+```
+</CodeGroup>
+:::
+
+#### ZIM media file download API (downloadMediaFile)
+
+The deprecated old `downloadMediaFile` API (without `config` parameter) has been removed. Please use the new [downloadMediaFile](@downloadMediaFile) API with the [ZIMMediaDownloadConfig](@-ZIMMediaDownloadConfig) parameter instead.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java New version usage
+ZIMImageMessage imageMessage = (ZIMImageMessage) message;
+ZIMMediaDownloadConfig config = new ZIMMediaDownloadConfig();
+zim.downloadMediaFile(imageMessage, ZIMMediaFileType.ORIGINAL_FILE, config,
+    new ZIMMediaDownloadedCallback() {
+        @Override
+        public void onMediaDownloadingProgress(ZIMMessage message,
+                long currentFileSize, long totalFileSize) {
+            // Download progress
+        }
+        @Override
+        public void onMediaDownloaded(ZIMMessage message, ZIMError errorInfo) {
+            // Download complete
+        }
+    });
+```
+
+```java Old version usage
+// Old API has been removed, please migrate to the new version with config parameter
+ZIMMediaMessage imageMessage = (ZIMMediaMessage) message;
+zim.downloadMediaFile(imageMessage, ZIMMediaFileType.ORIGINAL_FILE,
+    new ZIMMediaDownloadedCallback() {
+        @Override
+        public void onMediaDownloadingProgress(ZIMMediaMessage message,
+                long currentFileSize, long totalFileSize) {
+            // Download progress
+        }
+        @Override
+        public void onMediaDownloaded(ZIMMediaMessage message, ZIMError errorInfo) {
+            // Download complete
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp New version usage
+auto imageMessage = std::static_pointer_cast<ZIMImageMessage>(message);
+ZIMMediaDownloadConfig config;
+zim->downloadMediaFile(imageMessage,
+    ZIMMediaFileType::ZIM_MEDIA_FILE_TYPE_ORIGINAL_FILE, config,
+    [=](const std::shared_ptr<ZIMMessage> &msg,
+        unsigned long long currentFileSize, unsigned long long totalFileSize) {
+        // Download progress
+    },
+    [=](const std::shared_ptr<ZIMMessage> &msg, const ZIMError &errorInfo) {
+        // Download complete
+    });
+```
+
+```cpp Old version usage
+// Old API has been removed, please migrate to the new version with config parameter
+auto imageMessage = std::static_pointer_cast<ZIMMediaMessage>(message);
+zim->downloadMediaFile(imageMessage,
+    ZIMMediaFileType::ZIM_MEDIA_FILE_TYPE_ORIGINAL_FILE,
+    [=](const std::shared_ptr<ZIMMediaMessage> &msg,
+        unsigned long long currentFileSize, unsigned long long totalFileSize) {
+        // Download progress
+    },
+    [=](const std::shared_ptr<ZIMMediaMessage> &msg, const ZIMError &errorInfo) {
+        // Download complete
+    });
+```
+</CodeGroup>
+:::
+
+#### ZIM message receive callback APIs
+
+The `onReceivePeerMessage`, `onReceiveRoomMessage`, and `onReceiveGroupMessage` callbacks deprecated in 2.18.0 have been officially removed in this version. It is recommended to migrate to [onMessageReceived](@onMessageReceived).
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java New version usage
+@Override
+public void onMessageReceived(ZIM zim, ZIMMessageReceivedEventResult result) {
+    List<ZIMMessage> messageList = result.messageList;
+    ZIMMessageReceivedInfo info = result.info;
+    String conversationID = result.conversationID;
+    ZIMConversationType conversationType = result.conversationType;
+    // Handle messages for different conversation types based on conversationType
+}
+```
+
+```java Old version usage (removed)
+@Override
+public void onReceivePeerMessage(ZIM zim, List<ZIMMessage> messageList,
+        String fromUserID) {}
+@Override
+public void onReceiveRoomMessage(ZIM zim, List<ZIMMessage> messageList,
+        String fromRoomID) {}
+@Override
+public void onReceiveGroupMessage(ZIM zim, List<ZIMMessage> messageList,
+        String fromGroupID) {}
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp New version usage
+virtual void onMessageReceived(ZIM *zim,
+        const ZIMMessageReceivedEventResult &result) override {
+    auto &messageList = result.messageList;
+    auto &info = result.info;
+    auto &conversationID = result.conversationID;
+    auto conversationType = result.conversationType;
+    // Handle messages for different conversation types based on conversationType
+}
+```
+
+```cpp Old version usage (removed)
+virtual void onReceivePeerMessage(ZIM *zim,
+        const std::vector<std::shared_ptr<ZIMMessage>> &messageList,
+        const std::string &fromUserID) override {}
+virtual void onReceiveRoomMessage(ZIM *zim,
+        const std::vector<std::shared_ptr<ZIMMessage>> &messageList,
+        const std::string &fromRoomID) override {}
+virtual void onReceiveGroupMessage(ZIM *zim,
+        const std::vector<std::shared_ptr<ZIMMessage>> &messageList,
+        const std::string &fromGroupID) override {}
+```
+</CodeGroup>
+:::
+
+#### ZIM call invitation callback APIs
+
+The old `onCallInvitationTimeout(zim, callID)`, `onCallInvitationRejected`, `onCallInvitationAccepted`, and `onCallInviteesAnsweredTimeout` callbacks have been removed. Please use the new [onCallInvitationTimeout](@onCallInvitationTimeout) and [onCallUserStateChanged](@onCallUserStateChanged) instead.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java New version usage
+@Override
+public void onCallInvitationTimeout(ZIM zim,
+        ZIMCallInvitationTimeoutInfo info, String callID) {
+    // info.mode can distinguish between normal mode and advanced mode
+}
+
+@Override
+public void onCallUserStateChanged(ZIM zim,
+        ZIMCallUserStateChangeInfo info, String callID) {
+    // info.callUserList contains the list of users whose status changed
+    // You can uniformly handle accept, reject, timeout, and other status changes
+}
+```
+
+```java Old version usage
+// Old callbacks have been removed, please migrate to onCallInvitationTimeout and onCallUserStateChanged
+@Override
+public void onCallInvitationTimeout(ZIM zim, String callID) {}
+@Override
+public void onCallInvitationRejected(ZIM zim,
+        ZIMCallInvitationRejectedInfo info, String callID) {}
+@Override
+public void onCallInvitationAccepted(ZIM zim,
+        ZIMCallInvitationAcceptedInfo info, String callID) {}
+@Override
+public void onCallInviteesAnsweredTimeout(ZIM zim,
+        List<String> invitees, String callID) {}
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp New version usage
+virtual void onCallInvitationTimeout(ZIM *zim,
+        const ZIMCallInvitationTimeoutInfo &info,
+        const std::string &callID) override {
+    // info.mode can distinguish between normal mode and advanced mode
+}
+
+virtual void onCallUserStateChanged(ZIM *zim,
+        const ZIMCallUserStateChangeInfo &info,
+        const std::string &callID) override {
+    // info.callUserList contains the list of users whose status changed
+    // You can uniformly handle accept, reject, timeout, and other status changes
+}
+```
+
+```cpp Old version usage
+// Old callbacks have been removed, please migrate to onCallInvitationTimeout and onCallUserStateChanged
+virtual void onCallInvitationTimeout(ZIM *zim,
+        const std::string &callID) override {}
+virtual void onCallInvitationRejected(ZIM *zim,
+        const ZIMCallInvitationRejectedInfo &info,
+        const std::string &callID) override {}
+virtual void onCallInvitationAccepted(ZIM *zim,
+        const ZIMCallInvitationAcceptedInfo &info,
+        const std::string &callID) override {}
+virtual void onCallInviteesAnsweredTimeout(ZIM *zim,
+        const std::vector<std::string> &invitees,
+        const std::string &callID) override {}
+```
+</CodeGroup>
+:::
+
+#### importLocalMessages / exportLocalMessages APIs removed
+
+The `importLocalMessages` and `exportLocalMessages` APIs have been temporarily removed in version 3.0.0, and there is no replacement API at this time. This functionality will be re-enabled in future versions. Please follow the SDK release notes for updates.
+
+### Newly deprecated APIs (recommended to migrate)
+
+#### ZIM message receive callback APIs
+
+The `onPeerMessageReceived`, `onRoomMessageReceived`, and `onGroupMessageReceived` callbacks have been marked as deprecated in this version. They can still be used normally at present, but it is recommended to migrate to [onMessageReceived](@onMessageReceived) as soon as possible.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java Recommended (new API)
+@Override
+public void onMessageReceived(ZIM zim, ZIMMessageReceivedEventResult result) {
+    List<ZIMMessage> messageList = result.messageList;
+    ZIMMessageReceivedInfo info = result.info;
+    String conversationID = result.conversationID;
+    ZIMConversationType conversationType = result.conversationType;
+    // Handle messages for different conversation types based on conversationType
+}
+```
+
+```java Deprecated API (still usable, recommended to migrate)
+@Override
+public void onPeerMessageReceived(ZIM zim, List<ZIMMessage> messageList,
+        ZIMMessageReceivedInfo info, String fromUserID) {}
+@Override
+public void onRoomMessageReceived(ZIM zim, List<ZIMMessage> messageList,
+        ZIMMessageReceivedInfo info, String fromRoomID) {}
+@Override
+public void onGroupMessageReceived(ZIM zim, List<ZIMMessage> messageList,
+        ZIMMessageReceivedInfo info, String fromGroupID) {}
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp Recommended (new API)
+virtual void onMessageReceived(ZIM *zim,
+        const ZIMMessageReceivedEventResult &result) override {
+    auto &messageList = result.messageList;
+    auto &info = result.info;
+    auto &conversationID = result.conversationID;
+    auto conversationType = result.conversationType;
+    // Handle messages for different conversation types based on conversationType
+}
+```
+
+```cpp Deprecated API (still usable, recommended to migrate)
+virtual void onPeerMessageReceived(ZIM *zim,
+        const std::vector<std::shared_ptr<ZIMMessage>> &messageList,
+        const ZIMMessageReceivedInfo &info,
+        const std::string &fromUserID) override {}
+virtual void onRoomMessageReceived(ZIM *zim,
+        const std::vector<std::shared_ptr<ZIMMessage>> &messageList,
+        const ZIMMessageReceivedInfo &info,
+        const std::string &fromRoomID) override {}
+virtual void onGroupMessageReceived(ZIM *zim,
+        const std::vector<std::shared_ptr<ZIMMessage>> &messageList,
+        const ZIMMessageReceivedInfo &info,
+        const std::string &fromGroupID) override {}
+```
+</CodeGroup>
+:::
+
+#### ZIMGroupConversation deprecated
+
+The `ZIMGroupConversation` class has been deprecated in 3.0.0. The `isDisabled` and `mutedExpiredTime` fields should be replaced with the corresponding properties of the base class `ZIMConversation`:
+
+| ZIMGroupConversation (deprecated) | ZIMConversation (replacement property) |
+|---|---|
+| `isDisabled` | `isConversationDisabled` |
+| `mutedExpiredTime` | `selfMutedExpiredTime` |
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java New version usage
+boolean isDisabled = conversation.isConversationDisabled;
+long mutedExpiredTime = conversation.selfMutedExpiredTime;
+```
+
+```java Old version usage (deprecated)
+ZIMGroupConversation groupConversation = (ZIMGroupConversation) conversation;
+boolean isDisabled = groupConversation.isDisabled;
+long mutedExpiredTime = groupConversation.mutedExpiredTime;
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp New version usage
+bool isDisabled = conversation.isConversationDisabled;
+long long mutedExpiredTime = conversation.selfMutedExpiredTime;
+```
+
+```cpp Old version usage (deprecated)
+auto groupConversation = std::static_pointer_cast<ZIMGroupConversation>(conversationPtr);
+bool isDisabled = groupConversation->isDisabled;
+long long mutedExpiredTime = groupConversation->mutedExpiredTime;
+```
+</CodeGroup>
+:::
+
+### Enum value removals
+
+#### ZIMMessageType enum value removed
+
+`SYSTEM` (value 30) has been removed from the `ZIMMessageType` enum, and the `ZIMSystemMessage` class has also been removed. If you need to send system-level commands, please use [ZIMCommandMessage](@ZIMCommandMessage) instead.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java New version usage
+// Use ZIMCommandMessage instead of ZIMSystemMessage
+ZIMCommandMessage commandMessage = new ZIMCommandMessage();
+commandMessage.message = "payload".getBytes(StandardCharsets.UTF_8);
+zim.sendMessage(commandMessage, "toConversationID", ZIMConversationType.PEER,
+    new ZIMMessageSendConfig(), null, new ZIMMessageSentFullCallback() {
+        @Override
+        public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {}
+        @Override
+        public void onMessageAttached(ZIMMessage message) {}
+    });
+```
+
+```java Old version usage
+// ZIMMessageType.SYSTEM and ZIMSystemMessage have been removed
+ZIMSystemMessage systemMessage = new ZIMSystemMessage();
+// ...
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp New version usage
+// Use ZIMCommandMessage instead of ZIMSystemMessage
+auto commandMessage = std::make_shared<ZIMCommandMessage>();
+commandMessage->message = {/* payload bytes */};
+zim->sendMessage(commandMessage, "toConversationID",
+    ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER,
+    ZIMMessageSendConfig{}, nullptr,
+    [=](const std::shared_ptr<ZIMMessage> &msg, const ZIMError &errorInfo) {});
+```
+
+```cpp Old version usage
+// ZIMMessageType::ZIM_MESSAGE_TYPE_SYSTEM and ZIMSystemMessage have been removed
+auto systemMessage = std::make_shared<ZIMSystemMessage>();
+// ...
+```
+</CodeGroup>
+:::
+
+#### ZIMCallUserState enum value removed
+
+`OFFLINE` (value 4) has been removed from the `ZIMCallUserState` enum. Please check your code for any references to this enum value and remove them.
+
+:::if{props.platform=undefined}
+```java
+// The following enum value has been removed, please check and remove references to this value in your code
+// ZIMCallUserState.OFFLINE  (value 4)
+```
+:::
+:::if{props.platform="window"}
+```cpp
+// The following enum value has been removed, please check and remove references to this value in your code
+// ZIMCallUserState::ZIM_CALL_USER_STATE_OFFLINE  (value 4)
+```
+:::
+
+### Field changes
+
+#### ZIMUserFullInfo.userAvatarUrl deprecated
+
+`ZIMUserFullInfo.userAvatarUrl` has been deprecated. Please use `ZIMUserFullInfo.baseInfo.userAvatarUrl` instead.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java New version usage
+String avatarUrl = userFullInfo.baseInfo.userAvatarUrl;
+```
+
+```java Old version usage
+String avatarUrl = userFullInfo.userAvatarUrl; // Deprecated
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp New version usage
+std::string avatarUrl = userFullInfo.baseInfo.userAvatarUrl;
+```
+
+```cpp Old version usage
+std::string avatarUrl = userFullInfo.userAvatarUrl; // Deprecated
+```
+</CodeGroup>
+:::
+
+#### ZIMMessage.conversationSeq replaced with messageSeq
+
+`ZIMMessage.conversationSeq` has been removed. Please use `ZIMMessage.messageSeq` instead.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java New version usage
+long seq = message.messageSeq;
+```
+
+```java Old version usage
+long seq = message.conversationSeq; // Removed
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp New version usage
+long long seq = message->messageSeq;
+```
+
+```cpp Old version usage
+long long seq = message->conversationSeq; // Removed
+```
+</CodeGroup>
+:::
+
+#### ZIMMessageDeletedInfo.isDeleteConversationAllMessage removed
+
+`ZIMMessageDeletedInfo.isDeleteConversationAllMessage` has been removed. Please use `ZIMMessageDeletedInfo.messageDeleteType` instead.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java New version usage
+ZIMMessageDeleteType deleteType = deletedInfo.messageDeleteType;
+// Determine whether it is a single deletion or a full deletion through deleteType
+```
+
+```java Old version usage
+boolean isDeleteAll = deletedInfo.isDeleteConversationAllMessage; // Removed
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp New version usage
+ZIMMessageDeleteType deleteType = deletedInfo.messageDeleteType;
+// Determine whether it is a single deletion or a full deletion through deleteType
+```
+
+```cpp Old version usage
+bool isDeleteAll = deletedInfo.isDeleteConversationAllMessage; // Removed
+```
+</CodeGroup>
+:::
+
+#### ZIMGroupMemberInfo.memberAvatarUrl removed
+
+`ZIMGroupMemberInfo.memberAvatarUrl` has been removed. Please use `ZIMGroupMemberInfo.userAvatarUrl` instead.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java New version usage
+String avatarUrl = groupMemberInfo.userAvatarUrl;
+```
+
+```java Old version usage
+String avatarUrl = groupMemberInfo.memberAvatarUrl; // Removed
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp New version usage
+std::string avatarUrl = groupMemberInfo.userAvatarUrl;
+```
+
+```cpp Old version usage
+std::string avatarUrl = groupMemberInfo.memberAvatarUrl; // Removed
+```
+</CodeGroup>
+:::
+
+#### ZIMGroupOperatedInfo structure change
+
+The `ZIMGroupOperatedInfo.operatedUserInfo` field has been removed. Its internal fields have been flattened into `ZIMGroupOperatedInfo`, and can be accessed directly from `ZIMGroupOperatedInfo`.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java New version usage
+// Get fields directly from ZIMGroupOperatedInfo
+String operatorUserID = groupOperatedInfo.userID;
+String operatorUserName = groupOperatedInfo.userName;
+String operatorAvatarUrl = groupOperatedInfo.userAvatarUrl;
+```
+
+```java Old version usage
+// operatedUserInfo has been removed
+String operatorUserID = groupOperatedInfo.operatedUserInfo.userID;
+String operatorUserName = groupOperatedInfo.operatedUserInfo.userName;
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp New version usage
+// Get fields directly from ZIMGroupOperatedInfo
+std::string operatorUserID = groupOperatedInfo.userID;
+std::string operatorUserName = groupOperatedInfo.userName;
+std::string operatorAvatarUrl = groupOperatedInfo.userAvatarUrl;
+```
+
+```cpp Old version usage
+// operatedUserInfo has been removed
+std::string operatorUserID = groupOperatedInfo.operatedUserInfo.userID;
+std::string operatorUserName = groupOperatedInfo.operatedUserInfo.userName;
+```
+</CodeGroup>
+:::
+
+#### ZIMCallInvitationSentInfo.errorInvitees replaced
+
+`ZIMCallInvitationSentInfo.errorInvitees` has been removed. Please use `ZIMCallInvitationSentInfo.errorUserList` instead. The type has changed from `List<ZIMCallUserInfo>` to `List<ZIMErrorUserInfo>`.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java New version usage
+zim.callInvite(invitees, config, new ZIMCallInvitationSentCallback() {
+    @Override
+    public void onCallInvitationSent(String callID,
+            ZIMCallInvitationSentInfo info, ZIMError error) {
+        for (ZIMErrorUserInfo errorUser : info.errorUserList) {
+            // errorUser.userID, errorUser.reason
+        }
+    }
+});
+```
+
+```java Old version usage
+// errorInvitees has been removed, please use errorUserList
+zim.callInvite(invitees, config, new ZIMCallInvitationSentCallback() {
+    @Override
+    public void onCallInvitationSent(String callID,
+            ZIMCallInvitationSentInfo info, ZIMError error) {
+        for (ZIMCallUserInfo errorInvitee : info.errorInvitees) {
+            // errorInvitee.userID, errorInvitee.state
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp New version usage
+zim->callInvite(invitees, config,
+    [=](const std::string &callID,
+        const ZIMCallInvitationSentInfo &info,
+        const ZIMError &errorInfo) {
+        for (const auto &errorUser : info.errorUserList) {
+            // errorUser.userID, errorUser.reason
+        }
+    });
+```
+
+```cpp Old version usage
+// errorInvitees has been removed, please use errorUserList
+zim->callInvite(invitees, config,
+    [=](const std::string &callID,
+        const ZIMCallInvitationSentInfo &info,
+        const ZIMError &errorInfo) {
+        for (const auto &errorInvitee : info.errorInvitees) {
+            // errorInvitee.userID, errorInvitee.state
+        }
+    });
+```
+</CodeGroup>
+:::
+
+#### ZIMConversationChangeInfo field change
+
+The `event` property (type `ZIMConversationEvent`) in `ZIMConversationChangeInfo` has been removed. Please use the `action` property (type `ZIMConversationChangeAction`) in the same structure instead.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java New version usage
+@Override
+public void onConversationChanged(ZIM zim, ZIMConversationChangeEventResult result) {
+    for (ZIMConversationChangeInfo changeInfo : result.infoList) {
+        ZIMConversationChangeAction action = changeInfo.action;
+        // Handle conversation changes based on action
+    }
+}
+```
+
+```java Old version usage
+@Override
+public void onConversationChanged(ZIM zim, ZIMConversationChangeEventResult result) {
+    for (ZIMConversationChangeInfo changeInfo : result.infoList) {
+        ZIMConversationEvent event = changeInfo.event; // Removed
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp New version usage
+virtual void onConversationChanged(ZIM *zim,
+        const ZIMConversationChangeEventResult &result) override {
+    for (const auto &changeInfo : result.infoList) {
+        ZIMConversationChangeAction action = changeInfo.action;
+        // Handle conversation changes based on action
+    }
+}
+```
+
+```cpp Old version usage
+virtual void onConversationChanged(ZIM *zim,
+        const ZIMConversationChangeEventResult &result) override {
+    for (const auto &changeInfo : result.infoList) {
+        ZIMConversationEvent event = changeInfo.event; // Removed
+    }
+}
+```
+</CodeGroup>
+:::
+
+### API naming and signature changes
+
+The following changes in 3.0.0 may cause compilation errors. Please make the corresponding modifications as prompted.
+
+#### ZIMMessage getter method renames
+
+The following getter methods in `ZIMMessage` have been renamed. After upgrading, you need to update the calling methods accordingly:
+
+| Old method name | New method name |
+|---|---|
+| `isUserInserted()` | `getIsUserInserted()` |
+| `isBroadcastMessage()` | `getIsBroadcastMessage()` |
+| `isServerMessage()` | `getIsServerMessage()` |
+| `isMentionAll()` | `getIsMentionAll()` |
+| `isGroupTargetedMessage()` | `getIsGroupTargetedMessage()` |
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java New version usage
+boolean isUserInserted = message.getIsUserInserted();
+boolean isBroadcastMessage = message.getIsBroadcastMessage();
+boolean isServerMessage = message.getIsServerMessage();
+boolean isMentionAll = message.getIsMentionAll();
+boolean isGroupTargetedMessage = message.getIsGroupTargetedMessage();
+```
+
+```java Old version usage
+boolean isUserInserted = message.isUserInserted();
+boolean isBroadcastMessage = message.isBroadcastMessage();
+boolean isServerMessage = message.isServerMessage();
+boolean isMentionAll = message.isMentionAll();
+boolean isGroupTargetedMessage = message.isGroupTargetedMessage();
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp New version usage
+bool isUserInserted = message->getIsUserInserted();
+bool isBroadcastMessage = message->getIsBroadcastMessage();
+bool isServerMessage = message->getIsServerMessage();
+bool isMentionAll = message->getIsMentionAll();
+bool isGroupTargetedMessage = message->getIsGroupTargetedMessage();
+```
+
+```cpp Old version usage
+bool isUserInserted = message->isUserInserted();
+bool isBroadcastMessage = message->isBroadcastMessage();
+bool isServerMessage = message->isServerMessage();
+bool isMentionAll = message->isMentionAll();
+bool isGroupTargetedMessage = message->isGroupTargetedMessage();
+```
+</CodeGroup>
+:::
+
+#### Callback interface method renames
+
+:::if{props.platform=undefined}
+The following callback methods in Callback interfaces have been renamed. When implementing these interfaces, you need to update the method names accordingly:
+
+| Interface class | Old method name | New method name |
+|---|---|---|
+| `ZIMUserOfflinePushRuleUpdatedCallback` | `onUserOfflinePushRuleInfoUpdated` | `onUserOfflinePushRuleUpdated` |
+| `ZIMMessageLocalExtendedDataUpdatedCallback` | `onMessageExtendedDataUpdated` | `onMessageLocalExtendedData` |
+| `ZIMGroupMemberMutedListQueriedCallback` | `onGroupMemberListQueried` | `onGroupMemberMutedListQueried` |
+| `ZIMFriendAddCallback` | `onFriendAddedCallback` | `onFriendAdded` |
+| `ZIMFriendApplicationSentCallback` | `onFriendApplicationSentCallback` | `onFriendApplicationSent` |
+| `ZIMFriendsDeletedCallback` | `onFriendsDeletedCallback` | `onFriendsDeleted` |
+| `ZIMFriendsRelationCheckedCallback` | `onFriendsChecked` | `onFriendsReactionChecked` |
+
+<CodeGroup>
+```java New version usage (using ZIMFriendAddCallback as an example)
+zim.addFriend("targetUserID", config, new ZIMFriendAddCallback() {
+    @Override
+    public void onFriendAdded(ZIMFriendInfo friendInfo, ZIMError error) {
+        // Handle add friend result
+    }
+});
+```
+
+```java Old version usage (using ZIMFriendAddCallback as an example)
+zim.addFriend("targetUserID", config, new ZIMFriendAddCallback() {
+    @Override
+    public void onFriendAddedCallback(ZIMFriendInfo friendInfo, ZIMError error) {
+        // Handle add friend result (method name has changed)
+    }
+});
+```
+</CodeGroup>
+:::
+
+#### Class serialization method change
+
+:::if{props.platform=undefined}
+The following classes and all their subclasses no longer implement the `Serializable` interface. If you previously passed these objects through `Intent`, please use the SDK-provided `toBundle()` and `fromBundle()` methods instead:
+
+- `ZIMMessage` and its subclasses
+- `ZIMMessageLiteInfo` and its subclasses
+- `ZIMUserInfo` and its subclasses
+- `ZIMTipsMessageChangeInfo` and its subclasses
+- `ZIMConversation` and its subclasses
+
+<CodeGroup>
+```java New version usage
+// Sender: write object to Intent via toBundle()
+Intent intent = new Intent(this, TargetActivity.class);
+intent.putExtra("message_bundle", message.toBundle());
+startActivity(intent);
+
+// Receiver: restore object from Bundle via fromBundle()
+Bundle bundle = getIntent().getBundleExtra("message_bundle");
+ZIMMessage message = ZIMMessage.fromBundle(bundle);
+```
+
+```java Old version usage
+// Sender: directly pass via Serializable (no longer supported)
+Intent intent = new Intent(this, TargetActivity.class);
+intent.putExtra("message", message);
+startActivity(intent);
+
+// Receiver:
+ZIMMessage message = (ZIMMessage) getIntent().getSerializableExtra("message");
+```
+</CodeGroup>
+:::
+
+#### Callback signature changes
+
+:::if{props.platform="window"}
+The parameter signatures of the following event callbacks have changed. You need to update the implementation code accordingly:
+
+**onBlacklistChanged** — `action` parameter removed `const &`:
+<CodeGroup>
+```cpp New version
+virtual void onBlacklistChanged(ZIM *zim,
+        const std::vector<ZIMUserInfo> &userList,
+        ZIMBlacklistChangeAction action) override {}
+```
+
+```cpp Old version
+virtual void onBlacklistChanged(ZIM *zim,
+        const std::vector<ZIMUserInfo> &userList,
+        const ZIMBlacklistChangeAction &action) override {}
+```
+</CodeGroup>
+
+**onFriendListChanged** — `action` parameter removed `&`:
+<CodeGroup>
+```cpp New version
+virtual void onFriendListChanged(ZIM *zim,
+        const std::vector<ZIMFriendInfo> &friendInfoList,
+        ZIMFriendListChangeAction action) override {}
+```
+
+```cpp Old version
+virtual void onFriendListChanged(ZIM *zim,
+        const std::vector<ZIMFriendInfo> &friendInfoList,
+        ZIMFriendListChangeAction &action) override {}
+```
+</CodeGroup>
+
+**onFriendApplicationListChanged** — `action` parameter removed `&`:
+<CodeGroup>
+```cpp New version
+virtual void onFriendApplicationListChanged(ZIM *zim,
+        const std::vector<ZIMFriendApplicationInfo> &applicationList,
+        ZIMFriendApplicationListChangeAction action) override {}
+```
+
+```cpp Old version
+virtual void onFriendApplicationListChanged(ZIM *zim,
+        const std::vector<ZIMFriendApplicationInfo> &applicationList,
+        ZIMFriendApplicationListChangeAction &action) override {}
+```
+</CodeGroup>
+
+**onRoomMemberAttributesUpdated** — `operatedInfo` parameter added `const &`:
+<CodeGroup>
+```cpp New version
+virtual void onRoomMemberAttributesUpdated(ZIM *zim,
+        const std::vector<ZIMRoomMemberAttributesUpdateInfo> &infos,
+        const ZIMRoomOperatedInfo &operatedInfo,
+        const std::string &roomID) override {}
+```
+
+```cpp Old version
+virtual void onRoomMemberAttributesUpdated(ZIM *zim,
+        const std::vector<ZIMRoomMemberAttributesUpdateInfo> &infos,
+        ZIMRoomOperatedInfo operatedInfo,
+        const std::string &roomID) override {}
+```
+</CodeGroup>
+:::
+
+#### ZIMMessageRevokeConfig field rename
+
+:::if{props.platform="window"}
+The `config` field in `ZIMMessageRevokeConfig` has been renamed to `pushConfig`. Please check and replace all related references.
+
+<CodeGroup>
+```cpp New version usage
+ZIMMessageRevokeConfig revokeConfig;
+ZIMPushConfig pushConfig;
+pushConfig.title = "Notification title";
+revokeConfig.pushConfig = pushConfig;
+```
+
+```cpp Old version usage
+ZIMMessageRevokeConfig revokeConfig;
+ZIMPushConfig pushConfig;
+pushConfig.title = "Notification title";
+revokeConfig.config = pushConfig; // Renamed to pushConfig
+```
+</CodeGroup>
+:::
+
+#### ZIMCombineMessageDetailQueriedCallback parameter change
+
+:::if{props.platform="window"}
+The parameter signature of the `ZIMCombineMessageDetailQueriedCallback` callback has the following changes:
+- `message` parameter: changed from `const std::shared_ptr<ZIMCombineMessage> &` to `std::shared_ptr<ZIMCombineMessage>` (removed `const &`)
+- `error` parameter: changed from `ZIMError &` to `const ZIMError &` (added `const`)
+
+<CodeGroup>
+```cpp New version usage
+zim->queryCombineMessageDetail(combineMessage,
+    [=](std::shared_ptr<ZIMCombineMessage> message, const ZIMError &errorInfo) {
+        // Handle result
+    });
+```
+
+```cpp Old version usage
+zim->queryCombineMessageDetail(combineMessage,
+    [=](const std::shared_ptr<ZIMCombineMessage> &message, ZIMError &errorInfo) {
+        // Handle result
+    });
+```
+</CodeGroup>
+:::
+
+#### ZIMMessage.rootRepliedCount type change
+
+:::if{props.platform="window"}
+The `rootRepliedCount` field type of `ZIMMessage` has changed from `int` to `unsigned int`. Please check your code for any logic involving assignment or comparison with signed integers for this field to avoid type conversion issues.
+
+<CodeGroup>
+```cpp New version usage
+unsigned int count = message->rootRepliedCount;
+```
+
+```cpp Old version usage
+int count = message->rootRepliedCount; // Field type changed to unsigned int
+```
+</CodeGroup>
+:::
+
+#### Other method renames
+
+:::if{props.platform="window"}
+**ZIMTipsMessagePinStatusChangeInfo** — `isPinned()` renamed to `getIsPinned()`:
+<CodeGroup>
+```cpp New version usage
+bool isPinned = pinStatusChangeInfo->getIsPinned();
+```
+
+```cpp Old version usage
+bool isPinned = pinStatusChangeInfo->isPinned();
+```
+</CodeGroup>
+
+**ZIMImageMessage** — thumbnail size getter methods renamed:
+<CodeGroup>
+```cpp New version usage
+int width = imageMessage->getThumbnailWidth();
+int height = imageMessage->getThumbnailHeight();
+```
+
+```cpp Old version usage
+int width = imageMessage->getThumbnailImageWidth();
+int height = imageMessage->getThumbnailImageHeight();
+```
+</CodeGroup>
+:::
+
+### Enum value renames
+
+The following enum values have been renamed in 3.0.0. After upgrading, please check and replace all related references in your code.
+
+#### ZIMCallUserState
+
+:::if{props.platform=undefined}
+`ZIMCallUserState.QUITED` has been renamed to `ZIMCallUserState.QUIT`.
+
+<CodeGroup>
+```java New version usage
+if (userState == ZIMCallUserState.QUIT) {
+    // User has quit the call
+}
+```
+
+```java Old version usage
+if (userState == ZIMCallUserState.QUITED) { // Renamed to QUIT
+    // User has quit the call
+}
+```
+</CodeGroup>
+:::
+
+#### ZIMMediaFileType
+
+:::if{props.platform=undefined}
+`ZIMMediaFileType.THUMBNAIL_IMAGE` has been renamed to `ZIMMediaFileType.THUMBNAIL`. Please check and replace the enum values passed when calling APIs like `downloadMediaFile`.
+
+<CodeGroup>
+```java New version usage
+zim.downloadMediaFile(imageMessage, ZIMMediaFileType.THUMBNAIL, config, callback);
+```
+
+```java Old version usage
+zim.downloadMediaFile(imageMessage, ZIMMediaFileType.THUMBNAIL_IMAGE, config, callback); // Renamed
+```
+</CodeGroup>
+:::
+
+#### ZIMGroupMessageNotificationStatus
+
+:::if{props.platform=undefined}
+`ZIMGroupMessageNotificationStatus.DISTURB` has been renamed to `ZIMGroupMessageNotificationStatus.DO_NOT_DISTURB`.
+
+<CodeGroup>
+```java New version usage
+ZIMGroupMessageNotificationStatus status = ZIMGroupMessageNotificationStatus.DO_NOT_DISTURB;
+```
+
+```java Old version usage
+ZIMGroupMessageNotificationStatus status = ZIMGroupMessageNotificationStatus.DISTURB; // Renamed
+```
+</CodeGroup>
+:::
+
+### setRoomMembersAttributes behavior change
+
+Starting from version 3.0.0, when setting room member attributes via [setRoomMembersAttributes](@setRoomMembersAttributes), if `isDeleteAfterOwnerLeft` is `false`, the room member attributes will not be deleted when the user leaves the room. In versions 2.x.x, attributes were first deleted when the user left the room and then restored when the user returned.
+
+- - -
 
 ## 2.28.0 Upgrade Guide
 
@@ -986,4 +2133,3 @@ zim.callCancel(invitees, callID, config)
 </CodeGroup>
 
 :::
-
