@@ -1,0 +1,372 @@
+---
+articleID: 11594
+date: "2026-07-16"
+---
+
+import { getPlatformData } from "/snippets/utils-content-parser.js"
+import { conversationChangedMap } from "/snippets/zim/const-link.mdx"
+
+export const setConversationMessageDestructDurationMap = {
+  'Android': <a href='@setConversationMessageDestructDuration' target='_blank'>setConversationMessageDestructDuration</a>,
+  'iOS,mac': <a href='@setConversationMessageDestructDuration' target='_blank'>setConversationMessageDestructDuration</a>,
+  'window': <a href='@setConversationMessageDestructDuration' target='_blank'>setConversationMessageDestructDuration</a>,
+  'Web,UTS': <a href='@setConversationMessageDestructDuration' target='_blank'>setConversationMessageDestructDuration</a>,
+  'U3d': <a href='@setConversationMessageDestructDuration' target='_blank'>setConversationMessageDestructDuration</a>,
+  'Flutter': <a href='@setConversationMessageDestructDuration' target='_blank'>setConversationMessageDestructDuration</a>,
+}
+
+# 会话消息定时销毁
+
+- - -
+
+## 功能概述
+
+会话消息定时销毁，指设置一个会话的消息定时销毁时长后，该会话内此后发送的消息将在指定时长后自动删除。可用于阅后即焚、保密通信等场景。
+
+<Frame width="auto" height="auto">
+  <img src="https://doc-media.zego.im/docuo/7c17419de1.png" alt="消息定时销毁.png"/>
+</Frame>
+
+本文档介绍了如何使用 ZIM SDK 的接口，实现设置会话消息定时销毁时长、感知配置变化、获取消息过期时间戳、以及监听消息销毁事件等功能。
+
+## 设置会话消息定时销毁时长
+
+调用 [setConversationMessageDestructDuration](@setConversationMessageDestructDuration) 接口，可设置指定会话的消息定时销毁时长。
+
+**参数说明：**
+
+- `duration`：定时销毁时长，单位秒。支持设置的范围为 `0` 或 `60` ~ `604800`（7 天）。设置为 `0` 表示取消定时销毁。
+
+**调用时机：** 用户登录后可调用，网络条件良好时可调用成功。
+
+- 设置单聊会话，需要 conversationID 对应的用户为已注册用户。
+- 设置群聊会话，需要群组已创建、且当前用户已加入群组。
+
+:::if{props.platform=undefined}
+```java
+// duration: 单位秒。支持设置的范围 0 或 60-604800（7d），0 = 取消定时销毁
+int duration = 300; // 例如设置为 5 分钟后销毁
+
+zim.setConversationMessageDestructDuration(duration, conversationID, ZIMConversationType.PEER,
+    new ZIMConversationMessageDestructDurationSetCallback() {
+        @Override
+        public void onConversationMessageDestructDurationSet(
+            String conversationID, ZIMConversationType conversationType, ZIMError errorInfo) {
+            if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+                // 设置成功
+            } else {
+                // 设置失败
+            }
+        }
+    });
+```
+:::
+
+:::if{props.platform="iOS|mac"}
+```objc
+// duration: 单位秒。支持设置的范围 0 或 60-604800（7d），0 = 取消定时销毁
+int duration = 300; // 例如设置为 5 分钟后销毁
+
+[zim setConversationMessageDestructDuration:duration
+                             conversationID:conversationID
+                           conversationType:ZIMConversationTypePeer
+                                   callback:^(NSString *conversationID, ZIMConversationType conversationType, ZIMError *errorInfo) {
+    if (errorInfo.code == 0) {
+        // 设置成功
+    } else {
+        // 设置失败
+    }
+}];
+```
+:::
+
+:::if{props.platform="window"}
+```cpp
+// duration: 单位秒。支持设置的范围 0 或 60-604800（7d），0 = 取消定时销毁
+int duration = 300; // 例如设置为 5 分钟后销毁
+
+zim->setConversationMessageDestructDuration(duration, conversationID, ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER,
+    [=](const std::string &conversationID, ZIMConversationType conversationType, const ZIMError &errorInfo) {
+        if (errorInfo.code == 0) {
+            // 设置成功
+        } else {
+            // 设置失败
+        }
+    });
+```
+:::
+
+:::if{props.platform="Flutter"}
+```dart
+// duration: 单位秒。支持设置的范围 0 或 60-604800（7d），0 = 取消定时销毁
+int duration = 300; // 例如设置为 5 分钟后销毁
+
+ZIM.getInstance()!
+    .setConversationMessageDestructDuration(duration, conversationID, ZIMConversationType.peer)
+    .then((value) {
+        // 设置成功
+    })
+    .catchError((onError) {
+        // 设置失败
+    });
+```
+:::
+
+## 感知会话消息定时销毁配置变化
+
+当会话的定时销毁时长发生变化时（包括本端设置或多端同步），可通过 [conversationChanged](@conversationChanged) 回调感知到变化。
+
+[ZIMConversation](@-ZIMConversation) 新增 `messageDestructDuration` 属性，表示当前会话的限时消息时长。未设置过定时销毁的会话，该值为 `0`。
+
+:::if{props.platform=undefined}
+```java
+// 1. 监听会话变更事件
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onConversationChanged(ZIM zim, ArrayList<ZIMConversationChangeInfo> conversationChangeInfoList) {
+        for (ZIMConversationChangeInfo info : conversationChangeInfoList) {
+            int duration = info.conversation.messageDestructDuration;
+            // 根据 duration 更新 UI
+        }
+    }
+});
+
+// 2. 也可通过 queryConversation 接口查询指定会话
+zim.queryConversation(conversationID, ZIMConversationType.PEER, new ZIMConversationQueriedCallback() {
+    @Override
+    public void onConversationQueried(ZIMConversation conversation, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            int duration = conversation.messageDestructDuration;
+        }
+    }
+});
+```
+:::
+
+:::if{props.platform="iOS|mac"}
+```objc
+// 1. 监听会话变更事件
+- (void)zim:(ZIM *)zim conversationChanged:(NSArray<ZIMConversationChangeInfo *> *)infoList {
+    for (ZIMConversationChangeInfo *info in infoList) {
+        int duration = info.conversation.messageDestructDuration;
+        // 根据 duration 更新 UI
+    }
+}
+
+// 2. 也可通过 queryConversation 接口查询指定会话
+[zim queryConversationWithConversationID:conversationID
+                        conversationType:ZIMConversationTypePeer
+                                callback:^(ZIMConversation *conversation, ZIMError *errorInfo) {
+    if (errorInfo.code == 0) {
+        int duration = conversation.messageDestructDuration;
+    }
+}];
+```
+:::
+
+:::if{props.platform="window"}
+```cpp
+// 1. 监听会话变更事件
+zim->onConversationChanged = [](ZIM *zim, const std::vector<ZIMConversationChangeInfo> &infoList) {
+    for (auto &info : infoList) {
+        int duration = info.conversation.getMessageDestructDuration();
+        // 根据 duration 更新 UI
+    }
+};
+
+// 2. 也可通过 queryConversation 接口查询指定会话
+zim->queryConversation(conversationID, ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER,
+    [=](const std::shared_ptr<ZIMConversation> &conversation, const ZIMError &errorInfo) {
+        if (errorInfo.code == 0) {
+            int duration = conversation->getMessageDestructDuration();
+        }
+    });
+```
+:::
+
+:::if{props.platform="Flutter"}
+```dart
+// 1. 监听会话变更事件
+ZIMEventHandler.onConversationChanged = (ZIM zim, List<ZIMConversationChangeInfo> conversationChangeInfoList) {
+    for (var info in conversationChangeInfoList) {
+        int duration = info.conversation.messageDestructDuration;
+        // 根据 duration 更新 UI
+    }
+};
+
+// 2. 也可通过 queryConversation 接口查询指定会话
+ZIM.getInstance()!
+    .queryConversation(conversationID, ZIMConversationType.peer)
+    .then((conversation) {
+        int duration = conversation.messageDestructDuration;
+    })
+    .catchError((onError) {});
+```
+:::
+
+## 限时消息携带过期时间戳
+
+在会话内设置消息定时销毁时长后，此后该会话内成员发送的消息，将会携带过期时间戳 `destructTime`。
+
+开发者可通过 `destructTime` 减去当前本地时间，展示对应消息的销毁倒计时。
+
+`destructTime` 单位为毫秒，`0` 表示该消息非限时消息。
+
+:::if{props.platform=undefined}
+```java
+// ZIMMessage 新增属性
+// public long destructTime; // 单位毫秒，0 表示非限时消息
+
+long destructTime = message.destructTime;
+if (destructTime > 0) {
+    long countdown = destructTime - System.currentTimeMillis();
+    // 展示倒计时
+}
+```
+:::
+
+:::if{props.platform="iOS|mac"}
+```objc
+// ZIMMessage 新增属性
+// @property (nonatomic, assign) long long destructTime; // 单位毫秒，0 表示非限时消息
+
+long long destructTime = message.destructTime;
+if (destructTime > 0) {
+    long long countdown = destructTime - [[NSDate date] timeIntervalSince1970] * 1000;
+    // 展示倒计时
+}
+```
+:::
+
+:::if{props.platform="window"}
+```cpp
+// ZIMMessage 新增方法
+// long long getDestructTime() { return destructTime; } // 毫秒，0 表示非限时消息
+
+long long destructTime = message->getDestructTime();
+if (destructTime > 0) {
+    // 展示倒计时
+}
+```
+:::
+
+:::if{props.platform="Flutter"}
+```dart
+// ZIMMessage 新增属性
+// int destructTime; // 单位毫秒，0 表示非限时消息
+
+int destructTime = message.destructTime;
+if (destructTime > 0) {
+    int countdown = destructTime - DateTime.now().millisecondsSinceEpoch;
+    // 展示倒计时
+}
+```
+:::
+
+<Note title="获取更精确的倒计时">
+
+若希望获得更精确的倒计时，可通过 [callExperimentalAPI](@callExperimentalAPI) 接口获取 SDK 当前时间戳，再通过 `destructTime - SDK 当前时间戳` 获得倒计时。
+
+传入参数为 JSON 字符串：
+```json
+{
+    "method": "getSDKTimestamp"
+}
+```
+
+SDK 返回结果（`ZIMExperimentalAPICalledCallback` 的 result 参数）为 JSON：
+```json
+{
+    "timestamp": 123456
+}
+```
+其中 `timestamp` 精度为毫秒。
+
+</Note>
+
+## 监听消息因定时销毁被删除
+
+当消息达到销毁时间时，将会触发 [onMessageDeleted](@onMessageDeleted) 事件，删除类型 `ZIMMessageDeleteType` 为 `MessagesDestructed`。
+
+开发者可监听此回调，从消息列表中移除对应的消息。
+
+:::if{props.platform=undefined}
+```java
+// ZIMMessageDeleteType 枚举
+// MessageListDeleted             = 0  // 用户主动删除
+// ConversationAllMessagesDeleted  = 1  // 清空会话消息
+// AllConversationMessagesDeleted  = 2  // 清空所有会话
+// MessagesDestructed             = 3  // 消息定时销毁
+
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onMessageDeleted(ZIM zim, ZIMMessageDeletedInfo deletedInfo) {
+        if (deletedInfo.deleteType == ZIMMessageDeleteType.MessagesDestructed) {
+            // 消息因定时销毁被删除
+            for (ZIMMessage message : deletedInfo.messageList) {
+                // 从消息列表中移除对应消息
+            }
+        }
+    }
+});
+```
+:::
+
+:::if{props.platform="iOS|mac"}
+```objc
+// ZIMMessageDeleteType 枚举
+// ZIMMessageDeleteTypeMessageListDeleted            = 0  // 用户主动删除
+// ZIMMessageDeleteTypeConversationAllMessagesDeleted  = 1  // 清空会话消息
+// ZIMMessageDeleteTypeAllConversationMessagesDeleted  = 2  // 清空所有会话
+// ZIMMessageDeleteTypeMessagesDestructed             = 3  // 消息定时销毁
+
+- (void)zim:(ZIM *)zim messageDeleted:(ZIMMessageDeletedInfo *)deletedInfo {
+    if (deletedInfo.deleteType == ZIMMessageDeleteTypeMessagesDestructed) {
+        // 消息因定时销毁被删除
+        for (ZIMMessage *message in deletedInfo.messageList) {
+            // 从消息列表中移除对应消息
+        }
+    }
+}
+```
+:::
+
+:::if{props.platform="window"}
+```cpp
+// ZIMMessageDeleteType 枚举
+// enum class ZIMMessageDeleteType {
+//     MessageListDeleted            = 0,
+//     ConversationAllMessagesDeleted = 1,
+//     AllConversationMessagesDeleted = 2,
+//     MessagesDestructed            = 3,
+// };
+
+zim->onMessageDeleted = [](ZIM *zim, const ZIMMessageDeletedInfo &deletedInfo) {
+    if (deletedInfo.deleteType == ZIMMessageDeleteType::MessagesDestructed) {
+        // 消息因定时销毁被删除
+        for (auto &message : deletedInfo.messageList) {
+            // 从消息列表中移除对应消息
+        }
+    }
+};
+```
+:::
+
+:::if{props.platform="Flutter"}
+```dart
+// ZIMMessageDeleteType 枚举
+// messageListDeleted            = 0  // 用户主动删除
+// conversationAllMessagesDeleted = 1  // 清空会话消息
+// allConversationMessagesDeleted = 2  // 清空所有会话
+// messagesDestructed            = 3  // 消息定时销毁
+
+ZIMEventHandler.onMessageDeleted = (ZIM zim, ZIMMessageDeletedInfo deletedInfo) {
+    if (deletedInfo.deleteType == ZIMMessageDeleteType.messagesDestructed) {
+        // 消息因定时销毁被删除
+        for (var message in deletedInfo.messageList) {
+            // 从消息列表中移除对应消息
+        }
+    }
+};
+```
+:::
