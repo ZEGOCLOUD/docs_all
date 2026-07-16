@@ -190,7 +190,7 @@ sequenceDiagram
     业务后台-->>客户端: Token
     客户端->>客户端: 初始化 ZEGO Express SDK 并登录房间
     客户端->>业务后台: 创建播报数字人实例
-    业务后台->>AI Agent 后台: 创建数字人智能体实例
+    业务后台->>AI Agent 后台: CreateLiveDigitalHumanAgentInstance
     AI Agent 后台->>AI Agent 后台: 数字人登录房间并推送数字人流
     AI Agent 后台-->>业务后台: 返回数字人配置和流信息
     业务后台-->>客户端: 返回实例 ID、流 ID 和数字人配置
@@ -345,7 +345,7 @@ async createDigitalHumanAgentInstance(agentId: string, userId: string, rtcInfo: 
 :::if{props.type="live-digital-human"}
 <Step title="创建播报数字人智能体实例">
 
-可以用已注册的智能体为模板创建播报数字人智能体实例。与数字人视频通话不同，播报数字人只需要加入 RTC 房间并推送数字人流，不需要接收真实用户的流，因此客户端请求不需要传 `user_id` 和 `user_stream_id`。
+可以用已注册的智能体为模板创建播报数字人智能体实例。与数字人视频通话不同，播报数字人只需要加入 RTC 房间并推送数字人流，不需要接收真实用户的流，因此调用创建接口时不需要传 `UserId` 和 `UserStreamId`。
 
 客户端调用业务后台的 `POST /api/start-live-digital-human`，RTC 模式下请求体示例如下：
 
@@ -357,9 +357,66 @@ async createDigitalHumanAgentInstance(agentId: string, userId: string, rtcInfo: 
 }
 ```
 
-业务后台收到请求后，调用 `CreateDigitalHumanAgentInstance` 创建实例，并将 `AgentInstanceId`、`AgentStreamId`、`AgentUserId` 和 `DigitalHumanConfig` 返回给客户端。客户端保存 `AgentInstanceId`，后续用于调用 [SendAgentInstanceTTS](/aiagent-server/api-reference/agent-instance-control/send-agent-instance-tts) 和删除实例。
+业务后台收到请求后，调用 `CreateLiveDigitalHumanAgentInstance` 创建实例，并将 `AgentInstanceId`、`AgentStreamId`、`AgentUserId` 和 `DigitalHumanConfig` 转换后返回给客户端。客户端保存 `AgentInstanceId`，后续用于调用 [SendAgentInstanceTTS](/aiagent-server/api-reference/agent-instance-control/send-agent-instance-tts) 和删除实例。
+
+以下是调用创建播报数字人智能体实例接口的示例：
+
+```javascript Server(NodeJS)
+async createLiveDigitalHumanAgentInstance(agentId: string, rtcInfo: RtcInfo, digitalHuman: DigitalHumanInfo) {
+    // 请求接口：https://aigc-aiagent-api.zegotech.cn?Action=CreateLiveDigitalHumanAgentInstance
+    // const rtcInfo = {
+    //   RoomId: room_id,
+    //   AgentStreamId: agent_stream_id,
+    //   AgentUserId: agent_user_id,
+    // };
+    const action = 'CreateLiveDigitalHumanAgentInstance';
+    const body = {
+        AgentId: agentId,
+        RTC: rtcInfo,
+        DigitalHuman: digitalHuman, // 测试时可使用公共 ID ：c4b56d5c-db98-4d91-86d4-5a97b507da97
+    };
+    // sendRequest 方法封装了请求的 URL 和公共参数。详情参考：https://doc-zh.zego.im/aiagent-server/api-reference/accessing-server-apis
+    const result = await this.sendRequest<any>(action, body);
+    return result.AgentInstanceId, result.DigitalHumanConfig;
+}
+```
 
 <Warning title="注意">默认情况下一个账号下最多同时存在 10 个数字人智能体实例，超过限制后创建实例会失败，如需调整请联系 ZEGO 商务。</Warning>
+
+</Step>
+:::
+:::if{props.type="live-digital-human"}
+<Step title="主动调用 TTS">
+
+创建播报数字人实例后，业务后台可以调用 `SendAgentInstanceTTS` 主动发送播报文本。
+
+```javascript Server(NodeJS)
+async sendAgentInstanceTTS(agentInstanceId: string, text: string) {
+    const action = 'SendAgentInstanceTTS';
+    const body = {
+        AgentInstanceId: agentInstanceId,
+        Text: text
+    };
+    return this.sendRequest<any>(action, body);
+}
+```
+
+如果业务后台对外封装 quick-start server 接口，可使用：
+
+`POST /api/send-agent-instance-tts`
+
+```http
+Content-Type: application/json
+```
+
+请求示例：
+
+```json
+{
+  "agent_instance_id": "1912124734317838336",
+  "text": "尊敬的开发者你好，欢迎使用 ZEGO RTC 共建实时互动世界。"
+}
+```
 
 </Step>
 :::
@@ -441,7 +498,12 @@ async deleteAgentInstance(agentInstanceId: string) {
 </Step>
 </Steps>
 
+:::if{props.type="live-digital-human"}
+以上就是您实现数字人播报的完整核心流程。
+:::
+:::if{props.type="undefined|digital-human"}
 以上就是您实现与智能体进行实时语音互动的完整核心流程。
+:::
 
 ## 监听异常回调
 
