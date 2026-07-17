@@ -853,3 +853,132 @@ zim.queryGroupMessageReceiptUnreadMemberList(groupMsgObj, groupMsgObj.conversati
     });
 ```
 :::
+
+### 获取回执消息的已送达状态
+
+自 ZIM 3.1.0 版本起，消息回执在"回执中"和"已完成"之间新增了"已送达"状态。发送者发送回执消息后，若接收端设备已收到该消息，那么消息的回执状态将变更为已送达。该功能默认为关闭状态，您可以通过联系技术支持开启此功能。
+开发者可通过 [onMessageReceiptChanged](@onMessageReceiptChanged) 回调监听回执状态的变化。
+
+**单聊场景：**
+
+- **发送端**：接收端在线收到消息后，SDK 自动确认已送达；或接收端收到离线推送后调用服务端 API 确认已送达。发送端收到 [onMessageReceiptChanged](@onMessageReceiptChanged) 回调，消息回执状态由"回执中"变更为"已送达"。
+- **接收端**：在线收到消息时，SDK 自动确认已送达；收到离线推送时，调用服务端 API 确认已送达；无离线推送时，本端上线拉取到消息后 SDK 自动确认已送达。以上场景均会收到 [onMessageReceiptChanged](@onMessageReceiptChanged) 回调，状态变更为"已送达"。
+
+**群聊场景：**
+
+- **发送端**：当所有群成员都已送达且仍有成员未读时，消息回执状态流转为"已送达"。
+
+<Warning title="注意">
+
+离线推送送达不代表消息本身送达，必须 ZIM message 实际送达到接收端或通过服务端 API 确认，才会流转为"已送达"。
+
+</Warning>
+
+如果您需要在消息接收方收到离线推送后使得消息回执状态在发送端变更为"已送达"（iOS 可通过开启推送拦截，Android FCM 可通过使用 DataMessage 推送消息类型的方式，国内 Android 厂商暂不支持），可在收到推送后调用服务端 API [GroupDeliveryReceipt](https://zim-api.zego.im/?Action=GroupDeliveryReceipt) 进行确认。
+
+### 废弃接口
+
+- [queryGroupMessageReceiptReadMemberList](@queryGroupMessageReceiptReadMemberList)
+- [queryGroupMessageReceiptUnreadMemberList](@queryGroupMessageReceiptUnreadMemberList)
+
+上述接口请使用新接口 [queryGroupMessageReceiptMemberList](@queryGroupMessageReceiptMemberList) 替换。
+
+### 新增接口：queryGroupMessageReceiptMemberList
+
+调用该接口可一次性查询群消息的已读、未读（未送达）、或已送达状态的成员列表。
+
+**参数说明：**
+
+| 参数 | 说明 |
+| --- | --- |
+| message | 需要查询的带回执的消息。 |
+| groupID | 对应群会话的群 ID。 |
+| count | 查询的人数，单次查询不超过 100。 |
+| config | 查询的配置项：[ZIMGroupMessageReceiptMemberQueryConfig](@-ZIMGroupMessageReceiptMemberQueryConfig)，可以配置查询起始标记 `nextFlag` 以及查询项（已读、未读【未送达】、已送达）。 |
+| callback | 查询结果的回调：[ZIMGroupMessageReceiptMemberListQueriedCallback](@-ZIMGroupMessageReceiptMemberListQueriedCallback)，其中 `userList` 为符合查询条件的群成员列表，`nextFlag` 为下一次查询的起始标记（当 `nextFlag` 为 0 时表示查询完毕）。 |
+
+**调用示例：**
+
+:::if{props.platform=undefined}
+```java
+ZIMGroupMessageReceiptMemberQueryConfig config = new ZIMGroupMessageReceiptMemberQueryConfig();
+config.nextFlag = 0;    // 查询的起始标记，初始填 0，后续填从 callback 里返回的 nextFlag。
+config.count = 10;      // 需要查询的用户数量，单次不超过 100。
+
+zim.queryGroupMessageReceiptMemberList(
+    message, groupID, count, config,
+    new ZIMGroupMessageReceiptMemberListQueriedCallback() {
+        @Override
+        public void onGroupMessageReceiptMemberListQueried(
+            String groupID, ArrayList<ZIMGroupMemberInfo> userList,
+            int nextFlag, ZIMError errorInfo) {
+            if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+                // 查询成功，userList 为符合查询条件的群成员列表
+                // nextFlag 为下一次查询的起始标记，nextFlag 为 0 时表示查询完毕
+            } else {
+                // 查询失败
+            }
+        }
+    });
+```
+:::
+
+:::if{props.platform="iOS|mac"}
+```objc
+ZIMGroupMessageReceiptMemberQueryConfig *config = [[ZIMGroupMessageReceiptMemberQueryConfig alloc] init];
+config.nextFlag = 0;    // 查询的起始标记，初始填 0，后续填从 callback 里返回的 nextFlag。
+config.count = 10;      // 需要查询的用户数量，单次不超过 100。
+
+[zim queryGroupMessageReceiptMemberListByMessage:message
+                                         groupID:groupID
+                                           count:count
+                                          config:config
+                                        callback:^(NSString *_Nonnull groupID, NSArray<ZIMGroupMemberInfo *> *_Nonnull userList,
+                                                   unsigned int nextFlag, ZIMError *_Nonnull errorInfo) {
+    if (errorInfo.code == 0) {
+        // 查询成功，userList 为符合查询条件的群成员列表
+        // nextFlag 为下一次查询的起始标记，nextFlag 为 0 时表示查询完毕
+    } else {
+        // 查询失败
+    }
+}];
+```
+:::
+
+:::if{props.platform="window"}
+```cpp
+zim::ZIMGroupMessageReceiptMemberQueryConfig config;
+config.nextFlag = 0;    // 查询的起始标记，初始填 0，后续填从 callback 里返回的 nextFlag。
+config.count = 10;      // 需要查询的用户数量，单次不超过 100。
+
+zim->queryGroupMessageReceiptMemberList(
+    message, groupID, count, config,
+    [=](const std::string &groupID, const std::vector<ZIMGroupMemberInfo> &userList,
+        unsigned int nextFlag, const ZIMError &errorInfo) {
+        if (errorInfo.code == 0) {
+            // 查询成功，userList 为符合查询条件的群成员列表
+            // nextFlag 为下一次查询的起始标记，nextFlag 为 0 时表示查询完毕
+        } else {
+            // 查询失败
+        }
+    });
+```
+:::
+
+:::if{props.platform="Flutter"}
+```dart
+ZIMGroupMessageReceiptMemberQueryConfig config = ZIMGroupMessageReceiptMemberQueryConfig();
+config.nextFlag = 0;    // 查询的起始标记，初始填 0，后续填从 callback 里返回的 nextFlag。
+config.count = 10;      // 需要查询的用户数量，单次不超过 100。
+
+ZIM.getInstance()!
+    .queryGroupMessageReceiptMemberList(message, groupID, count, config)
+    .then((result) {
+        // 查询成功，result.userList 为符合查询条件的群成员列表
+        // result.nextFlag 为下一次查询的起始标记，nextFlag 为 0 时表示查询完毕
+    })
+    .catchError((onError) {
+        // 查询失败
+    });
+```
+:::
