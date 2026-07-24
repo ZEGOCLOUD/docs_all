@@ -46,8 +46,7 @@ export const onMessageReceiptChangedMap = {
   'Android': <a href='@onMessageReceiptChanged' target='_blank'>onMessageReceiptChanged</a>,
   'Web': <a href='@messageReceiptChanged' target='_blank'>messageReceiptChanged</a>,
   'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onMessageReceiptChanged.html' target='_blank'>onMessageReceiptChanged</a>,
-  'iOS': <a href='https://docs.zegocloud.com/article/api?doc=zim_API~objective-c_ios~protocol~ZIMEventHandler#zim-message-receipt-changed' target='_blank'>messageReceiptChanged</a>,
-  'mac': <a href='https://docs.zegocloud.com/article/api?doc=zim_API~objective-c_macos~protocol~ZIMEventHandler#zim-message-receipt-changed' target='_blank'>messageReceiptChanged</a>,
+  'iOS,mac': <a href='@ZIMmessageReceiptChanged' target='_blank'>messageReceiptChanged</a>,
 }
 export const ZIMEventHandlerMap = {
   'Android': <a href='@-ZIMEventHandler' target='_blank'>ZIMEventHandler</a>,
@@ -121,6 +120,10 @@ export const ZIMCombineMessageMap = {
   'Android': <a href='@-ZIMCombineMessage' target='_blank'>ZIMCombineMessage</a>,
   'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMCombineMessage-class.html' target='_blank'>ZIMCombineMessage</a>,
 }
+export const queryGroupMessageReceiptMemberListMap = {
+  'Android': <a href='@queryGroupMessageReceiptMemberList' target='_blank'>queryGroupMessageReceiptMemberList</a>,
+  'iOS,mac': <a href='@queryGroupMessageReceiptMemberListByMessage' target='_blank'>queryGroupMessageReceiptMemberListByMessage</a>,
+}
 
 # Read receipts
 - - -
@@ -136,7 +139,7 @@ This document is applicable to the following platforms of Unity framework: iOS, 
 
 Message reading receipt helps users know whether other users have read the messages they sent in a conversation. This feature applies to enterprise office businesses and other scenarios in which the message reading status needs to be known in real time.
 
-<Frame width="auto" height="auto">
+<Frame width="512" height="auto">
   <img src="https://doc-media.zego.im/docuo/c9e82bb552.png" alt="Message receipt.png"/>
 </Frame>
 
@@ -809,6 +812,171 @@ zim.queryGroupMessageReceiptUnreadMemberList(groupMsgObj, groupMsgObj.conversati
     })
     .catch(function (err) {
         // The operation fails.
+    });
+```
+:::
+
+## Get the delivered status of receipt messages
+
+After the sender sends a receipt message, if the receiver's device has received the message, the receipt status of the message will change to delivered. Developers can listen for receipt status changes through the {getPlatformData(props,onMessageReceiptChangedMap)} callback.
+
+<Warning title="Note">
+Since ZIM 3.1.0, a "delivered" status has been added between "processing" and "completed" for message receipts, indicating that the receipt message has been delivered. To use this feature, contact ZEGO technical support.
+</Warning>
+
+The receipt status of messages in the following scenarios will change to "delivered" and trigger the {getPlatformData(props,onMessageReceiptChangedMap)} callback.
+
+**One-to-one chat:**
+
+- After the receiver receives the message online, the SDK automatically confirms delivery.
+- After the receiver receives an offline push and calls the server API to confirm delivery.
+- When there is no offline push, the SDK automatically confirms delivery after the receiver comes online and pulls the message.
+
+**Group chat:**
+
+- When all group members have received the message and some members have not yet read it, the receipt status transitions to "delivered".
+
+<Warning title="Note">
+
+Offline push delivery does not mean the message itself has been delivered. Only when the ZIM message actually reaches the receiver or is confirmed through the server API will the status transition to "delivered".
+
+</Warning>
+
+If you need the message receipt status on the sender side to change to "delivered" after the message receiver receives an offline push (iOS can enable push interception, Android FCM can use DataMessage push message type, domestic Android manufacturers currently do not support this), you can call [Server API - Set delivered receipts for group messages](/zim-server/messaging/set-delivery-receipts-for-group-messages) after receiving the push to confirm.
+
+## Query the member list of group message receipt status
+
+Call {getPlatformData(props,queryGroupMessageReceiptMemberListMap)} to query the member list of group messages with read, unread (undelivered), or delivered status.
+
+**Parameter description:**
+
+:::if{props.platform="undefined|iOS|mac|window"}
+| Parameter-20% | Description |
+| --- | --- |
+| message | The message with receipt to query. |
+| groupID | The group ID of the corresponding group conversation. |
+| count | The number of users to query, up to 100 per query. |
+| config | Query configuration: [ZIMGroupMessageReceiptMemberQueryConfig](@-ZIMGroupMessageReceiptMemberQueryConfig), which can configure the query start marker `nextFlag` and the query item (read, unread [undelivered], delivered). |
+| callback | Query result callback: [ZIMGroupMessageReceiptMemberListQueriedCallback](@-ZIMGroupMessageReceiptMemberListQueriedCallback), where `userList` is the group member list matching the query conditions, and `nextFlag` is the start marker for the next query (when `nextFlag` is 0, the query is complete). |
+:::
+
+:::if{props.platform="Flutter|Web"}
+| Parameter-20% | Description |
+| --- | --- |
+| message | The message with receipt to query. |
+| groupID | The group ID of the corresponding group conversation. |
+| count | The number of users to query, up to 100 per query. |
+| config | Query configuration: [ZIMGroupMessageReceiptMemberQueryConfig](@-ZIMGroupMessageReceiptMemberQueryConfig), which can configure the query start marker `nextFlag` and the query item (read, unread [undelivered], delivered). |
+
+| Return value-30% | Description |
+|--- | --- |
+| [ZIMGroupMessageReceiptMemberListQueriedResult](@-ZIMGroupMessageReceiptMemberListQueriedResult) | Query result, where `userList` is the group member list matching the query conditions, and `nextFlag` is the start marker for the next query (when `nextFlag` is 0, the query is complete).|
+:::
+
+**Sample code:**
+
+:::if{props.platform=undefined}
+```java
+ZIMGroupMessageReceiptMemberQueryConfig config = new ZIMGroupMessageReceiptMemberQueryConfig();
+config.nextFlag = 0;    // Query start marker, initially set to 0, then set to the nextFlag returned from the callback.
+config.count = 10;      // Number of users to query, up to 100 per query.
+
+zim.queryGroupMessageReceiptMemberList(
+    message, groupID, count, config,
+    new ZIMGroupMessageReceiptMemberListQueriedCallback() {
+        @Override
+        public void onGroupMessageReceiptMemberListQueried(
+            String groupID, ArrayList<ZIMGroupMemberInfo> userList,
+            int nextFlag, ZIMError errorInfo) {
+            if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+                // Query successful, userList is the group member list matching the query conditions
+                // nextFlag is the start marker for the next query, nextFlag is 0 when the query is complete
+            } else {
+                // Query failed
+            }
+        }
+    });
+```
+:::
+
+:::if{props.platform="iOS|mac"}
+```objc
+ZIMGroupMessageReceiptMemberQueryConfig *config = [[ZIMGroupMessageReceiptMemberQueryConfig alloc] init];
+config.nextFlag = 0;    // Query start marker, initially set to 0, then set to the nextFlag returned from the callback.
+config.count = 10;      // Number of users to query, up to 100 per query.
+
+[zim queryGroupMessageReceiptMemberListByMessage:message
+                                         groupID:groupID
+                                           count:count
+                                          config:config
+                                        callback:^(NSString *_Nonnull groupID, NSArray<ZIMGroupMemberInfo *> *_Nonnull userList,
+                                                   unsigned int nextFlag, ZIMError *_Nonnull errorInfo) {
+    if (errorInfo.code == 0) {
+        // Query successful, userList is the group member list matching the query conditions
+        // nextFlag is the start marker for the next query, nextFlag is 0 when the query is complete
+    } else {
+        // Query failed
+    }
+}];
+```
+:::
+
+:::if{props.platform="window"}
+```cpp
+zim::ZIMGroupMessageReceiptMemberQueryConfig config;
+config.nextFlag = 0;    // Query start marker, initially set to 0, then set to the nextFlag returned from the callback.
+config.count = 10;      // Number of users to query, up to 100 per query.
+
+zim->queryGroupMessageReceiptMemberList(
+    message, groupID, count, config,
+    [=](const std::string &groupID, const std::vector<ZIMGroupMemberInfo> &userList,
+        unsigned int nextFlag, const ZIMError &errorInfo) {
+        if (errorInfo.code == 0) {
+            // Query successful, userList is the group member list matching the query conditions
+            // nextFlag is the start marker for the next query, nextFlag is 0 when the query is complete
+        } else {
+            // Query failed
+        }
+    });
+```
+:::
+
+:::if{props.platform="Flutter"}
+```dart
+ZIMGroupMessageReceiptMemberQueryConfig config = ZIMGroupMessageReceiptMemberQueryConfig();
+config.nextFlag = 0;    // Query start marker, initially set to 0, then set to the nextFlag returned from the callback.
+config.count = 10;      // Number of users to query, up to 100 per query.
+
+ZIM.getInstance()!
+    .queryGroupMessageReceiptMemberList(message, groupID, count, config)
+    .then((result) {
+        // Query successful, result.userList is the group member list matching the query conditions
+        // result.nextFlag is the start marker for the next query, nextFlag is 0 when the query is complete
+    })
+    .catchError((onError) {
+        // Query failed
+    });
+```
+:::
+
+:::if{props.platform="Web"}
+```javascript
+// 1. Construct query configuration
+const config = new ZIMGroupMessageReceiptMemberListQueryConfig();
+config.nextFlag = 0;    // Initially set to 0, then set to the nextFlag returned from the result
+config.filterType = ZIMMessageReceiptFilterType.Read; // Default value, query read members
+
+// 2. Call the API
+zim.queryGroupMessageReceiptMemberList(message, groupID, 10, config)
+    .then((result) => {
+        // Query successful
+        // result.userList  — List<ZIMGroupMemberInfo>, group member list matching the query conditions
+        // result.nextFlag  — Start marker for the next query, 0 means the query is complete
+        // result.groupID   — Group ID
+        // result.errorInfo — ZIMError, code 0 means success
+    })
+    .catch((error) => {
+        // Query failed
     });
 ```
 :::
