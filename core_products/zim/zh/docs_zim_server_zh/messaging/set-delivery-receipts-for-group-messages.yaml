@@ -1,0 +1,132 @@
+openapi: 3.0.0
+info:
+  title: open-api-desc
+  version: 1.0.0
+  contact:
+    name: ZEGO Support
+    email: support@zegocloud.com
+
+servers:
+  $ref: '../shared-components.yaml#/servers'
+
+tags:
+  - messaging
+
+paths:
+  /:
+    post:
+      tags: [messaging]
+      summary: GroupDeliveryReceipt
+      description: |
+        通过该接口可以给某个用户设置群聊消息的已送达回执。
+        
+        服务端调用此接口可以代替消息接收方（群成员）上报送达状态。调用成功后，消息发送方会收到对应群消息的送达回执推送。
+        <Note title="说明">FromUserId 为接收方（操作者，须为群成员），GroupId 为目标群 ID。</Note>
+        <Note title="说明">调用频率限制：20 次/秒。</Note>
+      operationId: set-delivery-receipts-for-group-messages
+      parameters:
+        - name: Action
+          in: query
+          description: |
+            > 接口原型参数
+            >
+            > https://zim-api.zego.im/?Action=GroupDeliveryReceipt
+          required: true
+          schema:
+            type: string
+            enum: [GroupDeliveryReceipt]
+          style: form
+          explode: true
+        - $ref: '../shared-components.yaml#/components/parameters/AppId'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureNonce'
+        - $ref: '../shared-components.yaml#/components/parameters/Timestamp'
+        - $ref: '../shared-components.yaml#/components/parameters/SignatureVersion'
+        - $ref: '../shared-components.yaml#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupDeliveryReceiptRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDeliveryReceiptResponse'
+
+components:
+  schemas:
+    GroupDeliveryReceiptRequest:
+      type: object
+      required: [FromUserId,GroupId,ConvMsgSeq]
+      properties:
+        FromUserId:
+          type: string
+          description: 操作者（消息接收方），需要是已注册状态且为群成员。
+          example: "receiverUserId"
+        GroupId:
+          type: string
+          description: 群聊 ID。
+          example: "groupA"
+        ConvMsgSeq:
+          type: array
+          items:
+            type: number
+          description: 需要设置已送达回执的消息序号，单次最多 10 条。
+          example: [3,4]
+    GroupDeliveryReceiptResponse:
+      type: object
+      properties:
+        Code:
+          type: number
+          description: |
+            返回码。（0表示成功）
+
+            以下仅列出了接口业务逻辑相关的返回码，完整返回码请参考 [全局返回码](/zim-server/return-codes)。
+              
+            <table>
+              <thead>
+                <tr>
+                  <th>返回码</th>
+                  <th>说明</th>
+                  <th>解决方案</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>660000002</td>
+                  <td>参数错误</td>
+                  <td>请检查参数</td>
+                </tr>
+                <tr>
+                  <td>660300005</td>
+                  <td>频率限制</td>
+                  <td>请稍后再尝试</td>
+                </tr>
+                <tr>
+                  <td>660400102</td>
+                  <td>传入的回执消息数量超出上限</td>
+                  <td>单次最多 10 条，请减少后重试</td>
+                </tr>
+                <tr>
+                  <td>660400103</td>
+                  <td>设置群聊的回执消息异常</td>
+                  <td>联系技术支持</td>
+                </tr>
+              </tbody>
+            </table>
+          example: 0
+        Message:
+          type: string
+          description: 返回状态信息。
+          example: "success"
+        RequestId:
+          type: string
+          description: 请求唯一标识。
+          example: "req-123456789"
+        DeliveredTime:
+          type: number
+          description: 对于接收者，已送达回执成功时的服务端时间戳。
+          example: 12345678
