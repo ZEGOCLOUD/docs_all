@@ -29,10 +29,39 @@ You can jump to the [download page](./introduction/download.mdx) to download and
 
 :::
 
+:::if{props.type="live-digital-human"}
+# Quick Start Digital Human Live Broadcast
+
+This document explains how to call AI Agent related backend APIs to implement digital human live broadcast.
+
+Unlike digital human video calls, digital human broadcasting is a one-way viewing scenario—users do not interact with the digital human, but only watch the broadcast content.
+The client only needs to log in to the [RTC room](/glossary/term-explanation#rtc-room-) and [pull streams](/glossary/term-explanation#pull-stream); it does not need to capture or [publish streams](/glossary/term-explanation#publish-stream) of the user's audio and video. After creating a broadcast instance, the server can proactively make the digital human broadcast specified text via the TTS API.
+
+Suitable for scenarios such as digital human live streaming, news broadcasting, event hosting, and scripted broadcast.
+
+### Differences from Digital Human Video Calls
+
+| Item | Digital Human Video Call | Digital Human Live Broadcast |
+| --- | --- | --- |
+| Interaction Mode | Two-way; the digital human responds after the user speaks | One-way; users only watch the broadcast content |
+| Use Cases | AI interaction, AI customer service, digital human tutor | Digital human live streaming, news broadcasting |
+| Client Requires User Audio Capture | Yes | No |
+| Digital Human Driving Mechanism | After receiving user audio, the LLM generates a response and drives the digital human via TTS | Broadcast content is fully controlled by the server; the digital human is driven via TTS |
+| Instance Creation API | [CreateDigitalHumanAgentInstance](/aiagent-server/api-reference/agent-instance-management/create-digital-human-agent-instance) | [CreateLiveDigitalHumanAgentInstance](/aiagent-server/api-reference/agent-instance-management/create-live-digital-human-agent-instance) |
+| Requires user_id and user_stream_id | Yes | No |
+:::
+
+## Prerequisites
+
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com/) and obtained a valid AppID and ServerSecret (for server API signing and RTC Token04 generation). For details, see [Console - Project Info](/console/project-info).
+- You have contacted ZEGOCLOUD Technical Support to enable the Digital Human PaaS service and related API permissions.
+- You have obtained a valid `digital_human_id` (for testing, you can use the public ID: c4b56d5c-db98-4d91-86d4-5a97b507da97).
+:::
+:::if{props.type="undefined|digital-human"}
 ## Prerequisites
 
 - You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com/) and obtained a valid AppID and AppSign.
-- You have contacted ZEGOCLOUd Technical Support to enable AI Agent related services and obtain LLM and TTS related configuration information.
+- You have contacted ZEGOCLOUD Technical Support to enable AI Agent related services and obtain LLM and TTS related configuration information.
 :::if{props.type="digital-human"}
 - You have contacted ZEGOCLOUD Technical Support to create a digital human.
 - You have contacted ZEGOCLOUD Technical Support to enable AI Agent related services and obtain LLM and TTS related configuration information.
@@ -157,6 +186,38 @@ sequenceDiagram
 
     Client->>Client: User Stop Push Stream and Exit Room
     Client->>Client: User Exit Digital Human SDK
+```
+:::
+:::if{props.type="live-digital-human"}
+2. Client, refer to the [Android Quick Start](/aiagent-android/quick-start-with-live-digital-human), [iOS Quick Start](/aiagent-ios/quick-start-with-live-digital-human) or [Web Quick Start](/aiagent-web/quick-start-with-live-digital-human) document to run the client example code
+    - Create and manage broadcast digital human instances via the server.
+    - Integrate ZEGO Express SDK for room login and stream pulling.
+    - Android/iOS: Integrate Digital Human SDK for digital human rendering.
+    - Proactively invoke the TTS API to make the digital human broadcast.
+
+After completing the above two steps, you can watch the digital human broadcast.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Business Backend
+    participant AI Agent Backend
+
+    Business Backend->>Business Backend: Register Agent
+    Client->>Business Backend: Request Token
+    Business Backend-->>Client: Token
+    Client->>Client: Initialize ZEGO Express SDK and log in to room
+    Client->>Business Backend: Create broadcast digital human instance
+    Business Backend->>AI Agent Backend: CreateLiveDigitalHumanAgentInstance
+    AI Agent Backend->>AI Agent Backend: Digital human logs in to room and publishes stream
+    AI Agent Backend-->>Business Backend: Return digital human config and stream info
+    Business Backend-->>Client: Return instance ID, stream ID, and digital human config
+    Client->>Client: Pull digital human stream and render
+    Client->>Business Backend: Proactively invoke TTS (optional)
+    Business Backend->>AI Agent Backend: SendAgentInstanceTTS
+    Client->>Business Backend: Stop broadcast digital human
+    Business Backend->>AI Agent Backend: Delete digital human agent instance
+    Client->>Client: Stop pulling stream and log out of room
 ```
 :::
 
@@ -299,6 +360,156 @@ async createDigitalHumanAgentInstance(agentId: string, userId: string, rtcInfo: 
 After completing this step, you can create a digital human agent instance. After integrating the client, you can interact with the digital human agent instance in real-time video.
 </Step>
 :::
+:::if{props.type="live-digital-human"}
+<Step title="Obtain RTC Token">
+
+The client needs a Token to log in to the RTC room. The server can generate Token04 based on AppID and ServerSecret.
+
+```http
+GET /api/zego-token?user_id=<user_id>
+```
+
+Response example:
+
+```json
+{
+  "code": 0,
+  "token": "eyJhbGciOi..."
+}
+```
+
+</Step>
+<Step title="Create Broadcast Digital Human Agent Instance">
+
+Use the registered AI Agent as a template to create a broadcast digital human agent instance. Unlike digital human video calls, broadcast digital human only needs to join the RTC room and publish the digital human stream, without receiving the real user's stream. Therefore, `UserId` and `UserStreamId` are not required when calling the creation API.
+
+The client calls the server's `POST /api/start-live-digital-human`. In RTC mode, the request body example is:
+
+```json
+{
+    "digital_human_id": "digital_human_id",
+    "config_id": "mobile",
+    "room_id": "room_id"
+}
+```
+
+Upon receiving the request, the server calls `CreateLiveDigitalHumanAgentInstance` to create the instance, and returns `AgentInstanceId`, `AgentStreamId`, `AgentUserId`, and `DigitalHumanConfig` to the client. The client saves `AgentInstanceId` for subsequent [SendAgentInstanceTTS](/aiagent-server/api-reference/agent-instance-control/send-agent-instance-tts) and instance deletion.
+
+<Note title="Note">RTC and CDN parameters are mutually exclusive; if both are set, CDN takes precedence.</Note>
+
+<CodeGroup>
+```javascript Server(NodeJS) — RTC Mode
+async createLiveDigitalHumanAgentInstance(agentId: string, rtcInfo: RtcInfo, digitalHuman: DigitalHumanInfo) {
+    const action = 'CreateLiveDigitalHumanAgentInstance';
+    const body = {
+        AgentId: agentId,
+        RTC: rtcInfo,
+        DigitalHuman: digitalHuman, // You can use the public ID: c4b56d5c-db98-4d91-86d4-5a97b507da97 for testing.
+    };
+    const result = await this.sendRequest<any>(action, body);
+    return {
+        code: 0,
+        message: 'success',
+        agent_instance_id: result.AgentInstanceId,
+        agent_stream_id: result.AgentStreamId,
+        agent_user_id: result.AgentUserId,
+        digital_human_config: result.DigitalHumanConfig
+    };
+}
+```
+
+```javascript Server(NodeJS) — CDN Mode
+async createLiveDigitalHumanAgentInstance(agentId: string, cdnInfo: CdnInfo, digitalHuman: DigitalHumanInfo) {
+    const action = 'CreateLiveDigitalHumanAgentInstance';
+    const body = {
+        AgentId: agentId,
+        CDN: cdnInfo,
+        DigitalHuman: digitalHuman, // You can use the public ID: c4b56d5c-db98-4d91-86d4-5a97b507da97 for testing.
+    };
+    const result = await this.sendRequest<any>(action, body);
+    return {
+        code: 0,
+        message: 'success',
+        agent_instance_id: result.AgentInstanceId,
+        agent_stream_id: result.AgentStreamId,
+        agent_user_id: result.AgentUserId,
+        digital_human_config: result.DigitalHumanConfig
+    };
+}
+```
+</CodeGroup>
+
+<Warning title="Note">By default, each account can have at most 10 digital human agent instances. If the limit is exceeded, the creation will fail. If you need to adjust this limit, please contact ZEGOCLOUD Sales.</Warning>
+
+</Step>
+<Step title="Proactively Invoke TTS">
+
+After creating the broadcast digital human instance, the server can call `SendAgentInstanceTTS` to proactively send broadcast text.
+
+```javascript Server(NodeJS)
+async sendAgentInstanceTTS(agentInstanceId: string, text: string) {
+    const action = 'SendAgentInstanceTTS';
+    const body = {
+        AgentInstanceId: agentInstanceId,
+        Text: text
+    };
+    return this.sendRequest<any>(action, body);
+}
+```
+
+If the server exposes a quick-start server API, you can use:
+
+`POST /api/send-agent-instance-tts`
+
+```http
+Content-Type: application/json
+```
+
+Request example:
+
+```json
+{
+  "agent_instance_id": "1912124734317838336",
+  "text": "Hello developer, welcome to ZEGO RTC. Let's build the real-time interactive world together."
+}
+```
+
+<Note title="Note">
+- `Text` has a maximum length of 300 characters.
+- Optional parameters: `AddHistory`, `Priority`, `SamePriorityOption`. For details, see [Proactive Invocation of LLM and TTS](/aiagent-server/guides/proactive-invocation-of-llm-and-tts) and [SendAgentInstanceTTS](/aiagent-server/api-reference/agent-instance-control/send-agent-instance-tts).
+- The instance is automatically destroyed after 900 seconds of idleness without `SendAgentInstanceTTS` calls. For long broadcasts, adjust via `AdvancedConfig.MaxIdleTime` (30~86400 seconds).
+</Note>
+
+</Step>
+
+<Step title="Stop Broadcast and Delete Instance">
+
+After the broadcast ends, the server calls `POST /api/stop` to stop and delete the broadcast instance, passing in `agent_instance_id`. After deletion, the digital human automatically exits the room and stops publishing streams.
+
+```json
+{
+  "agent_instance_id": "1912124734317838336"
+}
+```
+
+<Note title="Note">For the general delete agent instance API, see [Delete AI Agent Instance](#delete-ai-agent-instance) below.</Note>
+
+</Step>
+
+<Step title="Display User and Agent Status">
+
+To view user and agent status, see [Display User and Agent Status](/aiagent-server/guides/display-user-and-agent-status).
+
+Broadcast digital human status descriptions:
+
+- **Idle**: The digital human instance has been successfully created and is waiting for the server to input driving content.
+- **Speaking**: The digital human has received driving content from the server and is broadcasting in real time. It automatically switches back to "Idle" after the broadcast ends.
+
+
+</Step>
+
+
+:::
 <Step title="Integrate Client SDK">
 
 Please refer to the following documents to complete the client integration development:
@@ -332,11 +543,34 @@ Quick Start
 </Card>
 </CardGroup>
 :::
+:::if{props.type="live-digital-human"}
+<CardGroup cols={3}>
+<Card title="Android" href="/aiagent-android/quick-start-with-live-digital-human" target="_blank">
+Quick Start
+</Card>
+<Card title="iOS" href="/aiagent-ios/quick-start-with-live-digital-human" target="_blank">
+Quick Start
+</Card>
+<Card title="Web" href="/aiagent-web/quick-start-with-live-digital-human" target="_blank">
+Quick Start
+</Card>
+</CardGroup>
+:::
 
+:::if{props.type="live-digital-human"}
+Congratulations! 🎉 After completing this step, you have successfully integrated the client SDK and can watch the digital human broadcast, as well as proactively trigger digital human broadcasts via the TTS API.
+:::
+:::if{props.type="undefined|digital-human"}
 Congratulations! 🎉 After completing this step, you have successfully integrated the client SDK and can interact with the AI Agent instance in real-time voice. You can ask the AI Agent any questions, and it will answer your questions!
+:::
 </Step>
 <Step title="Delete AI Agent Instance">
+:::if{props.type="live-digital-human"}
+After [Delete AI Agent Instance](./api-reference/agent-instance-management/delete-agent-instance.mdx), the broadcast digital human will automatically exit the room and stop publishing streams. After the client stops pulling streams and exits the room, a complete broadcast session ends.
+:::
+:::if{props.type="undefined|digital-human"}
 After [Delete AI Agent Instance](./api-reference/agent-instance-management/delete-agent-instance.mdx), the AI Agent instance will automatically exit the room and stop the push stream. The real user will stop the push stream and exit the room after the client, and a complete interactive session will end.
+:::
 
 The following is an example of calling the delete AI Agent Instance interface:
 
@@ -354,12 +588,33 @@ async deleteAgentInstance(agentInstanceId: string) {
 </Step>
 </Steps>
 
+:::if{props.type="live-digital-human"}
+This is the complete core process for you to implement digital human live broadcast.
+:::
+:::if{props.type="undefined|digital-human"}
 This is the complete core process for you to implement real-time interaction with the AI Agent.
+:::
 
-## Listen for Exception Callback
+## Listen for Callbacks
 
-<Warning title="Note">Since there are many and complex parameters such as LLM and TTS, it is easy to cause various abnormal problems such as the AI Agent not answering or not speaking due to parameter configuration errors during the test. We strongly recommend that you listen for exception callbacks during the test and quickly troubleshoot problems based on the callback information.</Warning>
+<Warning title="Note">Since there are many and complex parameters such as LLM and TTS, it is easy to cause various abnormal problems such as the AI Agent not answering or not speaking due to parameter configuration errors during the test. We strongly recommend that you listen for callbacks during the test and quickly troubleshoot problems based on the callback information.</Warning>
 
 <Card title="Receive Callback" href="/aiagent-server/callbacks/receiving-callback" target="_blank">
-Click to view the guide for listening to exception callbacks. The event with Event as Exception in the listening callback can be quickly located through Data.Code and Data.Message.
+Click to view the guide for listening to callbacks. The event with Event as Exception in the listening callback can be quickly located through Data.Code and Data.Message.
 </Card>
+
+<Card title="Exception Error Codes" href="/aiagent-server/callbacks/exception-codes" target="_blank">
+Click to view the exception error code list.
+</Card>
+
+:::if{props.type="live-digital-human"}
+
+### Broadcast Troubleshooting Checklist
+
+<Warning title="Troubleshooting Guide">
+
+- **Static display**: Check if `digital_human_config` is valid, if `agent_stream_id` is correct, if custom rendering is enabled before `startPlayingStream` (Android/iOS), and if video frames and SEI data are passed to the Digital Human SDK (Android/iOS).
+- **TTS not broadcasting**: Check if `SendAgentInstanceTTS` returns Code 0, if `MaxIdleTime` has expired, and if `DisableTTS` is set.
+- **Instance creation failed**: Check if `digital_human_id` is valid, and if `AppID` and `ServerSecret` are correct.
+</Warning>
+:::
