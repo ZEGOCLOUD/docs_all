@@ -1,5 +1,5 @@
 ---
-date: "2026-07-16"
+date: "2026-07-24"
 ---
 import {getPlatformData} from "/snippets/utils-content-parser.js"
 
@@ -10,41 +10,37 @@ export const expressSDKMap = {
   'Web': <a href='/real-time-voice-web/quick-start/integrating-sdk' target='_blank'>ZEGO Express SDK</a>,
 }
 
-# 实现数字人播报
+# 实现数字人实时播报
 
-本文档用于说明如何快速集成客户端 SDK（ZEGO Express SDK 和数字人 SDK）并实现数字人播报。
+:::if{props.platform="undefined|iOS"}
+本文档用于说明如何快速集成客户端 SDK（ZEGO Express SDK 和数字人 SDK）实现数字人实时播报。<br/>
+与数字人视频通话不同，数字人播报是单向观看场景——即用户不和数字人进行互动，只是拉数字人播报内容进行观看。<br/>
+客户端只需要登录 [RTC 房间](/glossary/term-explanation#rtc-房间-)并[拉流](/glossary/term-explanation#拉流)，不需要采集或[推流](/glossary/term-explanation#推流)用户的音视频流。创建播报实例后，服务端可以通过 TTS 接口主动让数字人播报指定文本。<br/>
+适用于数字人直播、新闻播报、活动主持和固定话术播报等场景。
+:::
+:::if{props.platform="Web"}
+本文档用于说明如何快速集成客户端 SDK（ZEGO Express SDK）实现数字人实时播报。<br/>
+与数字人视频通话不同，数字人播报是单向观看场景——即用户不和数字人进行互动，只是拉数字人播报内容进行观看。<br/>
+客户端只需要登录 [RTC 房间](/glossary/term-explanation#rtc-房间-)并[拉流](/glossary/term-explanation#拉流)，不需要采集或[推流](/glossary/term-explanation#推流)用户的音视频流。创建播报实例后，服务端可以通过 TTS 接口主动让数字人播报指定文本。<br/>
+适用于数字人直播、新闻播报、活动主持和固定话术播报等场景。
+:::
 
-与数字人视频通话不同，数字人播报是单向观看场景：客户端只需要登录 RTC 房间并拉取数字人流，不需要采集或推送用户的音视频流。创建播报实例后，还可以通过 TTS 接口主动让数字人播报指定文本。
+## 与数字人视频通话的区别
 
-## 播报数字人介绍
-
-仅需一张上半身的真人或二次元照片或图片，即可获得 1080P、口型准确、形象逼真的数字人。播报数字人适用于数字人直播、新闻播报、活动主持、固定话术播报等场景。
-
-- 更自然的驱动效果：支持轻微的身体动作，面部表情自然不变形；
-- 多语种口型准确：唇形准确自然，尤其针对中英文效果更佳；
-- 互动超低延迟：数字人驱动延迟 < 200ms；
-- 更高清晰度：真实 1080P 效果。
-
-可跳转至[下载页面](./introduction/download.mdx)下载体验。
-
-<Video src="https://doc-media.zego.im/docuo/9f0143abe9.mp4" />
-
-### 与数字人视频通话的区别
-
-| 对比项 | 数字人视频通话 | 数字人播报 |
+| 对比项 | 数字人视频通话 | 数字人实时播报 |
 | --- | --- | --- |
-| 交互方式 | 双向，用户说话后数字人回答 | 单向，用户观看数字人播报 |
-| 是否推本地流 | 是 | 否 |
-| 是否需要麦克风权限 | 是 | 否 |
-| 创建实例接口 | `/api/start-digital-human` | `/api/start-live-digital-human` |
-| 是否需要 `user_id`、`user_stream_id` | 是 | 否 |
-| 主动播报 | 可选 | 通过 `/api/send-agent-instance-tts` 实现 |
+| 交互方式 | 双向，用户说话后数字人回答 | 单向，用户仅观看数字人播报内容 |
+| 适用场景 | AI 互动、AI 客服、数字人老师 | 数字人直播、新闻播报 |
+| 客户端是否需要采集用户音频 | 是 | 否 |
+| 数字人驱动机制 | 收到用户音频后，LLM 输出回复，通过 TTS 驱动数字人 | 播报内容完全由服务端控制，通过 TTS 驱动数字人 |
+| 创建实例接口 | [CreateDigitalHumanAgentInstance](/aiagent-server/api-reference/agent-instance-management/create-digital-human-agent-instance) | [CreateLiveDigitalHumanAgentInstance](/aiagent-server/api-reference/agent-instance-management/create-live-digital-human-agent-instance) |
+| 是否需要 user_id、user_stream_id | 是 | 否 |
 
 ## 前提条件
 
-- 已在 [ZEGO 控制台](https://console.zego.im/) 创建项目，并申请有效的 AppID 和 AppSign，详情请参考 [控制台 - 项目信息](/console/project-info)。
+- 已在 [ZEGO 控制台](https://console.zego.im/){/* 英文控制台链接：https://console.zegocloud.com/ */} 创建项目，并申请有效的 AppID 和 ServerSecret（用于服务端 API 签名与 RTC Token04 生成），详情请参考 [控制台 - 项目信息](/console/project-info)。
 - 已联系 ZEGO 技术支持开通数字人 PaaS 服务和相关接口的权限。
-- 已联系 ZEGO 技术支持创建数字人，并获取有效的 `digital_human_id`。
+- 已获取有效的 `digital_human_id`（测试时可使用公共 ID：c4b56d5c-db98-4d91-86d4-5a97b507da97）。
 - 已按 [业务后台快速开始指引](/aiagent-server/quick-start-with-live-digital-human) 集成播报数字人相关服务端 API。
 :::if{props.platform="undefined|iOS"}
 - 已从[下载页面](./introduction/download.mdx)下载针对 AI Agent 优化的 ZEGO Express SDK，并集成到项目中。
@@ -98,7 +94,7 @@ export const expressSDKMap = {
 
 ## 整体业务流程
 
-1. 服务端，参考[业务后台快速开始](/aiagent-server/quick-start)文档跑通业务后台示例代码，部署好业务后台
+1. 服务端，参考[业务后台快速开始](/aiagent-server/quick-start-with-live-digital-human)文档跑通业务后台示例代码，部署好业务后台
     - 接入实时互动 AI Agent API 管理智能体。
 :::if{props.platform="Web"}
 2. 客户端，跑通示例代码
@@ -116,9 +112,9 @@ export const expressSDKMap = {
 :::if{props.platform=undefined}
 ```mermaid
 graph TD
-    A[初始化 Express 引擎] --> B[请求 Token]
+    A[初始化 ZEGO Express 引擎] --> B[请求 Token]
     B --> C[登录 RTC 房间]
-    C --> D[开启自定义渲染，将 Express 数据同步给数字人 SDK]
+    C --> D[开启自定义渲染，将 ZEGO Express SDK 数据同步给数字人 SDK]
     D --> E[通知业务后台创建播报数字人实例]
     E --> F[拉取数字人流 + 初始化数字人 SDK 渲染]
     F --> G{是否需要主动播报?}
@@ -206,13 +202,12 @@ sequenceDiagram
 
 :::if{props.platform=undefined}
 
-请参考 [集成 SDK > 2.2 > 方式 2](https://doc-zh.zego.im/real-time-voice-android/quick-start/integrating-sdk) 手动集成 SDK。示例工程使用 `ZegoExpressEngine` 和 `ZegoDigitalMobile`。
+请参考 [集成 SDK > 2.2 > 方式 2](/real-time-voice-android/quick-start/integrating-sdk) 手动集成 SDK。示例工程使用 `ZegoExpressEngine` 和 `ZegoDigitalMobile`。
 
 在 `app/build.gradle` 中添加数字人 SDK：
 
 ```groovy app/build.gradle
 dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation 'im.zego:digitalmobile:1.3.0.43'
 }
 ```
@@ -228,7 +223,7 @@ dependencies {
 Android quickstart 为了同时支持语音通话和数字人视频通话，Manifest 中仍保留了 `RECORD_AUDIO`；进入 `LiveDigitalHumanActivity` 时不会申请该权限，也不会创建本地音频流。只保留播报入口时可以移除该权限。
 </Warning>
 
-播报场景无需运行时申请录音权限，进入页面后可直接初始化 Express SDK：
+播报场景无需运行时申请录音权限，进入页面后可直接初始化 ZEGO Express SDK：
 
 ```java {3}
 ZegoEngineProfile profile = new ZegoEngineProfile();
@@ -237,6 +232,10 @@ profile.scenario = ZegoScenario.HIGH_QUALITY_CHATROOM;
 profile.application = getApplication();
 ZegoExpressEngine.createEngine(profile, null);
 ```
+
+<Note title="模拟器兼容说明">
+若在 Android 模拟器上运行，部分音视频能力和数字人渲染依赖真机硬件解码与 GPU 加速，可能无法正常显示画面或出现黑屏。建议在真机上调试和验证数字人播报效果。
+</Note>
 
 :::
 
@@ -274,8 +273,37 @@ end
 
 Web quickstart 使用 `zego-express-engine-webrtc`。播报入口不创建音频流、不调用 `startPublishingStream`，因此不需要麦克风权限：
 
+```bash
+npm install zego-express-engine-webrtc
+```
+
 ```ts
-const zg = new ZegoExpressEngine(appID, server);
+import { ZegoExpressEngine } from "zego-express-engine-webrtc";
+
+// appID: number，从 ZEGO 控制台项目信息获取
+// server: 信令服务器地址，若使用 3.7.0 及以上版本 ZEGO Express SDK，可填写控制台获取的 Server 地址或者直接填空字符串
+const zg = new ZegoExpressEngine(appID, "");
+```
+
+以下是 Web 端常用的变量声明/配置示例：
+
+```ts
+// 从 ZEGO 控制台获取
+const APP_ID = 1234567890; // AppID，数字类型
+const SERVER = ""; // 信令服务器地址，3.7.0+ 可填空字符串
+// 从业务后台获取
+const BASE_URL = "http://your-server-host:3000"; // 业务后台地址
+const ROOM_ID = "room_xxx"; // RTC 房间 ID
+const USER_ID = "user_xxx"; // 用户 ID
+const DIGITAL_HUMAN_ID = "c4b56d5c-db98-4d91-86d4-5a97b507da97"; // 数字人 ID
+const CONFIG_ID = "web"; // Web 端使用 web
+
+// 模块级变量，供 roomStreamUpdate / remoteCameraStatusUpdate / 退出使用
+let agentStreamId = "";
+let agentInstanceId = "";
+```
+
+```ts
 const loginResult = await zg.loginRoom(roomID, token, {
     userID,
     userName,
@@ -394,7 +422,7 @@ dependencies {
 
 ### 通知业务后台创建播报数字人实例
 
-客户端调用业务后台的 `POST /api/start-live-digital-human`。RTC 模式下请求体至少包含 `room_id`、`digital_human_id` 和 `config_id`，不需要传 `user_id` 或 `user_stream_id`。
+客户端调用业务后台的 `POST /api/start-live-digital-human`。业务后台收到请求后，会调用 ZEGO 的 `CreateLiveDigitalHumanAgentInstance` 接口创建播报数字人实例，接口详细参数请参考[创建数字人播报实例](/aiagent-server/api-reference/agent-instance-management/create-live-digital-human-agent-instance)。RTC 模式下请求体至少包含 `room_id`、`digital_human_id` 和 `config_id`，不需要传 `user_id` 或 `user_stream_id`。
 
 ```json
 {
@@ -404,7 +432,26 @@ dependencies {
 }
 ```
 
-其中 Android 和 iOS 的 `config_id` 使用 `mobile`，Web 使用 `web`。服务端成功响应中需要将以下信息返回给客户端：
+`digital_human_id` 对应服务端 `DigitalHuman` 结构，其核心字段如下：
+
+| 字段 | 说明 |
+| --- | --- |
+| `digital_human_id` | 数字人 ID，用于指定数字人形象。 |
+| `encode_code` | 编码类型，仅支持 `mobile`（Android/iOS）和 `web`（Web）。Android 与 iOS 使用 `mobile`，Web 使用 `web`。 |
+
+其中 Android 和 iOS 的 `config_id` 使用 `mobile`，Web 使用 `web`。`DigitalHumanConfig.EncodeCode` 合法取值仅 `mobile` 和 `web`。
+
+业务后台在调用 ZEGO API 时，需要将 `digital_human_id` 和 `config_id` 构造为 `DigitalHuman` 对象：
+
+```json
+{
+    "DigitalHumanId": "c4b56d5c-db98-4d91-86d4-5a97b507da97",
+    "ConfigId": "mobile",
+    "EncodeCode": "H264"
+}
+```
+
+服务端成功响应中需要将以下信息返回给客户端：
 
 | 字段 | 用途 |
 | --- | --- |
@@ -520,7 +567,7 @@ async function startLiveDigitalHuman(roomId: string) {
 
 :::if{props.platform=undefined}
 
-Android 需要先用 `OkHttp` 从业务后台获取 Token，再直接调用 Express SDK 登录房间。登录成功后开启自定义视频渲染，再创建播报数字人实例：
+Android 需要先用 `OkHttp` 从业务后台获取 Token，再直接调用 ZEGO Express SDK 登录房间。登录成功后开启自定义视频渲染，再创建播报数字人实例：
 
 ```java
 String tokenUrl = baseUrl + "/api/zego-token?userId=" + userId;
@@ -533,10 +580,11 @@ new OkHttpClient().newCall(tokenRequest).enqueue(new Callback() {
 
         ZegoEngineConfig engineConfig = new ZegoEngineConfig();
         engineConfig.advancedConfig = new HashMap<String, String>() {{
-            put("set_audio_volume_ducking_mode", "1");
-            put("enable_rnd_volume_adaptive", "true");
-            put("sideinfo_callback_version", "3");
-            put("sideinfo_bound_to_video_decoder", "true");
+            //===== 数字人专用 ====//
+            put("set_audio_volume_ducking_mode", "1");           // 音量闪避开关，默认开启
+            put("enable_rnd_volume_adaptive", "true");           // 播放音量自适应开关，默认开启
+            put("sideinfo_callback_version", "3");               // 让 SEI 和 frame 一一对应，针对 ZEGO Express SDK 3.17 版本
+            put("sideinfo_bound_to_video_decoder", "true");      // 让 SEI 和 frame 一一对应，针对 ZEGO Express SDK 3.18 版本
         }};
         ZegoExpressEngine.setEngineConfig(engineConfig);
 
@@ -592,20 +640,33 @@ iOS 使用 `NSURLSession` 获取 Token，再直接调用 `loginRoom`。播报场
 Web 直接登录房间，播报场景不创建音频流或推送本地流：
 
 ```ts
-await zg.loginRoom(roomID, token, { userID, userName });
-const result = await startLiveDigitalHuman(roomID);
-const agentStreamId = result.agent_stream_id;
+// 1. 从业务后台获取 Token
+const tokenRes = await fetch(`${BASE_URL}/api/zego-token?userId=${USER_ID}&roomId=${ROOM_ID}`);
+const { token } = await tokenRes.json();
+
+// 2. 登录 RTC 房间
+await zg.loginRoom(ROOM_ID, token, { userID: USER_ID, userName: USER_ID });
+
+// 3. 创建播报数字人实例
+const result = await startLiveDigitalHuman(ROOM_ID);
+// 4. 提取并保存 agent_stream_id 和 agent_instance_id，供后续拉流、TTS 和退出使用
+agentStreamId = result.agent_stream_id;
+agentInstanceId = result.agent_instance_id;
 ```
 
 :::
 
 ### 初始化数字人 SDK 和自定义渲染
 
-Android 和 iOS 需要将 Express 收到的原始视频帧与 SEI 数据传递给数字人 SDK，再由数字人 SDK 渲染数字人画面。必须在调用 `startPlayingStream` 之前开启自定义视频渲染。
+Android 和 iOS 需要将 ZEGO Express SDK 收到的原始视频帧与 SEI 数据传递给数字人 SDK，再由数字人 SDK 渲染数字人画面。必须在调用 `startPlayingStream` 之前开启自定义视频渲染。
 
 :::if{props.platform=undefined}
 
-Android 初始化数字人 SDK：
+Android 初始化数字人 SDK。示例中涉及三个视图成员变量，需提前在布局中声明并初始化：
+
+- `digitalView`：用于承载数字人 SDK 渲染画面的容器，数字人画面最终绘制在该 View 上，初始化时通过 `attach` 传给数字人 SDK。
+- `loadingView`：加载中占位视图，数字人首帧渲染前展示，首帧绘制回调中隐藏。
+- `digitalPic`：静态封面占位图，与 `loadingView` 类似在首帧绘制回调中隐藏，避免画面停留在静态图。
 
 ```java
 private void initDigitalMobileSDK(String digitalHumanConfig) {
@@ -622,7 +683,7 @@ private void initDigitalMobileSDK(String digitalHumanConfig) {
 }
 ```
 
-在 `openExpressCustomRender` 中配置 RAW_DATA，并将回调数据转发给数字人 SDK：
+在 `openExpressCustomRender` 中配置 RAW_DATA，并将回调数据转发给数字人 SDK。其中 `onPlayerSyncRecvSEI` 用于接收 ZEGO Express SDK 解析出的 SEI（Supplemental Enhancement Information）数据并转发给数字人 SDK，SEI 中携带数字人驱动所需的口型、表情等附加信息，是数字人口型准确的关键。关于 SEI 的详细说明请参考[SEI 高级功能](/real-time-voice-android/communication/sei)。
 
 ```java
 private void openExpressCustomRender() {
@@ -725,14 +786,7 @@ iOS 在 `startPlayingStream` 前调用 `enableCustomVideoRender`，并在数字�
 
 :::if{props.platform="Web"}
 
-Web quickstart 不集成 `ZegoDigitalMobile`，直接使用 Express 创建远程流视图并播放音视频：
-
-```ts
-const mediaStream = await zg.startPlayingStream(stream.streamID);
-const remoteView = await zg.createRemoteStreamView(mediaStream);
-remoteView?.playAudio();
-remoteView?.playVideo("remoteSteamView");
-```
+Web 端不集成数字人 SDK，无需自定义渲染配置，直接使用 ZEGO Express SDK 播放数字人视频流。
 
 :::
 
@@ -745,6 +799,7 @@ remoteView?.playVideo("remoteSteamView");
 Android quickstart 在创建播报数字人实例成功后直接拉取 `agent_stream_id`，不使用 `onRoomStreamUpdate`：
 
 ```java
+// 设置拉流缓冲区间，缓解网络抖动导致的画面卡顿；min 为起始缓冲（ms），max 为最大缓冲（ms）
 ZegoExpressEngine.getEngine()
     .setPlayStreamBufferIntervalRange(agent_stream_id, 100, 2000);
 ZegoExpressEngine.getEngine().startPlayingStream(agent_stream_id);
@@ -788,7 +843,7 @@ ZegoExpressEngine.getEngine().startPlayingStream(agent_stream_id);
 
 :::if{props.platform="Web"}
 
-监听 `roomStreamUpdate`，匹配 `agentStreamId` 后创建远程流视图。Web quickstart 还通过 `remoteCameraStatusUpdate` 监听视频状态并开始播放画面：
+监听 `roomStreamUpdate`，匹配服务端返回的 `agentStreamId` 后创建远程流视图。`agentStreamId` 来自创建实例接口返回的 `agent_stream_id`，已在登录房间后从响应中提取：
 
 ```ts
 let remoteView: any = null;
@@ -802,6 +857,8 @@ zg.on(
   ) => {
     if (updateType === "ADD" && streamList.length > 0) {
       for (const stream of streamList) {
+        // 仅拉取数字人流，过滤房间内其他流
+        if (stream.streamID !== agentStreamId) continue;
         const mediaStream = await zg.startPlayingStream(stream.streamID);
         remoteView = await zg.createRemoteStreamView(mediaStream);
         remoteView?.playAudio();
@@ -811,17 +868,22 @@ zg.on(
   },
 );
 
+// 数字人视频流由服务端推送，相机状态变为 OPEN 表示视频流已就绪，此时再播放画面
 zg.on(
   "remoteCameraStatusUpdate",
   (streamID: string, status: "OPEN" | "MUTE") => {
     if (streamID === agentStreamId && status === "OPEN") {
-      remoteView?.playVideo("remoteSteamView");
+      remoteView?.playVideo("remoteStreamView");
     }
   }
 );
 ```
 
 :::
+
+<Note title="CDN 模式拉流">
+以上为 RTC 模式拉流方式。若使用 CDN 模式，客户端无需登录 RTC 房间，也不需要按上述流程拉取 RTC 流，而是直接通过通用播放器（如 HLS / FLV 播放器）拉取业务后台返回的 `cdn_url` 即可观看数字人播报。CDN 模式不需要集成数字人 SDK。
+</Note>
 
 ### 主动让数字人播报文本
 
@@ -834,7 +896,11 @@ zg.on(
 }
 ```
 
-`text` 最大长度不超过 300 个字符。还可以按业务需要传入 `add_history`、`interrupt_mode`、`priority`、`same_priority_option` 和 `enqueue_user_speech` 等参数。详细说明请参考[主动调用 TTS](/aiagent-server/guides/proactive-invocation-of-llm-and-tts)。
+`text` 最大长度不超过 300 个字符。还可以按业务需要传入 `add_history`、`priority`、`same_priority_option` 等参数。详细说明请参考[主动调用 TTS](/aiagent-server/guides/proactive-invocation-of-llm-and-tts)。
+
+<Note title="实例生命周期">
+播报数字人实例在空闲（无播报任务）超过 900 秒后会自动销毁，业务侧可通过 `MaxIdleTime` 调整该空闲超时时间。如需长时间保活，请定期调用主动 TTS 或调大 `MaxIdleTime`。
+</Note>
 
 :::if{props.platform=undefined}
 
@@ -1001,15 +1067,69 @@ async function logoutRoom() {
 
 | 模式 | 创建实例参数 | 客户端播放方式 | 适用场景 |
 | --- | --- | --- | --- |
-| RTC | `room_id` | Express SDK 拉取 RTC 流 | 低延迟、小范围互动 |
+| RTC | `room_id` | ZEGO Express SDK 拉取 RTC 流 | 低延迟、小范围互动 |
 | CDN | `cdn_url` | 使用播放器拉取 CDN 流 | 大规模直播 |
 
-RTC 和 CDN 模式都使用 `agent_instance_id` 调用主动 TTS 和停止实例接口。CDN 模式不需要客户端登录 RTC 房间，也不需要集成数字人 SDK。
+RTC 和 CDN 模式都使用 `agent_instance_id` 调用主动 TTS 和停止实例接口。CDN 模式不需要客户端登录 RTC 房间，也不需要集成数字人 SDK。CDN 拉流方式：可以用任何支持 CDN 播放的方式进行拉流，不做特殊说明。
+
+:::if{props.platform="Web"}
+
+数字人支持 RTC、CDN 拉流，如若需要让大规模的用户观看数字人播报内容，例如电商直播、直播课堂等场景，可以使用 CDN 直播模式。CDN 模式下 Web 端无需集成 ZEGO Express SDK，使用任意支持 HLS/FLV 的 Web 播放器（如 hls.js、video.js）拉取 `cdn_url` 即可。
+:::
 
 ## 监听回调
 
-请监听 Express SDK 的房间登录、拉流状态和错误回调，并在业务后台记录 `agent_instance_id`、`agent_stream_id`、`request_id` 和错误信息，便于定位创建实例、拉流或 TTS 失败原因。
+请监听 ZEGO Express SDK 的房间登录、拉流状态和错误回调，并在业务后台记录 `agent_instance_id`、`agent_stream_id`、`request_id` 和错误信息，便于定位创建实例、拉流或 TTS 失败原因。其中 `request_id` 由 ZEGO 服务端返回，是排查服务端链路问题的关键标识，请务必在出现异常时连同上述信息一起反馈给 ZEGO 技术支持。
+
+接入测试过程中，强烈建议监听业务后台接收回调（Event 为 `Exception` 的事件），通过 `Data.Code` 和 `Data.Message` 快速定位 LLM/TTS 等参数配置问题。回调与错误码详情请参考[接收回调](/aiagent-server/callbacks/receiving-callback)和[异常事件错误码](/aiagent-server/callbacks/exception-codes)。
 
 <Warning title="注意">
 如果数字人画面停留在静态图，请重点检查：数字人配置是否有效、`agent_stream_id` 是否正确、是否在 `startPlayingStream` 前开启了自定义视频渲染，以及是否将视频帧和 SEI 数据传给了数字人 SDK。
 </Warning>
+
+## 排查清单
+
+接入过程中如遇异常，可对照以下清单逐项排查。
+
+:::if{props.platform=undefined}
+
+**Android 排查清单**
+
+| 现象 | 排查方向 |
+| --- | --- |
+| 登录房间失败 | 检查 Token 是否有效、`AppID` 是否匹配、网络是否可达 ZEGO 服务。 |
+| 创建实例返回失败 | 确认 `digital_human_id`、`config_id`（Android 为 `mobile`）、`room_id` 是否正确，业务后台签名是否有效。 |
+| 拉不到流 / 无画面 | 确认 `agent_stream_id` 与服务端返回一致；检查是否在 `startPlayingStream` 前调用 `enableCustomVideoRender`。 |
+| 画面停留在静态图 | 检查 `digitalView`/`loadingView`/`digitalPic` 是否正确 `attach`；确认视频帧和 SEI 已转发给 `digitalMobileSDK`；真机运行而非模拟器。 |
+| 口型不准 | 确认 SEI 数据已通过 `onPlayerSyncRecvSEI` 转发；确认 `advanceConfig` 中 SEI 相关参数与 ZEGO Express SDK 版本匹配。 |
+| TTS 不播报 | 确认 `agent_instance_id` 正确、`text` ≤ 300 字符、实例未因 900 秒空闲被销毁。 |
+
+:::
+:::if{props.platform="iOS"}
+
+**iOS 排查清单**
+
+| 现象 | 排查方向 |
+| --- | --- |
+| 登录房间失败 | 检查 Token 是否有效、`AppID` 是否匹配、网络是否可达 ZEGO 服务。 |
+| 创建实例返回失败 | 确认 `digital_human_id`、`config_id`（iOS 为 `mobile`）、`room_id` 是否正确，业务后台签名是否有效。 |
+| 拉不到流 / 无画面 | 在 `onRoomStreamUpdate` 中匹配 `agentStreamId` 后再拉流；确认 `enableCustomVideoRender` 在 `startPlayingStream` 前调用。 |
+| 画面停留在静态图 | 确认视频帧和 SEI 已转发给 `digitalMobile`；Info.plist 不需要麦克风权限但需保证网络权限。 |
+| TTS 不播报 | 确认 `agent_instance_id` 正确、`text` ≤ 300 字符、实例未因 900 秒空闲被销毁。 |
+
+:::
+:::if{props.platform="Web"}
+
+**Web 排查清单**
+
+| 现象 | 排查方向 |
+| --- | --- |
+| 登录房间失败 | 检查 Token 是否有效、`AppID` 是否匹配；3.7.0 及以上版本 `server` 可填空字符串。 |
+| 创建实例返回失败 | 确认 `digital_human_id`、`config_id`（Web 为 `web`）、`room_id` 是否正确，业务后台签名是否有效。 |
+| 无画面 / 无声音 | 在 `roomStreamUpdate` 中按 `agentStreamId` 过滤后再 `startPlayingStream`；等待 `remoteCameraStatusUpdate` 为 `OPEN` 后再 `playVideo`。 |
+| 视频容器不显示 | 确认 `playVideo` 传入的容器 ID 为 `remoteStreamView`（注意拼写）。 |
+| TTS 不播报 | 确认 `agent_instance_id` 正确、`text` ≤ 300 字符、实例未因 900 秒空闲被销毁。 |
+
+:::
+
+更多错误码请参考[异常事件错误码](/aiagent-server/callbacks/exception-codes)，回调监听请参考[接收回调](/aiagent-server/callbacks/receiving-callback)。
