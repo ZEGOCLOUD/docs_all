@@ -1,6 +1,5 @@
 ---
 docType: API
-date: "2026-06-24"
 ---
 
 # Class
@@ -2401,6 +2400,7 @@ Users push their local audio and video streams to the ZEGO RTC server or CDN, an
   2. Other users in the same room can get the streamID by monitoring the [onRoomStreamUpdate] event callback after the local user publishing stream successfully.
   3. In the case of poor network quality, user publish may be interrupted, and the SDK will attempt to reconnect. You can learn about the current state and error information of the stream published by monitoring the [onPublisherStateUpdate] event.
   4. To call [SetRoomMode] function to select multiple rooms, the room ID must be specified explicitly.
+  5. When there is a web client play the RTC stream, the audio encoder needs to be set to ZegoAudioCodecIDLow3, and the audio sampling rate needs to be set to high.
 </Note>
 
 <Warning title="">
@@ -2734,7 +2734,7 @@ Take a snapshot of the publishing stream.
 
 <Note title="">
 - **When to call**: Called this function after calling [startPublishingStream] or [startPreview].
-- **Caution**: The resolution of the snapshot is the encoding resolution set in [setVideoConfig]. If you need to change it to capture resolution, please call [setCapturePipelineScaleMode] to change the capture pipeline scale mode to [Post].
+- **Caution**: The resolution of the snapshot is the encoding resolution set in [setVideoConfig]. If you need to change it to capture resolution, please call [setCapturePipelineScaleMode] to change the capture pipeline scale mode to [Post].When using custom video capture, screenshots cannot be taken if only [startPublishingStream] is called for stream pushing without invoking [startPreview] to enable screen preview.
 - **Related callbacks**: The screenshot result will be called back through [ZegoPublisherTakeSnapshotCallback].
 - **Related APIs**: [takePlayStreamSnapshot].
   This function is only available in ZegoExpressVideo SDK!
@@ -3845,7 +3845,7 @@ Play audio and video streams from the ZEGO RTC server or CDN.
 
 <Warning title="">
 - **Available since**: 1.1.0
-- **Restrictions**: None.
+- **Restrictions**: Up to 20 streams can be played simultaneously.
 </Warning>
 </ParamField>
 <ParamField
@@ -4991,12 +4991,12 @@ This function is used to control whether to use the audio collection device. Whe
 - **Use cases**: When the user never needs to use the audio, you can call this function to close the audio collection.
 - **Default value**: The default is `true`.
 - **When to call**: After creating the engine [createEngine].
+- **Caution**: This function blocks the main thread, and it is recommended to use it in a child thread.
 - **Related APIs**: Turning off or turning on the microphone on the hardware is a time-consuming operation, and there is a certain performance overhead when the user performs frequent operations. [muteMicrophone] is generally recommended.
 </Note>
 
 <Warning title="">
 - **Available since**: 1.1.0
-- **Caution**: This function blocks the main thread, and it is recommended to use it in a child thread.
 - **Restrictions**: None.
 </Warning>
 </ParamField>
@@ -5618,7 +5618,7 @@ The remote playing streams audio sound level callback.
 
 | Name | Type | Description |
 | --- | --- | --- |
-| audioSpectrum | number[] | Locally captured audio spectrum value list. Spectrum value range is [0-2^31]. |
+| audioSpectrum | number[] | Locally captured audio spectrum value list. Spectrum value range is [0-2^30]. |
 
 **Details**
 
@@ -5645,7 +5645,7 @@ The local captured audio spectrum callback.
 
 | Name | Type | Description |
 | --- | --- | --- |
-| audioSpectrums | object | Remote audio spectrum hash map, key is the streamID, value is the audio spectrum list of the corresponding streamID. Spectrum value range is [0-2^31] |
+| audioSpectrums | object | Remote audio spectrum hash map, key is the streamID, value is the audio spectrum list of the corresponding streamID. Spectrum value range is [0-2^30] |
 
 **Details**
 
@@ -6681,6 +6681,94 @@ Obtain synchronization network time(NTP), including timestamp and maximum deviat
 Network time information.
 </ParamField>
 <ParamField
+  name="startDumpData"
+  prototype="  startDumpData(config: [ZegoDumpDataConfig](./struct#zegodumpdataconfig)): void"
+  desc="Dump audio, video data."
+  parent_file="Declared in \`ZegoExpressEngine.js\`"
+  parent_name="ZegoExpressEngine"
+  parent_type="class">
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| config | [ZegoDumpDataConfig](./struct#zegodumpdataconfig) | Dump data config. |
+
+**Details**
+
+Dump audio, video data.
+
+<Note title="">
+- **Use cases**: This is a debugging tool. When there is a problem with audio/video capturing, 3A processing, or other environment processing during publish, you can dump the audio data and upload it to the ZEGO server for further analysis.
+- **When to call**: It needs to be called after [createEngine].
+- **Caution**: It will trigger the [onStartDumpData] callback when data dumping starts. The video dump auto-stops after 30 seconds to prevent excessive storage usage, triggering the [onStopDumpData] callback.
+- **Related APIs**: Call [stopDumpData] to stop dumping data.
+</Note>
+
+<Warning title="">
+- **Available since**: 3.10.0
+- **Restrictions**: If dumping video, only support Android and iOS.
+</Warning>
+</ParamField>
+<ParamField
+  name="stopDumpData"
+  prototype="  stopDumpData(): void"
+  desc="Stop dumping data."
+  parent_file="Declared in \`ZegoExpressEngine.js\`"
+  parent_name="ZegoExpressEngine"
+  parent_type="class">
+Stop dumping data.
+
+<Note title="">
+- **Use cases**: This is a debugging tool. When there is a problem with audio capturing, 3A processing, or other environment processing during publish, you can dump the audio data and upload it to the ZEGO server for further analysis.
+- **When to call**: It needs to be called after [startDumpData].
+- **Caution**: It will trigger the [onStopDumpData] callback.
+</Note>
+
+<Warning title="">
+- **Available since**: 3.10.0
+- **Restrictions**: None.
+</Warning>
+</ParamField>
+<ParamField
+  name="uploadDumpData"
+  prototype="  uploadDumpData(): void"
+  desc="Upload dumped data to the ZEGO server."
+  parent_file="Declared in \`ZegoExpressEngine.js\`"
+  parent_name="ZegoExpressEngine"
+  parent_type="class">
+Upload dumped data to the ZEGO server.
+
+<Note title="">
+- **Use cases**: This is a debugging tool. When there is a problem with audio capturing, 3A processing, or other environment processing during publish, you can dump the audio data and upload it to the ZEGO server for further analysis.
+- **When to call**: It needs to be called after [stopDumpData].
+- **Caution**: It will trigger the [onUploadDumpData] callback when dump data uploaded.
+</Note>
+
+<Warning title="">
+- **Available since**: 3.10.0
+- **Restrictions**: None.
+</Warning>
+</ParamField>
+<ParamField
+  name="removeDumpData"
+  prototype="  removeDumpData(): void"
+  desc="Remove dumped data."
+  parent_file="Declared in \`ZegoExpressEngine.js\`"
+  parent_name="ZegoExpressEngine"
+  parent_type="class">
+Remove dumped data.
+
+<Note title="">
+- **Use cases**: This is a debugging tool. When there is a problem with audio capturing, 3A processing, or other environment processing during publish, you can dump the audio data and upload it to the ZEGO server for further analysis.
+- **When to call**: It needs to be called after [stopDumpData]. If the dump data is to be uploaded to the ZEGO server, it should be deleted after the upload is successful.
+</Note>
+
+<Warning title="">
+- **Available since**: 3.10.0
+- **Restrictions**: None.
+</Warning>
+</ParamField>
+<ParamField
   name="onNetworkModeChanged"
   prototype="  onNetworkModeChanged(mode: [ZegoNetworkMode](./enum#zegonetworkmode)): void"
   desc="Network mode changed callback."
@@ -6799,6 +6887,112 @@ The uplink and downlink network callbacks of the local and remote users, that wo
 
 <Warning title="">
 - **Available since**: 2.10.0
+</Warning>
+</ParamField>
+<ParamField
+  name="onRequestDumpData"
+  prototype="  onRequestDumpData(): void"
+  desc="Request to dump data."
+  parent_file="Declared in \`ZegoExpressEngine.js\`"
+  parent_name="ZegoExpressEngine"
+  parent_type="class">
+<Note title="">
+- **Trigger**: When the customer reports back the problem, ZEGO expects the user to dump the data to analyze the audio / video processing problem, which will trigger this callback.
+</Note>
+
+<Warning title="">
+- **Available since**: 3.10.0
+ When to 
+</Warning>
+</ParamField>
+<ParamField
+  name="onRequestUploadDumpData"
+  prototype="  onRequestUploadDumpData(dumpDir: string, takePhoto: boolean): void"
+  desc="Request to dump data."
+  parent_file="Declared in \`ZegoExpressEngine.js\`"
+  parent_name="ZegoExpressEngine"
+  parent_type="class">
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| dumpDir | string | Dump data dir. |
+| takePhoto | boolean | Need to take photo when uploading dump data |
+
+<Note title="">
+- **Trigger**: When the customer reports back the problem, ZEGO expects the user to dump the data to analyze the audio / video processing problem, which will trigger this callback.
+</Note>
+
+<Warning title="">
+- **Available since**: 3.11.0
+ When to 
+</Warning>
+</ParamField>
+<ParamField
+  name="onStartDumpData"
+  prototype="  onStartDumpData(errorCode: number): void"
+  desc="Callback when starting to dump data."
+  parent_file="Declared in \`ZegoExpressEngine.js\`"
+  parent_name="ZegoExpressEngine"
+  parent_type="class">
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| errorCode | number | Error code. |
+
+<Note title="">
+- **Trigger**: This callback is triggered when [startDumpData] is called.
+</Note>
+
+<Warning title="">
+- **Available since**: 3.10.0
+ When to 
+</Warning>
+</ParamField>
+<ParamField
+  name="onStopDumpData"
+  prototype="  onStopDumpData(errorCode: number, dumpDir: string): void"
+  desc="Callback when stopping to dump data."
+  parent_file="Declared in \`ZegoExpressEngine.js\`"
+  parent_name="ZegoExpressEngine"
+  parent_type="class">
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| errorCode | number | Error code. |
+| dumpDir | string | Dump data dir. |
+
+<Note title="">
+- **Trigger**: This callback is triggered when [stopDumpData] is called.
+</Note>
+
+<Warning title="">
+- **Available since**: 3.10.0
+ When to 
+</Warning>
+</ParamField>
+<ParamField
+  name="onUploadDumpData"
+  prototype="  onUploadDumpData(errorCode: number): void"
+  desc="Callback after uploading the dump data."
+  parent_file="Declared in \`ZegoExpressEngine.js\`"
+  parent_name="ZegoExpressEngine"
+  parent_type="class">
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| errorCode | number | Error code. |
+
+<Note title="">
+- **Trigger**: When [uploadDumpData] is called, this callback will be triggered after SDK executes the upload task.
+</Note>
+
+<Warning title="">
+- **Available since**: 3.10.0
+ When to 
 </Warning>
 </ParamField>
 <ParamField
@@ -6973,7 +7167,7 @@ When the developer opens custom pre-processing, by calling [setCustomVideoProces
 <Note title="">
 - **Use cases**: After the developer collects the video data by himself or obtains the video data collected by the SDK, if the basic beauty and watermark functions of the SDK cannot meet the needs of the developer (for example, the beauty effect cannot meet the expectations), the ZegoEffects SDK can be used to perform the video Some special processing, such as beautifying, adding pendants, etc., this process is the pre-processing of custom video.
 - **Default value**: Off by default
-- **When to call**: Must be set before calling [startPreview], [startPublishingStream], [createRealTimeSequentialDataManager], [startPlayingStream], [createMediaPlayer], or [createAudioEffectPlayer]. If you need to modify the configuration, please call [logoutRoom] to log out of the room first, otherwise it will not take effect.
+- **When to call**: Must be set before calling [startPreview], [startPublishingStream], [createRealTimeSequentialDataManager], [startPlayingStream], [createMediaPlayer] or [createAudioEffectPlayer]. If you need to modify the configuration, please call [logoutRoom] to log out of the room first, otherwise it will not take effect.
 - **Related APIs**: Call the [setCustomVideoProcessHandler] function to set the callback before custom video processing.
   This function is only available in ZegoExpressVideo SDK!
 </Note>
@@ -7232,9 +7426,12 @@ Destroys a copyrighted music instance.
 
 Get a list of screens or windows in a screen.
 
+<Note title="">
+- **Platform differences**: Only for Windows / macOS / Linux.
+</Note>
+
 <Warning title="">
 - **Available since**: 3.1.0
-- **Restrictions**: Only support in Windows/macOS.
 </Warning>
 
 **Return**
@@ -7257,12 +7454,12 @@ List of capture source info objects.
 
 **Details**
 
-Creates a screen capture source object based on the provided source ID and source type.
+Creates a screen capture source object.
 
 <Note title="">
-- **Use cases**: It is used when you need to record and share the screen or window.
+- **Use cases**: It is used when you need to record or share the screen or window.
 - **When to call**: It needs to be called after [createEngine].
-- **Platform differences**: Only supports Windows and macOS.
+- **Platform differences**: Supported on Windows / macOS / Linux / OHOS, not supported on Android/iOS.
 </Note>
 
 **Return**
@@ -7289,7 +7486,7 @@ Destroy the [ZegoScreenCaptureSource] instance object.
 <Note title="">
 - **Use cases**: When you no longer need to use the screen capture function, you can use this function to destroy the instance object created by the [createScreenCaptureSource] function
 - **When to call**: When you need to the screen capture source object needs to be destroyed
-- **Platform differences**: Only supports Windows and macOS.
+- **Platform differences**: Supported on Windows / macOS / Linux / OHOS, not supported on mobile.
 </Note>
 
 <Warning title="">
@@ -8054,7 +8251,7 @@ The callback of sound level update.
 
 | Name | Type | Description |
 | --- | --- | --- |
-| spectrumList | Array\<number\> | Locally captured frequency spectrum value list. Spectrum value range is [0-2^31]. |
+| spectrumList | Array\<number\> | Locally captured frequency spectrum value list. Spectrum value range is [0-2^30]. |
 
 **Details**
 
@@ -8171,7 +8368,7 @@ Update a screen capture source object based on the provided source ID and source
 </Note>
 
 <Warning title="">
-- **Restrictions**: Only available on Windows/macOS.
+- **Restrictions**: Available on Windows/macOS/Linux.
 </Warning>
 </ParamField>
 <ParamField
@@ -8348,7 +8545,7 @@ Set whether to show the cursor.
 
 <Warning title="">
 - **Available since**: 3.1.0
-- **Restrictions**: Only available on Windows/macOS.
+- **Restrictions**: Available on Windows/macOS/OHOS.
 </Warning>
 </ParamField>
 <ParamField
@@ -8375,7 +8572,7 @@ Set whether to highlight the capture area.
 
 <Warning title="">
 - **Available since**: 3.21.0
-- **Restrictions**: Only available on Windows/macOS.
+- **Restrictions**: Available on Windows/macOS/OHOS.
 </Warning>
 </ParamField>
 <ParamField
@@ -8413,6 +8610,15 @@ Set whether to collect sound.
   parent_name="ZegoScreenCaptureSource"
   parent_type="class">
 Index of the screen capture source.
+</ParamField>
+<ParamField
+  name="getCustomVideoCapturePlugin"
+  prototype="  getCustomVideoCapturePlugin(): number"
+  desc="Get the custom video capture plugin of the screen capture"
+  parent_file="Declared in \`ZegoExpressScreenCaptureSource.js\`"
+  parent_name="ZegoScreenCaptureSource"
+  parent_type="class">
+The plugin ID
 </ParamField>
 <ParamField
   name="onExceptionOccurred"
