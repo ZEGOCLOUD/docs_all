@@ -8,7 +8,7 @@ type: "manual"
 
 ## 目录与命名
 - 每个 mdx 对应一个同名 yaml，目录结构与 mdx 所在目录一致。
-- operationId 使用 mdx 文件名（不带扩展名），如 start-cdn-recrod.mdx → operationId: start-cdn-recrod。
+- operationId 使用 mdx 文件名（不带扩展名），如 start-cdn-record.mdx → operationId: start-cdn-record。
 - tags 取 mdx 所在目录名，例如：cdn、room、media-service、stream-mixing、moderation、scene。
 
 ## OpenAPI 基本骨架
