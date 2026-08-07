@@ -112,6 +112,98 @@ components:
           description: Response code
 ```
 
+#### Recursive indexed-dot arrays in query parameters
+
+Some ZEGO server APIs encode an object array as query keys with a continuous numeric index, for example:
+
+```text
+HandleMediaArgs.0.FileId=file-a&HandleMediaArgs.0.StartTime=0&HandleMediaArgs.1.FileId=file-b
+```
+
+OpenAPI does not have a standard serialization style for this indexed-dot wire format. Model the actual nested data shape with arrays and objects, then add the Docuo renderer extension:
+
+```yaml
+- name: HandleMediaArgs
+  in: query
+  required: false
+  schema:
+    type: array
+    minItems: 1
+    maxItems: 10
+    items:
+      type: object
+      required:
+        - FileId
+      properties:
+        FileId:
+          type: string
+          description: The file represented by `HandleMediaArgs.N.FileId`.
+        StartTime:
+          type: number
+          format: double
+          default: 0
+        EndTime:
+          type: number
+          format: double
+  example:
+    - FileId: file-a
+      StartTime: 0
+      EndTime: 10
+    - FileId: file-b
+      StartTime: 10
+      EndTime: 20
+  x-docuo-query-serialization:
+    style: recursive-indexed-dot
+    indexStart: 0
+    indexLabels: [N]
+```
+
+The same extension supports arrays at multiple depths. For example, this schema:
+
+```yaml
+- name: Media
+  in: query
+  required: false
+  schema:
+    type: array
+    maxItems: 100
+    items:
+      type: object
+      required: [FileId]
+      properties:
+        FileId:
+          type: string
+        Resolution:
+          type: array
+          maxItems: 3
+          uniqueItems: true
+          items:
+            type: string
+            enum: [360p, 540p, 720p]
+  example:
+    - FileId: file-a
+      Resolution: [360p, 720p]
+  x-docuo-query-serialization:
+    style: recursive-indexed-dot
+    indexStart: 0
+    indexLabels: [N, M]
+```
+
+produces `Media.0.FileId=file-a&Media.0.Resolution.0=360p&Media.0.Resolution.1=720p`. If an array item later becomes an object, the same recursive schema also supports keys such as `Media.0.Resolution.0.id` without another serialization style.
+
+The parameter documentation uses the same nested visual structure as an OpenAPI request body: each array is shown as an `Array [` container, and its object properties are displayed directly inside it. Do not add separate `Index: N/M` or `Array item N/M` rows. The placeholders remain visible in full leaf names such as `Media.N.FileId` and `Media.N.Resolution.M`.
+
+Use this pattern only when the actual API expects recursively indexed dot-separated query keys. Keep these rules together:
+
+- Define each level with normal OpenAPI `items`, `properties`, and nested schemas; do not enumerate concrete keys such as `Media.0` or every possible N/M value.
+- Use `minItems` and `maxItems` for array size constraints. For an optional parameter, `minItems` applies only after the parameter is supplied.
+- Use `uniqueItems: true` when scalar array entries cannot repeat. Put object-field requirements in the corresponding object's `required` list.
+- Use `indexLabels` for placeholders in full documented query names and descriptions. Labels follow array depth (`[N, M]`); they do not affect request serialization or create a separate index annotation in the rendered array header.
+- Describe cross-field conditions and mutual exclusion in parameter/property descriptions. This extension does not enforce `FileId` versus `Media` mutual exclusion in the editor.
+- Use the parameter-level `example` for documentation output only. It must not make an optional parameter appear automatically in the generated request.
+- Keep indices continuous at every array depth. Use `indexStart: 0` when indices start at 0; the renderer derives all later N/M indices from the user's array entries and compacts them after deletion.
+- Do not replace this extension with `style: deepObject`; deep-object serialization does not define the same indexed-dot keys.
+
 ### Step 4: Run `docuo god` Command
 
 After editing the yaml file, regenerate the mdx file:
