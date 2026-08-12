@@ -68,7 +68,7 @@ When a resource declared in documentation needs to be updated (e.g. replacing a 
 How to determine the upload parameters from the original CDN URL:
 
 1. Parse the URL: `https://<cdn-domain>/<oss-path>`
-2. Map `cdn-domain` back to the bucket (see table above; e.g. `artifact-sdk.zego.im` → `zego-artifact-sdk`).
+2. Map `cdn-domain` back to the bucket (see table above [Bucket Auto-Detection](#bucket-auto-detection); e.g. `artifact-sdk.zego.im` → `zego-artifact-sdk`).
 3. Split the OSS path: everything except the last segment is `--path`, the last segment is the filename.
 4. **The local file must be renamed to match the original filename** before uploading, because the script derives the OSS key from `os.path.basename(local_path)`. A different local filename would produce a different URL and break existing references.
 5. Run the upload script with the resolved `--path` and `--bucket`. The script automatically triggers a CDN refresh after upload, so the new content becomes visible shortly after.
