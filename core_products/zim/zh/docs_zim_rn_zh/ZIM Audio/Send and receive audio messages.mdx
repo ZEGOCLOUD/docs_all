@@ -65,7 +65,7 @@ ZIMAudio.getInstance().on("onError", (error) => {
 
 2. 触发相关回调。
 
-    - 开始录制后，消息发送客户端可以监听 [onRecorderStarted](@onRecorderStarted) 回调，用于更新 UI。
+    - 开始录制后，消息发送客户端可以监听 [recorderStarted](@recorderStarted) 回调，用于更新 UI。
 
         ```typescript
         onRecorderStarted: () => void;
@@ -90,7 +90,7 @@ ZIMAudio.getInstance().on("onError", (error) => {
 
     <Note title="说明">
 
-    - 请在调用 [completeRecord](@completeRecord) 接口之前，您已监听到 [onRecorderStarted](@onRecorderStarted) 回调，否则会导致本次录制取消，且收到录制时间过短的报错。
+    - 请在调用 [completeRecord](@completeRecord) 接口之前，您已监听到 [recorderStarted](@recorderStarted) 回调，否则会导致本次录制取消，且收到录制时间过短的报错。
     - 如果录制没有被 <a href="#complete">完成</a> 或 <a href="#cancel">取消</a>，当录制时长达到时间上限时，ZIM Audio SDK 将会自动完成录制，并触发 [onRecorderCompleted](@onRecorderCompleted) 回调。
     </Note>
 
@@ -137,39 +137,30 @@ ZIMAudio.getInstance().isRecording()
 实现此步骤前，请确认用户已 [登录 ZIM](../Send%20and%20receive%20messages.mdx#4-登录-zim)。
 </Warning>
 
-当 [onRecorderCompleted](@onRecorderCompleted) 触发后，消息发送客户端可以使用音频文件绝对路径构造 [ZIMAudioMessage](@-ZIMAudioMessage)（ZIM 音频消息），并调用 [sendMediaMessage](@sendMediaMessage) 接口发送该消息，下列代码以在单聊会话中发送音频消息为例。
+当 [onRecorderCompleted](@onRecorderCompleted) 触发后，消息发送客户端可以使用音频文件绝对路径构造 [ZIMAudioMessage](@-ZIMAudioMessage)（ZIM 音频消息），并调用 [sendMessage](@sendMessage) 接口发送该消息，下列代码以在单聊会话中发送音频消息为例。
 
 ```typescript
 // 录制完成回调
-ZIMAudio.getInstance().on("onRecorderCompleted", (totalDuration) => {
-    // 将单位为毫秒的音频时长转换为 ZIM 需要的秒
-    let second = Math.floor(totalDuration / 1000);
-    // 构造 ZIM 音频消息
-    /* 注意：fileLocalPath 是本地文件的绝对路径 */
-    const fileLocalPath = 'xxx/xxx.mp3';
-    const conversationID = 'xxxx';
-    const config: ZIMMessageSendConfig = { priority: 1 };
-    const notification: ZIMMessageSendNotification = {
-        onMessageAttached: (message) => {
-            // todo: Loading
-        },
-        onMediaUploadingProgress: (message, currentFileSize, totalFileSize) => {
-            // todo: upload progress
-        }
-    };
+ZIMAudio.getInstance().on('onRecorderCompleted', (totalDuration: number) => {
+    const second = Math.floor(totalDuration / 1000); // 毫秒转秒
 
-    const mediaMessageObj: ZIMMessage = {
-        fileLocalPath, 
-        type: 13,
-        audioDuration: second, 
+    // 构造 ZIM 音频消息
+    const audioMessage: ZIMAudioMessage = {
+        type: ZIMMessageType.Audio,
+        fileLocalPath: '录制音频文件绝对路径',
+        audioDuration: second,
     };
-    zim.sendMessage(
-        mediaMessageObj,
-        conversationID,
-        0,
-        config,
-        notification,
-    );
+    const config: ZIMMessageSendConfig = { priority: 1 };
+
+    // 用 sendMessage 发送，单聊传 ZIMConversationType.Peer
+    ZIM.getInstance()
+        .sendMessage(audioMessage, '单聊的会话ID', ZIMConversationType.Peer, config)
+        .then((result: ZIMMessageSentResult) => {
+            // result.message 即发送成功的消息
+        })
+        .catch((error: { code: number; message: string }) => {
+            // 根据官网 ZIM 错误码文档处理 error.code
+        });
 });
 ```
 
@@ -182,7 +173,7 @@ ZIMAudio.getInstance().on("onRecorderCompleted", (totalDuration) => {
 实现此步骤前，请确认用户已 [登录 ZIM](../Send%20and%20receive%20messages.mdx#4-登录-zim)。
 </Warning>
 
-根据会话类型（单聊、房间、群组），消息接收客户端监听 [peerMessageReceived](@peerMessageReceived)、[groupMessageReceived](@groupMessageReceived)、[roomMessageReceived](@roomMessageReceived)，接收语音消息的相关通知，然后可以调用 [downloadMediaFile](@downloadMediaFile) 接口，下载音频文件到本地。
+根据会话类型（单聊、房间、群组），消息接收客户端监听 [onPeerMessageReceived](@onPeerMessageReceived)、[onGroupMessageReceived](@onGroupMessageReceived)、[onRoomMessageReceived](@onRoomMessageReceived)，接收语音消息的相关通知，然后可以调用 [downloadMediaFile](@downloadMediaFile) 接口，下载音频文件到本地。
 
 下列代码描述在单聊会话接收并下载音频消息。
 
