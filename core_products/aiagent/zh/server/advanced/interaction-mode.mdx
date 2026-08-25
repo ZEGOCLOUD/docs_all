@@ -1,0 +1,83 @@
+---
+date: '2026-02-05'
+---
+# 互动模式：全双工、聆听、对讲机
+
+## 场景说明
+
+在与智能体互动时，有以下三种互动形式，可以通过[创建智能体实例](/aiagent-server/api-reference/agent-instance-management/create-agent-instance)时的 `AdvancedConfig.CommunicationMode` 参数配置：
+
+| 互动形式 | 使用场景 | 常见场景 |
+| --- | --- | --- |
+| 全双工互动（默认） | 自由对话场景，用户随时可以说AI随时可以回应。 | AI 语音通话 |
+| 聆听模式 | 持续语音转写场景，AI 仅聆听不回复。 | 云端语音识别、AI 面试、用户内容总结 |
+| 对讲机模式 | 按需发言的短轮交互场景，用户按住说话、松开后获得 AI 回复。 | 在线会议中的临时发言、AI 硬件中的隐私保护 |
+
+## AI Agent 行为差异
+
+| 维度 | 全双工模式 | 聆听模式 | 对讲机模式 |
+| --- | --- | --- | --- |
+| 用户说话与结束条件 | 由 VAD 自动检测断句结束 | 由 VAD 自动检测断句结束 | 由 StartListening 开始、StopListening 结束一次聆听；通常在 30 秒以内 |
+| AI 说话触发时机 | ✅ 用户结束说话后 AI 自动回复<br />✅ 调用 SendAgentInstanceTTS 等方式让 AI 主动说话 | ✅ 调用 SendAgentInstanceTTS 等方式让 AI 主动说话 | ✅ 用户结束聆听后 AI 自动回复<br />✅ 调用 SendAgentInstanceTTS 等方式让 AI 主动说话 |
+| ASR 回调 | 用户说话结束后下发结果 | 每个符合断句规则的结果均下发；持续聆听可能产生多次回调 | StopListening 后下发本次结果 |
+| LLM 请求 | 请求 LLM，生成回复 | 不请求 LLM | 请求 LLM，生成回复 |
+| TTS | 播报 AI 回复内容 | 不自动播报 | 播报 AI 回复内容 |
+| 字幕 | 正常下发 | 正常下发 | 正常下发 |
+
+### 互动模式切换
+
+- 全双工模式（0）与聆听模式（1）可以互相切换，切换后从下一句用户说话开始生效。
+- 对讲机模式（2）不支持切换到其他模式。
+
+## 实现步骤
+
+### 前提条件
+- 开通 AI Agent 服务，并按[快速发起语音通话](/aiagent-server/quick-start)完成基本流程。
+
+### 实现不同的互动形式
+
+<Tabs>
+<Tab title="全双工模式">
+<Steps titleSize="p">
+<Step title="创建实例时设置互动模式为全双工模式">
+通过[创建智能体实例](/aiagent-server/api-reference/agent-instance-management/create-agent-instance)时的 `AdvancedConfig.CommunicationMode` 参数配置为 0（默认值），开启全双工模式。
+
+可以参考[语音识别断句](/aiagent-server/advanced/speech-segmentation-control)、[语音活动检测 VAD 灵敏度](/aiagent-server/advanced/voice-interruption-sensitivity-adjustment)等章节，实现更精细的全双工互动控制。
+</Step>
+<Step title="（可选）更新互动模式为聆听模式">
+通过调用[更新智能体实例](/aiagent-server/api-reference/agent-instance-management/update-agent-instance)接口将互动模式切换为聆听模式，切换后从下一句用户说话开始生效。
+</Step>
+</Steps>
+</Tab>
+<Tab title="聆听模式">
+<Steps titleSize="p">
+<Step title="创建实例时设置互动模式为聆听模式">
+通过[创建智能体实例](/aiagent-server/api-reference/agent-instance-management/create-agent-instance)时的 `AdvancedConfig.CommunicationMode` 参数配置为 1，开启聆听模式。
+
+在聆听模式下，AI 不会自动回复用户。如果需要 AI 主动说话，可通过调用 [发送 TTS](/aiagent-server/api-reference/agent-instance-control/send-agent-instance-tts) 等方式触发。
+
+用户说话内容会通过 ASR 回调返回，可用于展示字幕、内容总结或关键词触发。
+</Step>
+<Step title="（可选）更新互动模式为全双工模式">
+通过调用[更新智能体实例](/aiagent-server/api-reference/agent-instance-management/update-agent-instance)接口将互动模式切换为全双工模式，切换后从下一句用户说话开始生效。
+</Step>
+</Steps>
+</Tab>
+<Tab title="对讲机模式">
+<Steps titleSize="p">
+<Step title="创建实例时设置互动模式为对讲机模式">
+通过[创建智能体实例](/aiagent-server/api-reference/agent-instance-management/create-agent-instance)时的 `AdvancedConfig.CommunicationMode` 参数配置为 2，开启对讲机模式。
+</Step>
+<Step title="调用服务端 API 让 AI 聆听用户说话">
+调用 [StartListening](/aiagent-server/api-reference/agent-instance-control/start-listening) 接口，让 AI 聆听用户说话。
+</Step>
+<Step title="调用服务端 API 让 AI 停止聆听用户说话">
+调用 [StopListening](/aiagent-server/api-reference/agent-instance-control/stop-listening) 接口，让 AI 停止聆听用户说话。正常结束后 AI 会根据用户说话内容进行回复。
+
+如果需要取消本轮聆听（不生成 AI 回复），可在调用 StopListening 时将 `CancelFlag` 设置为 true，此时会停止 ASR、丢弃本轮缓存和已识别结果，不下发 ASR 终态回调、不请求 LLM/TTS、不写入历史，Agent 实例状态将从 listening 变为 idle。
+</Step>
+</Steps>
+
+完整调用一次让 AI 聆听用户说话后结束聆听的流程后，AI 就会根据用户说话的内容进行回复🎉。
+</Tab>
+</Tabs>
