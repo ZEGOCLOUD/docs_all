@@ -126,7 +126,7 @@ export const queryGroupMessageReceiptMemberListMap = {
 
 ## 功能简介
 
-消息已读回执，是指用户在会话中发送一条消息后，得知其他用户已读或未读此消息。本功能可用于在企业办公等需要实时知晓消息是否已经被阅读的场景。
+消息回执是指发送方发送一条附带回执的消息后，可以知晓该消息在接收端的送达与阅读情况。回执状态覆盖“回执中 → 已送达 → 已完成（已读）”的完整流转，也包含“已失败”“已过期”等异常状态。本功能可用于企业办公等需要实时知晓消息是否已被送达、是否已被阅读的场景。
 
 
 <Frame width="512" height="auto" >
@@ -144,7 +144,19 @@ ZIM SDK 目前支持发送“单聊”会话和“群组”会话的消息回执
 
 ## 实现流程
 
-消息发送端通过 ZIM SDK 发送一条消息，并通过设置 {getPlatformData(props,ZIMMessageSendConfigMap)} 的 `hasReceipt` 字段标记该消息是否需要带回执，接收端可根据消息的回执状态 `receiptStatus` 判断该消息当前是否带回执，或者回执处于正在进行中还是已完成，从而渲染不同的 UI 效果，而接收端可根据不同的场景进行不同的已读方式。
+消息发送端通过 ZIM SDK 发送一条消息，并通过设置 {getPlatformData(props,ZIMMessageSendConfigMap)} 的 `hasReceipt` 字段标记该消息是否需要带回执，接收端可根据消息的回执状态 `receiptStatus` 判断该消息是否带回执以及回执的当前进度，从而渲染不同的 UI 效果，而接收端可根据不同的场景进行不同的已读方式。
+
+其中，`receiptStatus` 的取值来自枚举 [ZIMMessageReceiptStatus](@-ZIMMessageReceiptStatus)：
+
+| 取值-30% | 说明 |
+| --- | --- |
+| NONE | 不是回执 |
+| PROCESSING | 回执中 |
+| DELIVERED | 已送达（3.1.0 及以上版本支持） |
+| DONE | 已完成，即已被已读 |
+| FAILED | 已失败 |
+| EXPIRED | 已过期 |
+| UNKNOWN | 未知 |
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/ZIM/receipt_2.png" /></Frame>
 
@@ -846,7 +858,7 @@ zim.queryGroupMessageReceiptUnreadMemberList(groupMsgObj, groupMsgObj.conversati
 发送者发送回执消息后，若接收端设备已收到该消息，那么消息的回执状态将变更为已送达。开发者可通过 {getPlatformData(props,onMessageReceiptChangedMap)} 回调监听回执状态的变化。
 
 <Warning title="注意">
-ZIM 3.1.0 版本起，消息回执在 “回执中” 和 “已完成” 之间新增了 “已送达” 状态，用于表示回执消息已送达。如需使用此功能，请联系 ZEGO 技术支持。
+ZIM 3.1.0 版本起，消息回执在 “回执中” 和 “已完成” 之间新增了 “已送达” 状态，用于表示回执消息已送达，单聊和群聊均支持，无需额外开通。若使用 3.1.0 之前的版本需要此能力，请联系 ZEGO 技术支持评估。
 </Warning>
 
 以下场景的消息回执状态会变更为 “已送达” 并触发 {getPlatformData(props,onMessageReceiptChangedMap)} 回调。
@@ -868,6 +880,12 @@ ZIM 3.1.0 版本起，消息回执在 “回执中” 和 “已完成” 之间
 </Warning>
 
 如果您需要在消息接收方收到离线推送后使得消息回执状态在发送端变更为 “已送达”（iOS 可通过开启推送拦截，Android FCM 可通过使用 DataMessage 推送消息类型的方式，国内 Android 厂商暂不支持），可在收到推送后调用 [服务端 API - 设置群聊消息已送达回执](/zim-server/messaging/set-delivery-receipts-for-group-messages) 进行确认。
+
+### 回执有效期与已过期状态
+
+消息回执的有效期为 7 天。超出有效期后，消息的回执状态将流转为“已过期”（`EXPIRED`），且不再支持对该消息继续进行已读操作。
+
+开发者可通过 {getPlatformData(props,onMessageReceiptChangedMap)} 回调实时感知回执过期状态的变化（2.16.0 及以上版本支持），建议在 UI 层将过期消息的回执标识置灰或移除。
 
 ### 查询群消息回执状态的成员列表
 
