@@ -1,0 +1,221 @@
+---
+articleID: 11594
+---
+
+import { getPlatformData } from "/snippets/utils-content-parser.js"
+import { ZIMConversationMap, sendMessageMap, conversationChangedMap, messageReceivedMap, queryConversationListMap } from "/snippets/zim/const-link.mdx"
+
+export const ZIMMessageSendConfigMap = {
+  'default': <a href='@-ZIMMessageSendConfig' target='_blank'>ZIMMessageSendConfig</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMMessageSendConfig-class.html' target='_blank'>ZIMMessageSendConfig</a>,
+}
+export const queryUsersInfoMap = {
+  'default': <a href='@queryUsersInfo' target='_blank'>queryUsersInfo</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/queryUsersInfo.html' target='_blank'>queryUsersInfo</a>,
+}
+export const updateFriendAliasMap = {
+  'default': <a href='@updateFriendAlias' target='_blank'>updateFriendAlias</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/updateFriendAlias.html' target='_blank'>updateFriendAlias</a>,
+}
+
+
+
+# 为单聊创建多个会话
+
+- - -
+
+## 功能简介
+
+在 ZIM 中，单聊会话的会话 ID（`conversationID`）默认等于对方的 userID，因此同一对用户之间只能存在一个单聊会话。
+
+自 3.2.0 版本起，ZIM 支持为同一对用户创建多个相互独立的单聊会话：会话 ID 由您自行定义，不再与对方的 userID 绑定。每个会话拥有独立的消息记录、未读数和会话设置，适用于私密聊天等需要在同一对用户之间开启多个聊天窗口的场景。
+
+为便于区分，本文将两种会话称为：
+
+| 概念 | 说明 |
+| --- | --- |
+| 单聊单会话 | 传统的单聊会话，会话 ID 即对方的 userID。 |
+| 单聊多会话 | 本文介绍的能力，会话 ID 为您自定义的 ID，与对方的 userID 不同。 |
+
+两种会话可以在同一个 App 中共存，互不影响。
+
+## 前提条件
+
+在实现本功能前，请确保：
+
+- 已集成 3.2.0 或以上版本的 ZIM SDK。
+- 已完成 SDK 初始化与登录，详情请参考 [发送和接收消息](./../Messaging/Send%20and%20receive%20messages.mdx)。
+
+## 实现流程
+
+### 创建会话
+
+单聊多会话不需要提前调用创建接口，直接发送消息即可创建。调用 {getPlatformData(props,sendMessageMap)} 时：
+
+- 将 `toConversationID` 传入您自定义的会话 ID，它仅作为会话的唯一标识。
+- 将 {getPlatformData(props,ZIMMessageSendConfigMap)} 的 `toPeerUserID` 传入接收方的 userID，它决定消息真正投递给谁。
+
+若 `toPeerUserID` 为空，SDK 将沿用原有行为，即把 `toConversationID` 当作对方的 userID 处理，因此不影响已有的单聊逻辑。
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+// 自定义的会话 ID，需由开发者保证唯一
+String conversationID = "chatID_xxxx";
+
+ZIMTextMessage zimMessage = new ZIMTextMessage();
+zimMessage.message = "消息内容";
+
+ZIMMessageSendConfig config = new ZIMMessageSendConfig();
+// 指定消息真正投递到的用户 ID
+config.toPeerUserID = "peerUserID";
+
+zim.sendMessage(zimMessage, conversationID, ZIMConversationType.PEER, config, new ZIMMessageSentFullCallback() {
+    @Override
+    public void onMessageAttached(ZIMMessage zimMessage) {
+        // 开发者可以通过该回调，监听消息是否开始准备发送。
+    }
+
+    @Override
+    public void onMessageSent(ZIMMessage zimMessage, ZIMError errorInfo) {
+        // 开发者可以通过该回调监听消息是否发送成功。
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+// 自定义的会话 ID，需由开发者保证唯一
+NSString *conversationID = @"chatID_xxxx";
+
+ZIMTextMessage *textMessage = [[ZIMTextMessage alloc] init];
+textMessage.message = @"消息内容";
+
+ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+// 指定消息真正投递到的用户 ID
+config.toPeerUserID = @"peerUserID";
+
+ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
+notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
+    // 发送前的回调，开发者可以在此提前展示 UI。
+};
+
+[self.zim sendMessage:textMessage toConversationID:conversationID conversationType:ZIMConversationTypePeer config:config notification:notification callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+    // 开发者可以通过该回调监听消息是否发送成功。
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+// 自定义的会话 ID，需由开发者保证唯一
+std::string conversationID = "chatID_xxxx";
+
+zim::ZIMTextMessage text_message;
+text_message.message = "消息内容";
+zim::ZIMMessage *message = &text_message;
+
+zim::ZIMMessageSendConfig config;
+// 指定消息真正投递到的用户 ID
+config.toPeerUserID = "peerUserID";
+
+auto notification = std::make_shared<zim::ZIMMessageSendNotification>(
+    [=](const std::shared_ptr<zim::ZIMMessage> &message) {});
+
+zim_->sendMessage(message, conversationID, zim::ZIM_CONVERSATION_TYPE_PEER, config, notification,
+                  [=](const std::shared_ptr<zim::ZIMMessage> &message,
+                      const zim::ZIMError &errorInfo) {});
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+// 自定义的会话 ID，需由开发者保证唯一
+String conversationID = 'chatID_xxxx';
+
+ZIMTextMessage textMessage = ZIMTextMessage(message: '消息内容');
+
+ZIMMessageSendConfig sendConfig = ZIMMessageSendConfig();
+// 指定消息真正投递到的用户 ID
+sendConfig.toPeerUserID = 'peerUserID';
+
+ZIM
+    .getInstance()
+    !.sendMessage(textMessage, conversationID, ZIMConversationType.peer, sendConfig)
+    .then((value) => {})
+    .catchError((onError) {});
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web"}
+<CodeGroup>
+```typescript title="示例代码"
+// 自定义的会话 ID，需由开发者保证唯一
+const conversationID = 'chatID_xxxx';
+const conversationType = 0;
+
+const messageTextObj: ZIMMessage = {
+    type: 1,
+    message: '消息内容'
+};
+
+const config: ZIMMessageSendConfig = {
+    // 指定消息真正投递到的用户 ID
+    toPeerUserID: 'peerUserID'
+};
+
+const notification: ZIMMessageSendNotification = {
+    onMessageAttached: (message: ZIMMessage) => {}
+};
+
+zim.sendMessage(messageTextObj, conversationID, conversationType, config, notification)
+    .then((res: ZIMMessageSentResult) => {
+        // 发送成功
+    })
+    .catch((err: ZIMError) => {
+        // 发送失败
+    });
+```
+</CodeGroup>
+:::
+
+发送成功后，收发双方以及各自的其他登录端都会收到 {getPlatformData(props,conversationChangedMap)} 回调，其中的会话 ID 为您自定义的会话 ID；接收方还会收到 {getPlatformData(props,messageReceivedMap)} 回调。
+
+后续再向同一个自定义会话 ID 发送消息，消息会进入同一个会话；传入新的自定义会话 ID，则会创建新的会话。
+
+<Warning title="注意">
+
+- 自定义会话 ID 的唯一性由您保证，长度不超过 64 字节。
+- 请确保自定义会话 ID 不会与真实存在的 userID 重复，否则该会话将与对应用户的单聊会话相互混淆，导致消息串流。ZIM 无法识别此类冲突，建议采用与 userID 明显不同的生成规则（例如带固定前缀的 UUID）。
+</Warning>
+
+### 获取对方的 userID
+
+由于会话 ID 不再等于对方的 userID，您无法再从会话 ID 推断出聊天对象。请通过 {getPlatformData(props,ZIMConversationMap)} 的 `relatedID` 获取对方的 userID：当会话类型为单聊时，该字段的值即为对方的 userID。
+
+对于传统的单聊单会话，`relatedID` 的值与会话 ID 一致，因此您可以统一使用 `relatedID` 来获取聊天对象，无需区分两种会话。
+
+### 管理会话
+
+单聊多会话复用现有的会话管理能力。设置免打扰、置顶、标记、草稿、消息定时销毁，以及删除会话等操作的用法与普通单聊完全一致，传入自定义的会话 ID 即可。通过 {getPlatformData(props,queryConversationListMap)} 获取会话列表时，单聊多会话也会与其他会话一并返回。
+
+<Note title="说明">
+
+上述接口只能操作已存在的会话。如果目标会话尚未通过发送消息创建，调用将失败并返回错误码 `6000603`（会话不存在）。
+</Note>
+
+对方的用户信息仍然由 userID 关联，而非会话 ID：
+
+- 当您调用 {getPlatformData(props,queryUsersInfoMap)} 查询对方的用户信息后，与该 userID 关联的所有单聊多会话的 `conversationName` 和 `conversationAvatarUrl` 都会同步更新。
+- 当您调用 {getPlatformData(props,updateFriendAliasMap)} 修改好友备注后，与该 userID 关联的所有单聊多会话同样会同步更新。
+- 将对方加入黑名单后，与该 userID 关联的所有单聊多会话都会受影响，对方向这些会话发送消息将失败并返回错误码 `6000284`。
+
+## 注意事项
+
+- **版本兼容**：低于 3.2.0 的客户端无法正确处理自定义会话 ID，会将其识别为一个 userID 异常的普通单聊会话。因此，请确保使用本功能的用户已升级到 3.2.0 或以上版本，或在业务侧根据客户端版本号决定是否启用本功能。
+- **会话数量限制**：ZIM 不感知业务层面的会话数量规则，如需限制同一对用户之间可创建的会话数量，请在您的业务后台实现。
+- **会话列表长度**：服务端保存的会话列表长度存在上限，超出后较早的会话会被移出列表。若某个单聊多会话被移出，您只需使用原有的自定义会话 ID 重新发送消息，即可恢复该会话。

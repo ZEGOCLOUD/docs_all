@@ -1,0 +1,936 @@
+---
+date: "2026-09-03"
+---
+
+import { getPlatformData } from "/snippets/utils-content-parser.js"
+
+export const updateCommunityJoinModeMap = {
+  'Android': <a href="@updateCommunityJoinMode" target="_blank">updateCommunityJoinMode</a>,
+  'iOS,mac': <a href="@updateCommunityJoinMode" target="_blank">updateCommunityJoinMode</a>,
+}
+export const sendCommunityJoinApplicationMap = {
+  'Android': <a href="@sendCommunityJoinApplication" target="_blank">sendCommunityJoinApplication</a>,
+  'iOS,mac': <a href="@sendCommunityJoinApplicationToCommunityID" target="_blank">sendCommunityJoinApplicationToCommunityID</a>,
+}
+export const queryCommunitySelfApplicationListMap = {
+  'Android': <a href="@queryCommunitySelfApplicationList" target="_blank">queryCommunitySelfApplicationList</a>,
+  'iOS,mac': <a href="@queryCommunitySelfApplicationListWithCount" target="_blank">queryCommunitySelfApplicationListWithCount</a>,
+}
+export const cancelCommunityJoinApplicationMap = {
+  'Android': <a href="@cancelCommunityJoinApplication" target="_blank">cancelCommunityJoinApplication</a>,
+  'iOS,mac': <a href="@cancelCommunityJoinApplicationWithApplyID" target="_blank">cancelCommunityJoinApplicationWithApplyID</a>,
+}
+export const queryCommunityApplicationListMap = {
+  'Android': <a href="@queryCommunityApplicationList" target="_blank">queryCommunityApplicationList</a>,
+  'iOS,mac': <a href="@queryCommunityApplicationListByCommunityID" target="_blank">queryCommunityApplicationListByCommunityID</a>,
+}
+export const acceptCommunityJoinApplicationMap = {
+  'Android': <a href="@acceptCommunityJoinApplication" target="_blank">acceptCommunityJoinApplication</a>,
+  'iOS,mac': <a href="@acceptCommunityJoinApplicationFromUserID" target="_blank">acceptCommunityJoinApplicationFromUserID</a>,
+}
+export const rejectCommunityJoinApplicationMap = {
+  'Android': <a href="@rejectCommunityJoinApplication" target="_blank">rejectCommunityJoinApplication</a>,
+  'iOS,mac': <a href="@rejectCommunityJoinApplicationFromUserID" target="_blank">rejectCommunityJoinApplicationFromUserID</a>,
+}
+export const onCommunitySelfApplicationListChangedMap = {
+  'Android': <a href="@onCommunitySelfApplicationListChanged" target="_blank">onCommunitySelfApplicationListChanged</a>,
+  'iOS,mac': <a href="@ZIMCommunitySelfApplicationListChangedWithResult" target="_blank">communitySelfApplicationListChangedWithResult</a>,
+}
+export const onCommunityApplicationListChangedMap = {
+  'Android': <a href="@onCommunityApplicationListChanged" target="_blank">onCommunityApplicationListChanged</a>,
+  'iOS,mac': <a href="@ZIMCommunityApplicationListChangedWithResult" target="_blank">communityApplicationListChangedWithResult</a>,
+}
+
+# 社群入群审核
+
+- - -
+
+## 功能简介
+
+社群在「直接加入」之外，提供「申请—审批」的入群路径，由社群加入模式（joinMode）控制：
+
+| joinMode 取值 | 行为 |
+| --- | --- |
+| ANY（0） | 无需审核。调用 `joinCommunity` 直接入群；调用 `sendCommunityJoinApplication` 效果相同（直接入群，不产生申请记录） |
+| AUTH（1） | 需群主/管理员审批；申请人可在审批前撤销申请 |
+| FORBID（2） | 禁止加入与申请 |
+
+围绕申请记录，SDK 提供两个数据视图：
+
+- **我的申请列表**（申请人视角，跨所有社群）：当前用户提交的全部申请记录，通过 `queryCommunitySelfApplicationList` 分页查询。
+- **社群申请审核列表**（群主/管理员视角，单社群维度）：某社群收到的全部申请记录（含待审批与已处理），通过 `queryCommunityApplicationList` 分页查询。
+
+使用要点：
+
+- 申请记录**不在客户端本地持久化**，每次查询实时从服务端获取，列表展示请以查询结果为准。
+- 申请记录的变更通知依赖事件回调（见[监听申请状态变更](#监听申请状态变更)），事件为尽力送达；弱网等场景可能丢失，丢失后以查询兜底。
+
+## 前提条件
+
+- 请参考 [实现基本消息收发](../Messaging/Send%20and%20receive%20messages.mdx) 完成 ZIM SDK 获取、初始化和用户登录。
+- 请参考 [使用 Token 鉴权](../Users/Authentication.mdx) 实现用户鉴权登录。
+- 社群入群审核功能需要 ZIM SDK 3.2.0 及以上版本。
+- 社群功能为旗舰版功能，使用前请联系 ZEGO 技术支持开通。
+
+## 设置社群加入模式
+
+创建社群时，可通过 `ZIMCommunityCreateConfig` 的 `joinMode` 字段指定加入模式，默认为 `ANY`。创建社群的完整流程请参考 [社群管理](./community-management.mdx)。
+
+社群创建成功后，群主/管理员可调用 {getPlatformData(props,updateCommunityJoinModeMap)} 接口修改加入模式。修改成功后，其它端通过 `onCommunityInfoUpdated` 事件感知变更。
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+// 修改为「需审批」模式
+zim.updateCommunityJoinMode(ZIMCommunityJoinMode.AUTH, communityID,
+    new ZIMCommunityJoinModeUpdatedCallback() {
+        @Override
+        public void onCommunityJoinModeUpdated(String communityID, ZIMCommunityJoinMode joinMode, ZIMError errorInfo) {
+            if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+                // 修改成功
+            }
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+// 修改为「需审批」模式
+[zim updateCommunityJoinMode:ZIMCommunityJoinModeAuth communityID:communityID callback:^(NSString * _Nonnull communityID, ZIMCommunityJoinMode joinMode, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // 修改成功
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+// 修改为「需审批」模式
+zim_->updateCommunityJoinMode(zim::ZIM_COMMUNITY_JOIN_MODE_AUTH, communityID,
+    [=](const std::string &communityID,
+        zim::ZIMCommunityJoinMode joinMode,
+        const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // 修改成功
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+// 修改为「需审批」模式（1 = AUTH）
+zim.updateCommunityJoinMode(1, communityID)
+    .then((result: ZIMCommunityJoinModeUpdatedResult) => {
+        // 修改成功
+    })
+    .catch((err: ZIMError) => {
+        // 修改失败
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+// 修改为「需审批」模式
+try {
+    await ZIM.getInstance()!
+        .updateCommunityJoinMode(ZIMCommunityJoinMode.auth, communityID);
+    // 修改成功
+} on PlatformException catch (onError) {
+    // 修改失败
+}
+```
+</CodeGroup>
+:::
+
+<Accordion title="常见错误码">
+
+| 错误码 | 说明 | 处理建议 |
+|--------|------|----------|
+| 6001007 | 社群权限错误 | 仅群主/管理员可修改加入模式 |
+| 6001004 | 社群不存在 | 确认 communityID 是否正确 |
+
+</Accordion>
+
+## 申请入群（申请人视角）
+
+### 提交入群申请
+
+未入群用户可调用 {getPlatformData(props,sendCommunityJoinApplicationMap)} 接口提交入群申请。接口行为随社群加入模式不同而不同：
+
+| joinMode 取值 | 行为 |
+| --- | --- |
+| ANY（0） | 直接入群，不产生申请记录（收到入群相关事件，社群列表更新） |
+| AUTH（1） | 产生一条「待审批」申请，等待群主/管理员审批；本端收到 `onCommunitySelfApplicationListChanged`（ADDED）通知 |
+| FORBID（2） | 返回错误码 6001094 |
+
+申请配置 `ZIMCommunityJoinApplicationSendConfig` 说明：
+
+| 配置字段 | 说明 |
+|---------|------|
+| `wording` | 申请附言，≤256 字符，选填 |
+| `pushConfig` | 发给群主/管理员的离线推送配置 |
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+ZIMCommunityJoinApplicationSendConfig config = new ZIMCommunityJoinApplicationSendConfig();
+config.wording = "请让我加入社群";
+
+zim.sendCommunityJoinApplication(communityID, config, new ZIMCommunityJoinApplicationSentCallback() {
+    @Override
+    public void onCommunityJoinApplicationSent(String communityID, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // 申请已提交；joinMode 为 ANY 时此时已直接入群
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+ZIMCommunityJoinApplicationSendConfig *config = [[ZIMCommunityJoinApplicationSendConfig alloc] init];
+config.wording = @"请让我加入社群";
+
+[zim sendCommunityJoinApplicationToCommunityID:communityID config:config callback:^(NSString * _Nonnull communityID, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // 申请已提交；joinMode 为 ANY 时此时已直接入群
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+zim::ZIMCommunityJoinApplicationSendConfig config;
+config.wording = "请让我加入社群";
+
+zim_->sendCommunityJoinApplication(communityID, config,
+    [=](const std::string &communityID,
+        const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // 申请已提交；joinMode 为 ANY 时此时已直接入群
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+const config: ZIMCommunityJoinApplicationSendConfig = {
+    wording: '请让我加入社群',  // 申请附言，选填
+};
+
+zim.sendCommunityJoinApplication(communityID, config)
+    .then((result: ZIMCommunityJoinApplicationSentResult) => {
+        // 申请已提交；joinMode 为 ANY 时此时已直接入群
+    })
+    .catch((err: ZIMError) => {
+        // 提交失败
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+ZIMCommunityJoinApplicationSendConfig config = ZIMCommunityJoinApplicationSendConfig()
+    ..wording = '请让我加入社群';
+
+try {
+    await ZIM.getInstance()!
+        .sendCommunityJoinApplication(communityID, config);
+    // 申请已提交；joinMode 为 ANY 时此时已直接入群
+} on PlatformException catch (onError) {
+    // 提交失败
+}
+```
+</CodeGroup>
+:::
+
+<Accordion title="常见错误码">
+
+| 错误码 | 说明 | 处理建议 |
+|--------|------|----------|
+| 6001094 | 社群禁止加入（joinMode 为 FORBID） | 引导用户无法申请该社群 |
+| 6001097 | 已存在待审批的申请 | 无需重复提交，重复提交不会覆盖原附言 |
+| 6001006 | 已是社群成员 | 无需申请 |
+| 6000001 | 参数非法 | 检查 wording 是否超过 256 字符 |
+
+</Accordion>
+
+### 查询我的申请列表
+
+调用 {getPlatformData(props,queryCommunitySelfApplicationListMap)} 接口，分页查询当前用户提交的全部申请记录（跨所有社群），按 applyID 从新到旧返回。
+
+分页规则：首次查询将 `config.nextFlag` 设为 `0`，从最新一页开始；后续将上一页回调返回的 `nextFlag` 传入下次请求，直到返回的 `nextFlag` 为 `0` 表示已拉完全部数据。
+
+申请状态 `ZIMCommunityApplicationState` 说明：
+
+| 状态 | 含义 | 说明 |
+|------|------|------|
+| WAITING（1） | 待审批 | 等待群主/管理员处理 |
+| ACCEPTED（2） | 已同意 | 申请通过，已入群 |
+| REJECTED（3） | 已拒绝 | 可重新提交新申请 |
+| EXPIRED（4） | 已过期 | 超过待审批有效期（默认 7 天） |
+| CANCELLED（6） | 已撤销 | 申请人主动撤销 |
+| JOINED（7） | 已通过其它方式入群 | 申请处理前已入群（如被邀请），申请自动失效 |
+
+ACCEPTED / REJECTED / EXPIRED / CANCELLED / JOINED 均为**终态**，记录保留在列表中，可翻页拉取。
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+ZIMCommunitySelfApplicationListQueryConfig config = new ZIMCommunitySelfApplicationListQueryConfig();
+config.nextFlag = 0;  // 首次查询设为 0
+
+zim.queryCommunitySelfApplicationList(30, config, new ZIMCommunitySelfApplicationListQueriedCallback() {
+    @Override
+    public void onCommunitySelfApplicationListQueried(ArrayList<ZIMCommunityApplicationInfo> applicationList, long nextFlag, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // applicationList 为当前页申请记录；nextFlag != 0 时继续翻页
+            for (ZIMCommunityApplicationInfo info : applicationList) {
+                // info.state：申请状态
+                // info.applyID：申请单 ID，撤销申请时使用
+            }
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+ZIMCommunitySelfApplicationListQueryConfig *config = [[ZIMCommunitySelfApplicationListQueryConfig alloc] init];
+config.nextFlag = 0;  // 首次查询设为 0
+
+[zim queryCommunitySelfApplicationListWithCount:30 config:config callback:^(NSArray<ZIMCommunityApplicationInfo *> * _Nonnull applicationList, long long nextFlag, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // applicationList 为当前页申请记录；nextFlag != 0 时继续翻页
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+zim::ZIMCommunitySelfApplicationListQueryConfig config;
+config.nextFlag = 0;  // 首次查询设为 0
+
+zim_->queryCommunitySelfApplicationList(30, config,
+    [=](const std::vector<zim::ZIMCommunityApplicationInfo> &applicationList,
+        long long nextFlag,
+        const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // applicationList 为当前页申请记录；nextFlag != 0 时继续翻页
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+const config: ZIMCommunitySelfApplicationListQueryConfig = { nextFlag: 0 };
+
+zim.queryCommunitySelfApplicationList(30, config)
+    .then((result: ZIMCommunitySelfApplicationListQueriedResult) => {
+        const { applicationList, nextFlag } = result;
+        // nextFlag != 0 时继续分页拉取
+    })
+    .catch((err: ZIMError) => {
+        // 查询失败
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+ZIMCommunitySelfApplicationListQueryConfig config =
+    ZIMCommunitySelfApplicationListQueryConfig()..nextFlag = 0;
+
+try {
+    ZIMCommunitySelfApplicationListQueriedResult result =
+        await ZIM.getInstance()!.queryCommunitySelfApplicationList(30, config);
+    // result.applicationList 为当前页申请记录
+    // result.nextFlag != 0 时继续翻页
+} on PlatformException catch (onError) {
+    // 查询失败
+}
+```
+</CodeGroup>
+:::
+
+### 撤销入群申请
+
+申请人可调用 {getPlatformData(props,cancelCommunityJoinApplicationMap)} 接口，撤销自己提交的、仍处于待审批状态的申请。`applyID` 与 `communityID` 来自「我的申请列表」中的申请记录。
+
+撤销成功后，该记录状态变为 CANCELLED 并保留在列表中，本端会收到 `onCommunitySelfApplicationListChanged`（UPDATED）通知。
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+ZIMCommunityJoinApplicationCancelConfig config = new ZIMCommunityJoinApplicationCancelConfig();
+
+zim.cancelCommunityJoinApplication(applyID, communityID, config, new ZIMCommunityJoinApplicationCancelledCallback() {
+    @Override
+    public void onCommunityJoinApplicationCancelled(ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // 撤销成功，记录状态变为 CANCELLED
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+ZIMCommunityJoinApplicationCancelConfig *config = [[ZIMCommunityJoinApplicationCancelConfig alloc] init];
+
+[zim cancelCommunityJoinApplicationWithApplyID:applyID communityID:communityID config:config callback:^(ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // 撤销成功，记录状态变为 CANCELLED
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+zim::ZIMCommunityJoinApplicationCancelConfig config;
+
+zim_->cancelCommunityJoinApplication(applyID, communityID, config,
+    [=](const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // 撤销成功，记录状态变为 CANCELLED
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+zim.cancelCommunityJoinApplication(applyID, communityID, {})
+    .then((result: ZIMCommunityJoinApplicationCancelledResult) => {
+        // 撤销成功，记录状态变为 CANCELLED
+    })
+    .catch((err: ZIMError) => {
+        // 撤销失败
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+try {
+    await ZIM.getInstance()!.cancelCommunityJoinApplication(
+        applyID, communityID, ZIMCommunityJoinApplicationCancelConfig());
+    // 撤销成功，记录状态变为 CANCELLED
+} on PlatformException catch (onError) {
+    // 撤销失败
+}
+```
+</CodeGroup>
+:::
+
+<Accordion title="常见错误码">
+
+| 错误码 | 说明 | 处理建议 |
+|--------|------|----------|
+| 6001091 | 申请记录不存在 | 检查 applyID 与 communityID 是否来自查询结果 |
+| 6001093 | 申请状态不允许此操作 | 申请已被处理（终态）时不可撤销 |
+
+</Accordion>
+
+## 审核入群申请（群主/管理员视角）
+
+### 查询社群申请审核列表
+
+群主/管理员可调用 {getPlatformData(props,queryCommunityApplicationListMap)} 接口，分页查询某社群收到的全部申请记录（含待审批与已处理），按 applyID 从新到旧返回。分页规则与「查询我的申请列表」一致。
+
+<Warning title="注意">
+
+- 返回**全部状态**的记录，「待审批」页面请按 `state == WAITING` 自行过滤。
+- 申请列表无本地缓存，需在联网状态下查询。
+</Warning>
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+ZIMCommunityApplicationListQueryConfig config = new ZIMCommunityApplicationListQueryConfig();
+config.nextFlag = 0;
+
+zim.queryCommunityApplicationList(communityID, 30, config, new ZIMCommunityApplicationListQueriedCallback() {
+    @Override
+    public void onCommunityApplicationListQueried(ArrayList<ZIMCommunityApplicationInfo> applicationList, long nextFlag, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // 按 state == WAITING 过滤出待审批记录
+            for (ZIMCommunityApplicationInfo info : applicationList) {
+                // info.applyUser.userID / info.applyUser.userName：申请人
+                // info.wording：申请附言
+                // info.applyID：审批接口入参
+            }
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+ZIMCommunityApplicationListQueryConfig *config = [[ZIMCommunityApplicationListQueryConfig alloc] init];
+config.nextFlag = 0;
+
+[zim queryCommunityApplicationListByCommunityID:communityID count:30 config:config callback:^(NSArray<ZIMCommunityApplicationInfo *> * _Nonnull applicationList, long long nextFlag, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // 按 state == ZIMCommunityApplicationStateWaiting 过滤出待审批记录
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+zim::ZIMCommunityApplicationListQueryConfig config;
+config.nextFlag = 0;
+
+zim_->queryCommunityApplicationList(communityID, 30, config,
+    [=](const std::vector<zim::ZIMCommunityApplicationInfo> &applicationList,
+        long long nextFlag,
+        const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // 按 state == ZIM_COMMUNITY_APPLICATION_STATE_WAITING 过滤出待审批记录
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+const config: ZIMCommunityApplicationListQueryConfig = { nextFlag: 0 };
+
+zim.queryCommunityApplicationList(communityID, 30, config)
+    .then((result: ZIMCommunityApplicationListQueriedResult) => {
+        // 按 state === ZIMCommunityApplicationState.Waiting 过滤出待审批记录
+    })
+    .catch((err: ZIMError) => {
+        // 查询失败
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+ZIMCommunityApplicationListQueryConfig config =
+    ZIMCommunityApplicationListQueryConfig()..nextFlag = 0;
+
+try {
+    ZIMCommunityApplicationListQueriedResult result =
+        await ZIM.getInstance()!.queryCommunityApplicationList(communityID, 30, config);
+    // 按 state == ZIMCommunityApplicationState.waiting 过滤出待审批记录
+} on PlatformException catch (onError) {
+    // 查询失败
+}
+```
+</CodeGroup>
+:::
+
+<Accordion title="常见错误码">
+
+| 错误码 | 说明 | 处理建议 |
+|--------|------|----------|
+| 6001007 | 社群权限错误 | 仅群主/管理员可查询审核列表 |
+
+</Accordion>
+
+### 同意申请
+
+群主/管理员可调用 {getPlatformData(props,acceptCommunityJoinApplicationMap)} 接口同意待审批的申请。`userID` 与 `applyID` 来自审核列表中的申请记录。
+
+同意成功后，申请人即加入社群：
+
+- 操作端收到 `onCommunityApplicationListChanged`（UPDATED，state = ACCEPTED）通知；
+- 申请人收到 `onCommunitySelfApplicationListChanged`（UPDATED）通知与入群相关事件。
+
+申请配置 `ZIMCommunityJoinApplicationAcceptConfig` 支持通过 `pushConfig` 定制发给申请人的离线推送。
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+ZIMCommunityJoinApplicationAcceptConfig config = new ZIMCommunityJoinApplicationAcceptConfig();
+
+zim.acceptCommunityJoinApplication(userID, communityID, applyID, config, new ZIMCommunityJoinApplicationAcceptedCallback() {
+    @Override
+    public void onCommunityJoinApplicationAccepted(String communityID, String userID, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // 已同意，申请人入群
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+ZIMCommunityJoinApplicationAcceptConfig *config = [[ZIMCommunityJoinApplicationAcceptConfig alloc] init];
+
+[zim acceptCommunityJoinApplicationFromUserID:userID communityID:communityID applyID:applyID config:config callback:^(NSString * _Nonnull communityID, NSString * _Nonnull userID, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // 已同意，申请人入群
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+zim::ZIMCommunityJoinApplicationAcceptConfig config;
+
+zim_->acceptCommunityJoinApplication(userID, communityID, applyID, config,
+    [=](const std::string &communityID,
+        const std::string &userID,
+        const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // 已同意，申请人入群
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+zim.acceptCommunityJoinApplication(userID, communityID, applyID, {})
+    .then((result: ZIMCommunityJoinApplicationAcceptedResult) => {
+        // 已同意，申请人入群
+    })
+    .catch((err: ZIMError) => {
+        // 操作失败
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+try {
+    await ZIM.getInstance()!.acceptCommunityJoinApplication(
+        userID, communityID, applyID, ZIMCommunityJoinApplicationAcceptConfig());
+    // 已同意，申请人入群
+} on PlatformException catch (onError) {
+    // 操作失败
+}
+```
+</CodeGroup>
+:::
+
+### 拒绝申请
+
+群主/管理员可调用 {getPlatformData(props,rejectCommunityJoinApplicationMap)} 接口拒绝待审批的申请。拒绝后记录变为 REJECTED 并保留在列表中，申请人可重新提交新申请（新申请的 applyID 不同）。
+
+申请配置 `ZIMCommunityJoinApplicationRejectConfig` 支持通过 `pushConfig` 定制发给申请人的离线推送。
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+ZIMCommunityJoinApplicationRejectConfig config = new ZIMCommunityJoinApplicationRejectConfig();
+
+zim.rejectCommunityJoinApplication(userID, communityID, applyID, config, new ZIMCommunityJoinApplicationRejectedCallback() {
+    @Override
+    public void onCommunityJoinApplicationRejected(String communityID, String userID, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // 已拒绝
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+ZIMCommunityJoinApplicationRejectConfig *config = [[ZIMCommunityJoinApplicationRejectConfig alloc] init];
+
+[zim rejectCommunityJoinApplicationFromUserID:userID communityID:communityID applyID:applyID config:config callback:^(NSString * _Nonnull communityID, NSString * _Nonnull userID, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // 已拒绝
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+zim::ZIMCommunityJoinApplicationRejectConfig config;
+
+zim_->rejectCommunityJoinApplication(userID, communityID, applyID, config,
+    [=](const std::string &communityID,
+        const std::string &userID,
+        const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // 已拒绝
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+zim.rejectCommunityJoinApplication(userID, communityID, applyID, {})
+    .then((result: ZIMCommunityJoinApplicationRejectedResult) => {
+        // 已拒绝
+    })
+    .catch((err: ZIMError) => {
+        // 操作失败
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+try {
+    await ZIM.getInstance()!.rejectCommunityJoinApplication(
+        userID, communityID, applyID, ZIMCommunityJoinApplicationRejectConfig());
+    // 已拒绝
+} on PlatformException catch (onError) {
+    // 操作失败
+}
+```
+</CodeGroup>
+:::
+
+<Accordion title="常见错误码">
+
+| 错误码 | 说明 | 处理建议 |
+|--------|------|----------|
+| 6001091 | 申请记录不存在 | 检查 applyID 是否来自查询结果 |
+| 6001092 | 申请已被其它操作处理 | 多管理员并发审批时出现，收到后刷新列表 |
+| 6001093 | 申请状态不允许此操作 | 申请已过期/撤销/已处理，不可再审批 |
+| 6001032 | 社群成员数已达上限 | 同意入群时出现 |
+| 6001006 | 申请人已是社群成员 | 无需再审批 |
+
+</Accordion>
+
+## 监听申请状态变更
+
+### 监听我的申请列表变更（申请人）
+
+当本人提交的申请发生变化（提交、撤销、审批结果、过期等）时，SDK 会触发 {getPlatformData(props,onCommunitySelfApplicationListChangedMap)} 回调。
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onCommunitySelfApplicationListChanged(ZIM zim, ZIMCommunitySelfApplicationListChangedEventResult result) {
+        for (ZIMCommunityApplicationChangeInfo changeInfo : result.getChangeInfoList()) {
+            // changeInfo.getAction()：列表动作（ADDED / DELETED / UPDATED）
+            // changeInfo.getApplicationInfo()：变更后的申请记录
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+- (void)zim:(ZIM *)zim communitySelfApplicationListChangedWithResult:(ZIMCommunitySelfApplicationListChangedEventResult *)result {
+    for (ZIMCommunityApplicationChangeInfo *changeInfo in result.changeInfoList) {
+        // changeInfo.action：列表动作（Added / Deleted / Updated）
+        // changeInfo.applicationInfo：变更后的申请记录
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+void onCommunitySelfApplicationListChanged(
+    zim::ZIM *zim,
+    const zim::ZIMCommunitySelfApplicationListChangedEventResult &result) override {
+    for (const auto &changeInfo : result.changeInfoList) {
+        // changeInfo.action：列表动作（ADDED / DELETED / UPDATED）
+        // changeInfo.applicationInfo：变更后的申请记录
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+zim.on('communitySelfApplicationListChanged', (zim, result) => {
+    for (const changeInfo of result.changeInfoList) {
+        // changeInfo.action：列表动作
+        // changeInfo.applicationInfo：变更后的申请记录
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+ZIMEventHandler.onCommunitySelfApplicationListChanged =
+    (ZIM zim, ZIMCommunitySelfApplicationListChangedEventResult result) {
+    for (final changeInfo in result.changeInfoList) {
+        // changeInfo.action：列表动作
+        // changeInfo.applicationInfo：变更后的申请记录
+    }
+};
+```
+</CodeGroup>
+:::
+
+### 监听社群申请列表变更（群主/管理员）
+
+当社群收到新申请、或任何管理员处理了申请时，SDK 会触发 {getPlatformData(props,onCommunityApplicationListChangedMap)} 回调，回调结果携带发生变更的社群 ID。
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onCommunityApplicationListChanged(ZIM zim, ZIMCommunityApplicationListChangedEventResult result) {
+        String communityID = result.getCommunityID();
+        for (ZIMCommunityApplicationChangeInfo changeInfo : result.getChangeInfoList()) {
+            // changeInfo.getAction() == ZIMCommunityApplicationListAction.ADDED：新增申请，可提示管理员处理
+            // changeInfo.getApplicationInfo()：变更后的申请记录
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+- (void)zim:(ZIM *)zim communityApplicationListChangedWithResult:(ZIMCommunityApplicationListChangedEventResult *)result {
+    NSString *communityID = result.communityID;
+    for (ZIMCommunityApplicationChangeInfo *changeInfo in result.changeInfoList) {
+        // changeInfo.action == ZIMCommunityApplicationListActionAdded：新增申请，可提示管理员处理
+        // changeInfo.applicationInfo：变更后的申请记录
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+void onCommunityApplicationListChanged(
+    zim::ZIM *zim,
+    const zim::ZIMCommunityApplicationListChangedEventResult &result) override {
+    std::string communityID = result.communityID;
+    for (const auto &changeInfo : result.changeInfoList) {
+        // changeInfo.action == zim::ZIM_COMMUNITY_APPLICATION_LIST_ACTION_ADDED：新增申请
+        // changeInfo.applicationInfo：变更后的申请记录
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+zim.on('communityApplicationListChanged', (zim, result) => {
+    const communityID = result.communityID;
+    for (const changeInfo of result.changeInfoList) {
+        // changeInfo.action：列表动作
+        // changeInfo.applicationInfo：变更后的申请记录
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+ZIMEventHandler.onCommunityApplicationListChanged =
+    (ZIM zim, ZIMCommunityApplicationListChangedEventResult result) {
+    final communityID = result.communityID;
+    for (final changeInfo in result.changeInfoList) {
+        // changeInfo.action：列表动作
+        // changeInfo.applicationInfo：变更后的申请记录
+    }
+};
+```
+</CodeGroup>
+:::
+
+各事件的接收方与触发来源：
+
+| 事件 | 接收方 | 触发来源 |
+| --- | --- | --- |
+| `onCommunitySelfApplicationListChanged` | 申请人（本端 + 多端） | 提交、撤销、审批结果、过期等 |
+| `onCommunityApplicationListChanged` | 群主/管理员（本端 + 其它管理员/多端） | 新申请到达、任何管理员处理 |
+| `onCommunityListChanged` | 申请人 | 被同意入群 / ANY 模式直接入群 |
+
+<Warning title="注意">
+
+- 事件**不保证送达**（尽力推送），列表展示始终以查询结果为准；收到事件后可刷新列表，或按 `action` 做增量更新。
+- 事件与操作回调之间的**先后顺序不保证**；同一 applyID 状态单向流转，可用 `updateTime` 过滤乱序、过期的事件。
+</Warning>
+
+## 申请记录字段说明
+
+`ZIMCommunityApplicationInfo` 主要字段：
+
+| 字段 | 说明 |
+|------|------|
+| `applyID` | 申请单唯一 ID，撤销/审批接口的入参，也是分页锚点 |
+| `type` | 申请类型，当前恒为 JOIN（主动申请） |
+| `state` | 申请状态，见[申请状态说明](#查询我的申请列表) |
+| `communityInfo` | 目标社群信息（communityID / communityName / communityAvatarUrl） |
+| `applyUser` | 申请人信息 |
+| `operatedUserID` | 操作人（审批/撤销者）ID，待审批时为空串 |
+| `wording` | 申请附言 |
+| `createTime` / `updateTime` | 创建时间 / 状态更新时间（毫秒） |
+
+列表变更动作 `ZIMCommunityApplicationListAction`：ADDED（新增）、DELETED（删除）、UPDATED（状态更新）。
+
+## 限制与默认值
+
+| 项 | 值 | 说明 |
+|----|----|------|
+| 申请附言 wording | ≤256 字符，选填 | 超出返回参数错误 |
+| 单页查询数量 count | 服务端上限 100 | 建议不超过 30 |
+| 我的申请列表容量 | 默认 100 条（可按 AppID 配置） | 满后新申请会淘汰最旧的已终态记录；全部为待审批时返回 6001096 |
+| 审核列表容量 | 默认 1000 条（可按 AppID 配置） | 同上策略 |
+| 待审批过期时间 | 默认 7 天（可按 AppID 配置） | 过期后状态转为 EXPIRED |
+| 加入模式修改权限 | 群主与管理员 | — |
+
+## 相关参考
+
+- [社群管理](./community-management.mdx)
+- [社群成员管理](./community-member-management.mdx)
+- [ZIM 错误码](../../SDK%20Error%20Codes/ZIM.mdx)

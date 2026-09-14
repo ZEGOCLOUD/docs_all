@@ -1,0 +1,494 @@
+---
+date: "2026-09-08"
+---
+
+# 社群入群审核（Dart 版）
+## 功能简介
+
+社群（Community）在直接加入之外提供「申请—审批」入群路径，由社群加入模式（joinMode）控制：
+
+| joinMode | 行为 |
+| --- | --- |
+| `ZIMCommunityJoinMode.any` (0) | 无需审核。调用 `joinCommunity` 直接入群；调用 `sendCommunityJoinApplication` 效果相同（直接入群，不产生申请记录） |
+| `ZIMCommunityJoinMode.auth` (1) | 需群主/管理员审批；申请人可在审批前撤销申请 |
+| `ZIMCommunityJoinMode.forbid` (2) | 禁止加入与申请 |
+
+加入模式为**社群级**设置。ZIM 社群内的频道均为公共频道，加入社群即相当于加入社群内全部频道，无频道级加入策略；如需对标「频道」类产品形态，可将「社群 + 默认频道」视为一个频道单元。
+
+两条数据视图：
+
+- **我的申请列表**（申请人视角，跨所有社群）：当前用户提交的全部申请记录，`queryCommunitySelfApplicationList` 分页查询。
+- **社群申请审核列表**（群主/管理员视角，单社群维度）：某社群收到的全部申请记录（含待审批与已处理），`queryCommunityApplicationList` 分页查询。
+
+使用要点：
+
+- 申请记录**不在客户端本地持久化**，每次查询实时从服务端获取；列表展示请以查询结果为准。
+- 变更通知依赖事件回调（见「事件通知」），事件为尽力送达；弱网等场景可能丢失，丢失后以查询兜底。
+
+- - -
+
+## 数据结构
+
+### 枚举
+
+```dart
+/// 社群加入模式
+enum ZIMCommunityJoinMode {
+  any,     // 0：自由加入
+  auth,    // 1：需群主/管理员审批
+  forbid,  // 2：禁止加入与申请
+}
+
+/// 申请类型
+enum ZIMCommunityApplicationType {
+  unknown,   // -1：SDK 侧兜底
+  none,      // 0
+  join,      // 1：主动申请（当前唯一类型）
+  invite,    // 2：预留
+  beInvite,  // 3：预留
+}
+
+/// 申请状态
+enum ZIMCommunityApplicationState {
+  unknown,   // -1：SDK 侧兜底
+  waiting,   // 1：待审批
+  accepted,  // 2：已同意
+  rejected,  // 3：已拒绝
+  expired,   // 4：已过期
+  disabled,  // 5：已失效（异常保底，正常流程不出现）
+  cancelled, // 6：申请人已撤销
+  joined,    // 7：已通过其它方式入群
+}
+
+/// 列表变更动作
+enum ZIMCommunityApplicationListAction {
+  added,    // 0：新增
+  deleted,  // 1：删除
+  updated,  // 2：状态更新
+}
+```
+
+状态说明：
+
+- accepted / rejected / expired / cancelled / joined 均为**终态**，记录保留在列表中；被拒绝或撤销后可重新提交申请（新申请的 applyID 不同）。
+- joined 表示申请人在申请处理前已通过其它方式（如被邀请）入群，该申请自动失效。
+- 邀请入群当前通过 `inviteUsersIntoCommunity` 直接实现，不产生申请记录；`invite` / `beInvite` 为后续扩展预留，邀请链接等由业务侧自行实现。
+
+### 申请记录 ZIMCommunityApplicationInfo
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| applyID | int | 申请单唯一 ID：撤销/审批接口入参，分页锚点 |
+| type | ZIMCommunityApplicationType | 当前恒为 join |
+| state | ZIMCommunityApplicationState | 见「枚举」 |
+| communityInfo | ZIMCommunityInfo | 目标社群信息（communityID / communityName / communityAvatarUrl） |
+| applyUser | ZIMUserInfo | 申请人 |
+| operatedUserID | String? | 操作人（审批/撤销者），waiting 时为 null |
+| wording | String | 附言，≤256 字符，选填 |
+| createTime | int | 创建时间（毫秒） |
+| updateTime | int | 状态更新时间（毫秒） |
+
+### 变更信息与事件结果
+
+```dart
+class ZIMCommunityApplicationChangeInfo {
+  ZIMCommunityApplicationListAction action;   // 列表动作
+  ZIMCommunityApplicationInfo applicationInfo; // 变更后的申请记录
+}
+
+// 我的申请列表变更事件结果（无社群维度字段）
+class ZIMCommunitySelfApplicationListChangedEventResult {
+  List<ZIMCommunityApplicationChangeInfo> changeInfoList;
+}
+
+// 审核列表变更事件结果（携带社群维度）
+class ZIMCommunityApplicationListChangedEventResult {
+  String communityID;                          // 发生变更的社群
+  List<ZIMCommunityApplicationChangeInfo> changeInfoList;
+}
+```
+
+### 请求配置类
+
+```dart
+class ZIMCommunityJoinApplicationSendConfig {
+  String wording;               // 附言，≤256 字符，选填
+  ZIMPushConfig? pushConfig;    // 发给管理员的离线推送
+}
+
+class ZIMCommunityJoinApplicationCancelConfig {}   // 预留，暂无字段
+
+class ZIMCommunityJoinApplicationAcceptConfig {
+  ZIMPushConfig? pushConfig;    // 发给申请人的离线推送
+}
+
+class ZIMCommunityJoinApplicationRejectConfig {
+  ZIMPushConfig? pushConfig;    // 发给申请人的离线推送
+}
+
+// 两个分页查询配置结构相同
+class ZIMCommunitySelfApplicationListQueryConfig {
+  int nextFlag;   // 0 = 从最新一页开始；传上页返回的 nextFlag 翻页
+}
+class ZIMCommunityApplicationListQueryConfig {
+  int nextFlag;
+}
+```
+
+- - -
+
+## 接口明细
+
+### 创建社群（指定加入模式）
+
+```dart
+Future<ZIMCommunityCreatedResult> createCommunity({
+  required ZIMCommunityInfo communityInfo,
+  ZIMCommunityCreateConfig? config,   // joinMode（默认 any）、communityNotice、communityAttributes
+});
+```
+
+- 调用方：任意登录用户（创建者即群主）。
+- 成功返回 `ZIMCommunityCreatedResult`，`communityInfo.baseInfo.communityID` 为新社群 ID。
+
+```dart title="示例代码"
+// 示例：创建「需审批」社群
+final communityInfo = ZIMCommunityInfo()
+  ..name = '我的社群';
+final config = ZIMCommunityCreateConfig()
+  ..joinMode = ZIMCommunityJoinMode.auth;
+
+try {
+  final result = await ZIM.getInstance()!
+      .createCommunity(communityInfo: communityInfo, config: config);
+  // 创建成功
+} on PlatformException catch (onError) {
+  // 创建失败：onError.code 为错误码
+}
+```
+
+### 修改加入模式
+
+```dart
+Future<ZIMCommunityJoinModeUpdatedResult> updateCommunityJoinMode({
+  required ZIMCommunityJoinMode joinMode,
+  required String communityID,
+});
+```
+
+- 调用方：群主/管理员；无权限返回 `6001007`。
+- 修改成功后，其它端通过 `ZIMEventHandler.onCommunityInfoUpdated` 事件感知变更。
+
+```dart title="示例代码"
+// 示例：修改为「需审批」模式
+try {
+  await ZIM.getInstance()!.updateCommunityJoinMode(
+      joinMode: ZIMCommunityJoinMode.auth, communityID: communityID);
+  // 修改成功
+} on PlatformException catch (onError) {
+  // 修改失败
+}
+```
+
+### 提交入群申请
+
+```dart
+Future<ZIMCommunityJoinApplicationSentResult> sendCommunityJoinApplication({
+  required String communityID,
+  required ZIMCommunityJoinApplicationSendConfig config,
+});
+```
+
+- 调用方：未入群用户。
+- `config.wording` 附言（≤256，选填）；`config.pushConfig` 给管理员的离线推送。
+- 行为随 joinMode：
+  - any：直接入群，不产生申请记录（收到入群相关事件，社群列表更新）；
+  - auth：产生一条 waiting 申请，等待审批；本端会收到 `onCommunitySelfApplicationListChanged`（added）；
+  - forbid：返回 `6001094`。
+- 已存在 waiting 申请时重复提交返回 `6001097`（不会覆盖原附言）。
+- ANY 模式下申请状态展示：以 `onCommunitySelfApplicationListChanged` 事件与查询结果为准，不得依据本地「已点击申请」渲染「等待验证」状态。
+
+```dart title="示例代码"
+// 示例：提交入群申请
+final config = ZIMCommunityJoinApplicationSendConfig(wording: '请让我加入社群');
+
+try {
+  final result = await ZIM.getInstance()!
+      .sendCommunityJoinApplication(communityID: communityID, config: config);
+  // 提交成功；joinMode 为 any 时此时已直接入群
+} on PlatformException catch (onError) {
+  // 提交失败：forbid 返回 6001094，重复申请返回 6001097
+}
+```
+
+### 查询我的申请列表
+
+```dart
+Future<ZIMCommunitySelfApplicationListQueriedResult>
+    queryCommunitySelfApplicationList({
+  required int count,
+  required ZIMCommunitySelfApplicationListQueryConfig config,
+});
+```
+
+- 调用方：任意登录用户（查询自己提交的申请，跨社群）。
+- `count` 单页数量，服务端上限 100（建议 ≤30）；`config.nextFlag` 翻页锚点。
+- 按 applyID 从新到旧返回；`nextFlag == 0` 表示没有更多数据。
+- 实时走服务端，无本地缓存；断网时抛出异常。
+
+```dart title="示例代码"
+// 示例：分页查询我的申请列表
+var config = ZIMCommunitySelfApplicationListQueryConfig(nextFlag: 0);
+
+try {
+  final result = await ZIM.getInstance()!
+      .queryCommunitySelfApplicationList(count: 30, config: config);
+  // result.applicationList 为当前页申请记录
+  // result.nextFlag != 0 时，将其传入 config.nextFlag 继续翻页
+} on PlatformException catch (onError) {
+  // 查询失败
+}
+```
+
+### 撤销申请
+
+```dart
+Future<void> cancelCommunityJoinApplication({
+  required int applyID,
+  required String communityID,
+  required ZIMCommunityJoinApplicationCancelConfig config,
+});
+```
+
+- 调用方：申请人本人；参数为 **applyID + communityID**。
+- 成功后该记录变为 cancelled（保留在列表中），本端收到 `onCommunitySelfApplicationListChanged`（updated）。
+- 对已撤销的申请重复撤销**幂等成功**；对不存在的 applyID 返回 `6001091`；对已处理的申请返回 `6001093`。
+
+```dart title="示例代码"
+// 示例：撤销一条待审批申请
+try {
+  await ZIM.getInstance()!.cancelCommunityJoinApplication(
+      applyID: applyID,
+      communityID: communityID,
+      config: ZIMCommunityJoinApplicationCancelConfig());
+  // 撤销成功，记录状态变为 cancelled
+} on PlatformException catch (onError) {
+  // 撤销失败
+}
+```
+
+### 查询社群申请审核列表
+
+```dart
+Future<ZIMCommunityApplicationListQueriedResult>
+    queryCommunityApplicationList({
+  required String communityID,
+  required int count,
+  required ZIMCommunityApplicationListQueryConfig config,
+});
+```
+
+- 调用方：群主/管理员；无权限返回 `6001007`。
+- 返回**全部状态**的记录（待审批 + 已处理），按 applyID 从新到旧；「待审批」页面请按 `state == ZIMCommunityApplicationState.waiting` 自行过滤。
+- `count` 上限与 `nextFlag` 语义同「查询我的申请列表」。
+
+```dart title="示例代码"
+// 示例：分页查询某社群的审核列表
+var config = ZIMCommunityApplicationListQueryConfig(nextFlag: 0);
+
+try {
+  final result = await ZIM.getInstance()!.queryCommunityApplicationList(
+      communityID: communityID, count: 30, config: config);
+  final waiting = result.applicationList
+      .where((e) => e.state == ZIMCommunityApplicationState.waiting)
+      .toList();
+  // waiting 即「待审批」数据
+} on PlatformException catch (onError) {
+  // 查询失败
+}
+```
+
+### 同意申请
+
+```dart
+Future<ZIMCommunityJoinApplicationAcceptedResult>
+    acceptCommunityJoinApplication({
+  required String userID,
+  required String communityID,
+  required int applyID,
+  required ZIMCommunityJoinApplicationAcceptConfig config,
+});
+```
+
+- 调用方：群主/管理员；`userID`/`applyID` 来自审核列表记录。
+- `config.pushConfig` 给申请人的离线推送。
+- 成功后申请人入群；本端收到 `onCommunityApplicationListChanged`（updated，state=accepted），申请人收到 `onCommunitySelfApplicationListChanged` 与入群事件。
+
+```dart title="示例代码"
+// 示例：同意一条申请
+try {
+  final result = await ZIM.getInstance()!.acceptCommunityJoinApplication(
+      userID: applicationInfo.applyUser.userID,
+      communityID: applicationInfo.communityInfo.baseInfo.communityID,
+      applyID: applicationInfo.applyID,
+      config: ZIMCommunityJoinApplicationAcceptConfig());
+  // 同意成功，申请人入群
+} on PlatformException catch (onError) {
+  // 失败：已被其它管理员处理返回 6001092
+}
+```
+
+### 拒绝申请
+
+```dart
+Future<ZIMCommunityJoinApplicationRejectedResult>
+    rejectCommunityJoinApplication({
+  required String userID,
+  required String communityID,
+  required int applyID,
+  required ZIMCommunityJoinApplicationRejectConfig config,
+});
+```
+
+- 调用方：群主/管理员。
+- 成功后记录变为 rejected 并保留；申请人可重新提交新申请。
+
+```dart title="示例代码"
+// 示例：拒绝一条申请
+try {
+  final result = await ZIM.getInstance()!.rejectCommunityJoinApplication(
+      userID: applicationInfo.applyUser.userID,
+      communityID: applicationInfo.communityInfo.baseInfo.communityID,
+      applyID: applicationInfo.applyID,
+      config: ZIMCommunityJoinApplicationRejectConfig());
+  // 拒绝成功
+} on PlatformException catch (onError) {
+  // 失败
+}
+```
+
+- - -
+
+## 事件通知（ZIMEventHandler）
+
+Flutter SDK 中事件回调为 `ZIMEventHandler` 的**静态成员**，直接赋值即可注册：
+
+```dart
+// 我的申请列表变更（接收方：申请人本端与多端）
+ZIMEventHandler.onCommunitySelfApplicationListChanged = (zim, result) {
+  for (final change in result.changeInfoList) {
+    // change.action：added / deleted / updated
+    // change.applicationInfo：变更后的申请记录（applyID、state、updateTime 等）
+  }
+};
+
+// 社群审核列表变更（接收方：群主/管理员）
+ZIMEventHandler.onCommunityApplicationListChanged = (zim, result) {
+  // result.communityID：发生变更的社群
+  for (final change in result.changeInfoList) {
+    // 按 change.action 做增量更新
+  }
+};
+
+// 申请人入群（被同意 / any 直进，社群列表既有事件）
+ZIMEventHandler.onCommunityListChanged = (zim, result) {
+  // 处理入群 / 退群
+};
+```
+
+| 事件 | 接收方 | 触发来源 |
+| --- | --- | --- |
+| `onCommunitySelfApplicationListChanged` | 申请人（本端 + 多端） | 提交、撤销、审批结果、过期等 |
+| `onCommunityApplicationListChanged` | 群主/管理员（本端 + 其它管理员/多端） | 新申请到达、任何管理员处理 |
+| `onCommunityListChanged` | 申请人 | 被同意入群 / any 直接入群 |
+
+使用建议：
+
+- 事件**不保证送达**（尽力推送），列表展示始终以查询结果为准；收到事件后可刷新或按 `action` 做增量更新。
+- 事件与操作回调之间的**先后顺序不保证**；同一 applyID 状态单向流转，可用 `updateTime` 过滤乱序/过期事件。
+- 待审批红点等 UI 状态：通过查询/遍历审核列表，存在 `state == waiting` 记录即展示。
+
+- - -
+
+## 错误码
+
+本功能专用错误码（失败时经 `PlatformException` 抛出，`code` 为下列错误码值）：
+
+| 枚举名 | 值 | 含义 | 典型场景 |
+| --- | --- | --- | --- |
+| APPLY_NOT_EXISTS | 6001091 | 申请记录不存在 | 撤销/审批传入无效 applyID |
+| APPLY_ALREADY_CHANGED | 6001092 | 申请已被其它操作处理 | 多管理员并发审批 |
+| APPLY_STATUS_ERROR | 6001093 | 申请状态不允许此操作 | 对已终态的申请再次撤销/审批 |
+| FORBID_JOIN_COMMUNITY_ERROR | 6001094 | 社群禁止加入（joinMode=forbid） | 提交申请 / 直接加入 |
+| NEED_APPLY_JOIN_COMMUNITY_ERROR | 6001095 | 需先提交申请（joinMode=auth） | 直接加入接口的误用 |
+| APPLY_LIST_FULL | 6001096 | 申请列表已满 | 提交申请（见「限制与默认值」） |
+| APPLY_DUPLICATE_PENDING | 6001097 | 已存在待审批申请 | 重复提交 |
+
+常见关联错误码：
+
+| 枚举名 | 值 | 含义 |
+| --- | --- | --- |
+| COMMON_MODULE_PARAMS_INVALID | 6000001 | 参数非法（wording >256、count >100 等） |
+| COMMUNITY_MODULE_COMMUNITY_AUTHORITY_ERROR | 6001007 | 无权限（非管理员查询审核列表/审批/修改加入模式） |
+| COMMUNITY_MODULE_COMMUNITY_MEMBER_COUNT_LIMIT | 6001032 | 成员数已达上限（同意入群时） |
+| COMMUNITY_MODULE_USER_ALREADY_IN_COMMUNITY | 6001006 | 已是社群成员 |
+| COMMUNITY_MODULE_COMMUNITY_DOES_NOT_EXIST | 6001004 | 社群不存在 |
+| COMMUNITY_MODULE_SERVER_ERROR | 6001002 | 服务端内部错误（通用兜底） |
+
+- - -
+
+## 限制与默认值
+
+| 项 | 值 | 说明 |
+| --- | --- | --- |
+| 附言 wording | ≤256 字符，选填 | 超出返回参数错误 |
+| 单页数量 count | 服务端上限 100 | 超出将按照 100 返回；建议 ≤30 |
+| 我的申请列表容量 | 默认 100 条（可按 AppId 配置） | 满后新申请会淘汰最旧的已终态记录；全部为待审批时返回 6001096 |
+| 审核列表容量 | 默认 1000 条（可按 AppId 配置） | 同上策略 |
+| 待审批过期时间 | 默认 7 天（可按 AppId 配置） | 过期后状态转为 expired |
+| 加入模式修改权限 | 群主与管理员 | — |
+
+`6001096` 为极端情况下防止容量无限增长的边界保护，正常场景不会触发；两个列表容量均可联系 ZEGO 扩容。
+
+- - -
+
+## 行为要点速查
+
+1. **无本地缓存**：两个列表每次查询实时获取，按照申请时间倒序返回；界面以查询结果为准，事件仅做增量提示。
+2. **终态保留**：已同意/拒绝/过期/撤销的记录保留在列表中，可翻页拉到；重新申请会生成新 applyID。
+3. **并发审批保护**：同一申请被其它管理员先处理后再操作，返回 6001092。
+4. **ANY 模式一致性**：`joinCommunity` 与 `sendCommunityJoinApplication` 在 any 模式下效果相同（直接入群、无申请记录）。
+5. **事件时序**：操作回调（Future 完成）与列表变更事件之间无顺序保证，用 `updateTime` 处理乱序。
+
+- - -
+
+## 与游客模式的衔接
+
+游客（Visitor）身份与申请—审批流程互不冲突，状态流转由 SDK / 服务端维护，客户端无需自行切换身份：
+
+- **joinMode 变更对游客无影响**：社群加入模式变更后，用户仍可以游客身份进入并浏览社群消息，已进入的存量游客不受影响（当前默认允许游客访问；如需按社群控制游客访问权限，请联系 ZEGO）。
+- **游客提交申请**：auth 模式下游客可提交入群申请，审批通过前保持游客身份。
+- **游客转正按 joinMode 分流**：
+  - any：调用 `joinCommunity`，直接入群并转正；
+  - auth：调用 `sendCommunityJoinApplication`，审批通过后自动转正；
+  - forbid：业务层不应提供加入入口。
+- **自动转正**：审批通过或 any 直接入群后，SDK 自动将游客态转为正式成员态，无需先调用 `quitCommunityAsVisitor`。
+- 已是正式成员再以游客身份进入返回 `6001006`；已是游客重复进入返回 `6001081`。
+
+```dart title="示例代码"
+// 示例：以游客身份进入社群，再按 joinMode 走转正流程
+try {
+  // 1. 游客进入（浏览）
+  await ZIM.getInstance()!
+      .enterCommunityAsVisitor(communityID: communityID);
+
+  // 2. joinMode 为 any 时直接转正
+  await ZIM.getInstance()!.joinCommunity(communityID: communityID);
+  // joinMode 为 auth 时改走申请：
+  // await ZIM.getInstance()!.sendCommunityJoinApplication(
+  //     communityID: communityID,
+  //     config: ZIMCommunityJoinApplicationSendConfig(wording: '申请加入'));
+} on PlatformException catch (onError) {
+  // 失败处理
+}
+```
