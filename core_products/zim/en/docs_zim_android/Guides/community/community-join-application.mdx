@@ -1,0 +1,942 @@
+---
+date: "2026-09-03"
+---
+
+import { getPlatformData } from "/snippets/utils-content-parser.js"
+
+export const updateCommunityJoinModeMap = {
+  'Android': <a href="@updateCommunityJoinMode" target="_blank">updateCommunityJoinMode</a>,
+  'iOS,mac': <a href="@updateCommunityJoinMode" target="_blank">updateCommunityJoinMode</a>,
+}
+export const sendCommunityJoinApplicationMap = {
+  'Android': <a href="@sendCommunityJoinApplication" target="_blank">sendCommunityJoinApplication</a>,
+  'iOS,mac': <a href="@sendCommunityJoinApplicationToCommunityID" target="_blank">sendCommunityJoinApplicationToCommunityID</a>,
+}
+export const queryCommunitySelfApplicationListMap = {
+  'Android': <a href="@queryCommunitySelfApplicationList" target="_blank">queryCommunitySelfApplicationList</a>,
+  'iOS,mac': <a href="@queryCommunitySelfApplicationListWithCount" target="_blank">queryCommunitySelfApplicationListWithCount</a>,
+}
+export const cancelCommunityJoinApplicationMap = {
+  'Android': <a href="@cancelCommunityJoinApplication" target="_blank">cancelCommunityJoinApplication</a>,
+  'iOS,mac': <a href="@cancelCommunityJoinApplicationWithApplyID" target="_blank">cancelCommunityJoinApplicationWithApplyID</a>,
+}
+export const queryCommunityApplicationListMap = {
+  'Android': <a href="@queryCommunityApplicationList" target="_blank">queryCommunityApplicationList</a>,
+  'iOS,mac': <a href="@queryCommunityApplicationListByCommunityID" target="_blank">queryCommunityApplicationListByCommunityID</a>,
+}
+export const acceptCommunityJoinApplicationMap = {
+  'Android': <a href="@acceptCommunityJoinApplication" target="_blank">acceptCommunityJoinApplication</a>,
+  'iOS,mac': <a href="@acceptCommunityJoinApplicationFromUserID" target="_blank">acceptCommunityJoinApplicationFromUserID</a>,
+}
+export const rejectCommunityJoinApplicationMap = {
+  'Android': <a href="@rejectCommunityJoinApplication" target="_blank">rejectCommunityJoinApplication</a>,
+  'iOS,mac': <a href="@rejectCommunityJoinApplicationFromUserID" target="_blank">rejectCommunityJoinApplicationFromUserID</a>,
+}
+export const onCommunitySelfApplicationListChangedMap = {
+  'Android': <a href="@onCommunitySelfApplicationListChanged" target="_blank">onCommunitySelfApplicationListChanged</a>,
+  'iOS,mac': <a href="@ZIMCommunitySelfApplicationListChangedWithResult" target="_blank">communitySelfApplicationListChangedWithResult</a>,
+}
+export const onCommunityApplicationListChangedMap = {
+  'Android': <a href="@onCommunityApplicationListChanged" target="_blank">onCommunityApplicationListChanged</a>,
+  'iOS,mac': <a href="@ZIMCommunityApplicationListChangedWithResult" target="_blank">communityApplicationListChangedWithResult</a>,
+}
+
+# Community Join Applications
+
+- - -
+
+## Feature Overview
+
+In addition to joining a Community directly, ZIM provides an "apply and approve" join path controlled by the Community join mode (joinMode):
+
+| joinMode | Behavior |
+| --- | --- |
+| ANY (0) | No approval required. Calling `joinCommunity` joins the Community directly; calling `sendCommunityJoinApplication` has the same effect (joins directly, no application record is created) |
+| AUTH (1) | Approval by the Community owner/administrators is required; the applicant can cancel the application before it is processed |
+| FORBID (2) | Joining and applying are forbidden |
+
+Around application records, the SDK provides two data views:
+
+- **My application list** (applicant's view, across all Communities): all application records submitted by the current user, queried page by page with `queryCommunitySelfApplicationList`.
+- **Community application review list** (owner/administrator's view, per Community): all application records received by a Community (pending and processed), queried page by page with `queryCommunityApplicationList`.
+
+Key points:
+
+- Application records are **not persisted on the client**. Each query fetches the latest data from the server in real time, so always display lists based on query results.
+- Change notifications for application records rely on event callbacks (see [Listen for Application Changes](#listen-for-application-changes)). Events are delivered on a best-effort basis and may be lost in weak network conditions; use queries as the fallback.
+
+## Prerequisites
+
+- Please refer to [Implement basic message sending and receiving](../Messaging/Send%20and%20receive%20messages.mdx) to complete ZIM SDK acquisition, initialization, and user login.
+- Please refer to [Authenticate with Token](../Users/Authentication.mdx) to implement user authentication and login.
+- Community join applications require ZIM SDK 3.2.0 or later.
+- Community is a premium feature. Please contact ZEGOCLOUD Technical Support for activation before use.
+
+## Set the Community Join Mode
+
+When creating a Community, you can specify the join mode through the `joinMode` field of `ZIMCommunityCreateConfig`, which defaults to `ANY`. For the complete Community creation flow, refer to [Community Management](./community-management.mdx).
+
+After a Community is created, the owner/administrators can call the {getPlatformData(props,updateCommunityJoinModeMap)} API to modify the join mode. After a successful modification, other clients are notified through the `onCommunityInfoUpdated` event.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Example code"
+// Change to the "approval required" mode
+zim.updateCommunityJoinMode(ZIMCommunityJoinMode.AUTH, communityID,
+    new ZIMCommunityJoinModeUpdatedCallback() {
+        @Override
+        public void onCommunityJoinModeUpdated(String communityID, ZIMCommunityJoinMode joinMode, ZIMError errorInfo) {
+            if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+                // Modified successfully
+            }
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Example code"
+// Change to the "approval required" mode
+[zim updateCommunityJoinMode:ZIMCommunityJoinModeAuth communityID:communityID callback:^(NSString * _Nonnull communityID, ZIMCommunityJoinMode joinMode, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // Modified successfully
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Example code"
+// Change to the "approval required" mode
+zim_->updateCommunityJoinMode(zim::ZIM_COMMUNITY_JOIN_MODE_AUTH, communityID,
+    [=](const std::string &communityID,
+        zim::ZIMCommunityJoinMode joinMode,
+        const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // Modified successfully
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Example code"
+// Change to the "approval required" mode (1 = AUTH)
+zim.updateCommunityJoinMode(1, communityID)
+    .then((result: ZIMCommunityJoinModeUpdatedResult) => {
+        // Modified successfully
+    })
+    .catch((err: ZIMError) => {
+        // Operation failed
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Example code"
+// Change to the "approval required" mode
+try {
+    await ZIM.getInstance()!
+        .updateCommunityJoinMode(ZIMCommunityJoinMode.auth, communityID);
+    // Modified successfully
+} on PlatformException catch (onError) {
+    // Operation failed
+}
+```
+</CodeGroup>
+:::
+
+<Accordion title="Common Error Codes">
+
+| Error Code | Description | Troubleshooting |
+|--------|------|----------|
+| 6001007 | Community permission error | Only the owner/administrators can modify the join mode |
+| 6001004 | Community does not exist | Check whether the communityID is correct |
+
+</Accordion>
+
+## Apply to Join a Community (Applicant)
+
+### Submit a Join Application
+
+A user who is not a member can call the {getPlatformData(props,sendCommunityJoinApplicationMap)} API to submit a join application. The behavior varies with the Community join mode:
+
+| joinMode | Behavior |
+| --- | --- |
+| ANY (0) | Joins the Community directly, no application record is created (join-related events are received and the Community list is updated) |
+| AUTH (1) | Creates a "pending" application waiting for the owner/administrators to review; the local client receives an `onCommunitySelfApplicationListChanged` (ADDED) notification |
+| FORBID (2) | Returns error code 6001094 |
+
+`ZIMCommunityJoinApplicationSendConfig` description:
+
+| Field | Description |
+|---------|------|
+| `wording` | Application note, up to 256 characters, optional |
+| `pushConfig` | Offline push configuration for the owner/administrators |
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Example code"
+ZIMCommunityJoinApplicationSendConfig config = new ZIMCommunityJoinApplicationSendConfig();
+config.wording = "Please let me join the community";
+
+zim.sendCommunityJoinApplication(communityID, config, new ZIMCommunityJoinApplicationSentCallback() {
+    @Override
+    public void onCommunityJoinApplicationSent(String communityID, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // Application submitted; if joinMode is ANY, the user has joined directly
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Example code"
+ZIMCommunityJoinApplicationSendConfig *config = [[ZIMCommunityJoinApplicationSendConfig alloc] init];
+config.wording = @"Please let me join the community";
+
+[zim sendCommunityJoinApplicationToCommunityID:communityID config:config callback:^(NSString * _Nonnull communityID, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // Application submitted; if joinMode is ANY, the user has joined directly
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Example code"
+zim::ZIMCommunityJoinApplicationSendConfig config;
+config.wording = "Please let me join the community";
+
+zim_->sendCommunityJoinApplication(communityID, config,
+    [=](const std::string &communityID,
+        const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // Application submitted; if joinMode is ANY, the user has joined directly
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Example code"
+const config: ZIMCommunityJoinApplicationSendConfig = {
+    wording: 'Please let me join the community',  // application note, optional
+};
+
+zim.sendCommunityJoinApplication(communityID, config)
+    .then((result: ZIMCommunityJoinApplicationSentResult) => {
+        // Application submitted; if joinMode is ANY, the user has joined directly
+    })
+    .catch((err: ZIMError) => {
+        // Operation failed
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Example code"
+ZIMCommunityJoinApplicationSendConfig config = ZIMCommunityJoinApplicationSendConfig()
+    ..wording = 'Please let me join the community';
+
+try {
+    await ZIM.getInstance()!
+        .sendCommunityJoinApplication(communityID, config);
+    // Application submitted; if joinMode is ANY, the user has joined directly
+} on PlatformException catch (onError) {
+    // Operation failed
+}
+```
+</CodeGroup>
+:::
+
+<Accordion title="Common Error Codes">
+
+| Error Code | Description | Troubleshooting |
+|--------|------|----------|
+| 6001094 | Joining the Community is forbidden (joinMode is FORBID) | Users cannot apply to join this Community |
+| 6001097 | A pending application already exists | No need to submit again; resubmitting does not overwrite the original note |
+| 6001006 | The user is already a Community member | No application needed |
+| 6000001 | Invalid parameters | Check whether wording exceeds 256 characters |
+
+</Accordion>
+
+### Query My Application List
+
+Call the {getPlatformData(props,queryCommunitySelfApplicationListMap)} API to query all application records submitted by the current user page by page (across all Communities), returned from newest to oldest by applyID.
+
+Pagination rules: set `config.nextFlag` to `0` for the first query to start from the latest page; then pass the `nextFlag` returned by the previous page's callback to the next request until the returned `nextFlag` is `0`, which means all data has been pulled.
+
+`ZIMCommunityApplicationState` description:
+
+| State | Meaning | Description |
+|------|------|------|
+| WAITING (1) | Pending | Waiting for the owner/administrators to process |
+| ACCEPTED (2) | Accepted | The application is approved and the user has joined |
+| REJECTED (3) | Rejected | The user can submit a new application |
+| EXPIRED (4) | Expired | Exceeded the pending validity period (7 days by default) |
+| CANCELLED (6) | Cancelled | Cancelled by the applicant |
+| JOINED (7) | Joined through other means | The user joined before the application was processed (e.g., invited), and the application becomes invalid automatically |
+
+ACCEPTED / REJECTED / EXPIRED / CANCELLED / JOINED are all **final states**; the records remain in the list and can be pulled through pagination.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Example code"
+ZIMCommunitySelfApplicationListQueryConfig config = new ZIMCommunitySelfApplicationListQueryConfig();
+config.nextFlag = 0;  // Set to 0 for the first query
+
+zim.queryCommunitySelfApplicationList(30, config, new ZIMCommunitySelfApplicationListQueriedCallback() {
+    @Override
+    public void onCommunitySelfApplicationListQueried(ArrayList<ZIMCommunityApplicationInfo> applicationList, long nextFlag, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // applicationList is the current page of application records;
+            // continue pagination when nextFlag != 0
+            for (ZIMCommunityApplicationInfo info : applicationList) {
+                // info.state: application state
+                // info.applyID: application ID, used when canceling the application
+            }
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Example code"
+ZIMCommunitySelfApplicationListQueryConfig *config = [[ZIMCommunitySelfApplicationListQueryConfig alloc] init];
+config.nextFlag = 0;  // Set to 0 for the first query
+
+[zim queryCommunitySelfApplicationListWithCount:30 config:config callback:^(NSArray<ZIMCommunityApplicationInfo *> * _Nonnull applicationList, long long nextFlag, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // applicationList is the current page of application records;
+        // continue pagination when nextFlag != 0
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Example code"
+zim::ZIMCommunitySelfApplicationListQueryConfig config;
+config.nextFlag = 0;  // Set to 0 for the first query
+
+zim_->queryCommunitySelfApplicationList(30, config,
+    [=](const std::vector<zim::ZIMCommunityApplicationInfo> &applicationList,
+        long long nextFlag,
+        const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // applicationList is the current page of application records;
+            // continue pagination when nextFlag != 0
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Example code"
+const config: ZIMCommunitySelfApplicationListQueryConfig = { nextFlag: 0 };
+
+zim.queryCommunitySelfApplicationList(30, config)
+    .then((result: ZIMCommunitySelfApplicationListQueriedResult) => {
+        const { applicationList, nextFlag } = result;
+        // continue pagination when nextFlag != 0
+    })
+    .catch((err: ZIMError) => {
+        // Query failed
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Example code"
+ZIMCommunitySelfApplicationListQueryConfig config =
+    ZIMCommunitySelfApplicationListQueryConfig()..nextFlag = 0;
+
+try {
+    ZIMCommunitySelfApplicationListQueriedResult result =
+        await ZIM.getInstance()!.queryCommunitySelfApplicationList(30, config);
+    // result.applicationList is the current page of application records
+    // continue pagination when result.nextFlag != 0
+} on PlatformException catch (onError) {
+    // Query failed
+}
+```
+</CodeGroup>
+:::
+
+### Cancel a Join Application
+
+The applicant can call the {getPlatformData(props,cancelCommunityJoinApplicationMap)} API to cancel their own application that is still pending. `applyID` and `communityID` come from the application records in "My application list".
+
+After a successful cancellation, the record state becomes CANCELLED and remains in the list, and the local client receives an `onCommunitySelfApplicationListChanged` (UPDATED) notification.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Example code"
+ZIMCommunityJoinApplicationCancelConfig config = new ZIMCommunityJoinApplicationCancelConfig();
+
+zim.cancelCommunityJoinApplication(applyID, communityID, config, new ZIMCommunityJoinApplicationCancelledCallback() {
+    @Override
+    public void onCommunityJoinApplicationCancelled(ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // Canceled successfully, the record state becomes CANCELLED
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Example code"
+ZIMCommunityJoinApplicationCancelConfig *config = [[ZIMCommunityJoinApplicationCancelConfig alloc] init];
+
+[zim cancelCommunityJoinApplicationWithApplyID:applyID communityID:communityID config:config callback:^(ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // Canceled successfully, the record state becomes CANCELLED
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Example code"
+zim::ZIMCommunityJoinApplicationCancelConfig config;
+
+zim_->cancelCommunityJoinApplication(applyID, communityID, config,
+    [=](const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // Canceled successfully, the record state becomes CANCELLED
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Example code"
+zim.cancelCommunityJoinApplication(applyID, communityID, {})
+    .then((result: ZIMCommunityJoinApplicationCancelledResult) => {
+        // Canceled successfully, the record state becomes CANCELLED
+    })
+    .catch((err: ZIMError) => {
+        // Operation failed
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Example code"
+try {
+    await ZIM.getInstance()!.cancelCommunityJoinApplication(
+        applyID, communityID, ZIMCommunityJoinApplicationCancelConfig());
+    // Canceled successfully, the record state becomes CANCELLED
+} on PlatformException catch (onError) {
+    // Operation failed
+}
+```
+</CodeGroup>
+:::
+
+<Accordion title="Common Error Codes">
+
+| Error Code | Description | Troubleshooting |
+|--------|------|----------|
+| 6001091 | Application record does not exist | Check whether applyID and communityID come from query results |
+| 6001093 | The application state does not allow this operation | Applications in final states cannot be canceled |
+
+</Accordion>
+
+## Review Join Applications (Owner/Administrators)
+
+### Query the Community Application Review List
+
+The owner/administrators can call the {getPlatformData(props,queryCommunityApplicationListMap)} API to query all application records received by a Community page by page (pending and processed), returned from newest to oldest by applyID. Pagination rules are the same as "Query My Application List".
+
+<Warning title="Warning">
+
+- Records of **all states** are returned; for a "pending review" page, filter by `state == WAITING` yourself.
+- The application list has no local cache and must be queried with a network connection.
+</Warning>
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Example code"
+ZIMCommunityApplicationListQueryConfig config = new ZIMCommunityApplicationListQueryConfig();
+config.nextFlag = 0;
+
+zim.queryCommunityApplicationList(communityID, 30, config, new ZIMCommunityApplicationListQueriedCallback() {
+    @Override
+    public void onCommunityApplicationListQueried(ArrayList<ZIMCommunityApplicationInfo> applicationList, long nextFlag, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // Filter pending records by state == WAITING
+            for (ZIMCommunityApplicationInfo info : applicationList) {
+                // info.applyUser.userID / info.applyUser.userName: applicant
+                // info.wording: application note
+                // info.applyID: input of the review APIs
+            }
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Example code"
+ZIMCommunityApplicationListQueryConfig *config = [[ZIMCommunityApplicationListQueryConfig alloc] init];
+config.nextFlag = 0;
+
+[zim queryCommunityApplicationListByCommunityID:communityID count:30 config:config callback:^(NSArray<ZIMCommunityApplicationInfo *> * _Nonnull applicationList, long long nextFlag, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // Filter pending records by state == ZIMCommunityApplicationStateWaiting
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Example code"
+zim::ZIMCommunityApplicationListQueryConfig config;
+config.nextFlag = 0;
+
+zim_->queryCommunityApplicationList(communityID, 30, config,
+    [=](const std::vector<zim::ZIMCommunityApplicationInfo> &applicationList,
+        long long nextFlag,
+        const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // Filter pending records by state == ZIM_COMMUNITY_APPLICATION_STATE_WAITING
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Example code"
+const config: ZIMCommunityApplicationListQueryConfig = { nextFlag: 0 };
+
+zim.queryCommunityApplicationList(communityID, 30, config)
+    .then((result: ZIMCommunityApplicationListQueriedResult) => {
+        // Filter pending records by state === ZIMCommunityApplicationState.Waiting
+    })
+    .catch((err: ZIMError) => {
+        // Query failed
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Example code"
+ZIMCommunityApplicationListQueryConfig config =
+    ZIMCommunityApplicationListQueryConfig()..nextFlag = 0;
+
+try {
+    ZIMCommunityApplicationListQueriedResult result =
+        await ZIM.getInstance()!.queryCommunityApplicationList(communityID, 30, config);
+    // Filter pending records by state == ZIMCommunityApplicationState.waiting
+} on PlatformException catch (onError) {
+    // Query failed
+}
+```
+</CodeGroup>
+:::
+
+<Accordion title="Common Error Codes">
+
+| Error Code | Description | Troubleshooting |
+|--------|------|----------|
+| 6001007 | Community permission error | Only the owner/administrators can query the review list |
+
+</Accordion>
+
+### Accept an Application
+
+The owner/administrators can call the {getPlatformData(props,acceptCommunityJoinApplicationMap)} API to accept a pending application. `userID` and `applyID` come from the application records in the review list.
+
+After a successful acceptance, the applicant joins the Community:
+
+- The operating client receives an `onCommunityApplicationListChanged` (UPDATED, state = ACCEPTED) notification.
+- The applicant receives an `onCommunitySelfApplicationListChanged` (UPDATED) notification and join-related events.
+
+`ZIMCommunityJoinApplicationAcceptConfig` supports customizing the offline push sent to the applicant through `pushConfig`.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Example code"
+ZIMCommunityJoinApplicationAcceptConfig config = new ZIMCommunityJoinApplicationAcceptConfig();
+
+zim.acceptCommunityJoinApplication(userID, communityID, applyID, config, new ZIMCommunityJoinApplicationAcceptedCallback() {
+    @Override
+    public void onCommunityJoinApplicationAccepted(String communityID, String userID, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // Accepted, the applicant has joined the Community
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Example code"
+ZIMCommunityJoinApplicationAcceptConfig *config = [[ZIMCommunityJoinApplicationAcceptConfig alloc] init];
+
+[zim acceptCommunityJoinApplicationFromUserID:userID communityID:communityID applyID:applyID config:config callback:^(NSString * _Nonnull communityID, NSString * _Nonnull userID, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // Accepted, the applicant has joined the Community
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Example code"
+zim::ZIMCommunityJoinApplicationAcceptConfig config;
+
+zim_->acceptCommunityJoinApplication(userID, communityID, applyID, config,
+    [=](const std::string &communityID,
+        const std::string &userID,
+        const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // Accepted, the applicant has joined the Community
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Example code"
+zim.acceptCommunityJoinApplication(userID, communityID, applyID, {})
+    .then((result: ZIMCommunityJoinApplicationAcceptedResult) => {
+        // Accepted, the applicant has joined the Community
+    })
+    .catch((err: ZIMError) => {
+        // Operation failed
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Example code"
+try {
+    await ZIM.getInstance()!.acceptCommunityJoinApplication(
+        userID, communityID, applyID, ZIMCommunityJoinApplicationAcceptConfig());
+    // Accepted, the applicant has joined the Community
+} on PlatformException catch (onError) {
+    // Operation failed
+}
+```
+</CodeGroup>
+:::
+
+### Reject an Application
+
+The owner/administrators can call the {getPlatformData(props,rejectCommunityJoinApplicationMap)} API to reject a pending application. After rejection, the record state becomes REJECTED and remains in the list; the applicant can submit a new application (with a different applyID).
+
+`ZIMCommunityJoinApplicationRejectConfig` supports customizing the offline push sent to the applicant through `pushConfig`.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Example code"
+ZIMCommunityJoinApplicationRejectConfig config = new ZIMCommunityJoinApplicationRejectConfig();
+
+zim.rejectCommunityJoinApplication(userID, communityID, applyID, config, new ZIMCommunityJoinApplicationRejectedCallback() {
+    @Override
+    public void onCommunityJoinApplicationRejected(String communityID, String userID, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // Rejected
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Example code"
+ZIMCommunityJoinApplicationRejectConfig *config = [[ZIMCommunityJoinApplicationRejectConfig alloc] init];
+
+[zim rejectCommunityJoinApplicationFromUserID:userID communityID:communityID applyID:applyID config:config callback:^(NSString * _Nonnull communityID, NSString * _Nonnull userID, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // Rejected
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Example code"
+zim::ZIMCommunityJoinApplicationRejectConfig config;
+
+zim_->rejectCommunityJoinApplication(userID, communityID, applyID, config,
+    [=](const std::string &communityID,
+        const std::string &userID,
+        const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // Rejected
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Example code"
+zim.rejectCommunityJoinApplication(userID, communityID, applyID, {})
+    .then((result: ZIMCommunityJoinApplicationRejectedResult) => {
+        // Rejected
+    })
+    .catch((err: ZIMError) => {
+        // Operation failed
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Example code"
+try {
+    await ZIM.getInstance()!.rejectCommunityJoinApplication(
+        userID, communityID, applyID, ZIMCommunityJoinApplicationRejectConfig());
+    // Rejected
+} on PlatformException catch (onError) {
+    // Operation failed
+}
+```
+</CodeGroup>
+:::
+
+<Accordion title="Common Error Codes">
+
+| Error Code | Description | Troubleshooting |
+|--------|------|----------|
+| 6001091 | Application record does not exist | Check whether applyID comes from query results |
+| 6001092 | The application has been processed by another operation | Occurs when multiple administrators review concurrently; refresh the list when received |
+| 6001093 | The application state does not allow this operation | Expired/canceled/processed applications cannot be reviewed again |
+| 6001032 | The Community member count has reached the limit | Occurs when accepting an application |
+| 6001006 | The applicant is already a Community member | No further review needed |
+
+</Accordion>
+
+## Listen for Application Changes
+
+### Listen for My Application List Changes (Applicant)
+
+When the applications submitted by the current user change (submitted, canceled, review result, expired, etc.), the SDK triggers the {getPlatformData(props,onCommunitySelfApplicationListChangedMap)} callback.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Example code"
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onCommunitySelfApplicationListChanged(ZIM zim, ZIMCommunitySelfApplicationListChangedEventResult result) {
+        for (ZIMCommunityApplicationChangeInfo changeInfo : result.getChangeInfoList()) {
+            // changeInfo.getAction(): list action (ADDED / DELETED / UPDATED)
+            // changeInfo.getApplicationInfo(): the changed application record
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Example code"
+- (void)zim:(ZIM *)zim communitySelfApplicationListChangedWithResult:(ZIMCommunitySelfApplicationListChangedEventResult *)result {
+    for (ZIMCommunityApplicationChangeInfo *changeInfo in result.changeInfoList) {
+        // changeInfo.action: list action (Added / Deleted / Updated)
+        // changeInfo.applicationInfo: the changed application record
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Example code"
+void onCommunitySelfApplicationListChanged(
+    zim::ZIM *zim,
+    const zim::ZIMCommunitySelfApplicationListChangedEventResult &result) override {
+    for (const auto &changeInfo : result.changeInfoList) {
+        // changeInfo.action: list action (ADDED / DELETED / UPDATED)
+        // changeInfo.applicationInfo: the changed application record
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Example code"
+zim.on('communitySelfApplicationListChanged', (zim, result) => {
+    for (const changeInfo of result.changeInfoList) {
+        // changeInfo.action: list action
+        // changeInfo.applicationInfo: the changed application record
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Example code"
+ZIMEventHandler.onCommunitySelfApplicationListChanged =
+    (ZIM zim, ZIMCommunitySelfApplicationListChangedEventResult result) {
+    for (final changeInfo in result.changeInfoList) {
+        // changeInfo.action: list action
+        // changeInfo.applicationInfo: the changed application record
+    }
+};
+```
+</CodeGroup>
+:::
+
+### Listen for Community Application List Changes (Owner/Administrators)
+
+When a Community receives a new application, or any administrator processes an application, the SDK triggers the {getPlatformData(props,onCommunityApplicationListChangedMap)} callback. The callback result carries the ID of the Community where the change occurred.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Example code"
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onCommunityApplicationListChanged(ZIM zim, ZIMCommunityApplicationListChangedEventResult result) {
+        String communityID = result.getCommunityID();
+        for (ZIMCommunityApplicationChangeInfo changeInfo : result.getChangeInfoList()) {
+            // changeInfo.getAction() == ZIMCommunityApplicationListAction.ADDED:
+            // a new application arrives, notify the administrators to process it
+            // changeInfo.getApplicationInfo(): the changed application record
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Example code"
+- (void)zim:(ZIM *)zim communityApplicationListChangedWithResult:(ZIMCommunityApplicationListChangedEventResult *)result {
+    NSString *communityID = result.communityID;
+    for (ZIMCommunityApplicationChangeInfo *changeInfo in result.changeInfoList) {
+        // changeInfo.action == ZIMCommunityApplicationListActionAdded:
+        // a new application arrives, notify the administrators to process it
+        // changeInfo.applicationInfo: the changed application record
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Example code"
+void onCommunityApplicationListChanged(
+    zim::ZIM *zim,
+    const zim::ZIMCommunityApplicationListChangedEventResult &result) override {
+    std::string communityID = result.communityID;
+    for (const auto &changeInfo : result.changeInfoList) {
+        // changeInfo.action == zim::ZIM_COMMUNITY_APPLICATION_LIST_ACTION_ADDED:
+        // a new application arrives
+        // changeInfo.applicationInfo: the changed application record
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Example code"
+zim.on('communityApplicationListChanged', (zim, result) => {
+    const communityID = result.communityID;
+    for (const changeInfo of result.changeInfoList) {
+        // changeInfo.action: list action
+        // changeInfo.applicationInfo: the changed application record
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Example code"
+ZIMEventHandler.onCommunityApplicationListChanged =
+    (ZIM zim, ZIMCommunityApplicationListChangedEventResult result) {
+    final communityID = result.communityID;
+    for (final changeInfo in result.changeInfoList) {
+        // changeInfo.action: list action
+        // changeInfo.applicationInfo: the changed application record
+    }
+};
+```
+</CodeGroup>
+:::
+
+Receivers and trigger sources of each event:
+
+| Event | Receiver | Trigger source |
+| --- | --- | --- |
+| `onCommunitySelfApplicationListChanged` | Applicant (local + multiple devices) | Submit, cancel, review result, expire, etc. |
+| `onCommunityApplicationListChanged` | Owner/administrators (local + other administrators/multiple devices) | New application arrives, any administrator processes |
+| `onCommunityListChanged` | Applicant | Accepted / joins directly in ANY mode |
+
+<Warning title="Warning">
+
+- Events are **not guaranteed to be delivered** (best-effort push); always display lists based on query results. After receiving an event, you can refresh the list or apply incremental updates based on `action`.
+- The **order between events and operation callbacks is not guaranteed**; the state of the same applyID flows in one direction. You can use `updateTime` to filter out-of-order or outdated events.
+</Warning>
+
+## Application Record Fields
+
+Main fields of `ZIMCommunityApplicationInfo`:
+
+| Field | Description |
+|------|------|
+| `applyID` | Unique ID of the application, the input of the cancel/review APIs and the pagination anchor |
+| `type` | Application type, currently always JOIN (active application) |
+| `state` | Application state, see [Query My Application List](#query-my-application-list) |
+| `communityInfo` | Target Community information (communityID / communityName / communityAvatarUrl) |
+| `applyUser` | Applicant information |
+| `operatedUserID` | ID of the operator (reviewer/canceller), an empty string when pending |
+| `wording` | Application note |
+| `createTime` / `updateTime` | Creation time / state update time (ms) |
+
+List change actions `ZIMCommunityApplicationListAction`: ADDED, DELETED, UPDATED.
+
+## Limits and Default Values
+
+| Item | Value | Description |
+|----|----|------|
+| Application note wording | ≤256 characters, optional | Exceeding it returns a parameter error |
+| Page size count | Server limit 100 | Recommended no more than 30 |
+| My application list capacity | 100 by default (configurable per AppID) | When full, new applications evict the oldest final-state records; returns 6001096 when all records are pending |
+| Review list capacity | 1000 by default (configurable per AppID) | Same eviction policy |
+| Pending validity period | 7 days by default (configurable per AppID) | After expiration, the state becomes EXPIRED |
+| Join mode modification permission | Owner and administrators | — |
+
+## Related References
+
+- [Community Management](./community-management.mdx)
+- [Community Member Management](./community-member-management.mdx)
+- [ZIM Error Codes](../../SDK%20Error%20Codes/ZIM.mdx)
