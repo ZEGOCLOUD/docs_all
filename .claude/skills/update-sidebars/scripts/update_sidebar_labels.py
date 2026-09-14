@@ -727,7 +727,7 @@ def resolve_internal_link(href: str, locale: str = 'zh') -> Optional[Path]:
     Resolve an internal link (/path) to an MDX file.
 
     Args:
-        href: Internal link path (e.g., '/real-time-video-android-ja/faq/connect-to-zego-mcp-server')
+        href: Internal link path (e.g., '/real-time-video-android-ja/faq/ai-coding')
         locale: Language locale ('zh' or 'en', defaults to 'zh')
 
     Returns:
