@@ -1,0 +1,585 @@
+---
+date: "2026-09-08"
+---
+
+import { getPlatformData } from "/snippets/utils-content-parser.js"
+
+export const enterCommunityAsVisitorMap = {
+  'Android': <a href="@enterCommunityAsVisitor" target="_blank">enterCommunityAsVisitor</a>,
+  'iOS,mac': <a href="@enterCommunityAsVisitorWithCommunityID" target="_blank">enterCommunityAsVisitorWithCommunityID</a>,
+}
+export const quitCommunityAsVisitorMap = {
+  'Android': <a href="@quitCommunityAsVisitor" target="_blank">quitCommunityAsVisitor</a>,
+  'iOS,mac': <a href="@quitCommunityAsVisitorByCommunityID" target="_blank">quitCommunityAsVisitorByCommunityID</a>,
+}
+export const updateCommunityVisitorFetchMessageCountMap = {
+  'Android': <a href="@updateCommunityVisitorFetchMessageCount" target="_blank">updateCommunityVisitorFetchMessageCount</a>,
+  'iOS,mac': <a href="@updateCommunityVisitorFetchMessageCount" target="_blank">updateCommunityVisitorFetchMessageCount</a>,
+}
+export const updateCommunityVisitorFetchMessageDurationMap = {
+  'Android': <a href="@updateCommunityVisitorFetchMessageDuration" target="_blank">updateCommunityVisitorFetchMessageDuration</a>,
+  'iOS,mac': <a href="@updateCommunityVisitorFetchMessageDuration" target="_blank">updateCommunityVisitorFetchMessageDuration</a>,
+}
+export const ZIMCommunityVisitorAccessInfoMap = {
+  'Android': <a href="@-ZIMCommunityVisitorAccessInfo" target="_blank">ZIMCommunityVisitorAccessInfo</a>,
+}
+export const ZIMCommunityFullInfoMap = {
+  'Android': <a href="@-ZIMCommunityFullInfo" target="_blank">ZIMCommunityFullInfo</a>,
+}
+
+# 游客模式
+
+---
+
+## 功能简介
+
+游客模式允许尚未加入社群的用户，以“游客”身份临时访问一个公开社群，仅浏览社群内容而无需成为正式成员。游客可以获取社群资料、社群人数、频道列表，以及社群管理员配置的可见消息列表，但无法发送消息或执行任何管理操作。
+
+借助游客模式，开发者可以让未加入社群的用户先“浏览”社群内容，降低用户进入门槛，适用于社群预览、公开内容展示、访客浏览等场景。
+
+## 前提条件
+
+- 请参考 [实现基本消息收发](../Messaging/Send%20and%20receive%20messages.mdx) 完成 ZIM SDK 获取、初始化和用户登录。
+- 请参考 [使用 Token 鉴权](../Users/Authentication.mdx) 实现用户鉴权登录。
+- 社群功能需要 ZIM SDK 3.0.0 及以上版本，游客模式需要 ZIM SDK 3.2.0 及以上版本。
+- 社群功能为旗舰版功能，使用前请联系 ZEGO 技术支持开通。
+- 社群功能的 Token 生成方式与其他 ZIM 功能一致，无需额外权限声明。
+
+## 游客身份说明
+
+游客身份是逻辑意义上的身份，与社群成员的 Role（群主、管理员、普通成员）不同。当用户以游客身份访问社群时，大部分接口会拥有相应的限制，游客对社群内容是“仅浏览”。
+
+### 游客可见消息范围
+
+游客进入社群后，可浏览的可见消息范围遵循以下规则：
+
+- 社群所有者（群主，Role 为 `1`）和管理员（Role 为 `2`）可通过 [更新游客可见消息数量](#更新游客可见消息数量) 与 [更新游客可见消息时间范围](#更新游客可见消息时间范围) 接口，设置游客可见的消息条数与时间范围。
+- 游客可见入社群前消息“条数”与“时间范围”二者取交集，即为游客真实可见的消息。
+
+### 游客心跳限制
+
+| 限制项 | 限制值 |
+|--------|--------|
+| 单用户最多并发游客实例（游客心跳）数 | 10（默认），可扩展至 20 |
+| 单个游客心跳包间隔 | 10 秒 |
+| 单个游客心跳超时 | 120 秒 |
+| 心跳超时移出游客列表 | 连续 12 个心跳超时后自动移出 |
+
+### 游客可访问能力
+
+游客对社群内容仅浏览，可访问与不可访问的能力如下：
+
+| 能力 | 游客是否可用 | 说明 |
+|------|--------------|------|
+| 获取社群资料 | 是 | 如社群名称、头像、公告、人数等 |
+| 获取社群属性 | 是 | 仅读取，不可修改 |
+| 获取频道列表 | 是 | 可浏览公开频道 |
+| 获取频道资料 / 属性 | 是 | 仅读取 |
+| 拉取频道消息 | 是 | 仅可见消息范围内 |
+| 查询消息表态 | 是 | 可查看表态列表与详情 |
+| 查询状态消息列表 | 是 | 仅读取 |
+| 查询成员信息 | 是 | 用于展示消息气泡相关内容 |
+| 发送消息 / 信令消息 | 否 | 游客为只读身份 |
+| 创建 / 解散社群 | 否 | - |
+| 邀请 / 踢出成员 | 否 | - |
+| 修改社群 / 频道资料与属性 | 否 | - |
+| 设置禁言 / 成员角色 / 所有权转让 | 否 | - |
+| 编辑 / 撤回消息、消息表态 | 否 | - |
+
+## 以游客身份进入社群
+
+登录 ZIM SDK 后，调用 {getPlatformData(props,enterCommunityAsVisitorMap)} 接口，传入目标社群 ID 即可作为游客进入社群。进入成功后，可通过回调获取该社群的完整信息。
+
+<Warning title="注意">
+- 用户已是该社群正式成员时，无需再以游客身份进入，此时调用会返回 `6001006` 错误码。
+- 用户已以游客身份处于该社群时，重复调用会返回 `6001081` 错误码。
+</Warning>
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+import im.zego.zim.ZIM;
+import im.zego.zim.callback.ZIMCommunityAsVisitorEnteredCallback;
+import im.zego.zim.entity.ZIMCommunityFullInfo;
+import im.zego.zim.entity.ZIMError;
+import im.zego.zim.enums.ZIMErrorCode;
+
+String communityID = "community_001";
+
+zim.enterCommunityAsVisitor(communityID, new ZIMCommunityAsVisitorEnteredCallback() {
+    @Override
+    public void onCommunityAsVisitorEntered(ZIMCommunityFullInfo communityInfo, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // 进入成功，communityInfo 包含社群完整信息
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+NSString *communityID = @"community_001";
+
+[zim enterCommunityAsVisitorWithCommunityID:communityID callback:^(ZIMCommunityFullInfo * _Nonnull communityInfo, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // 进入成功，communityInfo 包含社群完整信息
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+std::string communityID = "community_001";
+
+zim_->enterCommunityAsVisitor(communityID,
+    [=](const zim::ZIMCommunityFullInfo &communityInfo, const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // 进入成功，communityInfo 包含社群完整信息
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+const communityID = 'community_001';
+
+zim.enterCommunityAsVisitor(communityID)
+    .then((result: ZIMCommunityAsVisitorEnteredResult) => {
+        // 进入成功，result.communityInfo 包含社群完整信息
+    })
+    .catch((err: ZIMError) => {
+        // 进入失败
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+const communityID = 'community_001';
+
+try {
+    ZIMCommunityAsVisitorEnteredResult result =
+        await ZIM.getInstance()!.enterCommunityAsVisitor(communityID);
+    // 进入成功，result.communityInfo 包含社群完整信息
+} on PlatformException catch (onError) {
+    // 进入失败
+}
+```
+</CodeGroup>
+:::
+
+## 以游客身份离开社群
+
+游客身份进入社群后，可调用 {getPlatformData(props,quitCommunityAsVisitorMap)} 接口主动离开社群，离开后该游客身份下的社群缓存与浏览记录将被清理。
+
+<Warning title="注意">
+游客已离开社群后再次调用此接口，会返回 `6001082` 错误码。
+</Warning>
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+zim.quitCommunityAsVisitor(communityID, new ZIMCommunityAsVisitorQuitCallback() {
+    @Override
+    public void onCommunityAsVisitorQuit(String communityID, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // 离开成功
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+[zim quitCommunityAsVisitorByCommunityID:communityID callback:^(NSString * _Nonnull communityID, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // 离开成功
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+zim_->quitCommunityAsVisitor(communityID,
+    [=](const std::string &communityID, const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // 离开成功
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+zim.quitCommunityAsVisitor(communityID)
+    .then((result: ZIMCommunityAsVisitorQuitResult) => {
+        // 离开成功，result.communityID 为离开的社群 ID
+    })
+    .catch((err: ZIMError) => {
+        // 离开失败
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+try {
+    ZIMCommunityAsVisitorQuitResult result =
+        await ZIM.getInstance()!.quitCommunityAsVisitor(communityID);
+    // 离开成功，result.communityID 为离开的社群 ID
+} on PlatformException catch (onError) {
+    // 离开失败
+}
+```
+</CodeGroup>
+:::
+
+## 游客转正为正式成员
+
+游客身份是临时的“仅浏览”身份。当用户通过正式加入流程成为社群成员后，SDK 会将本地游客态自动转换为正式成员态，无需开发者先调用 `quitCommunityAsVisitor`，也不支持在客户端自行修改身份。
+
+### 转正场景
+
+| 场景 | 开发者操作 | 转正时机 |
+| --- | --- | --- |
+| 社群 `joinMode` 为 `ANY` | 调用 `joinCommunity` | `joinCommunity` 成功后，SDK 收到正式社群数据，自动由游客转为正式成员 |
+| 社群 `joinMode` 为 `AUTH` | 调用 `sendCommunityJoinApplication` | 审批通过前仍保持游客身份；审批通过后，SDK 收到加入事件或社群列表同步数据时自动转正 |
+| 社群 `joinMode` 为 `FORBID` | 不展示加入入口 | 不会发生转正 |
+
+### 示例代码：ANY 模式下游客转正
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+String communityID = "community_001";
+
+zim.joinCommunity(communityID, new ZIMCommunityJoinedCallback() {
+    @Override
+    public void onCommunityJoined(ZIMCommunityFullInfo communityInfo, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // 转正成功，可刷新为正式成员 UI
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+NSString *communityID = @"community_001";
+
+[zim joinCommunityWithCommunityID:communityID callback:^(ZIMCommunityFullInfo * _Nonnull communityInfo, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // 转正成功，可刷新为正式成员 UI
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+std::string communityID = "community_001";
+
+zim_->joinCommunity(communityID,
+    [=](const zim::ZIMCommunityFullInfo &communityInfo, const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // 转正成功，可刷新为正式成员 UI
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+const communityID = 'community_001';
+
+try {
+    await zim.joinCommunity(communityID);
+    // 转正成功，可刷新为正式成员 UI
+} catch (error) {
+    // 转正失败
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+const communityID = 'community_001';
+
+try {
+    await ZIM.getInstance()!.joinCommunity(communityID);
+    // 转正成功，可刷新为正式成员 UI
+} on PlatformException catch (onError) {
+    // 转正失败
+}
+```
+</CodeGroup>
+:::
+
+<Warning title="注意">
+- 用户已是正式成员时，无需再调用 `enterCommunityAsVisitor`，此时会返回 `6001006`。
+- 用户已经是游客时重复调用 `enterCommunityAsVisitor`，会返回 `6001081`。
+- 申请审批通过前，用户仍保持游客身份；审批通过后无需先调用 `quitCommunityAsVisitor`，SDK 会自动完成游客态到正式成员态的转换。
+</Warning>
+
+### 转正后的 SDK 行为
+
+- SDK 会合并游客期间已缓存的社群与频道数据，并切换到正式成员的心跳与数据同步。
+- SDK 会清理游客态相关缓存与浏览记录，后续数据以正式成员身份获取。
+- 转正后，游客的“仅浏览”限制不再适用，是否可发言等能力由正式成员角色及服务端禁言策略决定。
+
+### 开发者建议
+
+- 不要根据“用户曾经点击过申请”在本地判断身份，应以服务端回调、查询结果为准。
+- 游客态与正式成员态的界面切换，可通过 `joinCommunity` 成功回调或 `onCommunityListChanged` 事件刷新。
+- 游客态下如果希望隐藏发送入口，建议仅作为 UI 展示；实际发送权限由服务端限制，避免形成本地门禁。
+
+## 更新游客可见消息数量
+
+社群所有者（群主）或管理员可调用 {getPlatformData(props,updateCommunityVisitorFetchMessageCountMap)} 接口，更新游客进入社群后可浏览的“进入社群前消息”的条数。
+
+<Warning title="注意">
+- 仅社群所有者和管理员（Role 为 `1` 或 `2`）可调用此接口，普通成员调用会返回 `6001007` 错误码。
+- 游客可见入社群前消息“条数”与“时间范围”取交集，即为游客真实可见消息。
+</Warning>
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+int count = 20; // 游客进入社群后，可浏览进入社群前消息的条数
+
+zim.updateCommunityVisitorFetchMessageCount(count, communityID,
+    new ZIMCommunityVisitorFetchMessageCountUpdatedCallback() {
+        @Override
+        public void onCommunityVisitorFetchMessageCountUpdated(String communityID, ZIMError errorInfo) {
+            if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+                // 更新成功
+            }
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+NSInteger count = 20; // 游客进入社群后，可浏览进入社群前消息的条数
+
+[zim updateCommunityVisitorFetchMessageCount:count communityID:communityID callback:^(NSString * _Nonnull communityID, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // 更新成功
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+int32_t count = 20; // 游客进入社群后，可浏览进入社群前消息的条数
+
+zim_->updateCommunityVisitorFetchMessageCount(count, communityID,
+    [=](const std::string &communityID, const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // 更新成功
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+const count = 20; // 游客进入社群后，可浏览进入社群前消息的条数
+
+zim.updateCommunityVisitorFetchMessageCount(count, communityID)
+    .then((result: ZIMCommunityVisitorFetchMessageCountUpdatedResult) => {
+        // 更新成功，result.communityID 为社群 ID
+    })
+    .catch((err: ZIMError) => {
+        // 更新失败
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+const count = 20; // 游客进入社群后，可浏览进入社群前消息的条数
+
+try {
+    ZIMCommunityVisitorFetchMessageCountUpdatedResult result =
+        await ZIM.getInstance()!.updateCommunityVisitorFetchMessageCount(count, communityID);
+    // 更新成功，result.communityID 为社群 ID
+} on PlatformException catch (onError) {
+    // 更新失败
+}
+```
+</CodeGroup>
+:::
+
+## 更新游客可见消息时间范围
+
+社群所有者（群主）或管理员可调用 {getPlatformData(props,updateCommunityVisitorFetchMessageDurationMap)} 接口，更新游客进入社群后可浏览的“进入社群前消息”的时间范围，单位为秒。
+
+<Warning title="注意">
+- 仅社群所有者和管理员（Role 为 `1` 或 `2`）可调用此接口。
+- 游客可见入社群前消息“条数”与“时间范围”取交集，即为游客真实可见消息。
+</Warning>
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+int duration = 86400; // 游客进入社群后，可浏览进入社群前消息的时间范围，单位为秒
+
+zim.updateCommunityVisitorFetchMessageDuration(duration, communityID,
+    new ZIMCommunityVisitorFetchMessageDurationUpdatedCallback() {
+        @Override
+        public void onCommunityVisitorFetchMessageDurationUpdated(String communityID, ZIMError errorInfo) {
+            if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+                // 更新成功
+            }
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+NSInteger duration = 86400; // 游客进入社群后，可浏览进入社群前消息的时间范围，单位为秒
+
+[zim updateCommunityVisitorFetchMessageDuration:duration communityID:communityID callback:^(NSString * _Nonnull communityID, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // 更新成功
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+int32_t duration = 86400; // 游客进入社群后，可浏览进入社群前消息的时间范围，单位为秒
+
+zim_->updateCommunityVisitorFetchMessageDuration(duration, communityID,
+    [=](const std::string &communityID, const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // 更新成功
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+const duration = 86400; // 游客进入社群后，可浏览进入社群前消息的时间范围，单位为秒
+
+zim.updateCommunityVisitorFetchMessageDuration(duration, communityID)
+    .then((result: ZIMCommunityVisitorFetchMessageDurationUpdatedResult) => {
+        // 更新成功，result.communityID 为社群 ID
+    })
+    .catch((err: ZIMError) => {
+        // 更新失败
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+const duration = 86400; // 游客进入社群后，可浏览进入社群前消息的时间范围，单位为秒
+
+try {
+    ZIMCommunityVisitorFetchMessageDurationUpdatedResult result =
+        await ZIM.getInstance()!.updateCommunityVisitorFetchMessageDuration(duration, communityID);
+    // 更新成功，result.communityID 为社群 ID
+} on PlatformException catch (onError) {
+    // 更新失败
+}
+```
+</CodeGroup>
+:::
+
+## 游客访问限制信息
+
+社群的游客访问限制信息由 {getPlatformData(props,ZIMCommunityVisitorAccessInfoMap)} 表示，包含游客可拉取消息的数量与时间范围。该信息作为字段 `visitorAccessInfo` 包含在社群完整信息 {getPlatformData(props,ZIMCommunityFullInfoMap)} 中，可通过 [以游客身份进入社群](#以游客身份进入社群) 或 [查询社群信息](./community-management.mdx#查询社群信息) 获取。
+
+### ZIMCommunityVisitorAccessInfo 字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| fetchMessageCount | int | 游客可拉取的消息数量 |
+| fetchMessageDuration | long | 游客可拉取消息的时间范围，单位为秒 |
+
+### ZIMCommunityFullInfo.visitorAccessInfo 字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| visitorAccessInfo | ZIMCommunityVisitorAccessInfo | 社群游客访问限制信息 |
+
+## 常见错误码
+
+<Accordion title="常见错误码">
+
+| 错误码 | 说明 | 处理建议 |
+|--------|------|----------|
+| 6000011 | 用户未注册 | 确认用户是否已完成登录 |
+| 6001004 | 社群不存在 | 确认 communityID 是否正确 |
+| 6001006 | 已经是社群成员 | 正式成员无需以游客身份进入，请直接访问社群 |
+| 6001007 | 社群权限错误 | 游客访问了无权限的接口，或非管理员尝试更新游客可见消息配置 |
+| 6001081 | 用户已经是游客 | 当前用户已以游客身份处于该社群，请勿重复进入 |
+| 6001082 | 用户不是游客 | 游客已离开社群，无需再次调用离开接口 |
+
+</Accordion>
+
+## 常见问题
+
+**Q: 游客模式需要什么 SDK 版本？**
+A: 游客模式需要 ZIM SDK 3.2.0 及以上版本。
+
+**Q: 游客可以发送消息吗？**
+A: 不可以。游客对社群内容是“仅浏览”，只能获取社群资料、社群人数、频道列表及可见消息列表，无法发送消息或执行任何管理操作。
+
+**Q: 谁可以设置游客可见消息的范围？**
+A: 只有社群所有者（群主，Role 为 `1`）和管理员（Role 为 `2`）可以设置游客可见的消息条数与时间范围。
+
+**Q: 游客实际可见的消息是如何计算的？**
+A: 以访问社群瞬间、频道的会话消息序号（`conv msg seq`）作为起始点，再与管理员设置的“消息条数”和“时间范围”取交集，即为游客真实可见的消息。
+
+**Q: 游客身份和正式成员身份可以同时存在吗？**
+A: 游客身份是逻辑意义上的身份，与成员 Role 不同。用户已是正式成员时无需再以游客身份进入同一社群。
+
+**Q: 游客如何转为正式成员？**
+A: 根据社群的 `joinMode` 走正式加入流程：
+- `ANY`：调用 `joinCommunity`，成功后自动转正；
+- `AUTH`：调用 `sendCommunityJoinApplication`，审批通过后自动转正；
+- `FORBID`：不能加入，不会转正。
+
+**Q: 游客转正前需要先调用 `quitCommunityAsVisitor` 退出游客身份吗？**
+A: 不需要。审批通过或 `joinCommunity` 成功后，SDK 会自动将本地游客态转换为正式成员态，并完成游客缓存合并与清理。开发者不要在客户端自行切换身份，应以服务端回调/查询结果为准。
+
+## 相关参考
+
+- [社群管理](./community-management.mdx)
+- [社群成员管理](./community-member-management.mdx)
+- [频道消息管理](./channel-message-management.mdx)
+- [ZIM 错误码](../../SDK%20Error%20Codes/ZIM.mdx)

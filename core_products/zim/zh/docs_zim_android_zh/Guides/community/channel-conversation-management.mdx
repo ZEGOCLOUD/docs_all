@@ -33,6 +33,21 @@ export const onConversationChangedMap = {
 export const ZIMCommunityChannelMap = {
   'Android': <a href="@-ZIMCommunityChannel" target="_blank">ZIMCommunityChannel</a>,
 }
+export const queryConversationListMap = {
+  'Android': <a href="@queryConversationList" target="_blank">queryConversationList</a>,
+  'iOS,mac': <a href="@queryConversationListWithConfig:callback:" target="_blank">queryConversationListWithConfig</a>,
+  'Flutter': <a href="https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/queryConversationList.html" target="_blank">queryConversationList</a>,
+}
+export const updateConversationPinnedStateMap = {
+  'Android': <a href="@updateConversationPinnedState" target="_blank">updateConversationPinnedState</a>,
+  'iOS,mac': <a href="@updateConversationPinnedState:conversationID:conversationType:callback:" target="_blank">updateConversationPinnedState</a>,
+  'Flutter': <a href="https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/updateConversationPinnedState.html" target="_blank">updateConversationPinnedState</a>,
+}
+export const setConversationMarkMap = {
+  'Android': <a href="@setConversationMark" target="_blank">setConversationMark</a>,
+  'iOS,mac': <a href="@setConversationMark:enable:conversationInfos:callback:" target="_blank">setConversationMark</a>,
+  'Flutter': <a href="https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/setConversationMark.html" target="_blank">setConversationMark</a>,
+}
 
 # 频道会话管理
 
@@ -47,6 +62,7 @@ export const ZIMCommunityChannelMap = {
 - 设置/清除频道会话草稿
 - 设置频道会话免打扰
 - 监听频道会话变更
+- 将频道会话同步到会话列表
 
 ## 前提条件
 
@@ -240,7 +256,7 @@ zim.clearConversationUnreadMessageCount(conversationID, conversationType)
 try {
     await ZIM.getInstance()!.clearConversationUnreadMessageCount(
         channel.conversationID,
-        ZIMConversationType.CommunityChannel,
+        ZIMConversationType.communityChannel,
     );
     // 未读数已清零
 } on PlatformException catch (onError) {
@@ -329,7 +345,7 @@ try {
     await ZIM.getInstance()!.setConversationDraft(
         '这是草稿内容',
         channel.conversationID,
-        ZIMConversationType.CommunityChannel,
+        ZIMConversationType.communityChannel,
     );
     // 草稿保存成功
 } on PlatformException catch (onError) {
@@ -418,12 +434,170 @@ try {
     await ZIM.getInstance()!.setConversationNotificationStatus(
         ZIMConversationNotificationStatus.doNotDisturb,
         channel.conversationID,
-        ZIMConversationType.CommunityChannel,
+        ZIMConversationType.communityChannel,
     );
     // 设置成功
 } on PlatformException catch (onError) {
     // 设置失败
 }
+```
+</CodeGroup>
+:::
+
+## 将频道会话同步到会话列表
+
+开启该功能后，社群的频道会话会与单聊、群聊会话一起进入 ZIM 的会话列表：您可以通过 {getPlatformData(props,queryConversationListMap)} 一次性拉取包含频道会话的完整列表，并通过 {getPlatformData(props,onConversationChangedMap)} 感知频道会话的最新消息、未读数、草稿等变更，无需为社群频道单独维护一套列表。
+
+同步到会话列表中的频道会话，其会话类型为 `COMMUNITY_CHANNEL`，`conversationID` 仍为频道对象 {getPlatformData(props,ZIMCommunityChannelMap)} 中的 `conversationID` 字段。
+
+<Warning title="注意">
+- 该功能默认关闭，使用前请联系 ZEGO 技术支持开通。未开通时，频道会话不会出现在会话列表中，也不会产生 `COMMUNITY_CHANNEL` 类型的会话变更通知。
+- 当前版本仅支持将社群的**默认频道**同步到会话列表，其余频道请继续通过 {getPlatformData(props,queryCommunityChannelListMap)} 获取和管理。
+</Warning>
+
+### 支持的会话管理能力
+
+频道会话进入会话列表后，可使用的会话管理接口与本文前述能力保持一致：
+
+| 会话管理能力 | 对应接口 | 是否支持 |
+| --- | --- | --- |
+| 清除会话未读数 | {getPlatformData(props,clearConversationUnreadMessageCountMap)} | 支持 |
+| 设置会话草稿 | {getPlatformData(props,setConversationDraftMap)} | 支持 |
+| 设置会话免打扰 | {getPlatformData(props,setConversationNotificationStatusMap)} | 支持 |
+| 会话置顶 | {getPlatformData(props,updateConversationPinnedStateMap)} | 暂不支持 |
+| 会话标记 | {getPlatformData(props,setConversationMarkMap)} | 暂不支持 |
+
+### 获取频道会话所属的社群 ID
+
+`ZIMConversation` 新增 `relatedID` 属性，用于标识会话所关联的对象 ID。当会话类型为 `COMMUNITY_CHANNEL` 时，该值为频道所属社群的 `communityID`。
+
+在会话列表场景中，您可以直接通过 `relatedID` 定位频道会话所属的社群，用于查询社群公共信息、拉取社群成员列表等场景，无需自行维护 `conversationID` 与 `communityID` 的映射关系。
+
+<Note title="说明">
+
+当前版本中，仅当会话类型为 `COMMUNITY_CHANNEL` 时，`relatedID` 的含义有明确定义。
+</Note>
+
+### 监听社群频道会话更新
+
+频道会话的新增、更新与删除，与单聊、群聊会话一样通过 {getPlatformData(props,onConversationChangedMap)} 回调通知。您可以在回调中筛选出类型为 `COMMUNITY_CHANNEL` 的会话，更新社群频道在会话列表中的展示。
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+// 注册 SDK 事件通知回调
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onConversationChanged(ZIM zim, ArrayList<ZIMConversationChangeInfo> conversationChangeInfoList) {
+        for (ZIMConversationChangeInfo changeInfo : conversationChangeInfoList) {
+            ZIMConversation conversation = changeInfo.conversation;
+            if (conversation.type != ZIMConversationType.COMMUNITY_CHANNEL) {
+                // 非频道会话，按原有逻辑处理
+                continue;
+            }
+            // changeInfo.action：ADDED（新增会话）、UPDATED（会话更新）、DELETED（会话删除）
+            String conversationID = conversation.conversationID;    // 频道会话 ID
+            String communityID = conversation.relatedID;            // 该频道会话所属的社群 ID
+            int unreadMessageCount = conversation.unreadMessageCount;
+            String draft = conversation.draft;
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+// 注册 SDK 事件通知回调
+[self.zim setEventHandler:self];
+
+...
+
+- (void)zim:(ZIM *)zim
+conversationChanged:(NSArray<ZIMConversationChangeInfo *> *)conversationChangeInfoList {
+    for (ZIMConversationChangeInfo *changeInfo in conversationChangeInfoList) {
+        ZIMConversation *conversation = changeInfo.conversation;
+        if (conversation.type != ZIMConversationTypeCommunityChannel) {
+            // 非频道会话，按原有逻辑处理
+            continue;
+        }
+        // changeInfo.action：Added（新增会话）、Updated（会话更新）、Deleted（会话删除）
+        NSString *conversationID = conversation.conversationID;    // 频道会话 ID
+        NSString *communityID = conversation.relatedID;            // 该频道会话所属的社群 ID
+        unsigned int unreadMessageCount = conversation.unreadMessageCount;
+        NSString *draft = conversation.draft;
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+// 注册 SDK 事件通知回调
+class ZIMEventHandlerImpl : public zim::ZIMEventHandler {
+    void onConversationChanged(
+        zim::ZIM * /*zim*/,
+        const std::vector<zim::ZIMConversationChangeInfo> &conversationChangeInfoList) override {
+        for (const auto &changeInfo : conversationChangeInfoList) {
+            const auto &conversation = changeInfo.conversation;
+            if (!conversation ||
+                conversation->type != zim::ZIM_CONVERSATION_TYPE_COMMUNITY_CHANNEL) {
+                // 非频道会话，按原有逻辑处理
+                continue;
+            }
+            // changeInfo.action：ADDED（新增会话）、UPDATED（会话更新）、DELETED（会话删除）
+            std::string conversationID = conversation->conversationID; // 频道会话 ID
+            std::string communityID = conversation->relatedID;         // 该频道会话所属的社群 ID
+            unsigned int unreadMessageCount = conversation->unreadMessageCount;
+            std::string draft = conversation->draft;
+        }
+    }
+};
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="示例代码"
+// 注册 SDK 事件通知回调
+zim.on('conversationChanged', (zim: ZIM, data: ZIMConversationChangedEventResult) => {
+    data.infoList.forEach((info) => {
+        const conversation = info.conversation;
+        if (conversation.type !== ZIMConversationType.CommunityChannel) {
+            // 非频道会话，按原有逻辑处理
+            return;
+        }
+        // info.action：Added（新增会话）、Deleted（会话删除）、Updated（会话更新）
+        const conversationID = conversation.conversationID;  // 频道会话 ID
+        const communityID = conversation.relatedID;          // 该频道会话所属的社群 ID
+        const unreadMessageCount = conversation.unreadMessageCount;
+        const draft = conversation.draft;
+    });
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+// 注册 SDK 事件通知回调
+ZIMEventHandler.onConversationChanged =
+    (ZIM zim, List<ZIMConversationChangeInfo> conversationChangeInfoList) {
+    for (final ZIMConversationChangeInfo changeInfo in conversationChangeInfoList) {
+        final ZIMConversation? conversation = changeInfo.conversation;
+        if (conversation?.type != ZIMConversationType.communityChannel) {
+            // 非频道会话，按原有逻辑处理
+            continue;
+        }
+        // changeInfo.action：added（新增会话）、updated（会话更新）、deleted（会话删除）
+        final conversationID = conversation!.conversationID;  // 频道会话 ID
+        final communityID = conversation.relatedID;           // 该频道会话所属的社群 ID
+        final unreadMessageCount = conversation.unreadMessageCount;
+        final draft = conversation.draft;
+    }
+};
 ```
 </CodeGroup>
 :::

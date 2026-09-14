@@ -36,8 +36,17 @@ export const ZIMConversationMessagesAllDeletedCallbackMap = {
 }
 export const messageDeletedMap = {
   'Android': <a href='@onMessageDeleted' target='_blank'>onMessageDeleted</a>,
+  'window': <a href='@onMessageDeleted' target='_blank'>onMessageDeleted</a>,
   'iOS': <a href='@ZIMMessageDeleted' target='_blank'>messageDeleted</a>,
   'mac': <a href='@ZIMMessageDeleted' target='_blank'>messageDeleted</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onMessageDeleted.html' target='_blank'>onMessageDeleted</a>,
+}
+export const queryGroupMemberInfoMap = {
+  'Android': <a href='@queryGroupMemberInfo' target='_blank'>queryGroupMemberInfo</a>,
+  'window': <a href='@queryGroupMemberInfo' target='_blank'>queryGroupMemberInfo</a>,
+  'iOS': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~objective-c_ios~protocol~ZIM#query-group-member-info-by-user-id-group-id-callback' target='_blank'>queryGroupMemberInfoByGroupID</a>,
+  'mac': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~objective-c_macos~protocol~ZIM#query-group-member-info-by-user-id-group-id-callback' target='_blank'>queryGroupMemberInfoByGroupID</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/queryGroupMemberInfo.html' target='_blank'>queryGroupMemberInfo</a>,
 }
 
 
@@ -49,7 +58,7 @@ export const messageDeletedMap = {
 
 ZIM SDK 支持单聊消息、群组消息、房间消息等的收发，以及查询历史消息、删除消息等功能。可广泛应用于娱乐社交、电商购物、在线教育、互动直播等多种场景下。
 
-本文档介绍了如何使用 ZIM SDK 的接口，实现删除某个会话中指定的消息，或者删除某个会话的全部消息的功能。
+本文档介绍了如何使用 ZIM SDK 的接口，实现删除某个会话中指定的消息、删除某个会话的全部消息，以及为会话内所有人删除指定消息的功能。
 
 <Warning title="注意">
 
@@ -60,6 +69,10 @@ ZIM SDK 目前支持删除“单聊/群组”会话消息，暂不支持删除�
 ## 实现流程
 
 ZIM SDK 支持删除某个会话中指定的消息，或者删除某个会话的全部消息。删除消息分为“删除本地消息记录”和“删除服务端消息记录”，开发者可以通过 {getPlatformData(props,ZIMMessageDeleteConfigMap)} 对象，设置删除消息相关的高级属性配置。
+
+:::if{props.platform="undefined|iOS|mac|window|Flutter"}
+删除操作默认只对当前用户生效，如需让会话内的所有成员都不再看到指定的消息，请参考 [为所有人删除消息](#为所有人删除消息)。
+:::
 
 以客户端 A 删除与客户端 B 的某些消息、或全部消息为例：
 
@@ -85,9 +98,9 @@ ArrayList<ZIMMessage> deleteMessageList = new ArrayList();
 ZIMMessageDeleteConfig config = new ZIMMessageDeleteConfig();
 config.isAlsoDeleteServerMessage = false;
 
-zim.deleteMessages(deleteMessageList, conversationID, ZIMConversationType.Peer, config, new ZIMMessageDeletedCallback() {
+zim.deleteMessages(deleteMessageList, conversationID, ZIMConversationType.PEER, config, new ZIMMessageDeletedCallback() {
     @Override
-    public void onMessageDeleted(ZIMError error) {
+    public void onMessageDeleted(String conversationID, ZIMConversationType conversationType, ZIMError errorInfo) {
         // 开发者可以通过该回调监听消息是否删除成功。
     }
 });
@@ -116,7 +129,7 @@ std::vector<std::shared_ptr<ZIMMessage>> messageList;
 zim::ZIMMessageDeleteConfig config;
 //用于确定是否删除服务器消息
 config.isAlsoDeleteServerMessage = true;
-zim_->deleteMessages(messageList,"conversationID",zim::ZIMConversationTypePeer,config,callback);
+zim_->deleteMessages(messageList, "conversationID", zim::ZIM_CONVERSATION_TYPE_PEER, config, callback);
 
 ```
 </CodeGroup>
@@ -159,6 +172,170 @@ zim.deleteMessages(deleteMessageList, conversationID, conversationType, config)
 </CodeGroup>
 :::
 
+:::if{props.platform="undefined|iOS|mac|window|Flutter"}
+### 为所有人删除消息
+
+<Note title="说明">
+
+本功能自 ZIM SDK 3.2.0 版本开始支持。
+</Note>
+
+默认情况下，删除操作只对当前用户生效，会话内的其他成员仍可看到被删除的消息。如果需要让会话内的所有成员都不再看到指定的消息，请在调用 {getPlatformData(props,deleteMessagesMap)} 时，将 {getPlatformData(props,ZIMMessageDeleteConfigMap)} 的 `isAlsoDeleteForEveryone` 设置为 `true` 。
+
+删除成功后：
+
+- 操作者通过 {getPlatformData(props,ZIMMessageDeletedCallbackMap)} 回调得知删除结果。
+- 会话内的其他成员通过 {getPlatformData(props,messageDeletedMap)} 回调收到通知，回调参数 `ZIMMessageDeletedInfo` 中，`messageDeleteType` 为“删除指定消息”类型，`messageList` 为被删除的消息列表。
+
+<Warning title="注意">
+
+- `isAlsoDeleteForEveryone` 只在 {getPlatformData(props,deleteMessagesMap)} 接口生效，{getPlatformData(props,deleteAllMessageMap)} 和 {getPlatformData(props,deleteAllConversationMessagesWithConfigMap)} 不支持该配置。
+- 使用该配置时，必须同时将 `isAlsoDeleteServerMessage` 设置为 `true` 。
+- 单次最多可删除 100 条消息。
+- 本操作为整批生效：只要传入的消息列表中存在任意一条不满足条件的消息（超出有效期、无操作权限等），本次调用将整批失败，列表中其余合法的消息也不会被删除。
+</Warning>
+
+#### 有效期
+
+只有在有效期内的消息才能为所有人删除，有效期从消息的发送时间开始计算。默认有效期为 24 小时，最长支持配置至 7 天，如需修改配置，请联系 ZEGO 技术支持。
+
+建议业务层根据消息的 `timestamp` 与当前时间的差值，决定是否向用户展示“为所有人删除”的入口。若因设备本地时间不准确导致该操作被误调用，接口会返回错误码进行兜底。
+
+#### 操作权限
+
+会话成员可以为所有人删除的消息范围如下：
+
+| 会话类型 | 可以为所有人删除的消息 |
+| --- | --- |
+| 单聊 | 只能删除自己发送的消息，不支持删除对方发送的消息。 |
+| 群聊 | 普通成员只能删除自己发送的消息；管理员可以删除自己和普通成员发送的消息；群主可以删除自己、管理员和普通成员发送的消息。 |
+
+在群聊场景下，建议业务层先通过 {getPlatformData(props,queryGroupMemberInfoMap)} 查询操作者与消息发送者在群组中的身份，再决定是否向用户展示“为所有人删除”的入口。
+
+<Note title="说明">
+
+对于群定向消息，只有该消息的目标成员会收到删除通知，非目标成员不受影响。
+</Note>
+
+#### 错误码
+
+调用失败时，常见的错误码如下：
+
+| 错误码 | 说明 |
+| --- | --- |
+| 6000001 | 参数错误。未同时将 `isAlsoDeleteServerMessage` 设置为 `true` ，或单次删除的消息超过 100 条。 |
+| 6000288 | 待删除的消息已超出可为所有人删除的有效期。 |
+| 6000285 | 单聊场景下无操作权限，即尝试删除对方发送的消息。 |
+| 6000541 | 群聊场景下无操作权限，即尝试删除权限高于或等于自己的成员所发送的消息。 |
+
+为所有人删除消息，以及接收删除通知的示例代码如下：
+:::
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="示例代码"
+// 为会话内的所有人删除指定消息
+String conversationID = "xxxx";
+ArrayList<ZIMMessage> deleteMessageList = new ArrayList<>();
+
+ZIMMessageDeleteConfig config = new ZIMMessageDeleteConfig();
+// 为所有人删除消息时，必须同时删除服务端消息
+config.isAlsoDeleteServerMessage = true;
+config.isAlsoDeleteForEveryone = true;
+
+zim.deleteMessages(deleteMessageList, conversationID, ZIMConversationType.GROUP, config, new ZIMMessageDeletedCallback() {
+    @Override
+    public void onMessageDeleted(String conversationID, ZIMConversationType conversationType, ZIMError errorInfo) {
+        // 开发者可以通过该回调监听消息是否删除成功。
+    }
+});
+
+// 会话内的其他成员通过该回调感知消息被删除
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onMessageDeleted(ZIM zim, ZIMMessageDeletedInfo deletedInfo) {
+        if (deletedInfo.messageDeleteType == ZIMMessageDeleteType.MESSAGE_LIST_DELETED) {
+            // deletedInfo.messageList 为被删除的消息列表，可于此处刷新 UI
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="示例代码"
+// 为会话内的所有人删除指定消息
+NSMutableArray *deleteMessageList = [[NSMutableArray alloc] init];
+
+ZIMMessageDeleteConfig *config = [[ZIMMessageDeleteConfig alloc] init];
+// 为所有人删除消息时，必须同时删除服务端消息
+config.isAlsoDeleteServerMessage = YES;
+config.isAlsoDeleteForEveryone = YES;
+
+[self.zim deleteMessages:deleteMessageList conversationID:conversationID conversationType:ZIMConversationTypeGroup config:config callback:^(NSString * _Nonnull conversationID, ZIMConversationType conversationType, ZIMError * _Nonnull errorInfo) {
+    // 开发者可以通过该回调监听消息是否删除成功。
+}];
+
+// 会话内的其他成员通过该回调感知消息被删除
+- (void)zim:(ZIM *)zim messageDeleted:(ZIMMessageDeletedInfo *)deletedInfo {
+    if (deletedInfo.messageDeleteType == ZIMMessageDeleteTypeMessageListDeleted) {
+        // deletedInfo.messageList 为被删除的消息列表，可于此处刷新 UI
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="示例代码"
+// 为会话内的所有人删除指定消息
+std::vector<std::shared_ptr<zim::ZIMMessage>> messageList;
+
+zim::ZIMMessageDeleteConfig config;
+// 为所有人删除消息时，必须同时删除服务端消息
+config.isAlsoDeleteServerMessage = true;
+config.isAlsoDeleteForEveryone = true;
+
+zim_->deleteMessages(messageList, "conversationID", zim::ZIM_CONVERSATION_TYPE_GROUP, config, callback);
+
+// 会话内的其他成员通过该回调感知消息被删除
+void onMessageDeleted(zim::ZIM *zim, const zim::ZIMMessageDeletedInfo &deletedInfo) override {
+    if (deletedInfo.messageDeleteType == zim::ZIM_MESSAGE_DELETE_TYPE_MESSAGE_LIST_DELETED) {
+        // deletedInfo.messageList 为被删除的消息列表，可于此处刷新 UI
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="示例代码"
+// 为会话内的所有人删除指定消息
+String conversationID = 'xxxx';
+List<ZIMMessage> messageList = [];
+
+ZIMMessageDeleteConfig config = ZIMMessageDeleteConfig();
+// 为所有人删除消息时，必须同时删除服务端消息
+config.isAlsoDeleteServerMessage = true;
+config.isAlsoDeleteForEveryone = true;
+
+await ZIM
+    .getInstance()
+    !.deleteMessages(
+        messageList, conversationID, ZIMConversationType.group, config)
+    .then((value) => {})
+    .catchError((onError) {});
+
+// 会话内的其他成员通过该回调感知消息被删除
+ZIMEventHandler.onMessageDeleted = (zim, deletedInfo) {
+    if (deletedInfo.messageDeleteType == ZIMMessageDeleteType.messageListDeleted) {
+        // deletedInfo.messageList 为被删除的消息列表，可于此处刷新 UI
+    }
+};
+```
+</CodeGroup>
+:::
+
 ### 删除指定会话的全部消息
 
 如果客户端 A 想要删除与客户端 B 的指定会话的全部消息记录：
@@ -178,9 +355,9 @@ String conversationID = "xxxx";
 ZIMMessageDeleteConfig config = new ZIMMessageDeleteConfig();
 config.isAlsoDeleteServerMessage = false;
 
-zim.deleteAllMessage(conversationID, ZIMConversationType.Peer, config, new ZIMMessageDeletedCallback() {
+zim.deleteAllMessage(conversationID, ZIMConversationType.PEER, config, new ZIMMessageDeletedCallback() {
     @Override
-    public void onMessageDeleted(ZIMError error) {
+    public void onMessageDeleted(String conversationID, ZIMConversationType conversationType, ZIMError errorInfo) {
         // 开发者可以通过该回调监听消息是否删除成功。
     }
 });
@@ -210,7 +387,7 @@ config.isAlsoDeleteServerMessage = true;
 ZIMMessageDeleteConfig config;
 config.isAlsoDeleteServerMessage = true;
 
-zim_->deleteAllMessage("converastionID",zim::ZIMConversationTypePeer,config,callback);
+zim_->deleteAllMessage("conversationID", zim::ZIM_CONVERSATION_TYPE_PEER, config, callback);
 ```
 
 </CodeGroup>
@@ -276,7 +453,7 @@ config.isAlsoDeleteServerMessage = true;
 
 zim.deleteAllConversationMessages(config, new ZIMConversationMessagesAllDeletedCallback() {
     @Override
-    public void onConversationMessagesAllDeleted(ZIMError error) {
+    public void onConversationMessagesAllDeleted(ZIMError errorInfo) {
         // 开发者可以通过该回调监听消息是否删除成功。
     }
 });
