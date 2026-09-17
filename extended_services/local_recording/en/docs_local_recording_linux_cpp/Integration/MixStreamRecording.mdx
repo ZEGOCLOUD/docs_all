@@ -1,0 +1,209 @@
+---
+date: '2026-03-30'
+---
+# Record Mixed Stream
+- - - 
+
+## Feature Overview
+
+The Local Server Recording SDK supports mixing the audio/video streams of all users in a room into one view and then recording it. After integrating the SDK, you can start using its mixed-stream recording feature.
+
+## Prerequisites
+
+
+- The ZEGOCLOUD Local Server Recording SDK has been integrated into your project. For details, see [Quick Start - Integration](./SDK%20Integration.mdx).
+- You have created a project in the [ZEGOCLOUD Console](https://console.zegocloud.com) and obtained a valid AppID. For details, see "Project Information" in [Console - Project Management](/console/project-info).
+
+<Warning title="Note">
+
+ZEGOCLOUD Local Server Recording SDK versions earlier than ga01596a1c8 (released before 2022-03-23) require you to apply for a valid AppID in the [ZEGOCLOUD Console](https://console.zegocloud.com) and contact ZEGOCLOUD Technical Support to obtain the AppSign. If you need to upgrade the authentication method, see [How to upgrade from AppSign authentication to Token authentication](https://www.zegocloud.com/docs/faq/express-token-upgrade).
+</Warning>
+
+
+## Steps
+
+### Set the callback listener
+
+Before initialization, you need to inherit and implement ICallback, and set the callback listener.
+
+- API prototype:
+
+  `ZEGO_API bool SetCallback(ICallback* pCB)`
+    
+- Parameters:
+
+  pCB: Pointer to the callback object.
+  
+- Note:
+
+  Before initializing the SDK, you can call the following API as needed:
+
+  [SetLogDirAndSize](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#a3b3fbef85f70e1796df124616ad3eb5e) sets the log file path and size
+    
+### Initialize the SDK
+
+Call the [InitSDK](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#af8fcc2e5a69e83075637631d68fcf4ea) API to initialize the SDK, and pass the obtained AppID into the parameter "uiAppID".
+
+- API prototype:
+
+  ```cpp
+  ZEGO_API bool InitSDK(unsigned int uiAppID)
+  ```
+    
+- Parameters:
+
+  `uiAppID`: The numeric ID issued by ZEGO, the unique identifier of each developer.
+
+- Asynchronous callback interface:
+
+  ```cpp
+  class ICallback
+  {
+  public:
+      virtual void OnInitSDK(int errorCode) {}
+  }
+  ```
+  errorCode == 0 indicates that the initialization succeeded.
+
+### Set the token
+
+Before logging in to a room, call the [SetToken](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#aa0b8eca203fb7b2f40b69f1c853d29f4) API to pass the Token into the SDK.
+
+For how to obtain the Token, see [Authenticate with Token](/local-recording-linux-cpp/integration/user-access-control).
+
+- API prototype:
+
+  ```cpp
+  ZEGO_API void SetToken(const char *pszToken, const char *pszRoomID);
+  ```
+
+- Parameters:
+
+  `pszToken`: The authentication Token.
+  `pszRoomID`: Room ID, required.
+
+### Log in to the room
+
+You need to log in to the room before recording.
+
+- API prototype:
+
+  ```cpp
+  ZEGO_API bool LoginRoom(const char* pszRoomID)
+  ```
+    
+- Parameters:  
+
+  `pszRoomID`: Room ID, the ID of the room that is publishing streams.
+  
+- Asynchronous callback interface:
+
+  ```cpp
+  class ICallback
+  {
+  public:
+      virtual void OnLoginRoom(int errorCode, const char *pszRoomID) = 0;
+  }
+  ```
+    
+###   Start recording
+
+
+1. This API must be called after the initialization succeeds.
+2. It is recommended to start recording based on the added stream information after logging in to the room and receiving the [OnStreamUpdate](https://doc-zh.zego.im/API/ServerRecord-en/html/class_z_e_g_o_1_1_l_i_v_e_r_o_o_m_1_1_i_callback.html#a6d0fe744187badddf744918869c59dfd) stream information update callback.
+3. Before starting recording, you can call [GetMaxRecordCount](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#ac0a46bc40d185af50d12dc3b210c7bc7) to get the maximum number of streams the SDK supports recording simultaneously, and handle the number of concurrently recorded streams based on its value.
+
+- API prototype:
+
+  ```cpp
+  ZEGO_API bool StartRecordMixStream(ZegoMixStreamRecordConfig *pConfig,
+                                   const char *pszRoomID = nullptr)
+  ```
+    
+- Parameters:  
+
+  `pConfig`: The mixed-stream recording configuration. See [ZegoMixStreamRecordConfig](https://doc-zh.zego.im/API/ServerRecord-en/html/struct_z_e_g_o_1_1_l_i_v_e_r_o_o_m_1_1_zego_mix_stream_record_config.html).
+  
+- Asynchronous callback interface:
+
+  ```cpp
+  class ICallback
+  {
+  public:
+      virtual void OnStreamRecordBegin(const char* pszStreamID, const char *pszPathAndName) = 0;
+      virtual void OnMixStreamRecordUpdate(const char** ppszStreamID, int nStreamCount) = 0;
+  }
+  ```
+  When recording starts successfully, the `OnStreamRecordBegin` callback is received, and when a stream with audio/video data is successfully pulled, the `OnMixStreamRecordUpdate` callback is received.
+      
+- Note:
+ 
+  If you need to record single streams and the mixed stream at the same time, call [EnableSingleAndMixRecordMode](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#a53a179486c995ffceea94dfaec3935e4) before starting recording to enable the mode of recording single streams and the mixed stream simultaneously; **this mode consumes considerable system resources, and you can only start mixed-stream recording first and then start single-stream recording; stopping mixed-stream recording also stops all single-stream recordings at the same time**. In this mode, the SDK has a limitation: mixed-stream recording mixes in all streams being recorded by single-stream recording. Even if a single stream being recorded is not set as an input stream of the mixed stream, as long as this single stream has audio, the audio will also be recorded by the mixed-stream recording.
+      
+### Update the mixed-stream configuration
+
+When you need to add input streams, when the original input streams change, or when the mixed-stream output configuration changes, reconstruct the mixed-stream configuration and call the API for updating the mixed-stream configuration.
+
+- API prototype:
+
+  ```cpp
+  ZEGO_API bool UpdateInputStreamConfig(ZegoStreamConfig *pInputStream, int nInputStreamCount,
+                                      const char *pszRoomID = nullptr)
+  ```
+    
+- Asynchronous callback interface:
+
+  ```cpp
+  class ICallback
+  {
+  public:
+      virtual void OnMixStreamRecordUpdate(const char** ppszStreamID, int nStreamCount) = 0;
+  }
+  ```
+  After the mixing succeeds, a callback containing the list of single-stream IDs participating in the mixed-stream recording is returned, which only includes the stream IDs whose data was successfully pulled.
+  **Note: This callback is triggered whenever the streams participating in the mixed-stream recording change, for example, when recording starts or a stream encounters an exception during recording.**
+  
+### Stop recording
+
+- API prototype:
+
+  ```cpp
+  ZEGO_API bool StopRecordMixStream(const char *pszRoomID = nullptr)
+  ```
+    
+- Asynchronous callback interface:
+
+  ```cpp
+  class ICallback
+  {
+  public:
+      virtual void OnStreamRecordEnd(const char* pszStreamID, const char *pszPathAndName, RecordEndReason reason) = 0;
+  }
+  ```
+    
+- Note:
+
+  It is recommended to do the following when recording is no longer needed:
+  1. Call [LogoutRoom](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#a02b98c29388acfea615e98580dbf37be) to exit the room.
+  2. Call `LIVEROOM::SetCallback(nullptr);` to remove the callback listener.
+  3. Call [UnInitSDK](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#ad22d5b7f5f22a4f2339d7a09fbc8e149) to uninitialize the SDK.
+
+##   API Reference
+
+| Method | Description |
+|-------|--------|
+| [SetCallback](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#ac65bb0a987f3c4c2339869c8d42317ca) | Sets the callback listener. |
+| [InitSDK](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#af8fcc2e5a69e83075637631d68fcf4ea) | Initializes the SDK. |
+| [LoginRoom](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#ac13869a794f456b739a5c9240e8f752c) | Logs in to a room. |
+| [GetMaxRecordCount](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#ac0a46bc40d185af50d12dc3b210c7bc7) | Gets the maximum number of streams the SDK supports recording simultaneously. |
+| [EnableSingleAndMixRecordMode](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#a53a179486c995ffceea94dfaec3935e4) | Sets whether to enable the mode of recording single streams and the mixed stream simultaneously; enabling this mode consumes considerable system resources. |
+| [StartRecordMixStream](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#a6a117184a597fe9cb7b6bdce03604b39) | Starts mixed-stream recording. |
+| [UpdateInputStreamConfig](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#ae9f7fbef19a9dde6908e8378df4df71f) | Updates the input stream configuration of mixed-stream recording. |
+| [StopRecordMixStream](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#af59c73eed250520f562ebdbff1bb6776) | Stops mixed-stream recording. |
+| [SetMuxerOutType](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#a079d86fab862ef7691b72aae74a825b0) | Sets how the recorded data is output. |
+| [SetLogDirAndSize](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#a3b3fbef85f70e1796df124616ad3eb5e) | Sets the SDK log path and the size of a single log file. |
+| [SetConfig](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#a06880edde0dc25a759e0227b34f0e059) | Sets the configuration information. |
+| [SetMuxerCacheSize](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#a3f5e354e62a78ed4d0145f46cc06ed2c) | Sets the cache size before files are written to disk (64 KB~1 MB). |
+| [GetSDKVersion](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#af4eea202c9ac60b679c34e60d0c26729) | Gets the SDK version. |
+| [UnInitSDK](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#ad22d5b7f5f22a4f2339d7a09fbc8e149) | Uninitializes the SDK. |
+| [LogoutRoom](https://doc-zh.zego.im/API/ServerRecord-en/html/namespace_z_e_g_o_1_1_l_i_v_e_r_o_o_m.html#a02b98c29388acfea615e98580dbf37be) | Exits a room. |
