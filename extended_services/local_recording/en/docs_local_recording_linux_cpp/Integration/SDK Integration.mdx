@@ -1,0 +1,189 @@
+# 集成 SDK
+
+--- 
+
+## 前提条件
+
+开发和运行环境需满足以下要求：
+
+- 操作系统与架构：x86_64 架构的 Linux 操作系统 
+- C 运行库：glibc 2.18 或以上 
+- C++ 编译器：GCC / G++ 4.8.5 或以上，启用 C++11 
+- 构建工具：CMake 3.21.2 或以上、Make 
+- 命令行工具：Bash、curl、unzip 
+- 底层依赖库：libasound(ALSA)、libv4l2(v4l utils)
+
+<Note title="说明">
+
+- SDK 依赖 libasound (ALSA) 和 libv4l2 (v4l utils)。
+- CentOS (RHEL/Fedora) 可以通过执行 `yum install alsa-lib-devel libv4l-devel` 命令安装。
+- Ubuntu (Debian/Deepin) 可以通过执行 `apt install libasound2-dev libv4l-dev` 命令安装。
+- 其他平台和系统请自行安装。
+- 若需要交叉编译，请参考 [如何交叉编译 Linux alsa-lib 依赖库？](https://doc-zh.zego.im/faq/alsa-lib-cross-compile_1) 和 [如何交叉编译 Linux v4l-utils 依赖库？](https://doc-zh.zego.im/faq/linux-v4l-utils-cross-compile) 两篇文档，同时目标机器需安装好 libasound 和 libv4l2 依赖库。
+</Note>
+
+可通过以下命令检查服务器的运行环境是否符合要求：
+
+```bash
+uname -m                         # 应输出 x86_64
+getconf GNU_LIBC_VERSION          # 应为 glibc 2.18 或以上
+g++ --version
+cmake --version
+make --version
+```
+
+
+## 下载 SDK
+
+参考 [下载 SDK](../DownloadSDK.mdx) 或以下 `curl` 命令下载并解压 SDK：
+
+```bash
+curl -fL "https://artifact-sdk.zego.im/downloads/ZegoRecorder-linux-cpp.zip" \
+    -H "Referer: https://doc-zh.zego.im/" \
+    -o ZegoRecorder-linux-cpp.zip 
+
+unzip ZegoRecorder-linux-cpp.zip
+```
+
+解压后的目录结构如下：
+
+```tree
+ZegoRecorder-linux-cpp/
+    ├── VERSION.txt
+    ├── Document/
+    │   └── index.html
+    └── Library/
+        └── x86_64/
+            ├── include/LiveRoom.h
+            └── libZegoRecorder.so
+```
+
+| 文件或目录 | 用途 | 是否需要复制到项目 |
+| --- | --- | --- |
+| `Library/x86_64/include/` | C++ 接口头文件 | 编译需要，复制整个目录 |
+| `Library/x86_64/libZegoRecorder.so` | SDK 动态库 | 链接和运行需要，部署时也要携带 |
+| `Document/` | 离线 API 文档，打开 `index.html` 查看 | 按需保留，不参与编译和运行 |
+| `VERSION.txt` | SDK 版本信息 | 建议保留，便于核对版本 |
+
+## 新建项目并导入 SDK
+
+<Steps>
+<Step title="">
+创建工作目录 `recorder-cpp-integration` ：
+
+```bash
+mkdir -p recorder-cpp-integration
+cd recorder-cpp-integration
+```
+
+</Step>
+<Step title="">
+在 `recorder-cpp-integration` 下创建项目，将 SDK 文件放入 `sdk/`：
+
+```bash
+mkdir -p recorder-cpp/src recorder-cpp/sdk/Library/x86_64
+cp -a sdk-download/release/Library/x86_64/include recorder-cpp/sdk/Library/x86_64/
+cp sdk-download/release/Library/x86_64/libZegoRecorder.so recorder-cpp/sdk/Library/x86_64/
+cp sdk-download/release/VERSION.txt recorder-cpp/sdk/
+cd recorder-cpp
+```
+
+项目结构如下：
+
+```text
+recorder-cpp/
+    ├── src/
+    └── sdk/
+        ├── VERSION.txt
+        └── Library/x86_64/
+            ├── include/LiveRoom.h
+            └── libZegoRecorder.so
+```
+
+</Step>
+<Step title="">
+创建 `CMakeLists.txt`：
+
+```cmake
+cmake_minimum_required(VERSION 3.5.2)
+project(recorder_app LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(SDK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sdk" CACHE PATH "Recorder SDK directory")
+add_executable(recorder_app src/main.cpp)
+target_include_directories(recorder_app PRIVATE "${SDK_DIR}/Library/x86_64/include")
+target_link_libraries(recorder_app PRIVATE
+    "${SDK_DIR}/Library/x86_64/libZegoRecorder.so" pthread dl rt)
+```
+</Step>
+<Step title="">
+
+创建 `src/main.cpp`，验证头文件、链接和动态库加载：
+
+```cpp
+#include <cstdint>
+#include <cstdio>
+#include "LiveRoom.h"
+
+int main() {
+    const char* version = ZEGO::LIVEROOM::GetSDKVersion();
+    if (!version) return 1;
+    std::printf("Recorder SDK: %s\n", version);
+    return 0;
+}
+```
+</Step>
+
+<Step title="">
+
+在 `recorder-cpp` 目录编译并运行：
+
+```bash
+mkdir -p build
+(cd build && cmake .. && cmake --build .)
+export LD_LIBRARY_PATH="$PWD/sdk/Library/x86_64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+ldd build/recorder_app
+./build/recorder_app
+```
+
+控制台打印 `Recorder SDK: <版本号>` 表示成功集成 SDK。
+
+最终项目结构如下：
+```tree
+recorder-cpp/
+    ├── CMakeLists.txt
+    ├── src/main.cpp
+    ├── build/recorder_app
+    └── sdk/
+        ├── VERSION.txt
+        └── Library/x86_64/
+            ├── include/LiveRoom.h
+            └── libZegoRecorder.so
+```
+
+</Step>
+
+</Steps>
+
+
+## 常见问题
+
+<Accordion title="找不到头文件或链接符号" defaultOpen="false">
+检查 include 路径、库路径，确认头文件与动态库来自同一 C++ SDK 包。
+</Accordion>
+<Accordion title="找不到 libZegoRecorder.so" defaultOpen="false">
+检查部署路径与动态库搜索路径。
+</Accordion>
+<Accordion title=" GLIBC / GLIBCXX 版本错误" defaultOpen="false">
+用 ldd 检查应用、SDK 及其他库，使用满足全部依赖要求的环境。
+
+例如，在项目目录检查动态库依赖：
+
+```bash
+ldd sdk/Library/x86_64/libZegoRecorder.so
+```
+
+如果输出中出现 `not found`，说明缺少运行库；输出中出现 `version ... not found`，说明运行库版本不满足要求，请安装或更新对应的运行库。
+
+
+</Accordion>

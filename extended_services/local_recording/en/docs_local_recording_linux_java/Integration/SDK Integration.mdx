@@ -1,0 +1,179 @@
+# 集成 SDK
+
+--- 
+
+## 前提条件
+
+开发和运行环境需满足以下要求：
+
+- 操作系统与架构：x86_64 架构的 Linux 操作系统 
+- C 运行库：glibc 2.18 或以上 
+- Java 开发工具： 64 位 JDK 8 或以上，包含 java、javac 和 jar 命令 
+- 命令行工具：Bash、curl、unzip 
+- 底层依赖库：libasound(ALSA)、libv4l2(v4l utils)
+
+<Note title="说明">
+
+- SDK 依赖 libasound (ALSA) 和 libv4l2 (v4l utils)。
+- CentOS (RHEL/Fedora) 可以通过执行 `yum install alsa-lib-devel libv4l-devel` 命令安装。
+- Ubuntu (Debian/Deepin) 可以通过执行 `apt install libasound2-dev libv4l-dev` 命令安装。
+- 其他平台和系统请自行安装。
+- 若需要交叉编译，请参考 [如何交叉编译 Linux alsa-lib 依赖库？](https://doc-zh.zego.im/faq/alsa-lib-cross-compile_1) 和 [如何交叉编译 Linux v4l-utils 依赖库？](https://doc-zh.zego.im/faq/linux-v4l-utils-cross-compile) 两篇文档，同时目标机器需安装好 libasound 和 libv4l2 依赖库。
+</Note>
+
+可通过以下命令检查服务器的运行环境是否符合要求：
+
+```bash
+uname -m                         # 应输出 x86_64
+getconf GNU_LIBC_VERSION          # 应为 glibc 2.18 或以上
+java -version
+javac -version
+```
+
+## 下载 SDK
+
+参考 [下载 SDK](../DownloadSDK.mdx) 或以下 `curl` 命令下载并解压 SDK：
+
+```bash
+curl -fL "https://artifact-sdk.zego.im/downloads/ZegoRecorder-linux-java.zip" \
+    -H "Referer: https://doc-zh.zego.im/" \
+    -o ZegoRecorder-linux-java.zip 
+
+unzip ZegoRecorder-linux-java.zip
+```
+
+解压后的目录结构如下：
+
+```tree
+ZegoRecorder-linux-java/
+    ├── VERSION.txt
+    ├── Document/
+    │   └── index.html
+    └── Library/
+        ├── ZegoRecorder.jar
+        └── x86_64/libZegoRecorder.so
+```
+
+| 文件或目录 | 用途 | 是否需要复制到工程 |
+| --- | --- | --- |
+| `Library/ZegoRecorder.jar` | Java 接口及 JNI 桥接类 | 编译和运行需要，加入 classpath |
+| `Library/x86_64/libZegoRecorder.so` | JNI 原生动态库 | 运行需要，部署时也要携带 |
+| `Document/` | 离线 API 文档，打开 `index.html` 查看 | 按需保留，不参与编译和运行 |
+| `VERSION.txt` | SDK 版本信息 | 建议保留，便于核对版本 |
+
+## 新建项目并导入 SDK
+
+<Steps>
+<Step title="">
+创建工作目录 `recorder-java-integration`：
+
+```bash
+mkdir -p recorder-java-integration
+cd recorder-java-integration
+```
+
+</Step>
+<Step title="">
+在 `recorder-java-integration` 下创建项目，将 SDK 文件放入 `sdk/`：
+
+```bash
+mkdir -p recorder-java/src/com/example recorder-java/sdk/Library/x86_64
+cp sdk-download/release/Library/ZegoRecorder.jar recorder-java/sdk/Library/
+cp sdk-download/release/Library/x86_64/libZegoRecorder.so recorder-java/sdk/Library/x86_64/
+cp sdk-download/release/VERSION.txt recorder-java/sdk/
+cd recorder-java
+```
+
+项目结构如下：
+
+```tree
+recorder-java/
+    ├── src/com/example/
+    └── sdk/
+        ├── VERSION.txt
+        └── Library/
+            ├── ZegoRecorder.jar
+            └── x86_64/libZegoRecorder.so
+```
+
+</Step>
+<Step title="">
+
+创建 `src/com/example/Main.java`：
+
+```java
+package com.example;
+
+import com.zego.zegoliveroom.ZegoLiveRoom;
+
+public final class Main {
+    public static void main(String[] args) {
+        ZegoLiveRoom sdk = new ZegoLiveRoom();
+        System.out.println("Recorder SDK: " + sdk.getSDKVersion());
+    }
+}
+```
+
+
+</Step>
+
+<Step title="">
+
+在 `recorder-java` 目录编译、打包并运行：
+
+```bash
+mkdir -p out/classes
+javac -encoding UTF-8 -cp sdk/Library/ZegoRecorder.jar \
+  -d out/classes src/com/example/Main.java
+jar cfe out/recorder-app.jar com.example.Main -C out/classes .
+export LD_LIBRARY_PATH="$PWD/sdk/Library/x86_64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+java -Djava.library.path="$PWD/sdk/Library/x86_64" \
+  -cp "out/recorder-app.jar:sdk/Library/ZegoRecorder.jar" com.example.Main
+```
+
+控制台打印 `Recorder SDK: <版本号>` 表示成功集成 SDK。
+
+最终项目结构如下：
+
+```tree
+recorder-java/
+    ├── out
+    │    ├── recorder-app.jar
+    │    └── classes/com/example/
+    │        └── Main.class
+    ├── src/com/example/
+    │    └── Main.java
+    └── sdk/
+        ├── VERSION.txt
+        └── Library/
+            ├── ZegoRecorder.jar
+            └── x86_64/libZegoRecorder.so
+```
+</Step>
+
+</Steps>
+
+
+## 常见问题
+
+<Accordion title="找不到头文件或 Java 类" defaultOpen="false">
+检查 include 路径或编译、运行 classpath，确认使用对应语言的 SDK 。
+</Accordion>
+<Accordion title="找不到 libZegoRecorder.so" defaultOpen="false">
+检查部署路径与动态库搜索路径。
+</Accordion>
+<Accordion title=" GLIBC / GLIBCXX 版本错误" defaultOpen="false">
+用 ldd 检查应用、SDK 及其他库，使用满足全部依赖要求的环境。
+
+例如，在项目目录检查动态库依赖：
+
+```bash
+ldd sdk/Library/x86_64/libZegoRecorder.so
+```
+
+如果输出中出现 `not found`，说明缺少运行库；输出中出现 `version ... not found`，说明运行库版本不满足要求，请安装或更新对应的运行库。
+
+</Accordion>
+<Accordion title=" JNI 加载失败" defaultOpen="false">
+检查 JVM/so 均为 x86_64，并确认 JAR 与 so 配套。
+</Accordion>
