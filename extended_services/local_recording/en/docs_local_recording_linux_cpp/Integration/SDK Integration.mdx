@@ -1,0 +1,189 @@
+# Integrate the SDK
+
+--- 
+
+## Prerequisites
+
+The development and running environments must meet the following requirements:
+
+- Operating system and architecture: Linux operating system with the x86_64 architecture 
+- C runtime library: glibc 2.18 or above 
+- C++ compiler: GCC / G++ 4.8.5 or above, with C++11 enabled 
+- Build tools: CMake 3.21.2 or above, Make 
+- Command-line tools: Bash, curl, unzip 
+- Underlying dependency libraries: libasound(ALSA), libv4l2(v4l utils)
+
+<Note title="Note">
+
+- The SDK depends on libasound (ALSA) and libv4l2 (v4l utils).
+- CentOS (RHEL/Fedora): install them by running the `yum install alsa-lib-devel libv4l-devel` command.
+- Ubuntu (Debian/Deepin): install them by running the `apt install libasound2-dev libv4l-dev` command.
+- For other platforms and systems, install them by yourself.
+- If cross-compilation is required, see the documents [How to cross-compile the Linux alsa-lib dependency library?](https://www.zegocloud.com/docs/faq/alsa-lib-cross-compile_1) and [How to cross-compile the Linux v4l-utils dependency library?](https://www.zegocloud.com/docs/faq/linux-v4l-utils-cross-compile), and make sure the libasound and libv4l2 dependency libraries are installed on the target machine.
+</Note>
+
+You can run the following commands to check whether the server's running environment meets the requirements:
+
+```bash
+uname -m                         # Should output x86_64
+getconf GNU_LIBC_VERSION          # Should be glibc 2.18 or above
+g++ --version
+cmake --version
+make --version
+```
+
+
+## Download the SDK
+
+See [Download SDK](../DownloadSDK.mdx) or use the following `curl` command to download and extract the SDK:
+
+```bash
+curl -fL "https://artifact-sdk.zego.im/downloads/ZegoRecorder-linux-cpp.zip" \
+    -H "Referer: https://www.zegocloud.com" \
+    -o ZegoRecorder-linux-cpp.zip 
+
+unzip ZegoRecorder-linux-cpp.zip
+```
+
+The extracted directory structure is as follows:
+
+```tree
+ZegoRecorder-linux-cpp/
+    ├── VERSION.txt
+    ├── Document/
+    │   └── index.html
+    └── Library/
+        └── x86_64/
+            ├── include/LiveRoom.h
+            └── libZegoRecorder.so
+```
+
+| File or Directory | Purpose | Needs to Be Copied to the Project |
+| --- | --- | --- |
+| `Library/x86_64/include/` | C++ API header files | Required for compilation; copy the entire directory |
+| `Library/x86_64/libZegoRecorder.so` | SDK dynamic library | Required for linking and running; also included during deployment |
+| `Document/` | Offline API documentation, open `index.html` to view | Keep as needed; not involved in compilation or running |
+| `VERSION.txt` | SDK version information | Recommended to keep for version verification |
+
+## Create a Project and Import the SDK
+
+<Steps>
+<Step title="">
+Create the working directory `recorder-cpp-integration`:
+
+```bash
+mkdir -p recorder-cpp-integration
+cd recorder-cpp-integration
+```
+
+</Step>
+<Step title="">
+Create the project under `recorder-cpp-integration` and put the SDK files into `sdk/`:
+
+```bash
+mkdir -p recorder-cpp/src recorder-cpp/sdk/Library/x86_64
+cp -a sdk-download/release/Library/x86_64/include recorder-cpp/sdk/Library/x86_64/
+cp sdk-download/release/Library/x86_64/libZegoRecorder.so recorder-cpp/sdk/Library/x86_64/
+cp sdk-download/release/VERSION.txt recorder-cpp/sdk/
+cd recorder-cpp
+```
+
+The project structure is as follows:
+
+```text
+recorder-cpp/
+    ├── src/
+    └── sdk/
+        ├── VERSION.txt
+        └── Library/x86_64/
+            ├── include/LiveRoom.h
+            └── libZegoRecorder.so
+```
+
+</Step>
+<Step title="">
+Create `CMakeLists.txt`:
+
+```cmake
+cmake_minimum_required(VERSION 3.5.2)
+project(recorder_app LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(SDK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sdk" CACHE PATH "Recorder SDK directory")
+add_executable(recorder_app src/main.cpp)
+target_include_directories(recorder_app PRIVATE "${SDK_DIR}/Library/x86_64/include")
+target_link_libraries(recorder_app PRIVATE
+    "${SDK_DIR}/Library/x86_64/libZegoRecorder.so" pthread dl rt)
+```
+</Step>
+<Step title="">
+
+Create `src/main.cpp` to verify the header files, linking, and dynamic library loading:
+
+```cpp
+#include <cstdint>
+#include <cstdio>
+#include "LiveRoom.h"
+
+int main() {
+    const char* version = ZEGO::LIVEROOM::GetSDKVersion();
+    if (!version) return 1;
+    std::printf("Recorder SDK: %s\n", version);
+    return 0;
+}
+```
+</Step>
+
+<Step title="">
+
+Compile and run in the `recorder-cpp` directory:
+
+```bash
+mkdir -p build
+(cd build && cmake .. && cmake --build .)
+export LD_LIBRARY_PATH="$PWD/sdk/Library/x86_64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+ldd build/recorder_app
+./build/recorder_app
+```
+
+The console printing `Recorder SDK: <version>` indicates the SDK is successfully integrated.
+
+The final project structure is as follows:
+```tree
+recorder-cpp/
+    ├── CMakeLists.txt
+    ├── src/main.cpp
+    ├── build/recorder_app
+    └── sdk/
+        ├── VERSION.txt
+        └── Library/x86_64/
+            ├── include/LiveRoom.h
+            └── libZegoRecorder.so
+```
+
+</Step>
+
+</Steps>
+
+
+## FAQ
+
+<Accordion title="Header files or link symbols not found" defaultOpen="false">
+Check the include path and library path, and make sure the header files and the dynamic library come from the same C++ SDK package.
+</Accordion>
+<Accordion title="libZegoRecorder.so not found" defaultOpen="false">
+Check the deployment path and the dynamic library search path.
+</Accordion>
+<Accordion title=" GLIBC / GLIBCXX version errors" defaultOpen="false">
+Use ldd to check the app, the SDK, and other libraries, and use an environment that satisfies all dependency requirements.
+
+For example, check the dynamic library dependencies in the project directory:
+
+```bash
+ldd sdk/Library/x86_64/libZegoRecorder.so
+```
+
+If `not found` appears in the output, a runtime library is missing; if `version ... not found` appears in the output, the runtime library version does not meet the requirement. Install or update the corresponding runtime library.
+
+
+</Accordion>
