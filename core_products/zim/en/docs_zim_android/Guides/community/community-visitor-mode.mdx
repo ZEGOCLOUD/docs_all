@@ -1,0 +1,585 @@
+---
+date: "2026-09-08"
+---
+
+import { getPlatformData } from "/snippets/utils-content-parser.js"
+
+export const enterCommunityAsVisitorMap = {
+  'Android': <a href="@enterCommunityAsVisitor" target="_blank">enterCommunityAsVisitor</a>,
+  'iOS,mac': <a href="@enterCommunityAsVisitorWithCommunityID" target="_blank">enterCommunityAsVisitorWithCommunityID</a>,
+}
+export const quitCommunityAsVisitorMap = {
+  'Android': <a href="@quitCommunityAsVisitor" target="_blank">quitCommunityAsVisitor</a>,
+  'iOS,mac': <a href="@quitCommunityAsVisitorByCommunityID" target="_blank">quitCommunityAsVisitorByCommunityID</a>,
+}
+export const updateCommunityVisitorFetchMessageCountMap = {
+  'Android': <a href="@updateCommunityVisitorFetchMessageCount" target="_blank">updateCommunityVisitorFetchMessageCount</a>,
+  'iOS,mac': <a href="@updateCommunityVisitorFetchMessageCount" target="_blank">updateCommunityVisitorFetchMessageCount</a>,
+}
+export const updateCommunityVisitorFetchMessageDurationMap = {
+  'Android': <a href="@updateCommunityVisitorFetchMessageDuration" target="_blank">updateCommunityVisitorFetchMessageDuration</a>,
+  'iOS,mac': <a href="@updateCommunityVisitorFetchMessageDuration" target="_blank">updateCommunityVisitorFetchMessageDuration</a>,
+}
+export const ZIMCommunityVisitorAccessInfoMap = {
+  'Android': <a href="@-ZIMCommunityVisitorAccessInfo" target="_blank">ZIMCommunityVisitorAccessInfo</a>,
+}
+export const ZIMCommunityFullInfoMap = {
+  'Android': <a href="@-ZIMCommunityFullInfo" target="_blank">ZIMCommunityFullInfo</a>,
+}
+
+# Visitor Mode
+
+---
+
+## Overview
+
+Visitor mode allows users who have not joined a Community to temporarily access a public Community as a "visitor", browsing Community content only without becoming a formal member. Visitors can get the community profile, member count, channel list, and the visible message list configured by community administrators, but cannot send messages or perform any management operations.
+
+With visitor mode, developers can allow users who have not joined a Community to "browse" Community content first, lowering the barrier to entry. It is suitable for scenarios such as community preview, public content display, and guest browsing.
+
+## Prerequisites
+
+- Refer to [Send and receive messages](../Messaging/Send%20and%20receive%20messages.mdx) to obtain the ZIM SDK, initialize it, and log in to a user.
+- Refer to [Token authentication](../Users/Authentication.mdx) to implement user authentication login.
+- The Community feature requires ZIM SDK 3.0.0 or later, and visitor mode requires ZIM SDK 3.2.0 or later.
+- The Community feature is a premium edition feature. Contact ZEGOCLOUD Technical Support for activation before use.
+- Tokens for the Community feature are generated in the same way as for other ZIM features; no additional permission declaration is required.
+
+## Visitor Identity
+
+The visitor identity is a logical identity, different from the Role of community members (owner, admin, regular member). When a user accesses a Community as a visitor, most APIs have corresponding restrictions, and visitors have "browse-only" access to Community content.
+
+### Visible Message Range for Visitors
+
+After a visitor enters a Community, the visible message range that can be browsed follows these rules:
+
+- The Community owner (with a Role of `1`) and admins (with a Role of `2`) can set the number and time range of messages visible to visitors through the [Update the number of visible messages for visitors](#update-the-number-of-visible-messages-for-visitors) and [Update the visible message time range for visitors](#update-the-visible-message-time-range-for-visitors) APIs.
+- The intersection of the "number" and "time range" of messages sent before the visitor joins the Community is the messages actually visible to visitors.
+
+### Visitor Heartbeat Limits
+
+| Limit Item | Limit Value |
+|--------|--------|
+| Maximum concurrent visitor instances (visitor heartbeats) per user | 10 (default), expandable to 20 |
+| Interval of a single visitor heartbeat packet | 10 seconds |
+| Timeout of a single visitor heartbeat | 120 seconds |
+| Removal from the visitor list upon heartbeat timeout | Automatically removed after 12 consecutive heartbeat timeouts |
+
+### Capabilities Available to Visitors
+
+Visitors can only browse Community content. The available and unavailable capabilities are as follows:
+
+| Capability | Available to Visitors | Description |
+|------|--------------|------|
+| Get community profile | Yes | Such as community name, avatar, notice, member count, etc. |
+| Get community attributes | Yes | Read-only, cannot be modified |
+| Get channel list | Yes | Public channels can be browsed |
+| Get channel profile / attributes | Yes | Read-only |
+| Fetch channel messages | Yes | Only within the visible message range |
+| Query message reactions | Yes | The reaction list and details can be viewed |
+| Query status message list | Yes | Read-only |
+| Query member information | Yes | Used to display message bubble related content |
+| Send messages / signaling messages | No | Visitors have a read-only identity |
+| Create / dismiss a Community | No | - |
+| Invite / remove members | No | - |
+| Modify community / channel profile and attributes | No | - |
+| Set mute / member roles / transfer ownership | No | - |
+| Edit / recall messages, message reactions | No | - |
+
+## Enter a Community as a Visitor
+
+After logging in to the ZIM SDK, call the {getPlatformData(props,enterCommunityAsVisitorMap)} API and pass in the target community ID to enter the Community as a visitor. After entering successfully, you can get the full information of the Community through the callback.
+
+<Warning title="Warning">
+- If the user is already a formal member of the Community, there is no need to enter as a visitor; the call returns the error code `6001006` in this case.
+- If the user is already in the Community as a visitor, repeated calls return the error code `6001081`.
+</Warning>
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Sample code"
+import im.zego.zim.ZIM;
+import im.zego.zim.callback.ZIMCommunityAsVisitorEnteredCallback;
+import im.zego.zim.entity.ZIMCommunityFullInfo;
+import im.zego.zim.entity.ZIMError;
+import im.zego.zim.enums.ZIMErrorCode;
+
+String communityID = "community_001";
+
+zim.enterCommunityAsVisitor(communityID, new ZIMCommunityAsVisitorEnteredCallback() {
+    @Override
+    public void onCommunityAsVisitorEntered(ZIMCommunityFullInfo communityInfo, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // Entered successfully, communityInfo contains the full community information
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Sample code"
+NSString *communityID = @"community_001";
+
+[zim enterCommunityAsVisitorWithCommunityID:communityID callback:^(ZIMCommunityFullInfo * _Nonnull communityInfo, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // Entered successfully, communityInfo contains the full community information
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Sample code"
+std::string communityID = "community_001";
+
+zim_->enterCommunityAsVisitor(communityID,
+    [=](const zim::ZIMCommunityFullInfo &communityInfo, const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // Entered successfully, communityInfo contains the full community information
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Sample code"
+const communityID = 'community_001';
+
+zim.enterCommunityAsVisitor(communityID)
+    .then((result: ZIMCommunityAsVisitorEnteredResult) => {
+        // Entered successfully, result.communityInfo contains the full community information
+    })
+    .catch((err: ZIMError) => {
+        // Failed to enter
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Sample code"
+const communityID = 'community_001';
+
+try {
+    ZIMCommunityAsVisitorEnteredResult result =
+        await ZIM.getInstance()!.enterCommunityAsVisitor(communityID);
+    // Entered successfully, result.communityInfo contains the full community information
+} on PlatformException catch (onError) {
+    // Failed to enter
+}
+```
+</CodeGroup>
+:::
+
+## Leave a Community as a Visitor
+
+After entering a Community as a visitor, you can call the {getPlatformData(props,quitCommunityAsVisitorMap)} API to leave the Community actively. After leaving, the community cache and browsing records under the visitor identity are cleared.
+
+<Warning title="Warning">
+Calling this API again after the visitor has left the Community returns the error code `6001082`.
+</Warning>
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Sample code"
+zim.quitCommunityAsVisitor(communityID, new ZIMCommunityAsVisitorQuitCallback() {
+    @Override
+    public void onCommunityAsVisitorQuit(String communityID, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // Left successfully
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Sample code"
+[zim quitCommunityAsVisitorByCommunityID:communityID callback:^(NSString * _Nonnull communityID, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // Left successfully
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Sample code"
+zim_->quitCommunityAsVisitor(communityID,
+    [=](const std::string &communityID, const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // Left successfully
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Sample code"
+zim.quitCommunityAsVisitor(communityID)
+    .then((result: ZIMCommunityAsVisitorQuitResult) => {
+        // Left successfully, result.communityID is the ID of the Community left
+    })
+    .catch((err: ZIMError) => {
+        // Failed to leave
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Sample code"
+try {
+    ZIMCommunityAsVisitorQuitResult result =
+        await ZIM.getInstance()!.quitCommunityAsVisitor(communityID);
+    // Left successfully, result.communityID is the ID of the Community left
+} on PlatformException catch (onError) {
+    // Failed to leave
+}
+```
+</CodeGroup>
+:::
+
+## Converting a Visitor to a Formal Member
+
+The visitor identity is a temporary "browse-only" identity. After a user becomes a community member through the formal joining process, the SDK automatically converts the local visitor status to the formal member status. Developers do not need to call `quitCommunityAsVisitor` first, and the identity cannot be changed by the client itself.
+
+### Conversion Scenarios
+
+| Scenario | Developer Action | Conversion Timing |
+| --- | --- | --- |
+| The Community `joinMode` is `ANY` | Call `joinCommunity` | After `joinCommunity` succeeds, the SDK receives the formal community data and automatically converts the visitor to a formal member |
+| The Community `joinMode` is `AUTH` | Call `sendCommunityJoinApplication` | The user remains a visitor before approval; after approval, the conversion happens automatically when the SDK receives the join event or the community list sync data |
+| The Community `joinMode` is `FORBID` | Do not display the join entry | Conversion does not occur |
+
+### Sample code: visitor conversion in ANY mode
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Sample code"
+String communityID = "community_001";
+
+zim.joinCommunity(communityID, new ZIMCommunityJoinedCallback() {
+    @Override
+    public void onCommunityJoined(ZIMCommunityFullInfo communityInfo, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // Conversion succeeded, and you can refresh to the formal member UI
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Sample code"
+NSString *communityID = @"community_001";
+
+[zim joinCommunityWithCommunityID:communityID callback:^(ZIMCommunityFullInfo * _Nonnull communityInfo, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // Conversion succeeded, and you can refresh to the formal member UI
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Sample code"
+std::string communityID = "community_001";
+
+zim_->joinCommunity(communityID,
+    [=](const zim::ZIMCommunityFullInfo &communityInfo, const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // Conversion succeeded, and you can refresh to the formal member UI
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Sample code"
+const communityID = 'community_001';
+
+try {
+    await zim.joinCommunity(communityID);
+    // Conversion succeeded, and you can refresh to the formal member UI
+} catch (error) {
+    // Conversion failed
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Sample code"
+const communityID = 'community_001';
+
+try {
+    await ZIM.getInstance()!.joinCommunity(communityID);
+    // Conversion succeeded, and you can refresh to the formal member UI
+} on PlatformException catch (onError) {
+    // Conversion failed
+}
+```
+</CodeGroup>
+:::
+
+<Warning title="Warning">
+- If the user is already a formal member, there is no need to call `enterCommunityAsVisitor` again; `6001006` is returned in this case.
+- Repeatedly calling `enterCommunityAsVisitor` when the user is already a visitor returns `6001081`.
+- The user remains a visitor before the application is approved; after approval, there is no need to call `quitCommunityAsVisitor` first, and the SDK automatically completes the conversion from visitor status to formal member status.
+</Warning>
+
+### SDK Behavior After Conversion
+
+- The SDK merges the community and channel data cached during the visitor period, and switches to the heartbeat and data synchronization of a formal member.
+- The SDK clears the visitor-related caches and browsing records, and subsequent data is fetched as a formal member.
+- After conversion, the visitor's "browse-only" restrictions no longer apply. Capabilities such as whether the user can speak are determined by the formal member role and the server-side mute policy.
+
+### Recommendations for Developers
+
+- Do not determine the identity locally based on "the user has clicked apply"; rely on server callbacks and query results.
+- For the UI switch between visitor status and formal member status, refresh through the `joinCommunity` success callback or the `onCommunityListChanged` event.
+- If you want to hide the send entry in visitor status, it is recommended to do so only as UI display; the actual sending permission is restricted by the server, avoiding a local-only gate.
+
+## Update the Number of Visible Messages for Visitors
+
+The Community owner or admins can call the {getPlatformData(props,updateCommunityVisitorFetchMessageCountMap)} API to update the number of "messages sent before entering the Community" that visitors can browse after entering the Community.
+
+<Warning title="Warning">
+- Only the Community owner and admins (with a Role of `1` or `2`) can call this API; calls by regular members return the error code `6001007`.
+- The intersection of the "number" and "time range" of messages sent before the visitor joins the Community is the messages actually visible to visitors.
+</Warning>
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Sample code"
+int count = 20; // Number of messages sent before entering the Community that visitors can browse after entering
+
+zim.updateCommunityVisitorFetchMessageCount(count, communityID,
+    new ZIMCommunityVisitorFetchMessageCountUpdatedCallback() {
+        @Override
+        public void onCommunityVisitorFetchMessageCountUpdated(String communityID, ZIMError errorInfo) {
+            if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+                // Updated successfully
+            }
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Sample code"
+NSInteger count = 20; // Number of messages sent before entering the Community that visitors can browse after entering
+
+[zim updateCommunityVisitorFetchMessageCount:count communityID:communityID callback:^(NSString * _Nonnull communityID, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // Updated successfully
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Sample code"
+int32_t count = 20; // Number of messages sent before entering the Community that visitors can browse after entering
+
+zim_->updateCommunityVisitorFetchMessageCount(count, communityID,
+    [=](const std::string &communityID, const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // Updated successfully
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Sample code"
+const count = 20; // Number of messages sent before entering the Community that visitors can browse after entering
+
+zim.updateCommunityVisitorFetchMessageCount(count, communityID)
+    .then((result: ZIMCommunityVisitorFetchMessageCountUpdatedResult) => {
+        // Updated successfully, result.communityID is the community ID
+    })
+    .catch((err: ZIMError) => {
+        // Failed to update
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Sample code"
+const count = 20; // Number of messages sent before entering the Community that visitors can browse after entering
+
+try {
+    ZIMCommunityVisitorFetchMessageCountUpdatedResult result =
+        await ZIM.getInstance()!.updateCommunityVisitorFetchMessageCount(count, communityID);
+    // Updated successfully, result.communityID is the community ID
+} on PlatformException catch (onError) {
+    // Failed to update
+}
+```
+</CodeGroup>
+:::
+
+## Update the Visible Message Time Range for Visitors
+
+The Community owner or admins can call the {getPlatformData(props,updateCommunityVisitorFetchMessageDurationMap)} API to update the time range of "messages sent before entering the Community" that visitors can browse after entering the Community, in seconds.
+
+<Warning title="Warning">
+- Only the Community owner and admins (with a Role of `1` or `2`) can call this API.
+- The intersection of the "number" and "time range" of messages sent before the visitor joins the Community is the messages actually visible to visitors.
+</Warning>
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Sample code"
+int duration = 86400; // Time range of messages sent before entering the Community that visitors can browse after entering, in seconds
+
+zim.updateCommunityVisitorFetchMessageDuration(duration, communityID,
+    new ZIMCommunityVisitorFetchMessageDurationUpdatedCallback() {
+        @Override
+        public void onCommunityVisitorFetchMessageDurationUpdated(String communityID, ZIMError errorInfo) {
+            if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+                // Updated successfully
+            }
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Sample code"
+NSInteger duration = 86400; // Time range of messages sent before entering the Community that visitors can browse after entering, in seconds
+
+[zim updateCommunityVisitorFetchMessageDuration:duration communityID:communityID callback:^(NSString * _Nonnull communityID, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        // Updated successfully
+    }
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Sample code"
+int32_t duration = 86400; // Time range of messages sent before entering the Community that visitors can browse after entering, in seconds
+
+zim_->updateCommunityVisitorFetchMessageDuration(duration, communityID,
+    [=](const std::string &communityID, const zim::ZIMError &errorInfo) {
+        if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+            // Updated successfully
+        }
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Sample code"
+const duration = 86400; // Time range of messages sent before entering the Community that visitors can browse after entering, in seconds
+
+zim.updateCommunityVisitorFetchMessageDuration(duration, communityID)
+    .then((result: ZIMCommunityVisitorFetchMessageDurationUpdatedResult) => {
+        // Updated successfully, result.communityID is the community ID
+    })
+    .catch((err: ZIMError) => {
+        // Failed to update
+    });
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Sample code"
+const duration = 86400; // Time range of messages sent before entering the Community that visitors can browse after entering, in seconds
+
+try {
+    ZIMCommunityVisitorFetchMessageDurationUpdatedResult result =
+        await ZIM.getInstance()!.updateCommunityVisitorFetchMessageDuration(duration, communityID);
+    // Updated successfully, result.communityID is the community ID
+} on PlatformException catch (onError) {
+    // Failed to update
+}
+```
+</CodeGroup>
+:::
+
+## Visitor Access Restriction Information
+
+The visitor access restriction information of a Community is represented by {getPlatformData(props,ZIMCommunityVisitorAccessInfoMap)}, which contains the number and time range of messages that visitors can fetch. This information is included as the `visitorAccessInfo` field in the full community information {getPlatformData(props,ZIMCommunityFullInfoMap)}, and can be obtained through [Enter a Community as a visitor](#enter-a-community-as-a-visitor) or [Query Community Information](./community-management.mdx#query-community-information).
+
+### ZIMCommunityVisitorAccessInfo Fields
+
+| Field | Type | Description |
+|------|------|------|
+| fetchMessageCount | int | Number of messages visitors can fetch |
+| fetchMessageDuration | long | Time range of messages visitors can fetch, in seconds |
+
+### ZIMCommunityFullInfo.visitorAccessInfo Fields
+
+| Field | Type | Description |
+|------|------|------|
+| visitorAccessInfo | ZIMCommunityVisitorAccessInfo | Visitor access restriction information of the Community |
+
+## Common Error Codes
+
+<Accordion title="Common error codes">
+
+| Error Code | Description | Solution |
+|--------|------|----------|
+| 6000011 | User not registered | Check whether the user has logged in |
+| 6001004 | Community does not exist | Check whether the communityID is correct |
+| 6001006 | Already a Community member | Formal members do not need to enter as a visitor; access the Community directly |
+| 6001007 | Community permission error | The visitor accessed an API without permission, or a non-admin tried to update the visible message configuration for visitors |
+| 6001081 | User is already a visitor | The current user is already in the Community as a visitor; do not enter again |
+| 6001082 | User is not a visitor | The visitor has left the Community; no need to call the leave API again |
+
+</Accordion>
+
+## FAQs
+
+**Q: What SDK version does visitor mode require?**
+A: Visitor mode requires ZIM SDK 3.2.0 or later.
+
+**Q: Can visitors send messages?**
+A: No. Visitors have "browse-only" access to Community content. They can only get the community profile, member count, channel list, and visible message list, and cannot send messages or perform any management operations.
+
+**Q: Who can set the range of messages visible to visitors?**
+A: Only the Community owner (with a Role of `1`) and admins (with a Role of `2`) can set the number and time range of messages visible to visitors.
+
+**Q: How are the messages actually visible to visitors calculated?**
+A: The conversation message sequence (`conv msg seq`) of the channel at the moment of accessing the Community is taken as the starting point, and then intersected with the "number of messages" and "time range" set by administrators. The result is the messages actually visible to visitors.
+
+**Q: Can the visitor identity and formal member identity coexist?**
+A: The visitor identity is a logical identity, different from the member Role. When a user is already a formal member, there is no need to enter the same Community as a visitor.
+
+**Q: How does a visitor become a formal member?**
+A: Follow the formal joining process according to the Community's `joinMode`:
+- `ANY`: call `joinCommunity`, and the conversion happens automatically after success;
+- `AUTH`: call `sendCommunityJoinApplication`, and the conversion happens automatically after approval;
+- `FORBID`: cannot join, and no conversion occurs.
+
+**Q: Do visitors need to call `quitCommunityAsVisitor` to exit visitor status before becoming a formal member?**
+A: No. After approval or a successful `joinCommunity` call, the SDK automatically converts the local visitor status to the formal member status, and completes the merge and cleanup of visitor caches. Developers should not switch identities on the client by themselves, and should rely on server callbacks/query results.
+
+## Related References
+
+- [Community management](./community-management.mdx)
+- [Community member management](./community-member-management.mdx)
+- [Channel message management](./channel-message-management.mdx)
+- [ZIM error codes](../../SDK%20Error%20Codes/ZIM.mdx)

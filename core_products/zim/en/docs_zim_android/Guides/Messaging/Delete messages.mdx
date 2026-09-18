@@ -12,6 +12,7 @@ export const deleteMessagesMap = {
 export const ZIMMessageDeletedCallbackMap = {
   'Android': <a href='@-ZIMMessageDeletedCallback' target='_blank'>ZIMMessageDeletedCallback</a>,
   'Web': <a href='@-ZIMMessageDeletedResult' target='_blank'>ZIMMessageDeletedResult</a>,
+  'UTS': <a href='@-ZIMMessageDeletedCallback' target='_blank'>ZIMMessageDeletedCallback</a>,
   'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMMessageDeletedResult-class.html' target='_blank'>ZIMMessageDeletedResult</a>,
   'iOS,mac,window': <a href='@-ZIMMessageDeletedCallback' target='_blank'>ZIMMessageDeletedCallback</a>,
 }
@@ -34,10 +35,23 @@ export const ZIMConversationMessagesAllDeletedCallbackMap = {
   'Web,Flutter': <a href='@-ZIMConversationMessagesAllDeletedResult' target='_blank'>ZIMConversationMessagesAllDeletedResult</a>,
   'iOS,mac,window': <a href='@-ZIMConversationMessagesAllDeletedCallback' target='_blank'>ZIMConversationMessagesAllDeletedCallback</a>,
 }
+export const ZIMMessageDeletedInfoMap = {
+  'Android': <code>ZIMMessageDeletedInfo</code>,
+  'Web': <code>ZIMMessageDeletedEventResult</code>,
+}
 export const messageDeletedMap = {
   'Android': <a href='@onMessageDeleted' target='_blank'>onMessageDeleted</a>,
+  'window': <a href='@onMessageDeleted' target='_blank'>onMessageDeleted</a>,
   'iOS': <a href='@ZIMMessageDeleted' target='_blank'>messageDeleted</a>,
   'mac': <a href='@ZIMMessageDeleted' target='_blank'>messageDeleted</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMEventHandler/onMessageDeleted.html' target='_blank'>onMessageDeleted</a>,
+}
+export const queryGroupMemberInfoMap = {
+  'Android': <a href='@queryGroupMemberInfo' target='_blank'>queryGroupMemberInfo</a>,
+  'window': <a href='@queryGroupMemberInfo' target='_blank'>queryGroupMemberInfo</a>,
+  'iOS': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~objective-c_ios~protocol~ZIM#query-group-member-info-by-user-id-group-id-callback' target='_blank'>queryGroupMemberInfoByGroupID</a>,
+  'mac': <a href='https://doc-zh.zego.im/article/api?doc=zim_API~objective-c_macos~protocol~ZIM#query-group-member-info-by-user-id-group-id-callback' target='_blank'>queryGroupMemberInfoByGroupID</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/queryGroupMemberInfo.html' target='_blank'>queryGroupMemberInfo</a>,
 }
 
 # Delete messages
@@ -46,7 +60,7 @@ export const messageDeletedMap = {
 ##  Overview
 ZEGOCLOUD's In-app Chat (the ZIM SDK) provides the capability of message management, allowing you to send and receive one-to-one, group, in-room messages, query message history, delete messages, and more. With the message management feature, you can meet different requirements of various scenarios such as social entertainment, online shopping, online education, interactive live streaming, and more. 
 
-This document describes how to delete the specified messages in a specified session, or delete all the messages in a specified session.
+This document describes how to delete the specified messages in a specified session, delete all the messages in a specified session, and delete the specified messages for everyone in a session.
 
 <Warning title="Warning">
 The ZIM SDK currently supports deleting messages in "one-to-one" and "group" conversations, but does not support deleting messages in "room" conversations.
@@ -56,12 +70,16 @@ The ZIM SDK currently supports deleting messages in "one-to-one" and "group" con
 
 The ZIM SDK supports deleting specific messages in a conversation or deleting all messages in a conversation. Deleting messages can be divided into "delete local message records" and "delete server message records". Developers can use the {getPlatformData(props,ZIMMessageDeleteConfigMap)} object to set advanced properties for deleting messages.
 
+:::if{props.platform="undefined|iOS|mac|window|Flutter"}
+By default, a deletion operation only takes effect for the current user. To make the specified messages invisible to all members in the conversation, refer to [Delete for Everyone](#delete-for-everyone).
+:::
+
 Taking the example of client A deleting certain messages or all messages with client B:
 
 <Frame width="512" height="auto" caption=""><img src="https://doc-media.zego.im/sdk-doc/Pics/in_app_chat/deleteMessage.png" /></Frame>
 
 
-## Delete the specified messages
+### Delete the specified messages
 
 The following process shows how Client A deletes the specified messages with Client B:
 
@@ -84,9 +102,9 @@ ArrayList<ZIMMessage> deleteMessageList = new ArrayList();
 ZIMMessageDeleteConfig config = new ZIMMessageDeleteConfig();
 config.isAlsoDeleteServerMessage = false;
 
-zim.deleteMessages(deleteMessageList, conversationID, ZIMConversationType.Peer, config, new ZIMMessageDeletedCallback() {
+zim.deleteMessages(deleteMessageList, conversationID, ZIMConversationType.PEER, config, new ZIMMessageDeletedCallback() {
     @Override
-    public void onMessageDeleted(ZIMError error) {
+    public void onMessageDeleted(String conversationID, ZIMConversationType conversationType, ZIMError errorInfo) {
 
     }
 });
@@ -115,7 +133,7 @@ std::vector<std::shared_ptr<ZIMMessage>> messageList;
 zim::ZIMMessageDeleteConfig config;
 // Used to determine whether to delete messages from the server.
 config.isAlsoDeleteServerMessage = true;
-zim_->deleteMessages(messageList,"conversationID",zim::ZIMConversationTypePeer,config,callback);
+zim_->deleteMessages(messageList, "conversationID", zim::ZIM_CONVERSATION_TYPE_PEER, config, callback);
 ```
 </CodeGroup>
 :::
@@ -158,7 +176,203 @@ zim.deleteMessages(deleteMessageList, conversationID, conversationType, config)
 </CodeGroup>
 :::
 
-## Delete all messages of the specified session
+### Delete for Everyone
+
+<Note title="Note">
+
+This feature is supported since the ZIM SDK 3.2.0.
+</Note>
+
+By default, a deletion operation only takes effect for the current user, and other members in the conversation can still see the deleted messages. To make the specified messages invisible to all members in the conversation, set `isAlsoDeleteForEveryone` of {getPlatformData(props,ZIMMessageDeleteConfigMap)} to `true` when calling {getPlatformData(props,deleteMessagesMap)}.
+
+After the deletion succeeds, the operator and other members in the conversation will receive the deletion result notifications respectively:
+
+- The operator learns the deletion result through the {getPlatformData(props,ZIMMessageDeletedCallbackMap)} callback.
+- Other members in the conversation receive the notification through the {getPlatformData(props,messageDeletedMap)} callback. In the callback parameter {getPlatformData(props,ZIMMessageDeletedInfoMap)}, `messageDeleteType` is the "delete specified messages" type, and `messageList` is the list of deleted messages.
+
+The following sample code shows how to delete messages for everyone, and how the operator and other members receive the deletion result notifications:
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Sample code"
+// Delete the specified messages for everyone in the conversation
+String conversationID = "xxxx";
+ArrayList<ZIMMessage> deleteMessageList = new ArrayList<>();
+
+ZIMMessageDeleteConfig config = new ZIMMessageDeleteConfig();
+// When deleting messages for everyone, server messages must also be deleted
+config.isAlsoDeleteServerMessage = true;
+config.isAlsoDeleteForEveryone = true;
+
+zim.deleteMessages(deleteMessageList, conversationID, ZIMConversationType.GROUP, config, new ZIMMessageDeletedCallback() {
+    @Override
+    public void onMessageDeleted(String conversationID, ZIMConversationType conversationType, ZIMError errorInfo) {
+        // Developers can listen for whether the messages are deleted successfully through this callback.
+    }
+});
+
+// Other members in the conversation are notified of the message deletion through this callback
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onMessageDeleted(ZIM zim, ZIMMessageDeletedInfo deletedInfo) {
+        if (deletedInfo.messageDeleteType == ZIMMessageDeleteType.MESSAGE_LIST_DELETED) {
+            // deletedInfo.messageList is the list of deleted messages, where you can refresh the UI
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Sample code"
+// Delete the specified messages for everyone in the conversation
+NSMutableArray *deleteMessageList = [[NSMutableArray alloc] init];
+
+ZIMMessageDeleteConfig *config = [[ZIMMessageDeleteConfig alloc] init];
+// When deleting messages for everyone, server messages must also be deleted
+config.isAlsoDeleteServerMessage = YES;
+config.isAlsoDeleteForEveryone = YES;
+
+[self.zim deleteMessages:deleteMessageList conversationID:conversationID conversationType:ZIMConversationTypeGroup config:config callback:^(NSString * _Nonnull conversationID, ZIMConversationType conversationType, ZIMError * _Nonnull errorInfo) {
+    // Developers can listen for whether the messages are deleted successfully through this callback.
+}];
+
+// Other members in the conversation are notified of the message deletion through this callback
+- (void)zim:(ZIM *)zim messageDeleted:(ZIMMessageDeletedInfo *)deletedInfo {
+    if (deletedInfo.messageDeleteType == ZIMMessageDeleteTypeMessageListDeleted) {
+        // deletedInfo.messageList is the list of deleted messages, where you can refresh the UI
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Sample code"
+// Delete the specified messages for everyone in the conversation
+std::vector<std::shared_ptr<zim::ZIMMessage>> messageList;
+
+zim::ZIMMessageDeleteConfig config;
+// When deleting messages for everyone, server messages must also be deleted
+config.isAlsoDeleteServerMessage = true;
+config.isAlsoDeleteForEveryone = true;
+
+zim_->deleteMessages(messageList, "conversationID", zim::ZIM_CONVERSATION_TYPE_GROUP, config, callback);
+
+// Other members in the conversation are notified of the message deletion through this callback
+void onMessageDeleted(zim::ZIM *zim, const zim::ZIMMessageDeletedInfo &deletedInfo) override {
+    if (deletedInfo.messageDeleteType == zim::ZIM_MESSAGE_DELETE_TYPE_MESSAGE_LIST_DELETED) {
+        // deletedInfo.messageList is the list of deleted messages, where you can refresh the UI
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Sample code"
+// Delete the specified messages for everyone in the conversation
+String conversationID = 'xxxx';
+List<ZIMMessage> messageList = [];
+
+ZIMMessageDeleteConfig config = ZIMMessageDeleteConfig();
+// When deleting messages for everyone, server messages must also be deleted
+config.isAlsoDeleteServerMessage = true;
+config.isAlsoDeleteForEveryone = true;
+
+await ZIM
+    .getInstance()
+    !.deleteMessages(
+        messageList, conversationID, ZIMConversationType.group, config)
+    .then((value) => {})
+    .catchError((onError) {});
+
+// Other members in the conversation are notified of the message deletion through this callback
+ZIMEventHandler.onMessageDeleted = (zim, deletedInfo) {
+    if (deletedInfo.messageDeleteType == ZIMMessageDeleteType.messageListDeleted) {
+        // deletedInfo.messageList is the list of deleted messages, where you can refresh the UI
+    }
+};
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web"}
+<CodeGroup>
+```typescript title="Sample code"
+// Delete the specified messages for everyone in the conversation
+const conversationID = '';
+const conversationType = 2; // Group conversation
+const deleteMessageList: ZIMMessage[] = [];
+
+const config: ZIMMessageDeleteConfig = {
+    // When deleting messages for everyone, server messages must also be deleted
+    isAlsoDeleteServerMessage: true,
+    isAlsoDeleteForEveryone: true,
+};
+
+zim.deleteMessages(deleteMessageList, conversationID, conversationType, config)
+    .then((res: ZIMMessageDeletedResult) => {
+        // Operation successful.
+    })
+    .catch((err: ZIMError) => {
+        // Operation failed.
+    });
+
+// Other members in the conversation are notified of the message deletion through this callback
+zim.on('messageDeleted', (zim: ZIM, data: ZIMMessageDeletedEventResult) => {
+    if (data.messageDeleteType == 0) {
+        // data.messageList is the list of deleted messages, where you can refresh the UI
+    }
+});
+```
+</CodeGroup>
+:::
+
+<Warning title="Warning">
+
+- `isAlsoDeleteForEveryone` only takes effect for the {getPlatformData(props,deleteMessagesMap)} interface, and is not supported by {getPlatformData(props,deleteAllMessageMap)} or {getPlatformData(props,deleteAllConversationMessagesWithConfigMap)}.
+- When using this configuration, `isAlsoDeleteServerMessage` must also be set to `true`.
+- A maximum of 100 messages can be deleted at a time.
+- This operation takes effect for the entire batch: as long as any message in the passed-in list does not meet the conditions (exceeding the validity period, no operation permission, etc.), the entire batch fails, and the remaining valid messages in the list will not be deleted.
+</Warning>
+
+#### Validity period
+
+Only messages within the validity period can be deleted for everyone, and the validity period starts from the time the message is sent. The default validity period is 24 hours and can be configured to up to 7 days. To modify the configuration, contact ZEGO technical support.
+
+It is recommended that the business layer decide whether to display the "Delete for everyone" entry to users based on the difference between the `timestamp` of the message and the current time. If this operation is mistakenly triggered due to inaccurate local device time, the interface returns an error code as a fallback.
+
+#### Operation permissions
+
+The scope of messages that conversation members can delete for everyone is as follows:
+
+| Conversation type | Messages that can be deleted for everyone |
+| --- | --- |
+| One-to-one | Only the messages sent by yourself can be deleted, and deleting the messages sent by the other party is not supported. |
+| Group | Regular members can only delete the messages sent by themselves; admins can delete the messages sent by themselves and regular members; the group owner can delete the messages sent by themselves, admins, and regular members. |
+
+In group conversations, it is recommended that the business layer first query the identities of the operator and the message sender in the group through {getPlatformData(props,queryGroupMemberInfoMap)}, and then decide whether to display the "Delete for everyone" entry to users.
+
+<Note title="Note">
+
+For group targeted messages, only the target members of the message will receive the deletion notification, and non-target members are not affected.
+</Note>
+
+#### Error codes
+
+When the call fails, the common error codes are as follows:
+
+| Error code | Description |
+| --- | --- |
+| 6000001 | Parameter error. `isAlsoDeleteServerMessage` is not set to `true` at the same time, or more than 100 messages are deleted at a time. |
+| 6000288 | The message to be deleted has exceeded the validity period for deletion for everyone. |
+| 6000285 | No operation permission in the one-to-one conversation scenario, that is, an attempt is made to delete a message sent by the other party. |
+| 6000541 | No operation permission in the group conversation scenario, that is, an attempt is made to delete a message sent by a member whose permission is higher than or equal to your own. |
+
+
+
+### Delete all messages of the specified session
 
 The following process shows how Client A deletes all messages with Client B:
 
@@ -178,9 +392,9 @@ String conversationID = "xxxx";
 ZIMMessageDeleteConfig config = new ZIMMessageDeleteConfig();
 config.isAlsoDeleteServerMessage = false;
 
-zim.deleteAllMessage(conversationID, ZIMConversationType.Peer, config, new ZIMMessageDeletedCallback() {
+zim.deleteAllMessage(conversationID, ZIMConversationType.PEER, config, new ZIMMessageDeletedCallback() {
     @Override
-    public void onMessageDeleted(ZIMError error) {
+    public void onMessageDeleted(String conversationID, ZIMConversationType conversationType, ZIMError errorInfo) {
 
     }
 });
@@ -210,7 +424,7 @@ config.isAlsoDeleteServerMessage = true;
 ZIMMessageDeleteConfig config;
 config.isAlsoDeleteServerMessage = true;
 	 
-zim_->deleteAllMessage("converastionID",zim::ZIMConversationTypePeer,config,callback);
+zim_->deleteAllMessage("conversationID", zim::ZIM_CONVERSATION_TYPE_PEER, config, callback);
 ```
 
 </CodeGroup>
@@ -285,7 +499,7 @@ config.isAlsoDeleteServerMessage = true;
 
 zim.deleteAllConversationMessages(config, new ZIMConversationMessagesAllDeletedCallback() {
     @Override
-    public void onConversationMessagesAllDeleted(ZIMError error) {
+    public void onConversationMessagesAllDeleted(ZIMError errorInfo) {
         // Developers can use this callback to monitor whether the message is deleted successfully.
     }
 });
