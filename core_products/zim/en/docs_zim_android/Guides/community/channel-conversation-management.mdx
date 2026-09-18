@@ -33,6 +33,21 @@ export const onConversationChangedMap = {
 export const ZIMCommunityChannelMap = {
   'Android': <a href="@-ZIMCommunityChannel" target="_blank">ZIMCommunityChannel</a>,
 }
+export const queryConversationListMap = {
+  'Android': <a href="@queryConversationList" target="_blank">queryConversationList</a>,
+  'iOS,mac': <a href="@queryConversationListWithConfig:callback:" target="_blank">queryConversationListWithConfig</a>,
+  'Flutter': <a href="https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/queryConversationList.html" target="_blank">queryConversationList</a>,
+}
+export const updateConversationPinnedStateMap = {
+  'Android': <a href="@updateConversationPinnedState" target="_blank">updateConversationPinnedState</a>,
+  'iOS,mac': <a href="@updateConversationPinnedState:conversationID:conversationType:callback:" target="_blank">updateConversationPinnedState</a>,
+  'Flutter': <a href="https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/updateConversationPinnedState.html" target="_blank">updateConversationPinnedState</a>,
+}
+export const setConversationMarkMap = {
+  'Android': <a href="@setConversationMark" target="_blank">setConversationMark</a>,
+  'iOS,mac': <a href="@setConversationMark:enable:conversationInfos:callback:" target="_blank">setConversationMark</a>,
+  'Flutter': <a href="https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/setConversationMark.html" target="_blank">setConversationMark</a>,
+}
 
 # Channel conversation management
 
@@ -47,6 +62,7 @@ Each Community channel corresponds to a conversation of type `COMMUNITY_CHANNEL`
 - Setting/clearing the draft of a channel conversation
 - Configuring Do Not Disturb for a channel conversation
 - Listening for channel conversation changes
+- Syncing channel conversations to the conversation list
 
 ## Prerequisites
 
@@ -240,7 +256,7 @@ zim.clearConversationUnreadMessageCount(conversationID, conversationType)
 try {
     await ZIM.getInstance()!.clearConversationUnreadMessageCount(
         channel.conversationID,
-        ZIMConversationType.CommunityChannel,
+        ZIMConversationType.communityChannel,
     );
     // Unread count cleared
 } on PlatformException catch (onError) {
@@ -329,7 +345,7 @@ try {
     await ZIM.getInstance()!.setConversationDraft(
         'This is draft content',
         channel.conversationID,
-        ZIMConversationType.CommunityChannel,
+        ZIMConversationType.communityChannel,
     );
     // Draft saved successfully
 } on PlatformException catch (onError) {
@@ -418,12 +434,170 @@ try {
     await ZIM.getInstance()!.setConversationNotificationStatus(
         ZIMConversationNotificationStatus.doNotDisturb,
         channel.conversationID,
-        ZIMConversationType.CommunityChannel,
+        ZIMConversationType.communityChannel,
     );
     // Set successfully
 } on PlatformException catch (onError) {
     // Setting failed
 }
+```
+</CodeGroup>
+:::
+
+## Sync channel conversations to the conversation list
+
+After this feature is enabled, community channel conversations are included in the ZIM conversation list together with one-on-one and group conversations: you can pull the complete list including channel conversations in one go through {getPlatformData(props,queryConversationListMap)}, and stay aware of changes to channel conversations such as the latest messages, unread counts, and drafts through {getPlatformData(props,onConversationChangedMap)}, without maintaining a separate list for community channels.
+
+For channel conversations synced to the conversation list, the conversation type is `COMMUNITY_CHANNEL`, and the `conversationID` is still the `conversationID` field in the channel object {getPlatformData(props,ZIMCommunityChannelMap)}.
+
+<Warning title="Warning">
+- This feature is disabled by default. Contact ZEGOCLOUD Technical Support for activation before use. If it is not enabled, channel conversations do not appear in the conversation list, and no conversation change notifications of the `COMMUNITY_CHANNEL` type are generated.
+- The current version only supports syncing the **default channel** of a Community to the conversation list. For other channels, continue to use {getPlatformData(props,queryCommunityChannelListMap)} to get and manage them.
+</Warning>
+
+### Supported conversation management capabilities
+
+After channel conversations enter the conversation list, the available conversation management APIs are the same as the capabilities described earlier in this article:
+
+| Conversation management capability | API | Supported |
+| --- | --- | --- |
+| Clear conversation unread count | {getPlatformData(props,clearConversationUnreadMessageCountMap)} | Yes |
+| Set conversation draft | {getPlatformData(props,setConversationDraftMap)} | Yes |
+| Set conversation Do Not Disturb | {getPlatformData(props,setConversationNotificationStatusMap)} | Yes |
+| Pin conversation | {getPlatformData(props,updateConversationPinnedStateMap)} | Not supported yet |
+| Mark conversation | {getPlatformData(props,setConversationMarkMap)} | Not supported yet |
+
+### Get the community ID of a channel conversation
+
+`ZIMConversation` adds a `relatedID` property to identify the ID of the object associated with the conversation. When the conversation type is `COMMUNITY_CHANNEL`, this value is the `communityID` of the Community that the channel belongs to.
+
+In the conversation list scenario, you can directly locate the Community that a channel conversation belongs to through `relatedID`, for scenarios such as querying community public information and pulling the community member list, without maintaining the mapping between `conversationID` and `communityID` yourself.
+
+<Note title="Note">
+
+In the current version, the meaning of `relatedID` is clearly defined only when the conversation type is `COMMUNITY_CHANNEL`.
+</Note>
+
+### Listen for community channel conversation updates
+
+The addition, update, and deletion of channel conversations are notified through the {getPlatformData(props,onConversationChangedMap)} callback, just like one-on-one and group conversations. In the callback, you can filter out conversations of the `COMMUNITY_CHANNEL` type and update the display of community channels in the conversation list.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Example code"
+// Register SDK event notification callbacks
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onConversationChanged(ZIM zim, ArrayList<ZIMConversationChangeInfo> conversationChangeInfoList) {
+        for (ZIMConversationChangeInfo changeInfo : conversationChangeInfoList) {
+            ZIMConversation conversation = changeInfo.conversation;
+            if (conversation.type != ZIMConversationType.COMMUNITY_CHANNEL) {
+                // Not a channel conversation, handle it with the original logic
+                continue;
+            }
+            // changeInfo.action: ADDED (conversation added), UPDATED (conversation updated), DELETED (conversation deleted)
+            String conversationID = conversation.conversationID;    // Channel conversation ID
+            String communityID = conversation.relatedID;            // ID of the Community that the channel conversation belongs to
+            int unreadMessageCount = conversation.unreadMessageCount;
+            String draft = conversation.draft;
+        }
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Example code"
+// Register SDK event notification callbacks
+[self.zim setEventHandler:self];
+
+...
+
+- (void)zim:(ZIM *)zim
+conversationChanged:(NSArray<ZIMConversationChangeInfo *> *)conversationChangeInfoList {
+    for (ZIMConversationChangeInfo *changeInfo in conversationChangeInfoList) {
+        ZIMConversation *conversation = changeInfo.conversation;
+        if (conversation.type != ZIMConversationTypeCommunityChannel) {
+            // Not a channel conversation, handle it with the original logic
+            continue;
+        }
+        // changeInfo.action: Added (conversation added), Updated (conversation updated), Deleted (conversation deleted)
+        NSString *conversationID = conversation.conversationID;    // Channel conversation ID
+        NSString *communityID = conversation.relatedID;            // ID of the Community that the channel conversation belongs to
+        unsigned int unreadMessageCount = conversation.unreadMessageCount;
+        NSString *draft = conversation.draft;
+    }
+}
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Example code"
+// Register SDK event notification callbacks
+class ZIMEventHandlerImpl : public zim::ZIMEventHandler {
+    void onConversationChanged(
+        zim::ZIM * /*zim*/,
+        const std::vector<zim::ZIMConversationChangeInfo> &conversationChangeInfoList) override {
+        for (const auto &changeInfo : conversationChangeInfoList) {
+            const auto &conversation = changeInfo.conversation;
+            if (!conversation ||
+                conversation->type != zim::ZIM_CONVERSATION_TYPE_COMMUNITY_CHANNEL) {
+                // Not a channel conversation, handle it with the original logic
+                continue;
+            }
+            // changeInfo.action: ADDED (conversation added), UPDATED (conversation updated), DELETED (conversation deleted)
+            std::string conversationID = conversation->conversationID; // Channel conversation ID
+            std::string communityID = conversation->relatedID;         // ID of the Community that the channel conversation belongs to
+            unsigned int unreadMessageCount = conversation->unreadMessageCount;
+            std::string draft = conversation->draft;
+        }
+    }
+};
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web|UTS"}
+<CodeGroup>
+```typescript title="Example code"
+// Register SDK event notification callbacks
+zim.on('conversationChanged', (zim: ZIM, data: ZIMConversationChangedEventResult) => {
+    data.infoList.forEach((info) => {
+        const conversation = info.conversation;
+        if (conversation.type !== ZIMConversationType.CommunityChannel) {
+            // Not a channel conversation, handle it with the original logic
+            return;
+        }
+        // info.action: Added (conversation added), Deleted (conversation deleted), Updated (conversation updated)
+        const conversationID = conversation.conversationID;  // Channel conversation ID
+        const communityID = conversation.relatedID;          // ID of the Community that the channel conversation belongs to
+        const unreadMessageCount = conversation.unreadMessageCount;
+        const draft = conversation.draft;
+    });
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Example code"
+// Register SDK event notification callbacks
+ZIMEventHandler.onConversationChanged =
+    (ZIM zim, List<ZIMConversationChangeInfo> conversationChangeInfoList) {
+    for (final ZIMConversationChangeInfo changeInfo in conversationChangeInfoList) {
+        final ZIMConversation? conversation = changeInfo.conversation;
+        if (conversation?.type != ZIMConversationType.communityChannel) {
+            // Not a channel conversation, handle it with the original logic
+            continue;
+        }
+        // changeInfo.action: added (conversation added), updated (conversation updated), deleted (conversation deleted)
+        final conversationID = conversation!.conversationID;  // Channel conversation ID
+        final communityID = conversation.relatedID;           // ID of the Community that the channel conversation belongs to
+        final unreadMessageCount = conversation.unreadMessageCount;
+        final draft = conversation.draft;
+    }
+};
 ```
 </CodeGroup>
 :::

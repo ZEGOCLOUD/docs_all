@@ -1,0 +1,223 @@
+import { getPlatformData } from "/snippets/utils-content-parser.js"
+import { ZIMConversationMap, sendMessageMap, conversationChangedMap, messageReceivedMap, queryConversationListMap } from "/snippets/zim/const-link.mdx"
+
+export const ZIMMessageSendConfigMap = {
+  'default': <a href='@-ZIMMessageSendConfig' target='_blank'>ZIMMessageSendConfig</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIMMessageSendConfig-class.html' target='_blank'>ZIMMessageSendConfig</a>,
+}
+export const queryUsersInfoMap = {
+  'default': <a href='@queryUsersInfo' target='_blank'>queryUsersInfo</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/queryUsersInfo.html' target='_blank'>queryUsersInfo</a>,
+}
+export const updateFriendAliasMap = {
+  'default': <a href='@updateFriendAlias' target='_blank'>updateFriendAlias</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/updateFriendAlias.html' target='_blank'>updateFriendAlias</a>,
+}
+
+
+
+# Create Multiple Peer Conversations
+
+- - -
+
+## Introduction
+
+In ZIM, the conversation ID (`conversationID`) of a one-on-one chat defaults to the peer user's `userID`, so only **one** one-on-one conversation can exist between **two** users.
+
+Starting from version 3.2.0, ZIM supports creating multiple mutually independent one-on-one conversations for the same pair of users. Custom conversation IDs are supported and are no longer bound to the peer user's `userID`. Each conversation has its own message history, unread count, and conversation settings, making it suitable for scenarios such as private chats that require multiple chat windows between the same pair of users.
+
+<Note title="Note">
+For ease of description, this article categorizes one-on-one conversations into the following two types by how the conversation ID is generated:
+
+| Concept | Description |
+| --- | --- |
+| **One-on-one single conversation** | The traditional one-on-one conversation, whose conversation ID is the peer user's `userID`. |
+| **One-on-one multiple conversations** | The capability described in this article, whose conversation ID is a custom ID different from the peer user's `userID`. |
+
+The two one-on-one conversation scenarios can coexist in the same app without affecting each other.
+</Note>
+
+## Prerequisites
+
+Before implementing this feature, make sure that:
+
+- You have integrated [ZIM SDK](../../Client%20SDKs/SDK%20downloads.mdx) v3.2.0 or later.
+- You have implemented basic message sending and receiving. For details, refer to [Send and receive messages](../../Send%20and%20receive%20messages.mdx).
+
+## Implementation Steps
+
+### Create a conversation
+
+For one-on-one multiple conversations, you do not need to call a creation API in advance. Simply call {getPlatformData(props,sendMessageMap)} to send a message and the conversation is created:
+
+- Pass your custom conversation ID as `toConversationID`, which serves only as the unique identifier of the conversation.
+- Pass the recipient's `userID` as the `toPeerUserID` of {getPlatformData(props,ZIMMessageSendConfigMap)}, which determines who the message is actually delivered to.
+
+If `toPeerUserID` is empty, the SDK follows the original behavior, treating `toConversationID` as the peer user's `userID`, without affecting the existing **one-on-one single conversation**.
+
+:::if{props.platform=undefined}
+<CodeGroup>
+```java title="Sample code"
+// Custom conversation ID, which must be guaranteed unique by the developer
+String conversationID = "chatID_xxxx";
+
+ZIMTextMessage zimMessage = new ZIMTextMessage();
+zimMessage.message = "message content";
+
+ZIMMessageSendConfig config = new ZIMMessageSendConfig();
+// Specify the user ID to which the message is actually delivered
+config.toPeerUserID = "peerUserID";
+
+zim.sendMessage(zimMessage, conversationID, ZIMConversationType.PEER, config, new ZIMMessageSentFullCallback() {
+    @Override
+    public void onMessageAttached(ZIMMessage zimMessage) {
+        // Developers can use this callback to monitor whether the message starts being prepared for sending.
+    }
+
+    @Override
+    public void onMessageSent(ZIMMessage zimMessage, ZIMError errorInfo) {
+        // Developers can use this callback to monitor whether the message is sent successfully.
+    }
+});
+```
+</CodeGroup>
+:::
+:::if{props.platform="iOS|mac"}
+<CodeGroup>
+```objc title="Sample code"
+// Custom conversation ID, which must be guaranteed unique by the developer
+NSString *conversationID = @"chatID_xxxx";
+
+ZIMTextMessage *textMessage = [[ZIMTextMessage alloc] init];
+textMessage.message = @"message content";
+
+ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+// Specify the user ID to which the message is actually delivered
+config.toPeerUserID = @"peerUserID";
+
+ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
+notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
+    // Callback before sending, where developers can display the UI in advance.
+};
+
+[self.zim sendMessage:textMessage toConversationID:conversationID conversationType:ZIMConversationTypePeer config:config notification:notification callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+    // Developers can use this callback to monitor whether the message is sent successfully.
+}];
+```
+</CodeGroup>
+:::
+:::if{props.platform="window"}
+<CodeGroup>
+```cpp title="Sample code"
+// Custom conversation ID, which must be guaranteed unique by the developer
+std::string conversationID = "chatID_xxxx";
+
+zim::ZIMTextMessage text_message;
+text_message.message = "message content";
+zim::ZIMMessage *message = &text_message;
+
+zim::ZIMMessageSendConfig config;
+// Specify the user ID to which the message is actually delivered
+config.toPeerUserID = "peerUserID";
+
+auto notification = std::make_shared<zim::ZIMMessageSendNotification>(
+    [=](const std::shared_ptr<zim::ZIMMessage> &message) {});
+
+zim_->sendMessage(message, conversationID, zim::ZIM_CONVERSATION_TYPE_PEER, config, notification,
+                  [=](const std::shared_ptr<zim::ZIMMessage> &message,
+                      const zim::ZIMError &errorInfo) {});
+```
+</CodeGroup>
+:::
+:::if{props.platform="Flutter"}
+<CodeGroup>
+```dart title="Sample code"
+// Custom conversation ID, which must be guaranteed unique by the developer
+String conversationID = 'chatID_xxxx';
+
+ZIMTextMessage textMessage = ZIMTextMessage(message: 'message content');
+
+ZIMMessageSendConfig sendConfig = ZIMMessageSendConfig();
+// Specify the user ID to which the message is actually delivered
+sendConfig.toPeerUserID = 'peerUserID';
+
+ZIM
+    .getInstance()
+    !.sendMessage(textMessage, conversationID, ZIMConversationType.peer, sendConfig)
+    .then((value) => {})
+    .catchError((onError) {});
+```
+</CodeGroup>
+:::
+:::if{props.platform="Web"}
+<CodeGroup>
+```typescript title="Sample code"
+// Custom conversation ID, which must be guaranteed unique by the developer
+const conversationID = 'chatID_xxxx';
+const conversationType = 0;
+
+const messageTextObj: ZIMMessage = {
+    type: 1,
+    message: 'message content'
+};
+
+const config: ZIMMessageSendConfig = {
+    // Specify the user ID to which the message is actually delivered
+    toPeerUserID: 'peerUserID'
+};
+
+const notification: ZIMMessageSendNotification = {
+    onMessageAttached: (message: ZIMMessage) => {}
+};
+
+zim.sendMessage(messageTextObj, conversationID, conversationType, config, notification)
+    .then((res: ZIMMessageSentResult) => {
+        // Sent successfully
+    })
+    .catch((err: ZIMError) => {
+        // Failed to send
+    });
+```
+</CodeGroup>
+:::
+
+After the message is sent successfully, the sender, the recipient, and all other logged-in devices of both users receive the {getPlatformData(props,conversationChangedMap)} callback, in which the conversation ID carried is your custom conversation ID. In addition, the recipient also receives the {getPlatformData(props,messageReceivedMap)} callback.
+
+In subsequent one-on-one chats, sending a message to the same custom conversation ID routes the message into the same conversation; passing a new custom conversation ID creates a new conversation.
+
+<Warning title="Warning">
+
+- The custom conversation ID passed in must be unique and no more than 64 bytes in length.
+- Make sure the custom conversation ID does not duplicate a real `userID`. Otherwise, the conversation will be confused with the one-on-one conversation of the corresponding user, causing messages to be mixed across conversations. ZIM cannot detect such conflicts. It is recommended to use generation rules clearly different from that of `userID` (for example, a UUID with a fixed prefix).
+</Warning>
+
+### Get the peer user's userID
+
+In the one-on-one multiple conversations scenario, the conversation ID no longer equals the peer user's `userID`, so the chat partner cannot be inferred directly from the conversation ID.
+
+In this case, you can obtain the peer user's `userID` through the `relatedID` of {getPlatformData(props,ZIMConversationMap)}. When the conversation type is one-on-one chat, the value of this field is the peer user's `userID`. Both one-on-one conversation scenarios can use `relatedID` to obtain the chat partner.
+
+<Note title="Tips">
+In the one-on-one single conversation scenario, the value of `relatedID` is the same as the conversation ID.
+</Note>
+
+### Manage conversations
+
+The one-on-one multiple conversations scenario reuses existing conversation management capabilities. Operations such as setting do-not-disturb, pinning, marking, drafts, scheduled message destruction, and deleting conversations work exactly the same as for ordinary one-on-one conversations; simply pass in the custom conversation ID. When you get the conversation list through {getPlatformData(props,queryConversationListMap)}, one-on-one multiple conversations are returned together with other conversations.
+
+<Warning title="Warning">
+
+The above APIs can only operate on existing conversations. If the target conversation has not been created by sending a message, the call fails and returns the error code `6000603` (conversation does not exist).
+</Warning>
+
+The peer user's information is still associated by `userID`, not by conversation ID:
+
+- After you call {getPlatformData(props,queryUsersInfoMap)} to query the peer user's information, the `conversationName` and `conversationAvatarUrl` of all one-on-one multiple conversations associated with that `userID` are updated accordingly.
+- After you call {getPlatformData(props,updateFriendAliasMap)} to modify a friend's alias, all one-on-one multiple conversations associated with that `userID` are also updated accordingly.
+- After you add the peer user to the blacklist, all one-on-one multiple conversations associated with that `userID` are affected, and when the peer user sends messages to these conversations, the sending fails and returns the error code `6000284`.
+
+## Considerations
+
+- **Version compatibility**: Clients earlier than 3.2.0 cannot correctly handle custom conversation IDs and will recognize them as ordinary one-on-one conversations with an abnormal `userID`. Therefore, make sure users of this feature have upgraded to version 3.2.0 or later, or decide whether to enable this feature on the business side based on the client version.
+- **Conversation quantity limit**: ZIM is unaware of business-level conversation count rules. To limit the number of conversations that can be created between the same pair of users, implement this rule in your business backend.
+- **Conversation list length**: The conversation list stored on the server has a length limit. Once exceeded, earlier conversations are removed from the list. If a one-on-one multiple conversation is removed, you only need to send a message again with the original custom conversation ID to restore the conversation.
