@@ -6,7 +6,7 @@ date: "2026-06-04"
 ## 功能简介
 
 为匹配不同的人设和场景，您可能需要：
-- 选择不同的文本转语音(TTS)厂商，例如火山引擎、MiniMax、阿里云等，
+- 选择不同的文本转语音(TTS)厂商，例如火山引擎、MiniMax、阿里云、ElevenLabs 等，
 - 配置不同的音色。
 - 针对 TTS 的音频做个性化调整，例如音量、语速、语调等；
 - 特殊规则过滤 TTS 的内容。例如“（开心地说）今天天气真好呀”，过滤括号内容。
@@ -33,7 +33,7 @@ date: "2026-06-04"
 
 | 参数名         | 类型            | 是否必填 | 说明                                                                                                                                                                                                                                                                                                                                                   |
 | -------------- | --------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Vendor         | String          | 是       | 文本转语音（TTS）服务提供商。可选值：<ul><li>Aliyun: 阿里云 TTS（注意：这是普通语音合成，不是 CosyVoice ）。</li><li>CosyVoice: 阿里云 CosyVoice TTS</li><li>ByteDanceV3: 火山引擎V3版本单向流式 TTS。</li><li>ByteDanceFlowing: 火山引擎双向流式引擎 TTS。</li><li>MiniMax: MiniMax TTS</li></ul> <br/><Note title="说明">此参数在更新智能体实例时无法更新</Note> |
+| Vendor         | String          | 是       | 文本转语音（TTS）服务提供商。可选值：<ul><li>Aliyun: 阿里云 TTS（注意：这是普通语音合成，不是 CosyVoice ）。</li><li>CosyVoice: 阿里云 CosyVoice TTS</li><li>ByteDanceV3: 火山引擎V3版本单向流式 TTS。</li><li>ByteDanceFlowing: 火山引擎双向流式引擎 TTS。</li><li>MiniMax: MiniMax TTS</li><li>ElevenLabs: ElevenLabs TTS</li></ul> <br/><Note title="说明">此参数在更新智能体实例时无法更新</Note> |
 | Url            | String          | 否       | TTS 服务域名 URL 地址，默认为对应厂商的国内集群地址，如 MiniMax：wss://api.minimaxi.com/ws/v1/t2a_v2。 |
 | Params         | Object          | 是       | TTS 配置参数，格式为 JSON 对象。包含 app 参数（用于认证）和其他参数（用于调整 TTS 效果）。详见下方 Params 参数说明。                                                                                                                                                                                                                                   |
 | FilterText     | Array of Object | 否       | 从输入给 TTS 的内容中（一般是 LLM 返回的内容或者 SendAgentInstanceTTS 接口的 Text 参数值）过滤掉指定标点符号内的文本，然后再进行语音合成。比如把“(开心的说)即构科技欢迎你！”括号内的内容过滤掉，再进行语音合成，则设置成`[{"BeginCharacters": "(", "EndCharacters": ")"}]`<br/><Note title="注意">FilterText 是一个 Object 数组。其中的每个 Object 包含两个字符串类型的参数：BeginCharacters 和 EndCharacters。</Note><Note title="说明">此参数在更新智能体实例时无法更新</Note> |
@@ -304,6 +304,106 @@ voice_setting 部分常用参数:
 }
 ```
 
+</Tab>
+<Tab title="ElevenLabs">
+
+<Warning title="注意">**使用 ElevenLabs TTS 前请联系 ZEGO 商务开通。**</Warning>
+
+详细参数说明请查看：[ElevenLabs 模型介绍](https://elevenlabs.io/docs/overview/models#flash-v25) 和 [ElevenLabs TTS API 参考](https://elevenlabs.io/docs/api-reference/text-to-speech/v-1-text-to-speech-voice-id-stream-input)。推荐使用 `eleven_flash_v2_5` 模型。
+
+除 `app` 参数外，其余参数会直接透传给 ElevenLabs。`Url` 参数可不传，默认为 `wss://api.elevenlabs.io/v1/text-to-speech`。
+
+#### 设置 ApiKey
+
+ElevenLabs 的 API Key 需放入 `app.api_key` 字段。
+
+#### 设置模型
+
+- `model_id`：模型 ID，可选。推荐使用 `eleven_flash_v2_5`。
+
+#### 设置音色
+
+- `voice_id`：声音 ID，必填。`voice_id` 须为使用者账户下与 `model_id` 相匹配的声音 ID。
+
+#### 声音设置（可选）
+
+`voice_settings` 用于调整声音效果，部分常用参数如下：
+
+| 参数名            | 类型    | 说明                                                                                       |
+| ----------------- | ------- | ------------------------------------------------------------------------------------------ |
+| stability         | float   | 声音稳定性。数值越低，声音情感表现越丰富；数值越高，声音表现越稳定。                       |
+| similarity_boost  | float   | 与原始音色的相似度提升。数值越高，合成声音与原始音色越相似。                               |
+| speed             | float   | 语速，默认值为 1。                                                                         |
+| style             | float   | 说话风格强度。数值越高，越贴近原始音色的说话风格。                                         |
+| use_speaker_boost | boolean | 是否开启说话人增强，开启后可提升与原始音色的相似度。                                       |
+
+#### 使用示例
+
+以下为使用 ElevenLabs TTS、模型为 `eleven_flash_v2_5` 的示例。
+
+<CodeGroup>
+```json RegisterAgent
+// !mark(10:26)
+{
+    "AgentId": "xiaozhi",
+    "Name": "小智",
+    "LLM": {
+        "Url": "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
+        "ApiKey": "zego_test",
+        "Model": "doubao-1-5-lite-32k-250115",
+        "SystemPrompt": "你是小智，成年女性，是**即构科技创造的陪伴助手**，上知天文下知地理，聪明睿智、热情友善。"
+    },
+    "TTS": {
+        "Vendor": "ElevenLabs",
+        "Params": {
+            "app": {
+                "api_key": "your_api_key"
+            },
+            "model_id": "eleven_flash_v2_5",
+            "voice_id": "your_voice_id",
+            "voice_settings": {
+                "similarity_boost": 0.8,
+                "speed": 1,
+                "stability": 0.5,
+                "use_speaker_boost": true,
+                "style": 0
+            }
+        }
+    }
+}
+```
+
+```json CreateAgentInstance
+// !mark(10:26)
+{
+    "AgentId": "xiaozhi",
+    "UserId": "user_1",
+    "RTC": {
+        "RoomId": "room_1",
+        "AgentStreamId": "agent_stream_1",
+        "AgentUserId": "agent_user_1",
+        "UserStreamId": "user_stream_1"
+    },
+    "TTS": {
+        "Vendor": "ElevenLabs",
+        "Params": {
+            "app": {
+                "api_key": "your_api_key"
+            },
+            "model_id": "eleven_flash_v2_5",
+            "voice_id": "your_voice_id",
+            "voice_settings": {
+                "similarity_boost": 0.8,
+                "speed": 1,
+                "stability": 0.5,
+                "use_speaker_boost": true,
+                "style": 0
+            }
+        }
+    }
+}
+```
+</CodeGroup>
 </Tab>
 </Tabs>
 
