@@ -1,0 +1,222 @@
+---
+date: "2026-09-30"
+---
+
+# ZIM 呼叫失败场景处理最佳实践
+
+> 适用产品：ZEGO 即时通讯（ZIM）· 呼叫邀请  
+> 适用版本：ZIM SDK 2.9.0 及以上（callUserStateChanged）；未接检查需 2.15.0 及以上
+
+## 1. 功能简介
+
+实时音视频呼叫场景中，当被叫网络不可用、设备离线或长时间无应答时，若主叫侧一直静默等待，会严重损害用户体验。用户对"打电话"的预期是：拨不通就立刻知道，而不是举着手机听十几秒空白音。本方案对齐系统电话的呼叫交互体验：被叫不可达或呼叫超时时，主叫侧及时、明确地给出失败提示。
+
+目标效果：被叫不在线（未登录、无法收到呼叫邀请）时，主叫侧快速返回"无法接通"提示；被叫已登录但在设定时长内未接听时，主叫侧返回"对方无应答"提示。两类失败分开表达，并触发系统提示音。示例可参考：
+
+{/* TODO_IMAGE: 示例效果演示视频 20260617105544_rec_.mp4 (feishu token: NYGTbibz2oXWu1xZC6WchTJ1nJh) */}
+
+## 2. 适用范围与前提条件
+
+- 使用 ZIM 呼叫邀请（callInvite）能力、由主叫侧控制呼叫流程的场景；
+- 主叫与被叫均已集成 ZIM SDK 并完成登录，呼叫邀请功能可用；
+- SDK 版本 ≥ 2.9.0（callUserStateChanged 回调的最低支持版本）；
+- 启用未接检查需 SDK 版本 ≥ 2.15.0——enableNotReceivedCheck 在 2.15.0 及以后版本生效，低于该版本时主叫侧会持续展示 inviting 状态，而非未送达状态。
+
+## 3. 机制设计
+
+### 3.1 未接检查（enableNotReceivedCheck）
+
+| 项 | 说明 |
+|---|---|
+| 接口 | callInvite（zim.callInvite(invitees, config)） |
+| 关键参数 | enableNotReceivedCheck（属于 ZIMCallInviteConfig），默认值为 false |
+| 参数语义 | 传入 true 时，本次呼叫邀请以及后续呼叫都会检测邀请是否送达 |
+| 生效版本 | 2.15.0 及以后版本 |
+| 检测时延 | 被叫在 5 秒内因断网、未上线等原因未收到邀请，即判定为未送达；该时延可联系 ZEGO 技术支持配置为 3 秒或 4 秒 |
+| 超时参数 | timeout（属于 ZIMCallInviteConfig），单位为秒，取值范围 [1, 600]，默认值 90 |
+| 状态流转 | 未送达时被叫状态变为 notYetReceived（暂未送达）；若被叫在呼叫超时前上线，状态会流转为 received（已送达） |
+
+版本兼容：2.15.0 及以后版本向低版本客户端（2.14.0 及之前）发送开启送达检测的呼叫邀请时，低版本将继续展示 inviting 状态而非 notYetReceived。若业务要求全量用户体验一致，需在发版时引导升级。
+
+### 3.2 主叫侧关键状态与处理
+
+| 关键状态 | 触发时间 | 主叫侧表现 |
+|---|---|---|
+| NotYetReceived（9） | 5 秒快速失败（可配置为 3 / 4 秒） | 播放 SIT 音 + 语音提示"无法接通"，结束等待态 |
+| Received（5） | 被叫收到邀请时 | UI 切换为"响铃中"，继续等待接听 |
+| Timeout（6） | timeout 设定的兜底时长到期 | 播放 SIT 音 + 语音提示"对方无应答" |
+| Rejected（2） | 被叫主动拒绝时 | 提示"对方已拒接"，与不可达区分开 |
+
+### 3.3 超时分级设计
+
+采用"快速失败 + 兜底超时"的两级超时机制：**5 秒快速失败**（未接检查）在呼叫发起阶段即确认被叫是否正常收到邀请，避免无意义的等待；**兜底超时**（timeout 参数）覆盖"被叫已收到邀请但迟迟不接听"的路径。二者互补，分别覆盖"不可达"与"不接听"两类失败路径。
+
+### 3.4 失败提示策略
+
+- 音效组合：SIT 音（Special Information Tone，特殊信息音）+ 语音播报，对齐系统电话的失败反馈音效；
+- 文案建议：不可达（NotYetReceived）用"您拨打的用户无法接通"、无应答（Timeout）用"对方无应答，请稍后再拨"、拒接（Rejected）用"对方已拒接"——三类失败三套文案，避免语义混同；
+- 原则：提示需即时、明确、可理解；"不可达"与"已拒接"的业务含义完全不同，必须分开表达。
+
+{/* TODO_IMAGE: 呼叫失败判定链路 (feishu token: H8TIbEeSEoJ9u5xwIa0cRtaxnMd) */}
+
+## 4. 接入示例
+
+### 4.1 Android
+
+```java
+// 发起呼叫并开启未接检查
+List<String> invitees = new ArrayList<>();
+invitees.add("user02");
+
+ZIMCallInviteConfig config = new ZIMCallInviteConfig();
+config.mode = ZIMCallInvitationMode.GENERAL;   // 普通模式
+config.timeout = 30;                            // 兜底无应答超时，单位秒，取值范围 [1, 600]，默认 90
+config.enableNotReceivedCheck = true;           // 开启未送达检测
+
+zim.callInvite(invitees, config, new ZIMCallInvitationSentCallback() {
+    @Override
+    public void onCallInvitationSent(String callID, ZIMCallInvitationSentInfo info, ZIMError errorInfo) {
+        // callID 用于唯一标识本次呼叫，后续取消 / 接受 / 拒绝均使用该 ID
+    }
+});
+
+// 监听被叫状态并驱动 UI
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onCallUserStateChanged(ZIM zim, ZIMCallUserStateChangeInfo info, String callID) {
+        for (ZIMCallUserInfo userInfo : info.callUserList) {
+            switch (userInfo.state) {
+                case NOT_YET_RECEIVED:   // 被叫 5 秒内未收到邀请，快速失败
+                    playSIT();
+                    showTip("您拨打的用户无法接通");
+                    break;
+                case RECEIVED:           // 被叫已收到邀请，进入响铃等待
+                    setCallStatus("ringing");
+                    break;
+                case TIMEOUT:            // 被叫收到但超时未接听
+                    playSIT();
+                    showTip("对方无应答，请稍后再拨");
+                    break;
+                case REJECTED:           // 被叫主动拒绝
+                    playSIT();
+                    showTip("对方已拒接");
+                    break;
+            }
+        }
+    }
+});
+```
+
+### 4.2 iOS
+
+```objective-c
+// 发起呼叫并开启未接检查
+NSMutableArray<NSString *> *invitees = [NSMutableArray arrayWithObject:@"user02"];
+ZIMCallInviteConfig *config = [[ZIMCallInviteConfig alloc] init];
+config.mode = ZIMCallInvitationModeGeneral;    // 普通模式
+config.timeout = 30;                            // 兜底无应答超时，单位秒，取值范围 [1, 600]，默认 90
+config.enableNotReceivedCheck = true;           // 开启未送达检测
+
+[[ZIM getInstance] callInvite:invitees config:config callback:^(NSString * _Nonnull callID,
+        ZIMCallInvitationSentInfo * _Nonnull info, ZIMError * _Nonnull errorInfo) {
+    // callID 用于唯一标识本次呼叫
+}];
+
+// 监听被叫状态并驱动 UI
+- (void)zim:(ZIM *)zim callUserStateChanged:(ZIMCallUserStateChangeInfo *)info callID:(NSString *)callID {
+    for (ZIMCallUserInfo *userInfo in info.callUserList) {
+        switch (userInfo.state) {
+            case ZIMCallUserStateNotYetReceived:   // 被叫 5 秒内未收到邀请，快速失败
+                [self playSIT];
+                [self showTip:@"您拨打的用户无法接通"];
+                break;
+            case ZIMCallUserStateReceived:         // 被叫已收到邀请，进入响铃等待
+                [self setCallStatus:@"ringing"];
+                break;
+            case ZIMCallUserStateTimeout:          // 被叫收到但超时未接听
+                [self playSIT];
+                [self showTip:@"对方无应答，请稍后再拨"];
+                break;
+            case ZIMCallUserStateRejected:         // 被叫主动拒绝
+                [self playSIT];
+                [self showTip:@"对方已拒接"];
+                break;
+            default:
+                break;
+        }
+    }
+}
+```
+
+### 4.3 Web
+
+```typescript
+// 发起呼叫并开启未接检查
+const invitees = ['user02'];
+const config: ZIMCallInviteConfig = {
+  mode: 0,                        // 普通模式
+  timeout: 30,                    // 兜底无应答超时，单位秒，取值范围 [1, 600]，默认 90
+  enableNotReceivedCheck: true,   // 开启未送达检测，2.15.0 及以上生效
+  extendedData: '',
+};
+zim.callInvite(invitees, config)
+  .then((res: ZIMCallInvitationSentResult) => {
+    const callID = res.callID;    // 后续取消 / 接受 / 拒绝均使用该 ID
+  })
+  .catch((err: ZIMError) => { /* 发起失败处理 */ });
+
+// 监听被叫状态并驱动 UI
+zim.on('callUserStateChanged', (zim: ZIM, data: ZIMCallUserStateChangedEventResult) => {
+  if (data.callID !== currentCallID) return;
+  data.callUserList.forEach((userInfo) => {
+    switch (userInfo.state) {
+      case 9: // NotYetReceived：被叫 5 秒内未收到邀请，快速失败
+        playSIT();
+        showTip('您拨打的用户无法接通');
+        break;
+      case 5: // Received：被叫已收到邀请，进入响铃等待
+        setCallStatus('ringing');
+        break;
+      case 6: // Timeout：被叫收到但超时未接听
+        playSIT();
+        showTip('对方无应答，请稍后再拨');
+        break;
+      case 2: // Rejected：被叫主动拒绝
+        playSIT();
+        showTip('对方已拒接');
+        break;
+    }
+  });
+});
+```
+
+判定"不可达"时，主叫侧应主动结束本次呼叫等待态（可按业务调用 callCancel），避免 UI 长时间停留在拨号中。呼叫取消、接受、拒绝等接口的完整用法以官方《呼叫邀请》文档为准。
+
+## 5. 设计原则
+
+- 失败反馈要**快**：开启 enableNotReceivedCheck 主动确认可达性，而非单纯依赖被叫回包；
+- 失败反馈要**可区分**：快速失败（探测不可达）+ 兜底超时（探测不接听）+ 拒接，三类失败不要用同一套文案；
+- 状态机驱动体验：以 ZIMCallUserState 的流转统一驱动 UI 与提示，避免散落的定时器各自为政；
+- 提示音对齐原生体验：SIT 音 + 语音组合，贴近用户对系统电话失败反馈的预期；
+- 参数可配置：快速失败与兜底超时时长应作为可配置项，便于按业务节奏调优，不要硬编码。
+
+## 6. 注意事项
+
+**离线边界**：被叫处于离线状态时，离线推送通知本身也会返回 NotYetReceived 状态，造成"被叫实为离线、却被判定为不可达"的边界情况，主叫侧可能在呼叫离线用户时直接失败。规避方案：业务侧在收到离线推送通知后尽快触发一次登录（重新完成注册），即可规避该误判。该边界由业务侧配合处理，应在接入方案中提前说明。
+
+## 7. 常见问题
+
+**Q1：为什么被叫明明在线，却收到了 notYetReceived？**  
+A：最常见的原因是推送通道与实时通道的差异——被叫 App 处于离线 / 被系统回收状态时，送达检测在判定窗口内拿不到回包。请按第 6 节的方案做重登兜底，并确认被叫端的推送注册状态正常。
+
+**Q2：5 秒的快速失败判定时长可以改吗？**  
+A：可以。默认 5 秒，可联系 ZEGO 技术支持配置为 3 秒或 4 秒。建议不要设得过短，否则弱网下的正常呼叫也会被误判。
+
+**Q3：timeout 设多少合适？**  
+A：官方取值范围为 [1, 600] 秒，默认 90 秒。对齐系统电话体验建议设为 30 - 60 秒；若业务偏"留言 / 异步"形态可适当拉长。
+
+**Q4：低版本客户端看不到 notYetReceived 怎么办？**  
+A：这是官方明确的版本行为——2.14.0 及之前版本的被叫会持续展示 inviting。要么在发版时升级，要么在低版本走兜底超时逻辑。
+
+**Q5：多人呼叫场景是否适用？**  
+A：适用。callUserStateChanged 会返回本呼叫中所有状态发生变化的成员列表，主叫侧需按成员逐个判定，多人场景请按成员状态分别处理。
