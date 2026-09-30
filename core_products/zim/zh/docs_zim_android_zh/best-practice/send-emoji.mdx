@@ -1,0 +1,173 @@
+---
+date: "2026-09-30"
+---
+
+# ZIM 发送表情最佳实践
+
+## 1. 功能简介
+
+表情功能通常包含两层需求：一是键盘里的 Unicode emoji，混在文字里发送；二是表情面板中的自定义表情包（系列表情、大贴图、GIF），作为独立消息发送。
+
+实现前需明确能力边界：ZIM 不提供表情面板、表情资源管理和表情渲染——表情库的维护（资源上传、版本管理、下发客户端）由业务侧实现，ZIM 承担"把表情作为消息发出去、收进来、存进历史消息"。
+
+| 需求 | 实现路径 | 说明 |
+| --- | --- | --- |
+| Emoji 表情 | 直接作为文本消息发送 | SDK 原生透传，无需额外接口 |
+| 自定义表情包 | 业务侧自建表情库 + 自定义消息（type = 200）承载 | ZIM 只负责消息收发与存储 |
+
+## 2. Emoji 表情：直接走文本消息
+
+Emoji 就是普通 Unicode 字符，直接发文本消息（type = 1）即可。发送时的限制（均为官网明确值）：
+
+| 限制 | 官方值 | 对表情的影响 |
+| --- | --- | --- |
+| 消息大小 | 文本消息默认上限 2 KB（可联系技术支持配置至 32 KB） | Emoji 采用 UTF-8 编码后单字符最多 4 字节，2KB 约可容纳 500 个 emoji + 文字 |
+| 发送限频 | 10 次/秒（间隔 100ms） | 连发表情时注意客户端节流 |
+| 空白消息 | 空内容返回错误 6000001 | 纯 emoji 属于合法内容，可正常发送 |
+| 渲染兼容性 | 与 ZIM 无关 | 老操作系统上的新版本 Unicode emoji 可能显示为方框，表情面板建议按客户端操作系统的版本进行过滤 |
+
+## 3. 自定义表情包：自定义消息实现
+
+表情包统一采用自定义消息（type = 200）承载：消息体只放"表情 ID + 资源 URL + 宽高"，资源本体由业务 CDN 承载。表情是引用型资源（同一表情会被成千上万次发送），引用式设计避免每次发送都上传图片、占富媒体存储——同一表情发送一万次也只有一万条小消息，资源本体始终只有 CDN 上一份。
+
+```json
+{ "packId": "pack_2026_spring", "emojiId": "e_10086", "url": "https://cdn.example.com/emoji/e_10086.gif", "width": 240, "height": 240 }
+```
+
+版本兼容（务必处理）：
+
+| 接收端 SDK 版本 | 表现 | 建议处理 |
+| --- | --- | --- |
+| ≥ 2.8.0 | 正常收到自定义消息 | 按 subType 解析渲染 |
+| [2.0.0, 2.8.0) | 可收到消息，但类型未知、无法获取内容 | UI 显示"[表情]"占位，引导升级 |
+| 1.x.x | 收不到该消息 | 无需处理 |
+
+## 4. 表情库的维护（业务侧核心工作）
+
+```json
+// 表情包清单（服务端接口下发）
+{
+  "packId": "pack_2026_spring",
+  "version": 5,                      // 版本号：资源更新时递增，客户端据此增量更新
+  "emojis": [
+    { "emojiId": "e_10086", "file": "e_10086.gif", "width": 240, "height": 240, "order": 1 }
+  ],
+  "cdnBase": "https://cdn.example.com/emoji/pack_2026_spring/"
+}
+```
+
+- 启动 / 进入表情面板时请求表情包清单，按 version 对比本地缓存，增量下载新表情到本地目录；
+- 发送时只引用 emojiId + url，不携带资源本体；
+- 接收渲染时优先查本地表情库（按 emojiId），本地没有再按 url 走 CDN 加载，加载成功后写回本地缓存；
+- 下架表情：清单中移除即可，历史消息中的表情按 URL 仍可加载（若要彻底失效需 CDN 侧撤资源，注意历史消息观感）。
+
+## 5. 接入示例
+
+### 5.1 Android
+
+```java
+// Emoji 直接作为文本消息发送
+ZIMTextMessage textMessage = new ZIMTextMessage("今天天气不错 😄🏖️");
+zim.sendMessage(textMessage, toUserID, ZIMConversationType.PEER, config, new ZIMMessageSentCallback() {
+    @Override public void onMessageAttached(ZIMMessage message) {}
+    @Override public void onMessageSent(ZIMMessage message, ZIMError error) {}
+});
+```
+
+```java
+// 自定义表情包：自定义消息（type = 200）承载，消息体只放"表情 ID + 资源 URL + 宽高"
+String stickerJson = "{\"packId\":\"pack_2026_spring\",\"emojiId\":\"e_10086\"," +
+    "\"url\":\"https://cdn.example.com/emoji/e_10086.gif\",\"width\":240,\"height\":240}";
+
+ZIMCustomMessage stickerMessage = new ZIMCustomMessage(stickerJson, 3); // subType = 3：业务自定义的表情包消息
+zim.sendMessage(stickerMessage, toUserID, ZIMConversationType.PEER, config, new ZIMMessageSentCallback() {
+    @Override public void onMessageAttached(ZIMMessage message) {}
+    @Override public void onMessageSent(ZIMMessage message, ZIMError error) {}
+});
+
+// 接收端：统一消息回调中按 type / subType 分发解析
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onMessageReceived(ZIM zim, ZIMMessageReceivedEventResult result) {
+        for (ZIMMessage msg : result.messageList) {
+            if (msg.getType() == ZIMMessageType.CUSTOM) {
+                ZIMCustomMessage custom = (ZIMCustomMessage) msg;
+                if (custom.subType == 3) {
+                    // JSON 解析：优先查本地表情库（按 emojiId），本地没有再按 url 加载并回写缓存
+                }
+            }
+        }
+    }
+});
+```
+
+### 5.2 iOS
+
+```objective-c
+// 自定义表情包：自定义消息（type = 200）承载，消息体只放"表情 ID + 资源 URL + 宽高"
+NSString *stickerJson = @"{\"packId\":\"pack_2026_spring\",\"emojiId\":\"e_10086\","
+    @"\"url\":\"https://cdn.example.com/emoji/e_10086.gif\",\"width\":240,\"height\":240}";
+
+ZIMCustomMessage *stickerMessage = [[ZIMCustomMessage alloc] init];
+stickerMessage.message = stickerJson;
+stickerMessage.subType = 3;   // 业务自定义的表情包消息
+[self.zim sendMessage:stickerMessage toConversationID:toUserID conversationType:ZIMConversationTypePeer
+    config:config notification:nil callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {}];
+
+// 接收端：统一消息回调中按 type / subType 分发解析
+- (void)zim:(ZIM *)zim messageReceivedWithResult:(ZIMMessageReceivedEventResult *)result {
+    for (ZIMMessage *msg in result.messageList) {
+        if (msg.type == ZIMMessageTypeCustom) {
+            ZIMCustomMessage *custom = (ZIMCustomMessage *)msg;
+            if (custom.subType == 3) {
+                // JSON 解析：优先查本地表情库（按 emojiId），本地没有再按 url 加载并回写缓存
+            }
+        }
+    }
+}
+```
+
+### 5.3 Web
+
+```typescript
+const stickerMessage: ZIMCustomMessage = {
+  type: 200,
+  subType: 3,   // 业务自定义：3 = 表情包消息
+  message: JSON.stringify({
+    packId: 'pack_2026_spring',
+    emojiId: 'e_10086',
+    url: 'https://cdn.example.com/emoji/e_10086.gif',
+    width: 240,   // 建议带上宽高，接收端先占位再加载，防聊天气泡跳动
+    height: 240,
+  }),
+  searchedContent: '[表情:开心]', // 检索字段，本地搜聊天记录时可读
+};
+zim.sendMessage(stickerMessage, toUserID, 0, { priority: 1 });
+```
+
+## 6. 接入最佳实践
+
+- **消息体瘦身**：自定义消息默认上限 2 KB（可配置至 32 KB），表情消息体只放 ID + URL + 宽高；不要把 base64 图片塞进消息体。
+- **subType 规划**：表情包消息分配独立 subType（如 3），与红包、投票等其他自定义消息区分，接收端按 subType 分发解析。
+- **宽高占位**：消息体带 width/height，接收端先按宽高占位再异步加载，避免聊天页滚动跳动。
+- **GIF 注意**：ZIM 不做 GIF 解析，GIF 播放由客户端 UI 组件实现；大 GIF 建议压缩后上传 CDN。
+- **限频与节流**：连发表情同样受 10 次/秒限频（文本 / 自定义消息同级），表情面板建议做点击节流。
+- **历史消息**：表情消息可存储为历史消息，翻看历史时按消息体中的 URL / 本地缓存渲染即可。
+- **低版本降级**：接收端 `< 2.8.0` 显示"[表情]"占位，不要尝试对未知类型消息做内容解析。
+
+## 7. 常见问题
+
+**Q1：ZIM 有内置表情面板吗？**  
+A：没有。表情面板 UI、表情资源、渲染全部由业务侧实现，ZIM 只负责把表情作为消息收发存储。
+
+**Q2：表情发出去是消息本体还是引用？**  
+A：推荐引用（emojiId + CDN URL）。表情是高频复用的公共资源，引用式设计避免每次发送都上传图片，也大幅减小消息体。
+
+**Q3：为什么不把表情包作为图片消息发送？**  
+A：图片消息每次发送都要上传文件并占富媒体存储；而表情是高频复用的公共资源，自定义消息只发引用（emojiId + CDN URL），资源本体始终只有 CDN 上一份。图片消息保留给用户相册发送的原图场景。
+
+**Q4：表情库更新后，旧消息里的表情会失效吗？**  
+A：不会自动失效。消息里存的是 URL，只要 CDN 上资源还在就能渲染。若业务要求下架的表情从历史消息中"消失"，需 CDN 侧撤资源，此时历史消息会出现裂图，需在产品设计时提前确认该表现。
+
+**Q5：emoji 在部分老手机上显示方框？**  
+A：这是客户端 OS 渲染能力问题，与 ZIM 无关。常见做法：表情面板按 OS 版本过滤新版 Unicode emoji，或引入业务侧 emoji 字体库做统一渲染。

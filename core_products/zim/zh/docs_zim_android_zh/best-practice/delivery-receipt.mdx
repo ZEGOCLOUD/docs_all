@@ -1,0 +1,265 @@
+---
+date: "2026-09-30"
+---
+
+# ZIM 消息送达状态与回执体系
+
+## 1. 功能简介
+
+用户对"我这条消息到底怎么了"的追问集中在三个节点：发出去了吗（发送成功）、到对方设备了吗（已送达）、对方看了吗（已读）。ZIM 消息回执覆盖"回执中 → 已送达 → 已完成（已读）"的完整流转，也包含"已失败""已过期"等异常状态，适用于各类常见的即时通信场景，更适用于企业办公、客服工单、交易确认等需要明确消息触达状态的场景。
+
+核心设计约束：回执状态是**会话类型 + 消息类型 + 时间**三重约束下的能力——不支持房间会话、7 天后流转为"已过期"且不再支持已读操作。
+
+## 2. 适用范围与前提条件
+
+- ZIM SDK 版本 ≥ 2.5.0（消息回执最低支持版本）；需要"已送达"状态时 SDK ≥ 3.1.0；
+- 发送端需在发送时显式将 ZIMMessageSendConfig 的 hasReceipt 设置为 true，否则该消息不进入回执链路，receiptStatus 为 NONE；
+- 消息回执为付费版功能：如需使用需要开通专业版及以上版本，其中"已送达"状态回执需联系 ZEGO 技术支持开启，3.1.0 之前版本需要此能力请联系 ZEGO 技术支持评估；
+- 如需接收端在收到离线推送后即确认"已送达"，需接入服务端 API 上报。
+
+## 3. 机制设计
+
+### 3.1 回执状态机（ZIMMessageReceiptStatus）
+
+| 取值 | 版本 | 含义 |
+|---|---|---|
+| NONE | — | 不是回执消息。发送时未开启 hasReceipt |
+| PROCESSING | 2.5.0+ | 回执中。接收端据此判断"这条消息需要回执"，可执行已读操作 |
+| DELIVERED | 3.1.0+ | 已送达。表示回执消息已送达接收端，单聊与群聊均支持 |
+| DONE | 2.5.0+ | 已完成，即已被已读 |
+| FAILED | — | 已失败 |
+| EXPIRED | 2.16.0+ 可实时感知 | 已过期。回执有效期为 7 天，超期后不再支持已读操作 |
+| UNKNOWN | — | 未知，需联系 ZEGO 技术支持 |
+
+{/* TODO_IMAGE: 回执状态流转 (feishu token: OaVTbydpdouaLyxVVkEcHUEbnmb) */}
+
+### 3.2 支持矩阵
+
+| 维度 | 是否支持 | 说明 |
+|---|---|---|
+| 单聊会话 | ✅ | 支持消息已读与会话已读两种方式 |
+| 群组会话 | ✅ | 支持消息已读；会话已读不支持群聊；群聊可查询已读 / 未读 / 已送达成员列表 |
+| 房间会话 | ❌ | 暂不支持发送房间会话的消息回执 |
+| 普通消息 / 富媒体消息 / 自定义消息 / 合并消息 | ✅ | 均可携带回执 |
+| 信令消息 / 弹幕消息等 | ❌ | 不在回执支持的消息类型范围内，需业务侧另行实现"已读"语义 |
+
+### 3.3 两种已读方式
+
+| 方式 | 接口 | 语义与限制 |
+|---|---|---|
+| 消息已读 | sendMessageReceiptsRead | 把一批指定消息置为已读。单次消息列表不超过 10 条；仅支持回执状态为 PROCESSING 的已接收消息；不允许跨会话 |
+| 会话已读 | sendConversationMessageReceiptRead | 把指定会话内所有已接收的对方消息置为已读。仅单聊支持；只作用于"设置已读之前"获取的消息；建议在从会话列表进入会话时使用 |
+
+官方明确不推荐在同一会话中混用两种已读接口。接入前先确定路径：按会话进入时机整体清未读 → 会话已读（单聊）；按消息粒度精确控制 → 消息已读。
+
+### 3.4 已送达状态（3.1.0+）
+
+| 场景 | 流转为"已送达"的触发条件 |
+|---|---|
+| 单聊 | ① 接收端在线收到消息后，SDK 自动确认；② 接收端收到离线推送后调用服务端 API 确认；③ 无离线推送时，本端上线拉取到消息后 SDK 自动确认 |
+| 群聊 | 当所有群成员都已送达且仍有成员未读时，回执状态流转为"已送达" |
+
+**离线推送送达 ≠ 消息送达**。必须 ZIM message 实际送达到接收端，或通过服务端 API 确认，才会流转为"已送达"。若需在接收方收到离线推送后即让发送端看到"已送达"（iOS 可开启推送拦截，Android FCM 可使用 DataMessage 推送类型，国内 Android 厂商暂不支持），可在收到推送后调用服务端 API 进行确认。
+
+{/* TODO_IMAGE: 单聊回执三态链路（含离线场景） (feishu token: A6wMbWrTCoQtlpxXw7ncpEbMnng) */}
+
+### 3.5 回执有效期与过期状态
+
+- 消息回执的有效期为 7 天；超出有效期后回执状态流转为 EXPIRED，且不再支持对该消息继续进行已读操作；
+- 2.16.0 及以上版本可通过回执变更回调实时感知过期状态变化；
+- 建议在 UI 层将过期消息的回执标识置灰或移除，不要继续显示"未读"。
+
+### 3.6 查询能力
+
+| 接口 | 用途与注意事项 |
+|---|---|
+| queryMessageReceiptsInfo | 批量查询消息的回执状态、已读用户数、未读用户数。查询他人发送的消息时，已读与未读用户数均为 0 |
+| queryGroupMessageReceiptReadMemberList | 查询群组里自己发送的消息的已读成员列表 |
+| queryGroupMessageReceiptUnreadMemberList | 查询未读成员列表。SDK 低于 2.16.0 且群成员人数大于 100 时不会返回具体未读成员列表，如需使用可联系 ZEGO 技术支持 |
+| queryGroupMessageReceiptMemberList | 查询群消息的已读、未读（未送达）、或已送达状态的成员列表 |
+| ZIMMessageReceiptInfo.readTime | 获取回执已读时间（2.22.0+），可用于阅后即焚等密聊场景。发送者侧需会话内成员全部已读才有值；接收者侧为调用消息已读成功时的服务端时间戳；不支持"会话已读" |
+
+如需对会话的历史消息进行回执相关操作，需先完成查询历史消息、判断历史消息的回执状态后再处理。
+
+## 4. 接入示例
+
+### 4.1 Android
+
+```java
+// 用户 A 发送一条带回执的消息（以单聊文本消息为例）
+String conversationID = "xxx";
+ZIMTextMessage message = new ZIMTextMessage("test");
+ZIMMessageSendConfig sendConfig = new ZIMMessageSendConfig();
+sendConfig.hasReceipt = true;    // 必须为 true，否则该消息不进入回执链路
+zim.sendMessage(message, conversationID, ZIMConversationType.PEER, sendConfig, new ZIMMessageSentCallback() {
+    @Override public void onMessageAttached(ZIMMessage message) {}
+    @Override public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {}
+});
+
+// 发送端监听回执变化（含已送达 / 已读 / 已过期）
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onMessageReceiptChanged(ZIM zim, ArrayList<ZIMMessageReceiptInfo> infos) {
+        // 遍历 infos，按 receiptStatus 更新 UI：DELIVERED 已送达 / DONE 已读 / EXPIRED 已过期置灰
+    }
+    @Override
+    public void onConversationMessageReceiptChanged(ZIM zim, ArrayList<ZIMMessageReceiptInfo> infos) {
+        // 对方设置了会话的已读回执（仅单聊）
+    }
+});
+
+// 用户 B 执行已读——方式一：消息已读（单次不超过 10 条，仅对 PROCESSING 状态消息有效）
+List<ZIMMessage> messages = new ArrayList<>();
+messages.add(message);
+zim.sendMessageReceiptsRead(messages, conversationID, ZIMConversationType.PEER,
+    new ZIMMessageReceiptsReadSentCallback() {
+        @Override
+        public void onMessageReceiptsReadSent(String conversationID, ZIMConversationType conversationType,
+            ArrayList<Long> errorMessageIDs, ZIMError errorInfo) {}
+    });
+
+// 方式二：会话已读（仅单聊，建议在从会话列表进入会话时调用；不推荐与消息已读混用）
+zim.sendConversationMessageReceiptRead(conversationID, ZIMConversationType.PEER,
+    new ZIMConversationMessageReceiptReadSentCallback() {
+        @Override
+        public void onConversationMessageReceiptReadSent(String conversationID,
+            ZIMConversationType conversationType, ZIMError errorInfo) {}
+    });
+
+// （可选）查询一批消息的回执状态、已读用户数和未读用户数
+zim.queryMessageReceiptsInfo(messages, conversationID, ZIMConversationType.PEER,
+    new ZIMMessageReceiptsInfoQueriedCallback() {
+        @Override
+        public void onMessageReceiptsInfoQueried(ArrayList<ZIMMessageReceiptInfo> infos,
+            ArrayList<Long> errorMessageIDs, ZIMError errorInfo) {}
+    });
+
+// （可选）查询群消息的已读 / 未读成员列表（仅自己发送的消息）
+ZIMGroupMessageReceiptMemberQueryConfig queryConfig = new ZIMGroupMessageReceiptMemberQueryConfig();
+queryConfig.nextFlag = 0;   // 初始填 0，后续填回调返回的 flag
+queryConfig.count = 10;
+zim.queryGroupMessageReceiptReadMemberList(message, groupID, queryConfig,
+    new ZIMGroupMessageReceiptMemberListQueriedCallback() {
+        @Override
+        public void onGroupMessageReceiptMemberListQueried(String groupID,
+            ArrayList<ZIMGroupMemberInfo> userList, int nextFlag, ZIMError errorInfo) {}
+    });
+```
+
+### 4.2 iOS
+
+```objective-c
+// 用户 A 发送一条带回执的消息（以单聊文本消息为例）
+NSString *conversationID = @"xxx";
+ZIMTextMessage *message = [[ZIMTextMessage alloc] init];
+message.message = @"test";
+ZIMMessageSendConfig *sendConfig = [[ZIMMessageSendConfig alloc] init];
+sendConfig.hasReceipt = true;    // 必须为 true，否则该消息不进入回执链路
+[self.zim sendMessage:message toConversationID:conversationID conversationType:ZIMConversationTypePeer
+    config:sendConfig notification:nil callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {}];
+
+// 发送端监听回执变化（含已送达 / 已读 / 已过期）
+- (void)zim:(ZIM *)zim messageReceiptChanged:(NSArray<ZIMMessageReceiptInfo *> *)infos {
+    // 遍历 infos，按 receiptStatus 更新 UI：DELIVERED 已送达 / DONE 已读 / EXPIRED 已过期置灰
+}
+- (void)zim:(ZIM *)zim conversationMessageReceiptChanged:(NSArray<ZIMMessageReceiptInfo *> *)infos {
+    // 对方设置了会话的已读回执（仅单聊）
+}
+
+// 用户 B 执行已读——方式一：消息已读（单次不超过 10 条，仅对 PROCESSING 状态消息有效）
+NSMutableArray<ZIMMessage *> *messageList = [[NSMutableArray alloc] init];
+[messageList addObject:message];
+[[ZIM getInstance] sendMessageReceiptsRead:messageList conversationID:conversationID
+    conversationType:conversationType callback:^(NSString * _Nonnull conversationID,
+    ZIMConversationType conversationType, NSArray<NSNumber *> * _Nonnull errorMessageIDs, ZIMError * _Nonnull errorInfo) {}];
+
+// 方式二：会话已读（仅单聊，建议在从会话列表进入会话时调用；不推荐与消息已读混用）
+[[ZIM getInstance] sendConversationMessageReceiptRead:conversationID conversationType:conversationType
+    callback:^(NSString * _Nonnull conversationID, ZIMConversationType conversationType, ZIMError * _Nonnull errorInfo) {}];
+
+// （可选）查询一批消息的回执状态、已读用户数和未读用户数
+[[ZIM getInstance] queryMessageReceiptsInfoByMessageList:messageList conversationID:conversationID
+    conversationType:conversationType callback:^(NSArray<ZIMMessageReceiptInfo *> * _Nonnull infos,
+    NSArray<NSNumber *> * _Nonnull errorMessageIDs, ZIMError * _Nonnull errorInfo) {}];
+
+// （可选）查询群消息的已读成员列表（仅自己发送的消息）
+ZIMGroupMessageReceiptMemberQueryConfig *queryConfig = [[ZIMGroupMessageReceiptMemberQueryConfig alloc] init];
+queryConfig.nextFlag = 0;
+queryConfig.count = 10;
+[[ZIM getInstance] queryGroupMessageReceiptReadMemberListByMessage:message groupID:groupID config:queryConfig
+    callback:^(NSString * _Nonnull groupID, NSArray<ZIMGroupMemberInfo *> * _Nonnull userList,
+    unsigned int nextFlag, ZIMError * _Nonnull errorInfo) {}];
+```
+
+### 4.3 Web
+
+```typescript
+// 发送带回执的消息
+const messageObj: ZIMMessage = { type: 1, message: '文本回执消息' };
+const config: ZIMMessageSendConfig = {
+  priority: 1,
+  hasReceipt: true,     // 必须为 true，否则该消息不进入回执链路
+};
+zim.sendMessage(messageObj, toConversationID, conversationType, config, {
+  onMessageAttached: () => { /* UI 展示"发送中" */ },
+}).then((res: ZIMMessageSentResult) => { /* 发送成功 */ });
+
+// 发送端监听回执变化
+zim.on('messageReceiptChanged', (zim: ZIM, data: ZIMMessageReceiptChangedEventResult) => {
+  data.infos.forEach((info) => {
+    switch (info.receiptStatus) {
+      case ZIMMessageReceiptStatus.Delivered: renderDelivered(info.messageID); break;   // 已送达（3.1.0+）
+      case ZIMMessageReceiptStatus.Done:      renderRead(info.messageID); break;        // 已读
+      case ZIMMessageReceiptStatus.Expired:   renderExpired(info.messageID); break;     // 已过期，回执标识置灰
+      default: break;
+    }
+  });
+});
+// 对方设置了会话的已读回执（仅单聊）
+zim.on('conversationMessageReceiptChanged', (zim: ZIM, data: ZIMMessageReceiptChangedEventResult) => {
+  refreshConversationReceipt(data);
+});
+
+// 接收端执行已读——方式一：消息已读
+const pendingList = receivedList.filter((m) => m.receiptStatus === ZIMMessageReceiptStatus.Processing).slice(0, 10);
+zim.sendMessageReceiptsRead(pendingList, conversationID, conversationType);
+// 方式二：会话已读（仅单聊，建议在从会话列表进入会话时调用）
+zim.sendConversationMessageReceiptRead(conversationID, conversationType);
+```
+
+## 5. UI 设计建议
+
+- **三态呈现**：单勾 = 已发送、双勾 = 已送达、双蓝勾 = 已读，用最少的视觉元素表达最多状态；
+- **过期降级**：超出有效期后不再显示"未读"，改为置灰或移除回执标识，避免长期挂着虚假的未读状态；
+- **群聊聚合**：群聊不逐条展示每个成员状态，聚合为"xx 人已读"，需要时再点开明细列表。
+
+## 6. 接入最佳实践
+
+- **先对齐"要几态"再动工**：只用"发送成功 + 已读"两态还是完整三态，根据实际需要选择是否开通已送达状态。
+- **hasReceipt 必须显式开启**：它是回执链路的总开关，未开启的消息 receiptStatus 一直为 NONE。
+- **批量已读注意两个上限**：单次不超过 10 条，且只对 PROCESSING 状态的消息有效，超出部分需分片处理。
+- **会话已读只在单聊用**：群聊没有会话已读能力；且它只作用于"设置已读之前"的消息，不要在会话内反复调用。
+- **两条已读路径不要混用**：接入前先定路径。
+- **过期状态要主动处理**：7 天后回执转 EXPIRED，UI 应置灰或移除。
+- **群聊成员列表按需拉取**：每次拉取都有分页成本，建议用户点击"查看已读详情"时再拉。
+- **离线推送不等于送达**：若业务强依赖"离线也能标已送达"，需接入服务端上报接口，并注意国内 Android 厂商通道暂不支持的边界。
+
+## 7. 常见问题
+
+**Q1：为什么我做了已读操作，发送端没反应？**  
+A：先查三件事——消息发送时 hasReceipt 是否为 true；消息的 receiptStatus 是否为 PROCESSING（只有该状态才能被设为已读）；发送端与接收端是否在同一会话内（不允许跨会话）。
+
+**Q2：单聊里"已送达"一直不亮是什么原因？**  
+A：常见原因有两个——SDK 版本低于 3.1.0 或"已送达"能力未开通（需联系 ZEGO 技术支持开启）；接收端处于离线且未接入服务端上报。注意离线推送送达本身不等于消息送达。
+
+**Q3：群聊能不能做"会话已读"？**  
+A：不能。会话已读仅支持单聊。群聊只能走消息已读，或通过群成员列表能力展示"谁已读"。群聊里"已送达"的流转条件是所有群成员都已送达且仍有成员未读。
+
+**Q4：消息放久了回执状态变了是什么原因？**  
+A：回执有效期为 7 天，超期会流转为"已过期"，且不再支持已读操作。建议 UI 层对过期回执做置灰或移除处理。
+
+**Q5：自定义消息能做已读回执吗？**  
+A：可以。自定义消息与文本、图片、文件、音频、视频等消息一样可携带回执，合并消息同样支持；只有信令消息、弹幕消息不支持（需业务侧另行实现"已读"语义）。
+
+**Q6：readTime 什么时候才有值？**  
+A：发送者侧需会话内成员全部已读才有值，为最后一个成员已读时的服务端时间戳；接收者侧为调用消息已读成功时的服务端时间戳；两条都为 0 表示尚未满足条件。readTime 不支持"会话已读"，自 2.22.0 起支持。
