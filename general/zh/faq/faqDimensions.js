@@ -1,7 +1,7 @@
 // ⚠️ 本文件由 .scripts/faq/generate_faq_dimensions.mjs 自动生成，请勿手改。
 //   数据源：docuo.config.zh.json → themeConfig.instanceGroups
 //   维护：改 config 后重跑生成脚本（node .scripts/faq/generate_faq_dimensions.mjs）。
-//   实例数：152，产品分类：5，平台：13。
+//   实例数：153，产品分类：5，平台：13。
 export const allProducts = "全部";
 export const allPlatforms = "全部平台";
 
@@ -661,6 +661,10 @@ export const instanceMap = {
   },
   "faq_zh": {
     "product": "常见问题",
+    "platform": "全部平台"
+  },
+  "ai_coding_zh": {
+    "product": "AI Coding",
     "platform": "全部平台"
   }
 };
