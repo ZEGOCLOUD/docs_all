@@ -1,7 +1,7 @@
 // ⚠️ 本文件由 .scripts/faq/generate_faq_dimensions.mjs 自动生成，请勿手改。
 //   数据源：docuo.config.en.json → themeConfig.instanceGroups
 //   维护：改 config 后重跑生成脚本（node .scripts/faq/generate_faq_dimensions.mjs）。
-//   实例数：109，产品分类：4，平台：10。
+//   实例数：112，产品分类：4，平台：10。
 export const allProducts = "All";
 export const allPlatforms = "All Platforms";
 
@@ -25,6 +25,7 @@ export const productData = {
     "Cloud Player",
     "AI Effects",
     "Cloud Recording",
+    "Local Recording",
     "Admin Console",
     "Analytics Dashboard"
   ],
@@ -444,6 +445,14 @@ export const instanceMap = {
     "product": "Cloud Recording",
     "platform": "All Platforms"
   },
+  "local_recording_linux_cpp": {
+    "product": "Local Recording",
+    "platform": "Linux"
+  },
+  "local_recording_linux_java": {
+    "product": "Local Recording",
+    "platform": "Linux"
+  },
   "console": {
     "product": "Admin Console",
     "platform": "Android"
@@ -482,6 +491,10 @@ export const instanceMap = {
   },
   "faq": {
     "product": "FAQ",
+    "platform": "All Platforms"
+  },
+  "ai_coding": {
+    "product": "AI Coding",
     "platform": "All Platforms"
   }
 };
