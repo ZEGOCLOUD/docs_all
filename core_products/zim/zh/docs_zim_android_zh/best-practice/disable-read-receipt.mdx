@@ -1,0 +1,217 @@
+---
+date: "2026-09-30"
+---
+
+# 关闭已读回执通知
+---
+
+{/* 暂不发布 */}
+## 功能简介
+
+已读回执让发送方知道消息已被查看，但在特殊场景下也带来了社交压力，关闭已读回执通知可以隐藏用户 “已读不回” 的行为。
+“关闭已读回执”的隐私开关，其标准行为是 **双向屏蔽**：用户开启隐私开关后，自身看不到对方消息的已读状态，对方也看不到自身消息的已读状态。
+
+<Note title="说明">
+使用此功能需要 ZIM SDK 版本 ≥ 2.5.0 。
+</Note>
+
+## 实现方案
+
+ZIM 的消息回执是双向能力（发送端配置 hasReceipt，接收端调用已读接口回传），原生没有“隐私开关”这一层。要实现该效果，需在客户端做一层逻辑拦截：
+**发送时把“当时的开关状态”写进消息扩展字段，接收时同时校验“本地开关”与“该消息的发出时开关”，两者都满足才回传已读。**
+
+方案依赖两个业务侧约定：
+1. 全局开关 enableReadReceipt，由业务侧维护，true 表示开启回执、false 表示关闭，控制本地回执逻辑与 UI 展示。
+2. 扩展字段标记，发送每条消息时将当时的开关状态以 JSON 写入 extendedData（如 `{ "readReceipt": true }`），接收端据此判断该消息是否应被回执。
+
+开关切换只影响此后发送的消息，标记消息在发送时固化，关闭期间发出的消息标记为 false。重新开启后，接收端的判断条件会自动跳过这些历史消息，无需任何追溯代码。
+
+### 消息发送端
+发送端保持 hasReceipt 始终为 true，让消息正常进入回执链路，由扩展字段标记决定业务层是否处理；
+
+收到回执通知时，先检查本地开关：
+- 关闭则直接忽略回调、不更新 UI。
+- 开启则逐条比对消息的扩展字段标记，仅标记为 true 的消息更新为已读展示。
+
+### 消息接受端
+
+接收端是否回传已读回执，必须同时满足**自己当前已开启回执**，且**解析消息扩展字段确认发送方发送该消息时也开启了回执**。任意一个条件不满足，则不回传、不更新状态、不产生任何回执回调。
+需要拦截的已读接口为 [sendMessageReceiptsRead](@sendMessageReceiptsRead)（单次不超过 10 条，仅对 PROCESSING 状态消息有效）与 [sendConversationMessageReceiptRead](@sendConversationMessageReceiptRead)（仅单聊支持，只作用于设置已读之前获取的消息）。
+两类接口不要混用，接入前按业务场景二选一。
+
+### 注意事项
+
+- **开关全局生效**：关闭后所有单聊与群聊场景均屏蔽回执；回执控制基于单条消息的扩展字段标记实现，控制权在业务侧，不对单个会话独立生效；
+- **不影响送达状态**：本方案只屏蔽「已读」，「发送成功」与「送达」照常展示；
+- **群聊需额外处理展示**：除发送时写入相同标记外，还需不调用群消息已读 / 未读成员列表查询接口，UI 不展示已读人数；
+- **开关由业务侧维护**：持久化与多端一致性由业务负责——多端登录场景需通过业务侧通道（业务长连接或服务端下发）保持各端一致，重启后状态不丢失；
+- **扩展字段解析要兜底**：解析失败一律按“关闭回执”处理，宁可少展示也不误展示。
+
+## 接入示例
+
+### 4.1 Android
+
+```kotlin
+// 1. 构建消息：扩展字段以 JSON 存入当前开关状态（与其他业务标记共用同一 JSON、按 key 读取）
+val msg = ZIMTextMessage("消息内容")
+msg.extendedData = "{\"readReceipt\":$enableReadReceipt}"
+
+// 扩展字段标记的统一解析入口：JSON 按 key 读取，解析失败按"关闭回执"兜底
+fun parseReceiptSwitch(extendedData: String?): Boolean =
+    extendedData?.let { runCatching { org.json.JSONObject(it).optBoolean("readReceipt", false) }.getOrDefault(false) } ?: false
+
+// 2. 回执配置始终正常开启，仅通过扩展字段标记控制业务层回执逻辑
+val config = ZIMMessageSendConfig()
+config.hasReceipt = true
+
+zim.sendMessage(msg, convId, conversationType, config, object : ZIMMessageSentCallback() {
+    override fun onMessageAttached(message: ZIMMessage) {}
+    override fun onMessageSent(message: ZIMMessage, errorInfo: ZIMError) {}
+})
+
+// 3. 发送端：处理回执回调与 UI 展示
+override fun onMessageReceiptChanged(zim: ZIM, infos: ArrayList<ZIMMessageReceiptInfo>) {
+    if (!enableReadReceipt) return   // 本地开关关闭 → 直接忽略回调，不更新 UI
+    for (receiptInfo in infos) {
+        val message = messageDao.queryMessageById(receiptInfo.messageID)
+        message?.let {
+            val selfEnableWhenSend = parseReceiptSwitch(it.extendedData)
+            if (selfEnableWhenSend) updateReceiptUI(listOf(receiptInfo))   // 展示已读
+            // 标记为 false 时不更新状态，仍展示送达
+        }
+    }
+}
+
+// 4. 接收端：拦截已读回传（两个条件同时满足才回传）
+private fun handleReceivedMessage(messageList: MutableList<ZIMMessage>) {
+    for (msg in messageList) {
+        val selfEnableWhenSend = parseReceiptSwitch(msg.extendedData)  // 发送方发送该消息时的开关状态
+        val shouldHandleReceipt = enableReadReceipt && selfEnableWhenSend
+        if (shouldHandleReceipt) {
+            zim.sendMessageReceiptsRead(listOf(msg), msg.conversationID, conversationType,
+                object : ZIMMessageReceiptsReadSentCallback() {
+                    override fun onMessageReceiptsReadSent(conversationID: String,
+                        conversationType: ZIMConversationType, errorMessageIDs: ArrayList<Long>,
+                        errorInfo: ZIMError) {
+                        updateReceiveMsgUI(msg, true)   // 本地已查看，UI 按已读展示
+                    }
+                })
+        } else {
+            updateReceiveMsgUI(msg, false)   // 不回传、UI 不展示已读
+        }
+    }
+}
+```
+
+### 4.2 iOS
+
+```objective-c
+// 1. 构建消息：扩展字段以 JSON 存入当前开关状态
+ZIMTextMessage *msg = [[ZIMTextMessage alloc] init];
+msg.message = @"消息内容";
+msg.extendedData = [NSString stringWithFormat:@"{\"readReceipt\":%@}",
+    enableReadReceipt ? @"true" : @"false"];
+
+// 2. 回执配置始终正常开启
+ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+config.hasReceipt = true;
+[self.zim sendMessage:msg toConversationID:convID conversationType:conversationType
+    config:config notification:nil callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {}];
+
+// 3. 扩展字段标记的统一解析入口（解析失败按"关闭回执"兜底）
+- (BOOL)parseReceiptSwitch:(NSString *)extendedData {
+    if (extendedData.length == 0) return NO;
+    NSError *error = nil;
+    NSDictionary *json = [NSJSONSerialization JSONObjectWithData:
+        [extendedData dataUsingEncoding:NSUTF8StringEncoding] options:0 error:&error];
+    if (error || ![json isKindOfClass:[NSDictionary class]]) return NO;
+    return [json[@"readReceipt"] boolValue];
+}
+
+// 4. 发送端：处理回执回调与 UI 展示
+- (void)zim:(ZIM *)zim messageReceiptChanged:(NSArray<ZIMMessageReceiptInfo *> *)infos {
+    if (!enableReadReceipt) return;
+    for (ZIMMessageReceiptInfo *info in infos) {
+        ZIMMessage *message = [self queryLocalMessageByID:info.messageID];
+        if ([self parseReceiptSwitch:message.extendedData]) {
+            [self updateReceiptUI:infos];   // 展示已读
+        }
+    }
+}
+
+// 5. 接收端：拦截已读回传
+- (void)handleReceivedMessages:(NSArray<ZIMMessage *> *)messageList {
+    for (ZIMMessage *msg in messageList) {
+        BOOL selfEnableWhenSend = [self parseReceiptSwitch:msg.extendedData];
+        BOOL shouldHandleReceipt = enableReadReceipt && selfEnableWhenSend;
+        if (shouldHandleReceipt) {
+            [[ZIM getInstance] sendMessageReceiptsRead:@[msg] conversationID:msg.conversationID
+                conversationType:conversationType callback:^(NSString * _Nonnull conversationID,
+                ZIMConversationType conversationType, NSArray<NSNumber *> * _Nonnull errorMessageIDs,
+                ZIMError * _Nonnull errorInfo) {
+                [self updateReceiveMsgUI:msg isRead:YES];
+            }];
+        } else {
+            [self updateReceiveMsgUI:msg isRead:NO];   // 不回传、UI 不展示已读
+        }
+    }
+}
+```
+
+### 4.3 Web
+
+```typescript
+// 发送端：发送消息时写入开关标记（JSON），hasReceipt 始终为 true
+const msg: ZIMMessage = { type: 1, message: '消息内容', extendedData: JSON.stringify({ readReceipt: enableReadReceipt }) };
+const config: ZIMMessageSendConfig = { hasReceipt: true };
+zim.sendMessage(msg, convId, conversationType, config);
+
+// 发送端：收到回执通知时，先看本地开关，再逐条比对消息标记
+zim.on('messageReceiptChanged', (zim: ZIM, data: ZIMMessageReceiptChangedEventResult) => {
+  if (!enableReadReceipt) return;
+  data.infos.forEach((info) => {
+    const message = messageTable.get(info.messageID);
+    const selfEnableWhenSend = parseReceiptSwitch(message?.extendedData);
+    if (selfEnableWhenSend) renderRead(info.messageID);   // 展示已读；否则保持送达展示
+  });
+});
+
+// 接收端：解析标记 + 本地开关，两个条件同时满足才回传已读
+function parseReceiptSwitch(extendedData?: string): boolean {
+  try { return JSON.parse(extendedData || '{}').readReceipt === true; } catch { return false; }
+}
+
+zim.on('messageReceived', (zim: ZIM, { messageList }) => {
+  for (const msg of messageList) {
+    const selfEnableWhenSend = parseReceiptSwitch(msg.extendedData);
+    if (enableReadReceipt && selfEnableWhenSend) {
+      zim.sendMessageReceiptsRead([msg], msg.conversationID, conversationType)
+        .catch(() => { /* 失败重试 */ });
+    }
+    // 不满足条件：不回传、UI 不展示已读
+  }
+});
+```
+
+## 常见问题
+
+<Accordion title="为什么不直接把 hasReceipt 设为 false？" defaultOpen="false">
+hasReceipt 关闭后该消息彻底脱离回执链路，后续无法基于回执做任何状态展示。本方案让回执链路保持开启、只在业务层用扩展字段决定是否处理，保留了后续扩展空间（例如未来需要展示"已送达"）。
+
+</Accordion>
+<Accordion title="关闭回执会影响送达状态吗？" defaultOpen="false">
+不会。本方案只涉及「已读」回执，「发送成功」与「送达」状态不受影响。
+
+</Accordion>
+<Accordion title="群聊也能做到完全屏蔽吗？" defaultOpen="false">
+可以。发送群消息时写入与单聊相同的标记即可；但要注意群聊还需要额外不查询已读 / 未读成员列表，否则 UI 会暴露已读人数。另外，会话级已读接口仅支持单聊，群聊只能走单条 / 批量已读接口。
+
+</Accordion>
+<Accordion title="开启后为什么关闭期间的历史消息还是显示未读？" defaultOpen="false">
+这是设计如此。历史消息的扩展字段已固定为关闭标记，判断逻辑会天然跳过，不做追溯。
+
+</Accordion>
+<Accordion title="这个开关能按会话粒度控制吗？" defaultOpen="false">
+不能。回执控制基于单条消息的扩展字段标记实现，控制权在业务侧：全局开关决定"发送时打什么标记、收到后是否回传"，不对单个会话独立生效；关闭期间的历史消息因标记已固定，天然不回溯。如需会话级差异，需要业务侧自行扩展标记设计。
+
+</Accordion>

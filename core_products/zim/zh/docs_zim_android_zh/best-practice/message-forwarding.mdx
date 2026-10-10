@@ -1,0 +1,332 @@
+---
+date: "2026-09-30"
+---
+
+# 消息转发
+---
+
+## 功能简介
+
+消息转发是即时通讯的高频基础能力，包含两种转发方式：
+- **逐条转发**：将一条或多条消息直接转发到目标会话。
+- **合并转发**：将多条消息打包为一条合并消息转发到目标会话，接收方点击可查看子消息。
+
+消息转发支持单聊、群聊两种会话方式。逐条转发需要 ZIM SDK 2.0.0 及以上版本，合并转发需要 ZIM SDK 2.14.0 及以上版本。
+
+消息转发效果展示：
+| 场景 | 预期表现 |
+|-|-|
+| 逐条转发 50 条消息 | 全部成功，无限频报错（间隔 150ms 调度） |
+| 转发列表含发送失败的消息 | 失败消息被跳过 / 报错，其余正常转发 |
+| 合并转发 12 条消息 | 接收方收到 1 条合并消息，点开可见 12 条子消息 |
+| 接收端 SDK 2.0\~2.14 | 可收到合并消息，类型为未知，需业务降级处理 |
+| 合并列表含信令 / 弹幕 | 发送被拒绝或按文档过滤 |
+| 转发后的消息排序 | 新消息按送达时间排至目标会话末尾 |
+| 合并消息携带消息回执 | 回执链路正常流转 |
+
+## 实现方案
+
+### 逐条转发
+
+逐条转发的本质是 “复用原消息对象再次发送” ：通过 [queryHistoryMessage](@queryHistoryMessage) 获取原消息对象后传入 [sendMessage](@sendMessage)，原消息对象中的富媒体消息（图片、文件、音频、视频）逐条转发时**复用原消息的富媒体 URL**（引用原文件），不会重新上传，也不额外占用一份富媒体存储。
+
+<Warning title="注意">
+**发送限频**：文本等普通消息单客户端限频 10 次/秒（间隔 100ms），批量转发时若不加控制会触发限频导致部分消息失败，推荐每条间隔 **150ms**（在 100ms 之上留出余量），并采用"间隔调度 + 失败重试"策略。
+</Warning>
+
+### 合并转发
+
+合并转发是将多条消息打包为一条合并消息进行转发，合并消息具有以下特点：
+- 合并消息支持嵌套，合并消息内可包含其他合并消息，可逐层调用 [queryCombineMessageDetail](@queryCombineMessageDetail) 拉取。
+- 合并消息的消息大小无限制，但是超大合并消息建议在产品层进行拆分，确保客户端展开消息时的渲染性能与消息查看体验。
+- 合并消息不支持合并信令、弹幕、撤回、系统类型的消息，也不支持合并发送失败的消息，构造合并消息前需要对这些消息进行过滤。
+- 合并消息支持携带消息回执，转发内容的已读链路不会在合并消息处中断。
+
+<Warning title="注意">
+- 合并消息的标题 title 默认最大 20 字节、概要 summary 默认最大 100 字节，如需调整请联系 ZEGO 技术支持。
+- 接收端 SDK 的版本在 [2.0.0, 2.14.0) 区间可收到合并消息，但类型显示为未知、无法获取内容；1.x 版本的 SDK 无法接收合并消息。
+</Warning>
+
+### 转发后的消息语义
+
+- 转发产生的是一条**全新消息**：新的消息 ID、新的时间戳，与原消息再无关联；如需"引用原文"语义，请使用消息回复（reply）能力。
+- 排序按目标会话的送达时间排至末尾，不保留原消息的发送时序。
+- 不继承原消息的已读 / 未读状态与回执状态，新消息的回执按目标会话重新计算。
+- 原消息被撤回或删除，不影响已转发出去的消息；合并转发产物是独立消息，原消息后续被撤回 / 删除同样不影响子消息展示。
+
+## 接入最佳实践
+
+- **转发前校验**：合并转发前过滤不支持的消息类型（信令 / 弹幕 / 撤回 / 系统 / 发送失败的消息），避免发送报错。
+- **限频调度**：逐条转发务必控制调用间隔（推荐 150ms），批量转发用"间隔调度 + 失败重试"，不要连续裸调 [sendMessage](@sendMessage)。
+- **失败重试**：单条转发失败应记录失败列表并支持重试，避免用户感知"转发的消息少了"。
+- **版本兼容提示**：合并消息接收端需 ≥ 2.14.0 才能正常查看内容，业务侧应对低版本端做降级提示。
+- **接收端按需拉取**：接收回调只带标题 / 概要 / 合并 ID，子消息内容必须经 [queryCombineMessageDetail](@queryCombineMessageDetail) 拉取；嵌套合并需逐层多次拉取。
+- **大批量转发优先合并**：合并转发将多条消息打包为一条消息传输，大批量场景优先使用；合并消息体大小无限制，但超大合并在产品层拆分。
+
+## 接入示例
+
+:::if{props.platform=undefined}
+```java
+// 1. 从历史消息中获取待转发消息（分页示例）
+ArrayList<ZIMMessage> messageList = new ArrayList<>();
+ZIMMessageQueryConfig queryConfig = new ZIMMessageQueryConfig();
+queryConfig.nextMessage = null;      // 首次获取传 null，后续传上一页最后一条
+queryConfig.count = 30;
+queryConfig.reverse = true;
+zim.queryHistoryMessage(conversationID, ZIMConversationType.PEER, queryConfig,
+    new ZIMMessageQueriedCallback() {
+        @Override
+        public void onMessageQueried(String conversationID, ZIMConversationType conversationType,
+            ArrayList<ZIMMessage> list, ZIMError errorInfo) {
+            messageList.addAll(list);
+        }
+    });
+
+// 2. 逐条转发：复用原消息对象再次发送，每条间隔 ≥150ms，避免触发 100ms 限频
+// 注意：sendMessage 为异步回调，需按完成情况链式调度下一条（示例用 Handler 递归），禁止在主线程 sleep
+private void forwardOneByOne(List<ZIMMessage> list, int index) {
+    if (index >= list.size()) return;
+    zim.sendMessage(list.get(index), toConversationID, conversationType, config,
+        new ZIMMessageSentFullCallback() {
+            @Override public void onMessageAttached(ZIMMessage message) {}
+
+            @Override public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {
+                // 单条失败：记录并继续，最后统一汇总失败列表供重试
+            }
+
+            @Override public void onMediaUploadingProgress(ZIMMediaMessage message,
+                long currentFileSize, long totalFileSize) {}
+
+            @Override public void onMultipleMediaUploadingProgress(ZIMMultipleMessage message,
+                long currentFileSize, long totalFileSize, int messageInfoIndex,
+                long currentIndexFileSize, long totalIndexFileSize) {}
+        });
+    new Handler(Looper.getMainLooper()).postDelayed(() -> forwardOneByOne(list, index + 1), 150);
+}
+
+// 3. 合并转发：构造合并消息体（发送与查看需 2.14.0+）
+ZIMCombineMessage combineMessage = new ZIMCombineMessage("标题", "概要", messageList);
+zim.sendMessage(combineMessage, toConversationID, conversationType, config,
+    new ZIMMessageSentFullCallback() {
+        @Override public void onMessageAttached(ZIMMessage message) {}
+
+        @Override public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {}
+
+        @Override public void onMediaUploadingProgress(ZIMMediaMessage message,
+            long currentFileSize, long totalFileSize) {}
+
+        @Override public void onMultipleMediaUploadingProgress(ZIMMultipleMessage message,
+            long currentFileSize, long totalFileSize, int messageInfoIndex,
+            long currentIndexFileSize, long totalIndexFileSize) {}
+    });
+
+// 4. 接收方查看合并消息详情（回调只返回标题、概要、合并 ID）
+zim.queryCombineMessageDetail(combineMessage, new ZIMCombineMessageDetailQueriedCallback() {
+    @Override
+    public void onCombineMessageDetailQueried(ZIMCombineMessage message, ZIMError error) {
+        // 子消息在回调中 message 的 messageList 里；嵌套合并需再次调用本接口逐层拉取
+    }
+});
+```
+
+:::
+
+
+:::if{props.platform="ios|mac"}
+```objective-c
+// 1. 从历史消息中获取待转发消息（分页示例）
+NSMutableArray<ZIMMessage *> *messageList = [NSMutableArray array];
+ZIMMessageQueryConfig *queryConfig = [[ZIMMessageQueryConfig alloc] init];
+queryConfig.nextMessage = nil;       // 首次获取传 nil，后续传上一页第一条
+queryConfig.count = 20;
+queryConfig.reverse = YES;
+[zim queryHistoryMessageByConversationID:conversationID
+                       conversationType:conversationType
+                                 config:queryConfig
+                               callback:^(NSArray<ZIMMessage *> * _Nonnull list, ZIMError * _Nonnull errorInfo) {
+    [messageList addObjectsFromArray:list];
+}];
+
+// 2. 逐条转发：复用原消息对象再次发送，每条间隔 ≥150ms，避免触发 100ms 限频
+// 注意：sendMessage 为异步回调，需按完成情况链式调度下一条（示例用 dispatch_after 递归），勿在主线程 sleep
+- (void)forwardOneByOneWithMessageList:(NSArray<ZIMMessage *> *)messageList index:(NSUInteger)index {
+    if (index >= messageList.count) return;
+    [self.zim sendMessage:messageList[index] toConversationID:toConversationID conversationType:conversationType
+        config:config notification:nil callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {}];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self forwardOneByOneWithMessageList:messageList index:index + 1];
+    });
+}
+
+// 3. 合并转发：构造合并消息体（发送与查看需 2.14.0+）
+ZIMCombineMessage *combineMessage = [[ZIMCombineMessage alloc] initWithTitle:@"标题" summary:@"概要" messageList:messageList];
+[self.zim sendMessage:combineMessage toConversationID:toConversationID conversationType:conversationType
+    config:config notification:nil callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {}];
+
+// 4. 接收方查看合并消息详情（回调只返回标题、概要、合并 ID）
+[zim queryCombineMessageDetailByMessage:combineMessage callback:^(ZIMCombineMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+    // 子消息在回调中 message 的 messageList 里；嵌套合并需再次调用本接口逐层拉取
+}];
+```
+
+:::
+
+
+:::if{props.platform="web"}
+```typescript
+// 逐条转发：每条间隔 150ms，避免触发 100ms 限频
+async function forwardOneByOne(messageList: ZIMMessage[], toConversationID: string, conversationType: number) {
+  for (const msg of messageList) {
+    const config: ZIMMessageSendConfig = { priority: 1 };
+    try {
+      await zim.sendMessage(msg, toConversationID, conversationType, config);
+      await sleep(150); // 推荐间隔 150ms
+    } catch (err) {
+      // 单条失败：记录并继续，最后统一汇总失败列表供重试
+    }
+  }
+}
+
+// 合并转发：构造合并消息体（type = 100，需 2.14.0+）
+const combineMsg: ZIMCombineMessage = {
+  type: 100,
+  title: '聊天记录',
+  summary: `共 ${messageList.length} 条消息`,
+  messageList,
+};
+zim.sendMessage(combineMsg, toConversationID, conversationType, config, notification)
+  .then(() => { /* 发送成功 */ })
+  .catch((err: ZIMError) => { /* 发送失败 */ });
+
+// 接收方查看合并消息详情（回调只返回标题、概要、合并 ID）
+zim.on('messageReceived', (zim, { messageList }) => {
+  for (const msg of messageList) {
+    if (msg.type === 100) {
+      zim.queryCombineMessageDetail(msg)
+        .then((res) => {
+          // 子消息在 res.message.messageList 中；富媒体子消息可调用 downloadMediaFile 下载
+          // 嵌套合并需再次调用本接口逐层拉取
+        });
+    }
+  }
+});
+```
+
+:::
+
+
+:::if{props.platform="windows"}
+```cpp
+// 1. 从历史消息中获取待转发消息（分页示例）
+using namespace zim;   // ZIM C++ 接口位于 zim 命名空间
+
+std::vector<std::shared_ptr<ZIMMessage>> messageList;
+ZIMMessageQueryConfig queryConfig;
+queryConfig.nextMessage = nullptr;   // 首次获取传 nullptr，后续传上一页最后一条
+queryConfig.count = 30;
+queryConfig.reverse = true;
+ZIM::getInstance()->queryHistoryMessage(conversationID, ZIM_CONVERSATION_TYPE_PEER, queryConfig,
+    [&](const std::string &conversationID, ZIMConversationType conversationType,
+        const std::vector<std::shared_ptr<ZIMMessage>> &list, const ZIMError &errorInfo) {
+        messageList = list;   // 业务侧持有待转发列表
+    });
+
+// 2. 逐条转发：复用原消息对象再次发送，每条间隔 ≥150ms，避免触发 100ms 限频
+// 注意：sendMessage 为异步回调，需按完成情况链式调度下一条（示例用定时器递归），勿在调用线程 sleep
+void ForwardOneByOne(const std::vector<std::shared_ptr<ZIMMessage>> &list, size_t index) {
+    if (index >= list.size()) return;
+    ZIM::getInstance()->sendMessage(list[index], toConversationID, conversationType,
+        config, nullptr, [](std::shared_ptr<ZIMMessage> message, const ZIMError &errorInfo) {
+            // 单条失败：记录并继续，最后统一汇总失败列表供重试
+        });
+    // 150ms 后调度下一条（异步定时器），勿阻塞调用线程
+}
+
+// 3. 合并转发：构造合并消息体（发送与查看需 2.14.0+）
+auto combineMessage = std::make_shared<ZIMCombineMessage>("标题", "概要", messageList);
+ZIM::getInstance()->sendMessage(combineMessage, toConversationID, conversationType, config,
+    nullptr, [](std::shared_ptr<ZIMMessage> message, const ZIMError &errorInfo) {});
+
+// 4. 接收方查看合并消息详情（回调只返回标题、概要、合并 ID）
+ZIM::getInstance()->queryCombineMessageDetail(combineMessage,
+    [](std::shared_ptr<ZIMCombineMessage> message, const ZIMError &errorInfo) {
+        // 子消息在回调中 message 的 messageList 里；嵌套合并需再次调用本接口逐层拉取
+    });
+```
+:::
+
+:::if{props.platform="flutter"}
+```dart
+// 1. 从历史消息中获取待转发消息（分页示例）
+final queryConfig = ZIMMessageQueryConfig()
+  ..nextMessage = null    // 首次获取传 null，后续传上一页最后一条
+  ..count = 30
+  ..reverse = true;
+final queried = await ZIM.getInstance()!
+    .queryHistoryMessage(conversationID, ZIMConversationType.peer, queryConfig);
+final messageList = queried.messageList;
+
+// 2. 逐条转发：复用原消息对象再次发送，每条间隔 ≥150ms，避免触发 100ms 限频
+Future<void> forwardOneByOne(List<ZIMMessage> list, String toConversationID,
+    ZIMConversationType conversationType, ZIMMessageSendConfig config) async {
+  for (final msg in list) {
+    try {
+      await ZIM.getInstance()!.sendMessage(msg, toConversationID, conversationType, config);
+      await Future<void>.delayed(const Duration(milliseconds: 150));   // 推荐间隔 150ms
+    } catch (e) {
+      // 单条失败：记录并继续，最后统一汇总失败列表供重试
+    }
+  }
+}
+
+// 3. 合并转发：构造合并消息体（发送与查看需 2.14.0+）
+final combineMessage = ZIMCombineMessage(
+  title: '聊天记录',
+  summary: '共 ${messageList.length} 条消息',
+  messageList: messageList,
+);
+ZIM.getInstance()!.sendMessage(combineMessage, toConversationID, conversationType, config);
+
+// 4. 接收方查看合并消息详情（回调只返回标题、概要、合并 ID）
+ZIMEventHandler.onMessageReceived = (zim, result) {
+  for (final msg in result.messageList) {
+    if (msg.type == ZIMMessageType.combine) {
+      ZIM.getInstance()!.queryCombineMessageDetail(msg as ZIMCombineMessage).then((res) {
+        // 子消息在 res.message.messageList 中；嵌套合并需再次调用本接口逐层拉取
+      });
+    }
+  }
+};
+```
+:::
+
+## 常见问题
+
+<Accordion title="逐条转发会改变原消息的 ID 吗？" defaultOpen="false">
+会。转发本质是重新发送，生成新的消息 ID 与时间戳，原消息保持不变。转发消息无法与原文建立自动关联，如需"引用原文"语义，请使用消息回复（reply）能力。
+
+</Accordion>
+<Accordion title="转发后原消息被撤回，转发的那条还在吗？" defaultOpen="false">
+在。转发产生的是独立的新消息，原消息撤回不影响已转发的消息；合并转发同理，子消息展示不受影响。
+
+</Accordion>
+<Accordion title="合并消息里的子消息可以逐条再转发吗？" defaultOpen="false">
+可以。通过 queryCombineMessageDetail 获取子消息对象后，可将其作为普通消息再次逐条转发。
+
+</Accordion>
+<Accordion title="合并消息有大小限制吗？" defaultOpen="false">
+合并消息（type = 100）消息大小无限制。但超大合并（如数百条）仍建议在产品层拆分，兼顾接收端展开性能与 [queryCombineMessageDetail](@queryCombineMessageDetail) 查询体验。
+
+</Accordion>
+<Accordion title="为什么我的逐条转发经常失败？" defaultOpen="false">
+最常见原因是连续调用 [sendMessage](@sendMessage) 触发了 100ms 限频。请改为间隔调度（推荐 150ms），并增加失败重试。
+
+</Accordion>
+<Accordion title="合并消息能带已读回执吗？" defaultOpen="false">
+能。合并消息支持携带回执，发送合并消息时可按需设置 hasReceipt，转发内容的「已读」链路不会在合并消息处中断。
+
+</Accordion>
+<Accordion title="逐条转发富媒体消息会重新上传文件吗？" defaultOpen="false">
+不会。逐条转发复用原消息的富媒体 URL（引用原文件），不重新上传、不额外占用一份富媒体存储。
+
+</Accordion>
