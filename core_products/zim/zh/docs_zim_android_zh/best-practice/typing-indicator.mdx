@@ -1,0 +1,365 @@
+---
+date: "2026-09-30"
+---
+
+# 实现 “正在输入” 状态提示
+---
+
+## 功能简介
+
+**正在输入状态提示**（Typing Indicator）是消息通讯场景中提升沟通实时感的关键细节。此状态提示可以让消息接收方感知到对方正在编辑消息，减少 “等待回应” 的焦虑。
+
+正在输入状态效果展示：
+| 场景 | 预期表现 |
+|-|-|
+| 用户 A 输入文字 | 用户 B 立即看到 “对方正在输入…”。 |
+| 用户 A 持续输入 | 每 3s 保活一次，提示持续显示 。|
+| 用户 A 停止输入 | 1s 后发送 stop，用户 B 的提示隐藏。 |
+| stop 信号丢失（弱网） | 用户 B 在 10s 超时后自动隐藏提示（关键验证项）。 |
+| 历史消息检查 | A、B 双方翻看历史消息，均看不到任何 Typing 记录（关键验证项）。 |
+| 会话列表检查 | 会话列表最新消息不被 Typing 污染（关键验证项）。 |
+| 离线用户 | 离线期间不收到 Typing，上线后不收到过期 Typing 。|
+| 群聊（小群） | 多位成员输入时分别展示各自状态。 |
+
+
+## 消息类型选型
+
+正在输入（Typing） 是 **瞬时状态** 而非消息，它不会进入历史消息、不产生数据留痕、不出现在会话列表的最新消息展示中。
+基于此约束，本方案采用 ZIM 的 **信令消息**（[ZIMCommandMessage](@-ZIMCommandMessage)，type = 2）实现。
+
+信令消息具有以下特点：
+- 不可存储，天然无留痕。离线用户上线后不会收到过期 Typing，无需额外处理。
+- 不进入历史消息与会话最新消息展示。
+- 支持 30 次/秒的高发送频率。
+- 不保证送达与顺序的语义与 **正在输入** 的瞬时状态完全匹配（丢包不影响体验）。
+- 信令不可靠，使用 3s 保活心跳对抗丢包，优先保活而非节流。
+
+
+<Accordion title="为什么不使用自定义消息类型来实现正在输入状态？" defaultOpen="false">
+
+使用自定义消息（type = 200）承载 Typing。自定义消息属可存储消息，会导致 Typing 信号进入历史消息列表、出现在会话列表的最新消息展示中，所以在接入时务必确认消息类型为 type = 2。
+
+**ZIM 消息类型参考**
+
+| 消息类型 | type | 是否可存储为历史消息 | 限频（单客户端） |
+|-|-|-|-|
+| 信令消息 [ZIMCommandMessage](@-ZIMCommandMessage) | 2 | 不可存储 | 30 次/秒（间隔 34ms） |
+| 弹幕消息 [ZIMBarrageMessage](@-ZIMBarrageMessage) | 20 | 不可存储 | 无限制（仅房间） |
+| 文本消息 [ZIMTextMessage](@-ZIMTextMessage) | 1 | 可存储 | 10 次/秒（间隔 100ms） |
+| 自定义消息 [ZIMCustomMessage](@-ZIMCustomMessage) | 200 | 可存储 | 10 次/秒（间隔 100ms） |
+</Accordion>
+
+
+## 实现方案
+
+### 信令消息格式
+
+信令消息的 message 字段为二进制数据，业务侧需要自行序列化。消息可以用一个 JSON 表示，参考以下示例：
+
+```json
+// 正在输入（含保活心跳）
+{ "bizType": "typing", "action": "typing", "ts": 1725000000000 }
+// 停止输入
+{ "bizType": "typing", "action": "stop", "ts": 1725000005000 }
+```
+
+| 字段 | 说明 |
+|-|-|
+| bizType | 业务标识，固定 "typing"，用于与其他业务信令区分 |
+| action | typing（输入中）/ stop（停止） |
+| ts | 时间戳，接收端可用于防乱序（信令不保证顺序） |
+
+### 状态使用策略
+
+| 策略 | 时机 | 说明 |
+|-|-|-|
+| 首条立即发送 | 用户输入第一个字符时 | 保证提示快速出现 |
+| 保活心跳 | 持续输入期间每 3 秒一次 | 对抗丢包；即使丢 1\~2 条也能被下一条补上 |
+| 停止信号 | 停止输入 1 秒后 / 输入框失焦 / 清空 | 主动通知对端隐藏 |
+| 发送节流 | 两次发送间隔 ≥ 34ms（30 次/秒限频） | 保活 3 秒的节奏远低于限频，无需额外处理 |
+
+<Warning title="注意">
+多端登录过滤：同一账号多端登录时，其他端也会收到自己的 Typing 信令，接收端应过滤发送者为自己（senderUserID 为自己）的信令。
+</Warning>
+
+
+### UI 状态展示
+
+| 正在输入状态 | 触发条件 | UI 表现 |
+|-|-|-|
+| 隐藏 | 初始状态 / 收到 action: stop | 无提示 |
+| 展示中 | 收到 action: typing | 展示"对方正在输入…" |
+| 超时隐藏 | 距最后一条 typing 信号超过 10 秒 | 自动隐藏 |
+
+<Warning title="注意">
+超时兜底：stop 信号是不可靠信令，一旦丢失接收端的 “正在输入…” 会永久停留。设置 10 秒超时（远大于 3 秒保活间隔）保证正在输入状态不会一直存在。
+</Warning>
+
+## 接入示例
+
+:::if{props.platform=undefined}
+```java
+// 构造 typing 信令并发送（信令消息为二进制，需自行序列化）
+String payload = "{\"bizType\":\"typing\",\"action\":\"typing\",\"ts\":" + System.currentTimeMillis() + "}";
+ZIMCommandMessage commandMessage = new ZIMCommandMessage();
+commandMessage.message = payload.getBytes();
+
+ZIMMessageSendConfig config = new ZIMMessageSendConfig();
+config.priority = ZIMMessagePriority.LOW;   // 低优先级，避免抢占业务消息的发送队列
+
+zim.sendMessage(commandMessage, toUserID, ZIMConversationType.PEER, config, new ZIMMessageSentFullCallback() {
+    @Override
+    public void onMessageAttached(ZIMMessage message) {}
+
+    @Override
+    public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {
+        // typing 丢失不影响主流程，失败静默处理
+    }
+
+    @Override
+    public void onMediaUploadingProgress(ZIMMediaMessage message, long currentFileSize, long totalFileSize) {}
+
+    @Override
+    public void onMultipleMediaUploadingProgress(ZIMMultipleMessage message, long currentFileSize,
+        long totalFileSize, int messageInfoIndex, long currentIndexFileSize, long totalIndexFileSize) {}
+});
+
+// 接收端：仅处理信令消息，反序列化后按 action 更新 UI，10s 超时兜底
+zim.setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onMessageReceived(ZIM zim, ZIMMessageReceivedEventResult result) {
+        for (ZIMMessage msg : result.getMessageList()) { // 注意：messageList 为 private 字段，需走 getter
+            if (msg.getType() != ZIMMessageType.COMMAND) continue;
+            ZIMCommandMessage cmd = (ZIMCommandMessage) msg;
+            String payload = new String(cmd.message, StandardCharsets.UTF_8);
+            // JSON 解析后：action = typing 展示、action = stop 隐藏；发送者用 msg.getSenderUserID() 获取
+        }
+    }
+});
+```
+:::
+
+:::if{props.platform="ios|mac"}
+```objective-c
+// 构造 typing 信令并发送（信令消息为二进制，需自行序列化）
+NSString *payload = [NSString stringWithFormat:
+    @"{\"bizType\":\"typing\",\"action\":\"typing\",\"ts\":%lld}",
+    (long long)([[NSDate date] timeIntervalSince1970] * 1000)];
+ZIMCommandMessage *commandMessage = [[ZIMCommandMessage alloc] init];
+commandMessage.message = [payload dataUsingEncoding:NSUTF8StringEncoding];
+
+ZIMMessageSendConfig *config = [[ZIMMessageSendConfig alloc] init];
+config.priority = ZIMMessagePriorityLow;   // 低优先级
+
+[self.zim sendMessage:commandMessage
+     toConversationID:toUserID
+     conversationType:ZIMConversationTypePeer
+               config:config
+         notification:nil
+             callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+    // typing 丢失不影响主流程，失败静默处理
+}];
+
+// 接收端：仅处理信令消息，反序列化后按 action 更新 UI，10s 超时兜底
+- (void)zim:(ZIM *)zim messageReceivedWithResult:(ZIMMessageReceivedEventResult *)result {
+    for (ZIMMessage *msg in result.messageList) {
+        if (msg.type != ZIMMessageTypeCommand) continue;
+        ZIMCommandMessage *cmd = (ZIMCommandMessage *)msg;
+        NSString *payload = [[NSString alloc] initWithData:cmd.message encoding:NSUTF8StringEncoding];
+        // JSON 解析后：action = typing 展示、action = stop 隐藏；发送者用 msg.senderUserID 获取
+    }
+}
+```
+
+:::
+
+:::if{props.platform="web"}
+发送端：
+
+```typescript
+const TYPING_HEARTBEAT = 3000;  // 保活心跳间隔 3s
+const STOP_DELAY = 1000;        // 停止输入判定延迟 1s
+let heartbeatTimer: number | null = null;
+let stopTimer: number | null = null;
+let isSending = false;
+
+// 构造 typing 信令并发送
+function sendTypingSignal(toUserID: string, action: 'typing' | 'stop') {
+  const payload = JSON.stringify({ bizType: 'typing', action, ts: Date.now() });
+  // 信令消息 message 为二进制字段，需自行序列化
+  const bytes = new TextEncoder().encode(payload);
+  const commandMessage: ZIMCommandMessage = {
+    type: 2,      // 信令消息：不可存储，避免留痕（关键！勿用 200 自定义消息）
+    message: bytes,
+  };
+  const config: ZIMMessageSendConfig = { priority: 1 }; // 低优先级
+  zim.sendMessage(commandMessage, toUserID, 0 /* 单聊:0 群组:2 房间:1 */, config)
+    .catch(() => { /* typing 丢失不影响主流程，静默处理 */ });
+}
+
+// 输入中：立即发首条，随后 3s 保活
+function onUserTyping(toUserID: string) {
+  if (stopTimer) { clearTimeout(stopTimer); stopTimer = null; }
+  if (!isSending) {
+    isSending = true;
+    sendTypingSignal(toUserID, 'typing');            // 首条立即发送
+    heartbeatTimer = window.setInterval(() => {
+      sendTypingSignal(toUserID, 'typing');          // 3s 保活，抗丢包
+    }, TYPING_HEARTBEAT);
+  }
+}
+
+// 停止输入：清保活，发 stop
+function onUserStopTyping(toUserID: string) {
+  if (stopTimer) clearTimeout(stopTimer);
+  stopTimer = window.setTimeout(() => {
+    if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+    isSending = false;
+    sendTypingSignal(toUserID, 'stop');
+  }, STOP_DELAY);
+}
+
+inputElement.addEventListener('input', () => onUserTyping(toUserID));
+inputElement.addEventListener('blur',  () => onUserStopTyping(toUserID));
+```
+
+接收端：
+
+```typescript
+const TYPING_TIMEOUT = 10000;   // 10s 超时兜底
+const timeoutMap = new Map<string, number>();
+
+zim.on('messageReceived', (zim, { messageList }) => {
+  for (const msg of messageList) {
+    if (msg.type !== 2) continue;                  // 仅处理信令消息
+    let payload: any;
+    try {
+      payload = JSON.parse(new TextDecoder().decode(msg.message as Uint8Array));
+    } catch { continue; }                          // 非本业务信令，忽略
+    if (payload.bizType !== 'typing') continue;
+    if (payload.action === 'typing') {
+      showTypingIndicator(msg.senderUserID);
+      resetTimeout(msg.senderUserID);              // 重置 10s 兜底
+    } else if (payload.action === 'stop') {
+      hideTypingIndicator(msg.senderUserID);
+      clearTimeout(timeoutMap.get(msg.senderUserID)!);
+    }
+  }
+});
+
+function resetTimeout(userID: string) {
+  clearTimeout(timeoutMap.get(userID)!);
+  timeoutMap.set(userID, window.setTimeout(() => {
+    hideTypingIndicator(userID);                   // 超时隐藏，防 stop 丢包残留
+  }, TYPING_TIMEOUT));
+}
+```
+:::
+
+:::if{props.platform="windows"}
+```c++
+// 构造 typing 信令并发送（信令消息为二进制，需自行序列化）
+using namespace zim;   // ZIM C++ 接口位于 zim 命名空间
+
+long long ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+    std::chrono::system_clock::now().time_since_epoch()).count();
+std::string payload = "{\"bizType\":\"typing\",\"action\":\"typing\",\"ts\":" + std::to_string(ts) + "}";
+auto commandMessage = std::make_shared<ZIMCommandMessage>(
+    std::vector<uint8_t>(payload.begin(), payload.end()));
+
+ZIMMessageSendConfig config;
+config.priority = ZIM_MESSAGE_PRIORITY_LOW;   // 低优先级，避免抢占业务消息的发送队列
+
+ZIM::getInstance()->sendMessage(commandMessage, toUserID, ZIM_CONVERSATION_TYPE_PEER,
+    config, nullptr, [](std::shared_ptr<ZIMMessage> message, const ZIMError &errorInfo) {
+        // typing 丢失不影响主流程，失败静默处理
+    });
+
+// 接收端：仅处理信令消息，反序列化后按 action 更新 UI，10s 超时兜底
+class MessageHandler : public ZIMEventHandler {
+  public:
+    void onMessageReceived(ZIM *zim, const ZIMMessageReceivedEventResult &result) override {
+        for (const auto &msg : result.messageList) {
+            if (msg->type != ZIM_MESSAGE_TYPE_COMMAND) continue;
+            auto cmd = std::static_pointer_cast<ZIMCommandMessage>(msg);
+            std::string payload(cmd->message.begin(), cmd->message.end());
+            // JSON 解析后：action = typing 展示、action = stop 隐藏；发送者用 msg->senderUserID 获取
+        }
+    }
+};
+```
+:::
+
+:::if{props.platform="flutter"}
+```dart
+// 需 import 'dart:convert'（jsonEncode / utf8）与 'dart:typed_data'（Uint8List）
+
+// 构造 typing 信令并发送（信令消息为二进制，需自行序列化）
+final payload = jsonEncode({
+  'bizType': 'typing',
+  'action': 'typing',
+  'ts': DateTime.now().millisecondsSinceEpoch,
+});
+final commandMessage = ZIMCommandMessage(message: Uint8List.fromList(utf8.encode(payload)));
+
+final config = ZIMMessageSendConfig()
+  ..priority = ZIMMessagePriority.low;   // 低优先级，避免抢占业务消息的发送队列
+
+ZIM.getInstance()!
+    .sendMessage(commandMessage, toUserID, ZIMConversationType.peer, config)
+    .catchError((_) {});   // typing 丢失不影响主流程，失败静默处理
+
+// 接收端：仅处理信令消息，反序列化后按 action 更新 UI，10s 超时兜底
+ZIMEventHandler.onMessageReceived = (zim, result) {
+  for (final msg in result.messageList) {
+    if (msg.type != ZIMMessageType.command) continue;
+    final cmd = msg as ZIMCommandMessage;
+    final payload = utf8.decode(cmd.message);
+    // JSON 解析后：action = typing 展示、action = stop 隐藏；发送者用 msg.senderUserID 获取
+  }
+};
+```
+:::
+
+
+## 群聊场景扩展
+
+群聊场景也可以支持正在输入状态提示，使用时强烈建议遵守以下要求：
+
+1. 推荐在群成员 ≤ 50 的小群启用，大群建议关闭或仅对 “最近活跃成员” 展示。
+2. 按 senderUserID 维护多份状态，可展示 “张三、李四正在输入…”。
+3. Typing 为不可存储信令，不产生历史消息存储开销，但会占用共享的信令限频额度。多人高频输入时建议降低保活频率（如 3s → 5s）或设置独立降级开关。
+
+<Note title="说明">
+信令限频额度是共享的：30 次/秒的信令限频为单客户端共享额度，房间、群聊场景若同时用信令做上下麦、送礼等业务，typing 保活会挤占额度，建议降频处理或使用独立降级开关。
+</Note>
+
+
+## 常见问题
+
+<Accordion title="为什么不能用自定义消息实现 Typing？" defaultOpen="false">
+自定义消息（type = 200）属可存储消息，会进入历史消息并出现在会话列表的最新消息展示中。Typing 是瞬时状态，必须用不可存储的信令消息（type = 2）。
+
+</Accordion>
+<Accordion title="信令消息“不保证送达”，Typing 频繁丢失怎么办？" defaultOpen="false">
+这是设计取舍而非缺陷。Typing 丢失不影响主流程，通过 3s 保活心跳降低感知；真正必须兜底的是"提示残留"，由接收端 10s 超时解决。
+
+</Accordion>
+<Accordion title="信令消息会写入历史消息吗？" defaultOpen="false">
+不会。信令消息不可存储，双方均无法通过历史消息查询到 Typing 记录。这也是选型的首要理由。
+
+</Accordion>
+<Accordion title="Typing 会占用历史消息存储吗？" defaultOpen="false">
+不会。信令消息不可存储，不产生历史消息存储开销；未读数与消息量的计费口径请参考 [计费说明](../Introduction/Pricing.mdx) 。
+
+</Accordion>
+<Accordion title="可以跨端同步 Typing 状态吗？" defaultOpen="false">
+无需同步。Typing 是瞬时状态，各端独立接收展示即可。如需"输入中"这类持久语义的状态表示，应使用用户自定义状态能力（[updateUserCustomStatus](@updateUserCustomStatus)，2.20.0+，状态长度上限 64 字节、限频 1 次/秒，需开通旗舰版并由 ZEGO 技术支持开启用户状态订阅开关），而非 Typing 的输入状态。
+
+</Accordion>
+<Accordion title="大群（数百人）需要 Typing 吗？" defaultOpen="false">
+不建议。全量广播会放大信令量且 UI 噪音大，建议 ≤ 50 人群启用。
+
+</Accordion>
+
+
