@@ -1,5 +1,5 @@
 ---
-date: "2026-08-14"
+date: "2026-09-20"
 ---
 import {getPlatformData} from "/snippets/utils-content-parser.js"
 
@@ -113,14 +113,15 @@ After completing the above two steps, you can view digital human broadcasts.
 ```mermaid
 graph TD
     A[Initialize ZEGO Express engine] --> B[Request Token]
-    B --> C[Log in to RTC room]
+    B --> P[Call preload as needed]
+    P --> C[Log in to RTC room]
     C --> D[Enable custom rendering, sync ZEGO Express SDK data to Digital Human SDK]
     D --> E[Notify business backend to create broadcast digital human instance]
     E --> F[Play digital human stream + Initialize Digital Human SDK rendering]
     F --> G{Proactive broadcast needed?}
     G -->|Yes| H[Call SendAgentInstanceTTS]
     H --> G
-    G -->|No| I[End: Stop instance + Log out of room + Destroy engine]
+    G -->|No| I[End: Stop instance + Stop Digital Human SDK + Log out of room + Destroy engine]
 ```
 :::
 :::if{props.platform="iOS"}
@@ -144,6 +145,7 @@ sequenceDiagram
     Business Backend-->>Client: Token
 
     Client->>Client: Initialize ZEGO Express SDK and log in to room
+    Client->>Client: Call preload as needed to preload Digital Human resources
     Client->>Client: Initialize Digital Human SDK and set digital human config
     Client->>Client: Play digital human stream and pass video frames and SEI data to Digital Human SDK
 
@@ -156,8 +158,8 @@ sequenceDiagram
     AI Agent Backend-->>Business Backend: Response
     Business Backend-->>Client: Response
 
-    Client->>Client: Stop play stream and leave room
     Client->>Client: Exit Digital Human SDK
+    Client->>Client: Stop play stream and leave room
 ```
 :::
 :::if{props.platform="Web"}
@@ -208,7 +210,7 @@ Add the Digital Human SDK in `app/build.gradle`:
 
 ```groovy app/build.gradle
 dependencies {
-    implementation 'im.zego:digitalmobile:1.3.0.43'
+    implementation 'im.zego:digitalmobile:[1.6.0,)'
 }
 ```
 
@@ -250,7 +252,7 @@ target 'ai_agent_quickstart' do
 
   pod 'ZegoExpressEngine', :path => 'libs/Express'
   pod 'Masonry', '1.1.0'
-  pod 'ZegoDigitalMobile', '>= 1.3.0'
+  pod 'ZegoDigitalMobile', '>= 1.6.0'
 end
 ```
 
@@ -319,6 +321,12 @@ The current quickstart's common initialization logic still calls `checkSystemReq
 
 :::
 
+:::if{props.platform="undefined|iOS"}
+<Warning title="SDK Call Order">
+Starting with ZegoDigitalMobile 1.6.0, you must initialize the RTC engine before calling the Digital Human SDK. First call `ZegoExpressEngine.createEngine` (`createEngineWithProfile` on iOS) and make sure the RTC engine is created. You can then call `preload` as needed and use other Digital Human SDK APIs. When exiting, stop the Digital Human SDK before destroying the RTC engine.
+</Warning>
+:::
+
 :::if{props.platform="undefined"}
 
 ### Integrating the Digital Human SDK
@@ -362,7 +370,7 @@ allprojects {
 dependencies {
     ...
     // Digital Human SDK dependency
-    implementation "im.zego:digitalmobile:1.3.0.43"
+    implementation "im.zego:digitalmobile:[1.6.0,)"
 }
 ```
 <Warning title="Note">Supports Android 6.0 (API 23) and above.</Warning>
@@ -385,7 +393,7 @@ dependencies {
 <Steps>
   <Step title="Add dependencies in Podfile">
     ```ruby
-    pod 'ZegoDigitalMobile', '>= 1.3.0'
+    pod 'ZegoDigitalMobile', '>= 1.6.0'
     ```
   </Step>
   <Step title="Install the SDK">
@@ -399,7 +407,7 @@ dependencies {
 <Tab title="Manual Integration">
 <Steps>
   <Step title="Download the latest SDK version">
-    Download the latest version of the [SDK](https://artifact-node.zego.cloud/generic/digithuman/public/ZegoDigitalMobile/release/ios/ZegoDigitalMobile.zip?version=1.3.0.53).
+    Download the latest version of the [SDK](https://artifact-node.zego.cloud/generic/digithuman/public/ZegoDigitalMobile/release/ios/ZegoDigitalMobile.zip?version=1.6.0.136).
   </Step>
   <Step title="Extract the SDK">
     Extract the SDK package to the project directory, for example, under the "libs" folder.
@@ -983,7 +991,7 @@ The Web quickstart displays a TTS input box in broadcast mode and saves the `age
 
 ### Leaving the Room and Ending the Broadcast
 
-When exiting, you need to stop the Agent instance, stop playing the stream, log out of the RTC room, and destroy the client SDK. Regardless of whether the stop API call succeeds, RTC resources should be released to avoid lingering rooms and engines.
+When exiting, stop the Agent instance and stop playing the stream. Stop the Digital Human SDK before leaving the RTC room and destroying the RTC engine. Follow this order even if the stop API call fails so that no room or engine resources remain active.
 
 :::if{props.platform=undefined}
 
@@ -1002,16 +1010,16 @@ protected void onDestroy() {
         @Override
         public void onResponse(@NonNull Call call, @NonNull Response response) {
             ZegoExpressEngine.getEngine().stopPlayingStream(agentStreamId);
-            ZegoExpressEngine.getEngine().logoutRoom();
             digitalMobile.stop();
+            ZegoExpressEngine.getEngine().logoutRoom();
             ZegoExpressEngine.destroyEngine(null);
         }
 
         @Override
         public void onFailure(@NonNull Call call, @NonNull IOException e) {
             // Even if the request fails, release local RTC and Digital Human SDK resources
-            ZegoExpressEngine.getEngine().logoutRoom();
             digitalMobile.stop();
+            ZegoExpressEngine.getEngine().logoutRoom();
             ZegoExpressEngine.destroyEngine(null);
         }
     });
@@ -1035,8 +1043,8 @@ protected void onDestroy() {
     [[[NSURLSession sharedSession] dataTaskWithRequest:request
         completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         [[ZegoExpressEngine sharedEngine] stopPlayingStream:agentStreamId];
-        [[ZegoExpressEngine sharedEngine] logoutRoom];
         [digitalMobile stop];
+        [[ZegoExpressEngine sharedEngine] logoutRoom];
         [ZegoExpressEngine destroyEngine:nil];
     }] resume];
 }

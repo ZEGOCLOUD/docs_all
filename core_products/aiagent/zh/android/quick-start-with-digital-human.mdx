@@ -1,5 +1,5 @@
 ---
-date: "2026-08-26"
+date: "2026-09-20"
 ---
 import {getPlatformData} from "/snippets/utils-content-parser.js"
 
@@ -120,12 +120,12 @@ sequenceDiagram
     AI Agent 后台-->>业务后台: 数字人配置
     业务后台-->>客户端: 数字人配置
 
-    客户端->>客户端: 初始化数字人 SDK 并设置数字人配置
-
     客户端->>业务后台: 请求 Token
     业务后台-->>客户端: Token
 
     客户端->>客户端: 初始化 ZEGO Express SDK 后登录房间并推流
+    客户端->>客户端: 按需调用 preload 预加载数字人资源
+    客户端->>客户端: 初始化数字人 SDK 并设置数字人配置
 
     客户端->>客户端: 用户拉智能体流并且把帧数据和 SEI 数据传给数字人 SDK
 
@@ -134,8 +134,8 @@ sequenceDiagram
     AI Agent 后台-->>业务后台: 响应
     业务后台-->>客户端: 响应
 
-    客户端->>客户端: 用户停止推流并退出房间
     客户端->>客户端: 用户退出数字人 SDK
+    客户端->>客户端: 用户停止推流并退出房间
 ```
 :::
 :::if{props.platform="Web"}
@@ -155,8 +155,6 @@ sequenceDiagram
     AI Agent 后台-->>业务后台: 数字人配置
     业务后台-->>客户端: 数字人配置
 
-    客户端->>客户端: 初始化数字人 SDK 并设置数字人配置
-
     客户端->>业务后台: 请求 Token
     业务后台-->>客户端: Token
 
@@ -170,7 +168,6 @@ sequenceDiagram
     业务后台-->>客户端: 响应
 
     客户端->>客户端: 用户停止推流并退出房间
-    客户端->>客户端: 用户退出数字人 SDK
 ```
 :::
 ## 核心能力实现
@@ -398,6 +395,12 @@ checkSystemRequirements()
 ```
 :::
 
+:::if{props.platform="undefined|iOS"}
+<Warning title="SDK 调用顺序">
+从 ZegoDigitalMobile 1.6.0 开始，调用数字人 SDK 前必须先完成 RTC 引擎初始化。请先调用 `ZegoExpressEngine.createEngine`（iOS 为 `createEngineWithProfile`），成功创建 RTC 引擎后，再按需调用 `preload`，以及数字人 SDK 的其他接口。退出时应先停止数字人 SDK，再销毁 RTC 引擎。
+</Warning>
+:::
+
 :::if{props.platform="undefined"}
 
 ### 集成数字人 SDK
@@ -441,7 +444,7 @@ allprojects {
 dependencies {
     ...
     // 数字人 SDK 依赖
-    implementation "im.zego.digitalmobile: 1.4.1.132"
+    implementation "im.zego:digitalmobile:[1.6.0,)"
 }
 ```
 <Warning title="注意">支持 Android 6.0 (API 23) 及以上版本系统。</Warning>
@@ -464,7 +467,7 @@ dependencies {
 <Steps>
   <Step title="在 Podfile 中添加依赖">
     ```ruby
-    pod 'ZegoDigitalMobile', '>= 1.3.0'
+    pod 'ZegoDigitalMobile', '>= 1.6.0'
     ```
   </Step>
   <Step title="安装 SDK">
@@ -478,7 +481,7 @@ dependencies {
 <Tab title="手动集成">
 <Steps>
   <Step title="下载最新版本的SDK">
-    请下载最新版本的 [SDK](https://artifact-node.zego.cloud/generic/digithuman/public/ZegoDigitalMobile/release/ios/ZegoDigitalMobile.zip?version=1.3.0.53)。
+    请下载最新版本的 [SDK](https://artifact-node.zego.cloud/generic/digithuman/public/ZegoDigitalMobile/release/ios/ZegoDigitalMobile.zip?version=1.6.0.136)。
   </Step>
   <Step title="解压SDK">
     将 SDK 包解压至项目目录下，例如 “libs” 文件夹下。
@@ -1179,7 +1182,7 @@ function setupEvent() {
 
 ### 退出房间结束通话
 
-客户端调用退出登录接口退出房间，并停止推拉流。同时通知业务后台本次通话结束。业务后台收到结束通话通知后会删除智能体实例，智能体实例会自动退出房间并停止推拉流。最后再调用数字人 SDK 退出接口，这样一次完整的互动就结束了。
+客户端通知业务后台本次通话结束后，先调用数字人 SDK 的退出接口，再停止推拉流并退出 RTC 房间。业务后台收到通知后会删除智能体实例，智能体实例会自动退出房间并停止推拉流。若还需要销毁 RTC 引擎，必须在数字人 SDK 停止后执行。
 
 :::if{props.platform=undefined}
 ```java {4,16}
@@ -1197,10 +1200,10 @@ private void stop() {
         @Override
         public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
             if (response.isSuccessful()) {
-                // 退出房间
-                ZegoExpressEngine.getEngine().logoutRoom();
                 // 退出数字人 SDK
                 digitalMobile.stop();
+                // 退出房间
+                ZegoExpressEngine.getEngine().logoutRoom();
             }
         }
     });
@@ -1277,6 +1280,8 @@ private void stop() {
                 completion(code, message, responseData);
             }
 
+            // 退出数字人 SDK
+            [self.digitalMobile stop];
             // 退出房间
             [[ZegoExpressEngine sharedEngine] logoutRoom];
         });
