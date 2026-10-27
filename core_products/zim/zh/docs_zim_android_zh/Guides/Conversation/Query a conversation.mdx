@@ -8,6 +8,10 @@ export const queryConversationMap = {
   'Android': <a href='@queryConversation' target='_blank'>queryConversation</a>,
   'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/queryConversation.html' target='_blank'>queryConversation</a>,
 }
+export const queryConversationsMap = {
+  'Android': <a href='@queryConversations' target='_blank'>queryConversations</a>,
+  'Flutter': <a href='https://pub.dev/documentation/zego_zim/latest/zego_zim/ZIM/queryConversations.html' target='_blank'>queryConversations</a>,
+}
 
 
 
@@ -17,9 +21,9 @@ export const queryConversationMap = {
 
 ## 功能简介
 
-ZIM 支持通过指定会话 ID 查询会话的详细信息。
+ZIM 支持通过指定会话 ID 查询单个会话的详细信息，也支持批量查询多个指定会话的详细信息。
 
-## 实现流程
+## 查询单个会话
 
 用户登录后，可以调用 {getPlatformData(props,queryConversationMap)} 接口，指定会话 ID 及会话类型，获取对应会话的详细信息（包括会话名称、会话未读数、会话通知状态等）。
 
@@ -106,6 +110,117 @@ ZIM.GetInstance().QueryConversation(
         } else {
             // 可以打印错误码和错误信息，参考 ZIM 官网错误码文档排查错误原因
         }
+    });
+```
+:::
+
+## 批量查询会话
+
+自 3.3.0 版本起，ZIM 支持批量查询会话。
+
+用户登录后，可以调用 {getPlatformData(props,queryConversationsMap)} 接口，传入待查询的会话基础信息（[ZIMConversationBaseInfo](@-ZIMConversationBaseInfo)）列表，一次性获取多个指定会话的详细信息（包括会话名称、会话未读数、会话通知状态等），无需多次调用 {getPlatformData(props,queryConversationMap)}。
+
+- 单次最多可查询 100 个会话，登录后可用，登出后不可用。
+- 查询成功的会话通过回调中的 `conversations` 返回，查询失败的会话基础信息通过 `errorConversationInfos` 返回，开发者可据此进行重试或降级处理。
+
+:::if{props.platform=undefined}
+```java
+// 构造待查询的会话基础信息列表
+ArrayList<ZIMConversationBaseInfo> conversationInfos = new ArrayList<>();
+ZIMConversationBaseInfo info = new ZIMConversationBaseInfo();
+info.conversationID = "convId";
+info.conversationType = ZIMConversationType.PEER;
+conversationInfos.add(info);
+
+// 批量查询会话信息
+zim.queryConversations(conversationInfos, new ZIMConversationsQueriedCallback() {
+    @Override
+    public void onConversationsQueried(ArrayList<ZIMConversation> conversations, ArrayList<ZIMConversationBaseInfo> errorConversationInfos, ZIMError errorInfo) {
+        // conversations 为查询成功的会话列表
+        // errorConversationInfos 为查询失败的会话基础信息列表，可据此重试或降级处理
+    }
+});
+
+```
+
+:::
+:::if{props.platform="iOS"}
+```objc
+// 构造待查询的会话基础信息列表
+ZIMConversationBaseInfo *info = [[ZIMConversationBaseInfo alloc] init];
+info.conversationID = @"targetConversationID";
+info.conversationType = ZIMConversationTypePeer;
+
+// 批量查询会话信息
+[[ZIM getInstance] queryConversationsByConversationInfos:@[info] callback:^(NSArray<ZIMConversation *> * _Nonnull conversations, NSArray<ZIMConversationBaseInfo *> * _Nonnull errorConversationInfos, ZIMError * _Nonnull errorInfo) {
+        // 批量查询会话操作的结果回调
+        if (errorInfo.code == ZIMErrorCodeSuccess) {
+            // conversations 为查询成功的会话列表
+        } else {
+            // 可以打印错误码和错误信息，参考 ZIM 官网错误码文档排查错误原因
+        }
+        // errorConversationInfos 为查询失败的会话基础信息列表，可据此重试或降级处理
+}];
+
+```
+:::
+:::if{props.platform="Web|UTS"}
+```typescript
+// 构造待查询的会话基础信息列表
+const conversationInfos: ZIMConversationBaseInfo[] = [
+    { conversationID: 'xxx', conversationType: 0 }
+];
+
+// 批量查询会话信息
+zim.queryConversations(conversationInfos)
+    .then((res: ZIMConversationsQueriedResult) => {
+        // 查询成功，开发者需要保存和维护 res.conversations 数组内查询成功的会话对象
+        // res.errorConversationInfos 为查询失败的会话基础信息数组，可据此重试或降级处理
+    })
+    .catch((err: ZIMError) => {
+        // 查询失败
+    })
+```
+:::
+:::if{props.platform="Flutter"}
+```dart
+// 构造待查询的会话基础信息列表
+ZIMConversationBaseInfo info = ZIMConversationBaseInfo();
+info.conversationID = "conversationID";
+info.conversationType = ZIMConversationType.peer;
+
+// 批量查询会话信息
+ZIM.getInstance().queryConversations([info]).then((value){
+    // 批量查询会话操作的结果回调
+    // value.conversations 为查询成功的会话列表
+    // value.errorConversationInfos 为查询失败的会话基础信息列表，可据此重试或降级处理
+}).catchError((onError){
+    // 可以打印错误码和错误信息，参考 ZIM 官网错误码文档排查错误原因
+});
+```
+:::
+:::if{props.platform="window"}
+```cpp
+// 构造待查询的会话基础信息列表
+std::vector<zim::ZIMConversationBaseInfo> conversationInfos;
+zim::ZIMConversationBaseInfo info;
+info.conversationID = "conv_id";
+info.conversationType = zim::ZIMConversationType::ZIM_CONVERSATION_TYPE_PEER;
+conversationInfos.push_back(info);
+
+// 批量查询会话信息
+zim_->queryConversations(
+    conversationInfos,
+    [=](const std::vector<std::shared_ptr<zim::ZIMConversation>> &conversations,
+        const std::vector<zim::ZIMConversationBaseInfo> &errorConversationInfos,
+        const zim::ZIMError &errorInfo) {
+        // 批量查询会话操作的结果回调
+        if (errorInfo.code == zim::ZIMErrorCode::ZIM_ERROR_CODE_SUCCESS) {
+            // conversations 为查询成功的会话列表
+        } else {
+            // 可以打印错误码和错误信息，参考 ZIM 官网错误码文档排查错误原因
+        }
+        // errorConversationInfos 为查询失败的会话基础信息列表，可据此重试或降级处理
     });
 ```
 :::
