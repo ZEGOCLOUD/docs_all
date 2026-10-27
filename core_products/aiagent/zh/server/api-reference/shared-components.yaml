@@ -234,8 +234,8 @@ components:
       properties:
         Vendor:
           type: string
-          description: 语音合成（TTS）服务提供商。详细请参考[配置 TTS > TTS 参数说明](/aiagent-server/guides/configuring-tts##tts-params)
-          enum: ["Aliyun", "ByteDanceV3", "ByteDanceFlowing", "MiniMax", "CosyVoice", "ElevenLabs"]
+          description: 语音合成（TTS）服务提供商。详细请参考[配置 TTS > TTS 参数说明](/aiagent-server/guides/configuring-tts#tts-params)
+          enum: ["Aliyun", "ByteDanceV3", "ByteDanceFlowing", "MiniMax", "CosyVoice", "ElevenLabs", "ElevenLabsTTD"]
           example: "ByteDanceV3"
         Url:
           type: string
@@ -260,9 +260,8 @@ components:
                 > 除 app 参数外，其余参数均直接透传厂商参数。详细请参考[配置 TTS > Params 参数说明](/aiagent-server/guides/configuring-tts#params)
           example: {
             "app": {
-              "appid": "zego_test",
-              "token": "zego_test",
-              "resource_id": "seed-tts-2.0"
+              "X-Api-Key": "zego_test",
+              "X-Api-Resource-Id": "seed-tts-2.0"
             },
             "req_params": {
               "speaker": "zh_female_vv_uranus_bigtts"
@@ -592,10 +591,21 @@ components:
           description: |
             智能体说话时被用户语音打断的模式：
             - 0: 立即打断。如果在 AI 说话时用户说话，那么 AI 将被立刻打断，停止说话。
-            - 1: 不打断。如果在 AI 说话时用户说话，那么 AI 不会被影响直到内容说完。
+            - 1: 语音不打断。用户说话不会打断智能体，但语音识别会持续进行，可配合 `InterruptKeywords` 实现自定义打断。
           enum: [0, 1]
           default: 0
-          example: 0
+          example: 1
+        InterruptKeywords:
+          type: array
+          items:
+            type: string
+          description: |
+            打断关键词列表。当 `InterruptMode` 为 1 时，若用户本轮的识别内容中包含任一关键词，智能体将被打断；打断后语音识别继续进行。`InterruptMode` 为 0 时该参数不生效。
+
+            最多 10 个关键词，单个关键词长度 1～32 个字符。
+          maxItems: 10
+          example:
+            - "转人工"
         MaxIdleTime:
           type: integer
           description: 智能体实例的自动销毁时间。创建实例的用户（UserId）若超过 MaxIdleTime 不在 RTC 房间内，则智能体实例会自动销毁，并触发 Event 为 AgentInstanceDeleted 的[回调](/aiagent-server/callbacks/receiving-callback)，Data.Code 为 1202。默认为 120s，取值范围 [10, 1800]。
@@ -689,6 +699,68 @@ components:
           enum: [0, 1]
           default: 0
           example: 1
+        FunctionCallConfig:
+          type: object
+          description: |
+            functionCall 功能的配置。配置后，内部会根据配置添加大模型 functionCall 相关的参数，用来自定义大模型 functionCall 生成的元数据，可用于数字人动作驱动和其他自定义元数据的功能。
+            仅数字人智能体实例支持该参数，普通语音智能体实例传入将被拒绝。
+          required:
+            - Properties
+          properties:
+            Properties:
+              type: array
+              maxItems: 3
+              description: |
+                大模型通过 functionCall 生成的属性的配置。最多配置 3 项，数组内 `Key` 必须唯一，且不能使用内部保留的 key：`text`、`sentences`、`drive_action`。每一项的 `Key`、`Type` 以及 `Options` 中的 `Value` 为必填。数组中每一项包含以下字段：
+                - `Key`：告诉大模型可以生成这个类型的元数据。
+                - `Type`：字段的类型，基本上不需要修改，一般为 "string"。
+                - `Description`：这个类型的描述词，告诉大模型什么情况下生成这个元数据。
+                - `Required`：告诉大模型是否一定要生成这个元数据。
+                - `Options`：告诉大模型这个元数据的可选值。每一项包含 `Value`（可选值）、`Description`（描述）、`Keywords`（调用[主动调用 TTS](/aiagent-server/api-reference/agent-instance-control/send-agent-instance-tts) 接口时，内容中包含该关键词即触发对应元数据的回调）。
+              items:
+                type: object
+                required:
+                  - Key
+                  - Type
+                properties:
+                  Key:
+                    type: string
+                    description: 元数据名称，告诉大模型可以生成这个类型的元数据。不能使用内部保留的 key：text、sentences、drive_action。
+                  Type:
+                    type: string
+                    description: 字段类型，仅支持 "string"。
+                    enum: ["string"]
+                  Description:
+                    type: string
+                    description: 描述词，告诉大模型什么情况下生成这个元数据。
+                  Required:
+                    type: boolean
+                    description: 告诉大模型是否一定要生成这个元数据。
+                    default: false
+                  Options:
+                    type: array
+                    description: 元数据的可选值配置，为对象数组。每个对象表示一个可选值。
+                    items:
+                      type: object
+                      required:
+                        - Value
+                      properties:
+                        Value:
+                          type: string
+                          description: 可选值。
+                        Description:
+                          type: string
+                          description: 该可选值的含义，供大模型理解和选择。
+                        Keywords:
+                          type: array
+                          items:
+                            type: string
+                          description: 调用[主动调用 TTS](/aiagent-server/api-reference/agent-instance-control/send-agent-instance-tts) 接口时，用于匹配输入文本并生成对应元数据；是否通过元数据回调下发，由 `SendPropertyKeys` 等回调白名单配置决定。
+            SendPropertyKeys:
+              type: array
+              items:
+                type: string
+              description: 指定需要通过元数据回调下发的属性名。支持 `FunctionCallConfig.Properties` 中配置的属性，以及内部生成的 `drive_action`。
 
     DigitalHuman:
       type: object
@@ -703,7 +775,7 @@ components:
           type: string
           description: 数字人配置 ID
           enum: [mobile, web]
-          example: "mobile"
+          example: "web"
         EncodeCode:
           type: string
           description: 数字人视频编码格式
@@ -720,6 +792,22 @@ components:
           enum: [0, 1, 2]
           default: 0
           example: 0
+        Width:
+          type: integer
+          description: |
+            输出视频的宽度，单位为像素。必须与 `Height` 成对传入，仅传入其中一个会导致校验失败；两者均不传时默认使用形象分辨率的宽度。
+            - 仅在 web 模式（`ConfigId` 为 `web`）下生效。
+            - 不超过该数字人形象的分辨率。
+            - 与 `Height` 的宽高比须与形象分辨率的宽高比一致。
+          example: 720
+        Height:
+          type: integer
+          description: |
+            输出视频的高度，单位为像素。必须与 `Width` 成对传入，仅传入其中一个会导致校验失败；两者均不传时默认使用形象分辨率的高度。
+            - 仅在 web 模式（`ConfigId` 为 `web`）下生效。
+            - 不超过该数字人形象的分辨率。
+            - 与 `Width` 的宽高比须与形象分辨率的宽高比一致。
+          example: 1080
 
     ErrorResponse:
       type: object
