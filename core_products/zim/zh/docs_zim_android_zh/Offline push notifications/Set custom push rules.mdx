@@ -258,6 +258,11 @@ zim.updateUserOfflinePushRule(offlinePushRule)
 
 自 3.3.0 版本起，{getPlatformData(props,ZIMUserOfflinePushRuleMap)} 支持通过 `doNotDisturbRule` 字段设置免打扰时间规则。规则生效期间，消息和呼叫的离线推送均不下发。
 
+<Note title="说明">
+
+调用 {getPlatformData(props,updateUserOfflinePushRuleMap)} 接口时，离线推送规则会按传入对象的成员属性**全量更新**。如需修改免打扰时间规则等单个配置项，请先调用 {getPlatformData(props,querySelfUserInfoMap)} 查询当前完整的离线推送规则，修改后再全量提交，避免覆盖其他已有配置。
+</Note>
+
 [ZIMUserOfflinePushDoNotDisturbRule](@-ZIMUserOfflinePushDoNotDisturbRule) 字段说明如下：
 
 | 字段 | 说明 |
@@ -272,75 +277,101 @@ zim.updateUserOfflinePushRule(offlinePushRule)
 
 :::if{props.platform=undefined}
 ```java
-// 构造免打扰时间规则（自 3.3.0 版本起支持）
-ZIMUserOfflinePushDoNotDisturbRule doNotDisturbRule = new ZIMUserOfflinePushDoNotDisturbRule();
-doNotDisturbRule.setEnabled(true);
-// 免打扰时段：每天 22:00 至次日 08:00
-doNotDisturbRule.setStartHour(22);
-doNotDisturbRule.setStartMinute(0);
-doNotDisturbRule.setEndHour(8);
-doNotDisturbRule.setEndMinute(0);
-// 每天重复
-doNotDisturbRule.setRepeatMode(ZIMUserOfflinePushDoNotDisturbRepeatMode.DAILY);
-// 时区，建议显式传入本机 IANA 时区 ID
-doNotDisturbRule.setTimeZoneID("Asia/Shanghai");
-
-offlineRule.setDoNotDisturbRule(doNotDisturbRule);
-
-ZIM.getInstance().updateUserOfflinePushRule(offlineRule, new ZIMUserOfflinePushRuleUpdatedCallback() {
+// 先查询当前完整的离线推送规则
+ZIM.getInstance().querySelfUserInfo(new ZIMSelfUserInfoQueriedCallback() {
     @Override
-    public void onUserOfflinePushRuleUpdated(ZIMUserOfflinePushRule updatedOfflinePushRule, ZIMError errorInfo) {
+    public void onSelfUserInfoQueried(ZIMSelfUserInfo selfUserInfo, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            ZIMUserOfflinePushRule offlineRule = selfUserInfo.userRule.offlinePushRule;
+
+            // 修改免打扰时间规则（自 3.3.0 版本起支持）
+            ZIMUserOfflinePushDoNotDisturbRule doNotDisturbRule = new ZIMUserOfflinePushDoNotDisturbRule();
+            doNotDisturbRule.setEnabled(true);
+            // 免打扰时段：每天 22:00 至次日 08:00
+            doNotDisturbRule.setStartHour(22);
+            doNotDisturbRule.setStartMinute(0);
+            doNotDisturbRule.setEndHour(8);
+            doNotDisturbRule.setEndMinute(0);
+            // 每天重复
+            doNotDisturbRule.setRepeatMode(ZIMUserOfflinePushDoNotDisturbRepeatMode.DAILY);
+            // 时区，建议显式传入本机 IANA 时区 ID
+            doNotDisturbRule.setTimeZoneID("Asia/Shanghai");
+            offlineRule.setDoNotDisturbRule(doNotDisturbRule);
+
+            // 全量更新离线推送规则
+            ZIM.getInstance().updateUserOfflinePushRule(offlineRule, new ZIMUserOfflinePushRuleUpdatedCallback() {
+                @Override
+                public void onUserOfflinePushRuleUpdated(ZIMUserOfflinePushRule updatedOfflinePushRule, ZIMError errorInfo) {
+                }
+            });
+        }
     }
 });
 ```
 :::
 :::if{props.platform="iOS|mac"}
 ```objc
-// 构造免打扰时间规则（自 3.3.0 版本起支持）
-ZIMUserOfflinePushDoNotDisturbRule *doNotDisturbRule = [[ZIMUserOfflinePushDoNotDisturbRule alloc] init];
-doNotDisturbRule.enabled = YES;
-// 免打扰时段：每天 22:00 至次日 08:00
-doNotDisturbRule.startHour = 22;
-doNotDisturbRule.startMinute = 0;
-doNotDisturbRule.endHour = 8;
-doNotDisturbRule.endMinute = 0;
-// 每天重复
-doNotDisturbRule.repeatMode = ZIMUserOfflinePushDoNotDisturbRepeatModeDaily;
-// 时区，建议显式传入本机 IANA 时区 ID
-doNotDisturbRule.timeZoneID = @"Asia/Shanghai";
+// 先查询当前完整的离线推送规则
+[[ZIM getInstance] querySelfUserInfo:^(ZIMSelfUserInfo * _Nonnull selfUserInfo, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        ZIMUserOfflinePushRule *offlineRule = selfUserInfo.userRule.offlinePushRule;
 
-offlineRule.doNotDisturbRule = doNotDisturbRule;
+        // 修改免打扰时间规则（自 3.3.0 版本起支持）
+        ZIMUserOfflinePushDoNotDisturbRule *doNotDisturbRule = [[ZIMUserOfflinePushDoNotDisturbRule alloc] init];
+        doNotDisturbRule.enabled = YES;
+        // 免打扰时段：每天 22:00 至次日 08:00
+        doNotDisturbRule.startHour = 22;
+        doNotDisturbRule.startMinute = 0;
+        doNotDisturbRule.endHour = 8;
+        doNotDisturbRule.endMinute = 0;
+        // 每天重复
+        doNotDisturbRule.repeatMode = ZIMUserOfflinePushDoNotDisturbRepeatModeDaily;
+        // 时区，建议显式传入本机 IANA 时区 ID
+        doNotDisturbRule.timeZoneID = @"Asia/Shanghai";
+        offlineRule.doNotDisturbRule = doNotDisturbRule;
 
-[[ZIM getInstance] updateUserOfflinePushRule:offlineRule callback:^(ZIMUserOfflinePushRule * _Nonnull offlinePushRule, ZIMError * _Nonnull errorInfo) {
+        // 全量更新离线推送规则
+        [[ZIM getInstance] updateUserOfflinePushRule:offlineRule callback:^(ZIMUserOfflinePushRule * _Nonnull offlinePushRule, ZIMError * _Nonnull errorInfo) {
+        }];
+    }
 }];
 ```
 :::
 :::if{props.platform="win"}
 ```cpp
-// 构造免打扰时间规则（自 3.3.0 版本起支持）
-zim::ZIM::ZIMUserOfflinePushDoNotDisturbRule doNotDisturbRule;
-doNotDisturbRule.enabled = true;
-// 免打扰时段：每天 22:00 至次日 08:00
-doNotDisturbRule.startHour = 22;
-doNotDisturbRule.startMinute = 0;
-doNotDisturbRule.endHour = 8;
-doNotDisturbRule.endMinute = 0;
-// 每天重复
-doNotDisturbRule.repeatMode = zim::ZIM::ZIM_USER_OFFLINE_PUSH_DO_NOT_DISTURB_REPEAT_MODE_DAILY;
-// 时区，建议显式传入本机 IANA 时区 ID
-doNotDisturbRule.timeZoneID = "Asia/Shanghai";
+// 先查询当前完整的离线推送规则
+zim::ZIM::ZIM.getInstance()->querySelfUserInfo([](const zim::ZIM::ZIMSelfUserInfo& selfUserInfo, const zim::ZIM::ZIMError& errorInfo) {
+    if (errorInfo.code == zim::ZIM::ZIM_ERROR_CODE_SUCCESS) {
+        auto offlineRule = selfUserInfo.userRule.offlinePushRule;
 
-offlineRule.doNotDisturbRule = doNotDisturbRule;
+        // 修改免打扰时间规则（自 3.3.0 版本起支持）
+        zim::ZIM::ZIMUserOfflinePushDoNotDisturbRule doNotDisturbRule;
+        doNotDisturbRule.enabled = true;
+        // 免打扰时段：每天 22:00 至次日 08:00
+        doNotDisturbRule.startHour = 22;
+        doNotDisturbRule.startMinute = 0;
+        doNotDisturbRule.endHour = 8;
+        doNotDisturbRule.endMinute = 0;
+        // 每天重复
+        doNotDisturbRule.repeatMode = zim::ZIM::ZIM_USER_OFFLINE_PUSH_DO_NOT_DISTURB_REPEAT_MODE_DAILY;
+        // 时区，建议显式传入本机 IANA 时区 ID
+        doNotDisturbRule.timeZoneID = "Asia/Shanghai";
+        offlineRule.doNotDisturbRule = doNotDisturbRule;
 
-zim::ZIM::ZIM.getInstance()->updateUserOfflinePushRule(offlineRule, [](const zim::ZIM::ZIMUserOfflinePushRule& updatedOfflinePushRule, const zim::ZIM::ZIMError& errorInfo) {});
+        // 全量更新离线推送规则
+        zim::ZIM::ZIM.getInstance()->updateUserOfflinePushRule(offlineRule, [](const zim::ZIM::ZIMUserOfflinePushRule& updatedOfflinePushRule, const zim::ZIM::ZIMError& errorInfo) {});
+    }
+});
 ```
 :::
 :::if{props.platform="Flutter"}
 ```dart
 try{
-    ZIMUserOfflinePushRule rule = ZIMUserOfflinePushRule();
+    // 先查询当前完整的离线推送规则
+    ZIMSelfUserInfoQueriedResult result = await ZIM.getInstance()!.querySelfUserInfo();
+    ZIMUserOfflinePushRule rule = result.selfUserInfo.userRule.offlinePushRule;
 
-    // 构造免打扰时间规则（自 3.3.0 版本起支持）
+    // 修改免打扰时间规则（自 3.3.0 版本起支持）
     ZIMUserOfflinePushDoNotDisturbRule doNotDisturbRule = ZIMUserOfflinePushDoNotDisturbRule();
     doNotDisturbRule.enabled = true;
     // 免打扰时段：每天 22:00 至次日 08:00
@@ -354,7 +385,8 @@ try{
     doNotDisturbRule.timeZoneID = "Asia/Shanghai";
     rule.doNotDisturbRule = doNotDisturbRule;
 
-    ZIMUserOfflinePushRuleUpdatedResult result = await ZIM.getInstance()!.updateUserOfflinePushRule(rule);
+    // 全量更新离线推送规则
+    ZIMUserOfflinePushRuleUpdatedResult updateResult = await ZIM.getInstance()!.updateUserOfflinePushRule(rule);
 } on PlatformException catch (onError) {
     onError.code;
     onError.message;
@@ -363,27 +395,30 @@ try{
 :::
 :::if{props.platform="Web|UTS"}
 ```typescript
-const offlinePushRule: ZIMUserOfflinePushRule = {
-    onlinePlatforms: [1, 4, 5],
-    notToReceiveOfflinePushPlatforms: [2, 3, 9],
-    // 免打扰时间规则（自 3.3.0 版本起支持）
-    doNotDisturbRule: {
-        enabled: true,
-        // 免打扰时段：每天 22:00 至次日 08:00
-        startHour: 22,
-        startMinute: 0,
-        endHour: 8,
-        endMinute: 0,
-        // 每天重复
-        repeatMode: 2,
-        customRepeatDays: 0,
-        onceEndTimestamp: 0,
-        // 时区，建议显式传入本机 IANA 时区 ID
-        timeZoneID: 'Asia/Shanghai',
-    },
-};
+// 先查询当前完整的离线推送规则
+zim.querySelfUserInfo()
+    .then((res: ZIMSelfUserInfoQueriedResult) => {
+        const offlinePushRule = res.selfUserInfo.userRule.offlinePushRule;
 
-zim.updateUserOfflinePushRule(offlinePushRule)
+        // 修改免打扰时间规则（自 3.3.0 版本起支持）
+        offlinePushRule.doNotDisturbRule = {
+            enabled: true,
+            // 免打扰时段：每天 22:00 至次日 08:00
+            startHour: 22,
+            startMinute: 0,
+            endHour: 8,
+            endMinute: 0,
+            // 每天重复
+            repeatMode: 2,
+            customRepeatDays: 0,
+            onceEndTimestamp: 0,
+            // 时区，建议显式传入本机 IANA 时区 ID
+            timeZoneID: 'Asia/Shanghai',
+        };
+
+        // 全量更新离线推送规则
+        return zim.updateUserOfflinePushRule(offlinePushRule);
+    })
     .then((res: ZIMUserOfflinePushRuleUpdatedResult) => {
         // success
     })
