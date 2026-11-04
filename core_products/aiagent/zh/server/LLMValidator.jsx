@@ -8,9 +8,9 @@ const LLMValidator = ({ lang = 'zh' }) => {
   const t = i18n[lang] || i18n.zh;
 
   const vendors = [
-    { id: 'volcengine', name: '火山方舟', url: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions', model: 'doubao-1-5-lite-32k-250115' },
-    { id: 'aliyun', name: '阿里云百炼', url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-plus' },
-    { id: 'minimax', name: 'MiniMax', url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'MiniMax-Text-01' },
+    { id: 'volcengine', name: '火山方舟', url: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions', model: 'doubao-seed-2-1-turbo-260628' },
+    { id: 'aliyun', name: '阿里云百炼', url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen3.8-flash' },
+    { id: 'minimax', name: 'MiniMax', url: 'https://api.minimax.cn/v1/chat/completions', model: 'MiniMax-M3.1-Flash' },
     { id: 'openai', name: 'OpenAI', url: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4' },
     { id: 'deepseek', name: 'DeepSeek', url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat' },
     // { id: 'anthropic', name: 'Anthropic', url: 'https://api.anthropic.com/v1/messages', model: 'claude-3-opus-20240229' },
