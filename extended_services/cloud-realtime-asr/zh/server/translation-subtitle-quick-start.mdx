@@ -134,13 +134,239 @@ sequenceDiagram
 
 服务端基于 Node.js 实现：从环境变量读取 ZEGO AppID 与 ServerSecret，完成请求签名，调用 StartRealtimeASRTask 创建房间级「中文 → 英文」翻译任务，请求体与步骤二一致。
 
-{/* TODO(task-3): 在此嵌入服务端可运行最小示例的关键代码（请求签名 + StartRealtimeASRTask 调用），请求体须与步骤二示例保持一致 */}
+凭据一律从环境变量读取（`ZEGO_APP_ID`、`ZEGO_SERVER_SECRET`，翻译模型 APIKey 为 `ZEGO_TLLM_APIKEY`），严禁写死进代码。
+
+请求签名与任务创建的关键代码如下：
+
+```javascript server/src/signature.js
+// ZEGO 服务端 API 请求签名
+// 算法（见文档「调用方式 - 签名机制」）：
+//   Signature = md5(AppId + SignatureNonce + ServerSecret + Timestamp)
+//   SignatureNonce 为 16 位 16 进制随机字符串（8 字节随机数的 hex 编码）
+import crypto from 'node:crypto';
+
+/** 生成 16 位 hex 随机串（SignatureNonce） */
+export function randomNonce() {
+  return crypto.randomBytes(8).toString('hex');
+}
+
+/** 按官方算法计算签名 */
+export function generateSignature(appId, signatureNonce, serverSecret, timestamp) {
+  const raw = `${appId}${signatureNonce}${serverSecret}${timestamp}`;
+  return crypto.createHash('md5').update(raw).digest('hex');
+}
+
+/** 组装一次请求所需的公共参数（每次调用都要生成新的签名） */
+export function buildCommonParams(appId, serverSecret) {
+  const nonce = randomNonce();
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = generateSignature(appId, nonce, serverSecret, timestamp);
+  return {
+    AppId: String(appId),
+    SignatureNonce: nonce,
+    Timestamp: String(timestamp),
+    Signature: signature,
+    SignatureVersion: '2.0',
+  };
+}
+```
+
+```javascript server/src/asr.js
+// ZEGO 云端实时语音识别服务端 API 封装
+import { buildCommonParams } from './signature.js';
+
+const API_HOST = 'https://cloud-realtime-asr-api.zegotech.cn';
+
+/**
+ * 调用一个 ZEGO 服务端 API（POST，业务参数放 Body，公共参数放 Query）
+ */
+export async function callZegoServerApi(action, appId, serverSecret, body) {
+  const common = buildCommonParams(appId, serverSecret);
+  const query = new URLSearchParams({ Action: action, ...common });
+  const res = await fetch(`${API_HOST}/?${query}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    // 非 2xx：读出 JSON 错误体，读不出则按 HTTP 状态抛出（容错细节省略）
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status}: ${text.slice(0, 300)}`);
+  }
+  return res.json();
+}
+
+/**
+ * 构造「房间级 中文 -> 英文」翻译识别任务请求体，与本文步骤二示例保持一致。
+ * translation 为翻译模型配置，从环境变量读取（ZEGO_TLLM_*，见示例 README）。
+ */
+export function buildTranslationTaskBody(roomId, translation) {
+  return {
+    RoomId: roomId,
+    RecognitionRange: 0, // 0：识别房间内所有流
+    EnableTranslation: true,
+    SubtitleType: 3, // 3：识别结果与翻译结果同时经房间信令下发
+    Translation: {
+      Vendor: translation.vendor,
+      SourceLanguage: translation.sourceLanguage,
+      TargetLanguage: translation.targetLanguage,
+      LLM: {
+        Url: translation.url,
+        ApiKey: translation.apiKey,
+        Model: translation.model,
+      },
+    },
+    ASR: {
+      Vendor: 'Tencent', // 默认厂商，其他厂商见《配置 ASR》
+    },
+  };
+}
+
+/** 创建识别及翻译任务，返回 { Code, Message, RequestId, Data: { TaskId } } */
+export function startRealtimeASRTask(appId, serverSecret, body) {
+  return callZegoServerApi('StartRealtimeASRTask', appId, serverSecret, body);
+}
+```
+
+<Note title="说明">完整示例中，服务端还提供 Token 接口，用 AppID 与 ServerSecret 生成客户端登录房间的基础鉴权 Token（Token04），算法见[使用 Token 鉴权](/real-time-video-web/communication/using-token-authentication)；停止任务封装见下方[停止识别任务](#停止识别任务)。</Note>
 
 ### 客户端：接收并渲染翻译字幕
 
-Web（Vue）客户端加入房间并推流，集成字幕处理 Hook（`useChat.ts`）接收房间信令，实时渲染识别原文与翻译译文。
+Web（Vue）客户端加入房间并推流，集成字幕处理 Hook（`useChat.js`，改编自官方组件源码中的 `useChat.ts`）接收房间信令，实时渲染识别原文与翻译译文。
 
-{/* TODO(task-3): 在此嵌入 Web 客户端可运行最小示例的关键代码（进房推流 + useChat 双语字幕渲染） */}
+进房推流与 Hook 接入的关键代码如下：
+
+```javascript client/src/App.vue（关键片段）
+import { ZegoExpressEngine } from 'zego-express-engine-webrtc';
+import { useChat } from './hooks/useChat.js';
+
+// 字幕 Hook：messages 为合并后的双语消息列表，放入字幕组件中渲染
+const { messages, setupEventListeners, clearMessages } = useChat({
+  on: (event, cb) => zg?.on(event, cb),
+  callExperimentalAPI: (params) => zg?.callExperimentalAPI(params),
+});
+
+// 高品质语聊房场景（scenario: 7），与《快速开始 - 客户端最佳配置实践（Web）》一致
+// AppID 与接入地址由业务服务端 /api/config 下发（非凭据）
+zg = new ZegoExpressEngine(cfg.appID, cfg.serverAddress, { scenario: 7 });
+
+async function joinAndPublish() {
+  // 向业务服务端申请 Token（基础鉴权 Token04）
+  const { token } = await requestToken(form.userId);
+  // 加入房间并推送音频流（错误处理省略）
+  await zg.loginRoom(form.roomId, token, { userID: form.userId, userName: form.userId }, { userUpdate: true });
+  // 创建本地音频流（传统 3A 处理 SDK 默认开启）
+  localStream = await zg.createZegoStream({ camera: { video: false, audio: true } });
+  await zg.startPublishingStream(`stream_${form.userId}`, localStream, {
+    enableAutoSwitchVideoCodec: true,
+  });
+
+  // 进房后注册房间信令监听，接收识别（Cmd 201）/ 翻译（Cmd 202）结果
+  setupEventListeners();
+}
+```
+
+`useChat` Hook 解析房间信令消息的关键代码如下：
+
+```javascript client/src/hooks/useChat.js（关键片段）
+import { ref } from 'vue';
+
+export function useChat(zg) {
+  // 双语消息列表：同一说话人同一轮（UserId + Round）的原文与译文合并为一条
+  const messages = ref([]);
+  let asrMsgMap = {}; // Cmd 201 历史：全量文本，取 SeqId 最大者直接替换
+  let transformMsgMap = {}; // Cmd 202 历史：增量文本，按 SeqId 排序后拼接
+
+  function handleRoomCommandMessage(msg) {
+    const { Cmd, SeqId, Data, Round, Timestamp } = msg;
+    if (Cmd === 201) {
+      handleMessage(SeqId, Data, Round, Timestamp, 'asr');
+    } else if (Cmd === 202) {
+      handleMessage(SeqId, Data, Round, Timestamp, 'transform');
+    }
+  }
+
+  function setupEventListeners() {
+    // 监听实验性 API 回调，接收房间信令下发的识别/翻译结果
+    zg.on('recvExperimentalAPI', (result) => {
+      const { method, content } = result;
+      if (method === 'onRecvRoomChannelMessage') {
+        try {
+          const recvMsg = JSON.parse(content.msgContent);
+          handleRoomCommandMessage(recvMsg);
+        } catch (e) {
+          console.error('parse room channel message failed', e);
+        }
+      }
+    });
+    // 订阅房间通道消息（进房后调用）
+    zg.callExperimentalAPI({ method: 'onRecvRoomChannelMessage', params: {} });
+  }
+
+  function clearMessages() {
+    messages.value = [];
+    asrMsgMap = {};
+    transformMsgMap = {};
+  }
+
+  return { messages, setupEventListeners, clearMessages };
+}
+```
+
+识别原文与翻译译文的排序合并逻辑（`handleMessage` 核心）如下：
+
+```javascript client/src/hooks/useChat.js（续：Cmd 201/202 排序合并核心）
+function handleMessage(seqId, data, round, timestamp, type) {
+  const text = data.Text;
+  if (!text) return;
+
+  const isAsr = type === 'asr';
+  const index = messages.value.findIndex(
+    (m) => m.userId === data.UserId && m.round === round
+  );
+
+  const newMessage = {
+    userId: data.UserId,
+    round,
+    seqId,
+    messageId: data.MessageId,
+    timestamp,
+    [isAsr ? 'content' : 'translateContent']: text,
+  };
+
+  // 历史消息按轮次缓存于 msgMap（asrMsgMap / transformMsgMap）
+  const msgMap = isAsr ? asrMsgMap : transformMsgMap;
+  if (!msgMap[round]) msgMap[round] = [];
+  msgMap[round].push(newMessage);
+
+  if (index !== -1) {
+    if (isAsr) {
+      // 识别结果为全量文本：取历史中 SeqId 最大的一条，直接替换展示内容
+      const latest = msgMap[round].reduce((a, b) => (b.seqId > a.seqId ? b : a));
+      messages.value[index].content = latest.content;
+    } else {
+      // 翻译结果为增量文本：该轮所有片段按 SeqId 排序后拼接
+      const merged = msgMap[round]
+        .slice()
+        .sort((a, b) => a.seqId - b.seqId)
+        .map((m) => m.translateContent)
+        .join('');
+      messages.value[index].translateContent = merged;
+    }
+  } else {
+    messages.value.push(newMessage);
+  }
+}
+```
+
+模板中渲染双语字幕：
+
+```html client/src/App.vue（模板关键片段）
+<article v-for="m in messages" :key="`${m.userId}-${m.round}`" class="msg">
+  <p class="asr">{{ m.content }}</p>
+  <p class="llm">{{ m.translateContent }}</p>
+</article>
+```
 
 ## 停止识别任务
 
