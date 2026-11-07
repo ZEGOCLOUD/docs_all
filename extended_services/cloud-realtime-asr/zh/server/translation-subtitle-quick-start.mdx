@@ -1,0 +1,179 @@
+---
+date: "2026-11-07"
+---
+# 翻译字幕快速接入
+
+本文以「中文 → 英文」的房间级翻译为例，介绍从客户端进房推流、服务端创建识别及翻译任务，到客户端展示翻译字幕的最短闭环。识别引擎选择、流维度差异化翻译等进阶内容，请参考本文相关文档，此处不再展开。
+
+## 场景与效果
+
+<Frame width="auto" height="512" caption="">
+  <img src="https://doc-media.zego.im/extended_services/cloud-realtime-asr/zh/server/guides/asr_translation2.png" alt="翻译字幕效果图"/>
+</Frame>
+
+典型场景：
+
+- **1v1 跨语种通话**：双方各说母语，实时看到对方话语的翻译字幕，详见 [1v1 实时翻译字幕](/cloud-realtime-asr/best-practices/translate-subtitles-during-1-on-1-calls)。
+- **在线会议字幕**：会议发言实时转为文字字幕，跨语种参会者可直接阅读翻译结果。
+- **直播实时翻译**：主播语音实时翻译成目标语言字幕，覆盖跨语种观众。
+
+识别与翻译结果经 RTC 房间信令直接下发到客户端，无需自建推送通道。
+
+## 前提条件
+
+1. 已在 [ZEGO 控制台](https://console.zego.im/) 开通云端语音识别服务，详情请参考 [控制台 - 云端实时语音识别](/console/service-configuration/cloud-realtime-asr)。
+2. 已自行开通翻译模型服务并获取 API Key。目前支持豆包 doubao-seed-translation、通义 Qwen-MT 等模型。
+
+<Note title="说明">翻译模型需自行向模型厂商开通，翻译调用费用由模型厂商收取，与 ZEGO 账单无关，详见 [定价 - 翻译计费说明](/cloud-realtime-asr/introduction/pricing)。</Note>
+
+3. 客户端已集成针对 Cloud ASR 优化的 ZEGO Express SDK。
+
+<Warning title="注意">
+必须使用 [下载 SDK 及 Demo](/aiagent-ios/introduction/download) 页面针对 Cloud ASR 优化的 ZEGO Express SDK 版本，否则无法正常显示字幕。
+</Warning>
+
+4. Web 端字幕组件基于 Vue（`useChat.ts`）实现，本文客户端步骤以 Web 为例；iOS、Android 字幕组件的用法请参考 [展示字幕](/cloud-realtime-asr/guides/display-subtitles)。
+
+## 技术原理
+
+使用翻译字幕服务的核心流程如下图所示：
+
+```mermaid
+sequenceDiagram
+    participant Client as 客户端(ZEGO Express SDK)
+    participant RTCServer as ZEGO 实时音视频(RTC) 后台
+    participant Server as 业务后台
+    participant ASRServer as ZEGO 云端实时语音识别后台
+
+    Client->>RTCServer: 登录房间并推音频流
+    rect rgb(125, 168, 237)
+        Server->>ASRServer: 开启识别 (StartRealtimeASRTask)
+        ASRServer-->>Server: 返回 TaskId
+        ASRServer->>RTCServer: 从 RTC 房间拉取音视频流
+        RTCServer-->>ASRServer: 音视频流数据
+        ASRServer-->>Server: 识别结果回调 (Event: ASRResult)
+        ASRServer->>ASRServer: 根据音视频流数据进行识别/翻译
+        Note right of Server: 通过 TaskId 关联任务
+        ASRServer-->>Client: 实时识别结果 (onRecvExperimentalAPI)
+        Note right of Client: 业务后台开启识别时需设置 SubtitleType 为 1、2 或 3
+    Server->>ASRServer: 停止识别 (StopRealtimeASRTask, TaskId)
+    end
+```
+
+识别与翻译结果通过 RTC 房间信令下发，协议要点如下：
+
+- **识别结果（Cmd 201）**：每轮下发全量文本，支持前向修正，同一 MessageId 的消息直接替换上一条内容。
+- **翻译结果（Cmd 202）**：以增量文本下发，同一 MessageId 的消息按 SeqId 排序后累加显示。
+- 房间信令消息可能乱序到达，`SeqId` 用于消息重排及原文、译文对齐（配合 `Round`、`MessageId`），字段详情请参考 [展示字幕 - 核心说明](/cloud-realtime-asr/guides/display-subtitles)。
+
+## 步骤一：客户端进房推流
+
+客户端集成 ZEGO Express SDK，加入 RTC 房间并推送音频流：
+
+1. [集成 SDK（Web）](/real-time-video-web/quick-start/integrating-sdk)
+2. [实现视频通话 / 语音通话（Web）](/real-time-video-web/quick-start/implementing-video-call)
+
+为获得最佳的识别效果，建议参考 [快速开始 - 客户端最佳配置实践](/cloud-realtime-asr/quick-start) 开启音频 3A 处理（AEC、AGC、ANS）等配置。
+
+## 步骤二：服务端创建识别及翻译任务
+
+业务服务端调用 [开启云端实时语音识别（StartRealtimeASRTask）](/cloud-realtime-asr/api-reference/start) 接口创建任务。请求的鉴权与签名方式请参考 [调用方式](/cloud-realtime-asr/api-reference/accessing-server-apis)；也可先在 [在线调试服务端 API](/cloud-realtime-asr/api-reference/call-api-online) 中验证请求体。
+
+房间级「中文 → 英文」翻译的最小请求体示例：
+
+```json 请求示例 {4-15}
+{
+    "RoomId": "room_01",
+    "RecognitionRange": 0,
+    "EnableTranslation": true,
+    "SubtitleType": 3,
+    "Translation": {
+        "Vendor": "DoubaoSeedTranslation",
+        "SourceLanguage": "zh",
+        "TargetLanguage": "en",
+        "LLM": {
+            "Url": "https://ark.cn-beijing.volces.com/api/v3/responses",
+            "ApiKey": "your_doubao_api_key",
+            "Model": "doubao-seed-translation-250915"
+        }
+    },
+    "ASR": {
+        "Vendor": "Tencent"
+    }
+}
+```
+
+与翻译字幕相关的三个关键配置：
+
+| 参数 | 说明 |
+| --- | --- |
+| `EnableTranslation` | 设为 `true`，开启翻译。 |
+| `Translation` | 翻译模型配置，包括 `Vendor`（模型供应商）、`SourceLanguage` / `TargetLanguage`（翻译方向）和 `LLM`（模型的调用地址 `Url`、`ApiKey` 与模型名 `Model`）。 |
+| `SubtitleType` | 设为 `3`，识别结果与翻译结果同时经房间信令下发；仅需翻译字幕时可设为 `2`。 |
+
+<Note title="说明">
+- `ASR.Vendor` 默认为 `Tencent`，更多识别厂商及模型请参考 [配置 ASR](/cloud-realtime-asr/configuring-asr)。
+- 完整参数说明及流维度差异化翻译（如 1v1 双向互译），请参考 [配置翻译](/cloud-realtime-asr/guides/enable-translation)。
+- 当前每个翻译配置仅支持设置一个目标语言；如需多种目标语言，请按流或房间拆分多个翻译配置，参考 [1v1 实时翻译字幕](/cloud-realtime-asr/best-practices/translate-subtitles-during-1-on-1-calls)。
+</Note>
+
+## 步骤三：客户端接收并渲染翻译字幕
+
+任务创建成功后，识别与翻译结果经 RTC 房间信令下发，客户端有以下两种渲染方式：
+
+1. **使用字幕组件（推荐）**：Vue 项目可直接集成官方字幕处理 Hook（`useChat.ts`）；iOS、Android 可集成对应的字幕组件源码。组件内置消息解析、按 `SeqId` 排序以及原文、译文的合并展示逻辑。
+2. **自行解析渲染**：客户端监听 `onRecvExperimentalAPI` 回调，根据 `Cmd` 字段区分识别文本（201）与翻译文本（202），自行处理排序、合并与展示。
+
+两种方式的组件源码、信令字段说明与消息处理流程，请参考 [展示字幕](/cloud-realtime-asr/guides/display-subtitles)。
+
+## 完整示例
+
+本节将提供将上述三个步骤串联的端到端可运行最小示例：Web 客户端加入房间并推流，服务端创建带翻译的识别任务，客户端实时渲染中英双语字幕。
+
+### 服务端：创建识别及翻译任务
+
+服务端基于 Node.js 实现：从环境变量读取 ZEGO AppID 与 ServerSecret，完成请求签名，调用 StartRealtimeASRTask 创建房间级「中文 → 英文」翻译任务，请求体与步骤二一致。
+
+{/* TODO(task-3): 在此嵌入服务端可运行最小示例的关键代码（请求签名 + StartRealtimeASRTask 调用），请求体须与步骤二示例保持一致 */}
+
+### 客户端：接收并渲染翻译字幕
+
+Web（Vue）客户端加入房间并推流，集成字幕处理 Hook（`useChat.ts`）接收房间信令，实时渲染识别原文与翻译译文。
+
+{/* TODO(task-3): 在此嵌入 Web 客户端可运行最小示例的关键代码（进房推流 + useChat 双语字幕渲染） */}
+
+## 停止识别任务
+
+通话或直播结束后，业务服务端调用 [停止云端实时语音识别（StopRealtimeASRTask）](/cloud-realtime-asr/api-reference/stop) 接口停止任务：
+
+```json
+{
+    "TaskId": "your_task_id"
+}
+```
+
+若房间长时间没有真实用户，任务会自动停止，详见下方常见问题。
+
+## 常见问题
+
+**支持热词吗？**
+
+支持。热词通过识别厂商的 `Params` 参数配置（如 Qwen-Audio 系列模型），详见 [配置 ASR - ASR 参数](/cloud-realtime-asr/configuring-asr#asr-params)。
+
+**识别原文和译文如何对齐？**
+
+房间信令消息中的 `SeqId`、`Round` 与 `MessageId` 用于乱序重排与原文、译文对齐：`SeqId` 为包序列号，可能乱序，请按其排序；`Round` 为对话轮次；同一说话人的原文（Cmd 201）与译文（Cmd 202）通过 `UserId` 与 `MessageId` 关联。详见 [展示字幕 - 核心说明](/cloud-realtime-asr/guides/display-subtitles)。
+
+**任务为什么会自动停止？**
+
+若 RTC 房间 120 秒（默认值，可配置）内没有真实用户存在，云端实时语音识别服务会自动停止，并触发 Event 为 Exception 的回调，Data.Code 为 1202，详情请参考 [返回码](/cloud-realtime-asr/api-reference/return-codes)。请确保任务运行期间房间内存在真实用户；任务被自动停止后如需继续使用，请重新创建任务。
+
+**源语言与目标语言相同会怎样？**
+
+`SourceLanguage` 与 `TargetLanguage` 配置为相同语言时，任务创建失败。请检查翻译方向配置，确保两者不同。
+
+**识别并发有上限吗？**
+
+默认最大 10 路音频流语音识别并发。如需提升并发，请联系 ZEGO 技术支持，也可参考 [定价](/cloud-realtime-asr/introduction/pricing) 了解语音识别并发叠加包。
+
+<Note title="说明">本方案整体成本 = ① 云端语音识别费用（按识别时长计费，见 [定价](/cloud-realtime-asr/introduction/pricing)）+ ② RTC 音频订阅费用（随通话时长产生）+ ③ 翻译模型调用费用（由您所选模型厂商收取，与 ZEGO 账单无关）。</Note>
