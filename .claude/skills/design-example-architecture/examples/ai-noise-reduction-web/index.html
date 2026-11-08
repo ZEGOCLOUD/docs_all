@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZEGO Express Web SDK - AI 降噪示例</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #f5f6fa;
+      color: #1f2329;
+    }
+
+    h1 { font-size: 20px; margin: 0 0 8px; }
+
+    .tip { font-size: 13px; color: #646a73; margin: 0 0 20px; line-height: 1.6; }
+
+    .card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 4px rgba(31, 35, 41, 0.08);
+    }
+
+    .card h2 { font-size: 15px; margin: 0 0 12px; }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 130px 1fr;
+      gap: 10px 12px;
+      align-items: center;
+    }
+
+    .form-grid label { font-size: 13px; color: #41464c; }
+
+    .form-grid input {
+      width: 100%;
+      padding: 7px 10px;
+      font-size: 13px;
+      border: 1px solid #d5d9e0;
+      border-radius: 6px;
+      outline: none;
+    }
+
+    .form-grid input:focus { border-color: #0055ff; }
+
+    .form-grid input:disabled { background: #f2f3f5; color: #8f959e; }
+
+    button {
+      padding: 8px 18px;
+      font-size: 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #join-btn { background: #0055ff; color: #fff; }
+    #leave-btn { background: #eef0f3; color: #1f2329; }
+
+    .ans-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+    }
+
+    .ans-row input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+    .ans-row input[type="checkbox"]:disabled { cursor: not-allowed; }
+    .ans-state { font-weight: 600; }
+    .ans-state.on { color: #00a870; }
+    .ans-state.off { color: #8f959e; }
+    .ans-hint { font-size: 12px; color: #646a73; }
+
+    .videos { display: flex; gap: 16px; flex-wrap: wrap; }
+
+    .video-box {
+      width: 320px;
+      background: #000;
+      border-radius: 8px;
+      min-height: 180px;
+      overflow: hidden;
+    }
+
+    .video-box video { width: 100%; display: block; }
+
+    .video-title { font-size: 13px; margin: 0 0 6px; color: #41464c; }
+
+    #log {
+      font-size: 12px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 220px;
+      overflow-y: auto;
+      background: #17181a;
+      color: #d5d9e0;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin: 0;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>ZEGO Express Web SDK — AI 降噪（enableAiDenoise）快速接入示例</h1>
+  <p class="tip">
+    流程：创建引擎 → 登录房间 → 本地推流 → 开/关 AI 降噪对照。<br />
+    体验方法：本页面推流后，用<strong>另一个浏览器标签页或设备</strong>以不同 UserID 加入同一房间收听声音，
+    再切换下方「AI 降噪」开关，即可听出开/关差异（建议在风扇、空调等稳定噪音旁测试）。
+  </p>
+
+  <div class="card">
+    <h2>1. 基础配置（从 <a href="https://console.zego.im" target="_blank" rel="noopener">ZEGO 控制台</a> 获取）</h2>
+    <div class="form-grid">
+      <label for="app-id">AppID *</label>
+      <input id="app-id" type="number" placeholder="请填写控制台「项目管理」中的 AppID（数字）" />
+
+      <label for="server">Server 地址</label>
+      <input id="server" type="text" placeholder="控制台「项目信息」中的 Server 地址；SDK 3.7.0 及以上可留空" />
+
+      <label for="room-id">RoomID</label>
+      <input id="room-id" type="text" value="room-ai-denoise" />
+
+      <label for="user-id">UserID</label>
+      <input id="user-id" type="text" placeholder="全局唯一，如 user-1234" />
+
+      <label for="token">Token *</label>
+      <input id="token" type="text" placeholder="控制台「项目信息」中的临时 Token（24 小时有效），或业务服务器下发的 Token" />
+    </div>
+    <div style="margin-top: 14px">
+      <button id="join-btn">登录房间并推流</button>
+      <button id="leave-btn" disabled>退出房间</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2. AI 降噪对照开关</h2>
+    <div class="ans-row">
+      <input type="checkbox" id="ans-toggle" disabled />
+      <span>AI 降噪 <span id="ans-state" class="ans-state off">已关闭</span></span>
+    </div>
+    <p class="ans-hint">
+      推流前后均可切换：调用 <code>enableAiDenoise(localStream, enable)</code> 对本端推流实时生效。
+      仅支持对一条流降噪；如开启失败并提示 1103081，请改用最新版 Chrome/Edge 浏览器。
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>3. 视频画面</h2>
+    <div class="videos">
+      <div>
+        <p class="video-title">本地画面（推流端）</p>
+        <div class="video-box" id="local-video"></div>
+      </div>
+      <div>
+        <p class="video-title">远端画面（收听端：另一个标签页/设备加入同一房间）</p>
+        <div class="video-box" id="remote-video"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>运行日志</h2>
+    <pre id="log"></pre>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>
