@@ -109,7 +109,7 @@ sequenceDiagram
 ## 目录结构
 
 ```tree
-ai-noise-reduction/
+ai-noise-reduction-web/
 ├── index.html        # 页面结构与样式（配置表单、降噪开关、视频窗口、日志）
 ├── src/
 │   └── main.js       # 全部 SDK 逻辑（单文件：引擎→登录→推流→AI 降噪开关→退出）
