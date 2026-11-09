@@ -1,0 +1,761 @@
+---
+date: "2026-11-06"
+---
+
+# 大文件上传与断点续传
+---
+
+## 功能简介
+
+在协同办公、在线教育等场景中，用户需要通过 IM 收发安装包、课程视频、设计源文件等大文件。ZIM SDK 自 **3.2.0 版本起**将文件、视频和音频消息的大小上限提升至 1 GB，并新增可选的断点续传能力，减少弱网下重复上传的传输成本。
+
+本文以文件和视频消息为主，介绍发送前预检、上传进度、取消发送、失败恢复和接收端下载的接入方式。
+
+## 前提条件与适用范围
+
+- 已参考 [快速开始](../Send%20and%20receive%20messages.mdx) 集成 **3.2.0 及以上版本**的 ZIM SDK 并登录。
+- 发送、续传和重发期间，本地文件必须保持可访问，不能提前清理临时文件。
+- 向群组或房间发送消息前，发送者必须已加入该群组或房间。
+
+各类富媒体消息的大小限制如下。业务侧如有发送前预检，需要随 SDK 版本同步调整。
+
+| 消息类型 | 3.2.0 之前 | 3.2.0 及以后 | 格式与其他要求 |
+| --- | --- | --- | --- |
+| 文件 | 100 MB | 1 GB | 格式不限 |
+| 视频 | 100 MB | 1 GB | MP4、MOV；需填写播放时长；获取首帧宽高需使用 H.264 或 H.265 编码 |
+| 音频 | 6 MB | 1 GB | MP3、M4A；时长不超过 300 秒 |
+| 图片 | 10 MB | 20 MB | 支持的格式请参考[收发消息](../Guides/Messaging/Send%20and%20receive%20messages.mdx#消息类型) |
+
+组合消息中的媒体文件遵循对应类型的大小和格式限制。版本变化请参考 [ZIM 发布日志](../Client%20SDKs/ZIM%20release%20notes.mdx#320-版本)。
+
+## 实现方案
+
+### 选择文件发送方式
+
+| 方式-20% | 上传与投递行为 | 下载地址的维护责任 |
+| --- | --- | --- |
+| 本地文件发送 | 设置 `fileLocalPath`，SDK 将文件上传至 ZEGO 服务器，生成下载地址并随消息投递 | 发送成功后从回调的消息对象获取 `fileDownloadUrl`。双方均可用该 URL 下载文件，发送方删除本地文件不影响已发送成功的消息 |
+| 网络文件直发 | 设置 `fileDownloadUrl`，SDK 仅透传 URL，不经过 ZEGO 服务器中转，也不生成新的下载地址 | 业务侧确保 URL 公网可访问，并处理加载失败和链接失效 |
+
+<Note title="说明">
+同时设置本地路径和网络 URL 时，SDK 优先使用网络 URL。需要由 SDK 上传本地文件时，请勿填写 `fileDownloadUrl`。
+</Note>
+
+### 上传进度与发送结果
+
+本地文件的发送链路为：**发送前预检 → SDK 上传文件 → 生成下载地址 → 投递消息 → 返回发送结果**。
+
+1. 预检文件大小、可读性和会话权限，提前提示必然失败的场景。
+2. 调用 [sendMessage](@sendMessage) 发送，在 `onMessageAttached` 中保存消息对象，供状态更新与取消发送使用。
+3. 在 `onMediaUploadingProgress` 中更新进度条，同时提供取消入口。
+4. 以发送结果回调确认成功并获取下载地址。**上传进度达到 100% 不等于消息发送成功**，不能仅凭进度将 UI 标记为已发送。
+
+组合消息通过 `onMultipleMediaUploadingProgress` 获取整体及单个媒体文件的上传进度：
+
+| 参数 | 含义 |
+| --- | --- |
+| currentFileSize / totalFileSize | 组合消息中所有媒体文件的已上传字节数 / 总字节数 |
+| messageInfoIndex | 当前媒体文件在组合消息内容中的索引 |
+| currentIndexFileSize / totalIndexFileSize | 当前媒体文件的已上传字节数 / 总字节数 |
+
+业务侧可按索引展示各文件进度并辅助定位问题。进度回调本身不代表支持独立重发某个子文件，失败后的恢复方式需结合具体接口能力处理。
+
+### 中断恢复与断点续传
+
+SDK 3.2.0 起提供可选的媒体文件上传断点续传能力，关联接口为 `sendMessage`。弱网中断后，优先通过续传复用已上传部分；无法恢复时，再向用户提供重发入口。普通消息重发的对象复用、配置及并发约束，请参考[消息重发](./message-resend.mdx)。
+
+<Note title="说明">
+断点续传的具体开启参数、各平台支持范围及恢复条件，请联系 ZEGO 技术支持确认。下方普通发送示例不包含断点续传配置，不能据此认为已开启续传。
+</Note>
+
+恢复前应检查以下条件：
+
+- **文件仍可访问**：上传失败后保留本地文件和业务侧记录，直到发送成功或用户确认放弃。
+- **错误可重试**：参数错误（如 6000001）先修正参数；只有网络类错误才进入续传或重试流程，其他错误按错误码处理。
+- **上传任务仍可恢复**：本地记录丢失或文件被清理时，不应承诺可以从原进度继续。
+
+:::if{props.platform="web"}
+<Warning title="Web 页面生命周期限制">
+刷新或关闭页面会中断上传，SDK 无法在页面销毁后继续执行上传任务。断点续传不代表可跨页面生命周期自动恢复。建议在发送中通过 `beforeunload` 提示用户。
+</Warning>
+:::
+
+### 取消上传
+
+用户主动点击取消时，在文件上传期间调用 [cancelSendingMessage](@cancelSendingMessage)。该接口自 2.22.0 起支持，适用于包含本地媒体文件的消息，取消成功后消息状态变为“发送失败”。
+
+取消组合消息会终止整条消息的发送，包括其中的文本。若用户仍可能重试，应继续保留本地文件；只有用户确认放弃后再清理。详细说明请参考[取消媒体消息发送](../Guides/Messaging/Cancel%20sending%20message.mdx)。
+
+### 接收端下载与本地文件兜底
+
+接收到媒体消息后，先展示文件信息和下载入口，按用户操作下载，避免大文件自动消耗流量。
+
+- Android、iOS 等原生端需将文件落到本地时，调用 `downloadMediaFile` 下载原文件，并处理下载进度和结果。
+- Web 端直接使用消息上的 `fileDownloadUrl` 提供下载入口。
+- 网络文件直发模式下，链接有效性由业务侧负责，应提供链接失效后的重新获取或替代下载源。
+
+## 实现大文件上传
+
+以下示例使用已登录的 `zim` 实例，以单聊文件消息为例。选中的文件、`conversationID` 以及进度渲染、错误处理、URL 保存等函数由业务侧提供；UI 更新需切换至对应平台的 UI 线程。视频消息使用对应视频消息类型，并补充播放时长。
+
+### 发送文件并监听进度
+
+:::if{props.platform=undefined}
+```java
+// 1. 发送前预检，拦截必然失败的场景
+File file = selectedFile;
+final long FILE_MAX = 1024L * 1024 * 1024;   // 3.2.0 起 1GB；3.2.0 之前为 100MB
+if (!file.isFile() || !file.canRead() || file.length() > FILE_MAX) {
+    showTip("文件不可访问或超出大小限制");
+    return;
+}
+
+// 2. 发送并监控进度（大文件务必给进度与取消入口）
+ZIMFileMessage message = new ZIMFileMessage(file.getAbsolutePath());
+ZIMMessageSendConfig sendConfig = new ZIMMessageSendConfig();
+sendConfig.priority = ZIMMessagePriority.HIGH;
+
+zim.sendMessage(message, conversationID, ZIMConversationType.PEER, sendConfig, new ZIMMessageSentFullCallback() {
+    @Override
+    public void onMessageAttached(ZIMMessage message) {
+        // 保存此消息对象，供用户在上传中点击取消时使用
+        saveSendingMessage(message);
+    }
+
+    @Override
+    public void onMediaUploadingProgress(ZIMMediaMessage message, long currentFileSize, long totalFileSize) {
+        renderProgress(currentFileSize, totalFileSize);
+    }
+
+    @Override
+    public void onMessageSent(ZIMMessage message, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            // 发送成功后获取服务端下载地址
+            saveDownloadUrl(((ZIMFileMessage) message).getFileDownloadUrl());
+        } else {
+            // 业务侧区分错误：参数错误先修正，网络类错误再提供续传或重试入口
+            handleSendError(message, errorInfo);
+        }
+    }
+});
+```
+:::
+
+:::if{props.platform="ios|mac"}
+```objc
+// 1. 发送前预检，拦截必然失败的场景
+NSURL *fileURL = selectedFileURL;
+unsigned long long fileSize = getFileSize(fileURL); // 业务侧读取文件字节数
+if (fileSize > 1024ULL * 1024 * 1024) {   // 3.2.0 起 1GB；3.2.0 之前为 100MB
+    showTip(@"文件超出大小限制");
+    return;
+}
+
+// 2. 发送并监控进度（大文件务必给进度与取消入口）
+ZIMFileMessage *fileMsg = [[ZIMFileMessage alloc] init];
+// 需填入 UTF-8 格式的本地路径
+fileMsg.fileLocalPath = fileURL.path;
+// 使用本地上传，不填写网络 URL。
+fileMsg.fileDownloadUrl = @"";
+
+ZIMMessageSendConfig *sendConfig = [[ZIMMessageSendConfig alloc] init];
+sendConfig.priority = ZIMMessagePriorityHigh;
+
+ZIMMessageSendNotification *notification = [[ZIMMessageSendNotification alloc] init];
+notification.onMessageAttached = ^(ZIMMessage * _Nonnull message) {
+    saveSendingMessage(message); // 业务侧保存消息对象，供上传期间取消使用
+};
+notification.onMediaUploadingProgress = ^(ZIMMediaMessage * _Nonnull message, unsigned long long currentFileSize, unsigned long long totalFileSize) {
+    renderProgress(currentFileSize, totalFileSize);
+};
+
+[[ZIM getInstance] sendMessage:fileMsg toConversationID:conversationID conversationType:ZIMConversationTypePeer config:sendConfig notification:notification callback:^(ZIMMessage * _Nonnull message, ZIMError * _Nonnull errorInfo) {
+    if (errorInfo.code == 0) {
+        // 发送成功后获取服务端下载地址。
+        saveDownloadUrl([(ZIMFileMessage *)message fileDownloadUrl]);
+    } else {
+        handleSendError(message, errorInfo); // 先分类错误，再决定是否重试
+    }
+}];
+```
+:::
+
+:::if{props.platform="web"}
+```typescript
+const file = selectedFile; // 文件选择器返回的 File 对象
+const FILE_MAX = 1024 * 1024 * 1024;   // 3.2.0 起 1GB；3.2.0 之前为 100MB
+
+// 1. 发送前预检，拦截必然失败的场景
+if (file.size > FILE_MAX) {
+  showTip('文件超出大小限制');
+  return;
+}
+
+const fileMessage: ZIMMessage = {
+  type: 12,                  // 12 = 文件消息；14 = 视频消息
+  fileLocalPath: file,
+};
+
+// 2. 发送并监控进度（大文件务必给进度与取消入口）
+let sendingMessage: ZIMMessage; // 保存 SDK 回调中的消息对象
+const notification: ZIMMessageSendNotification = {
+  onMessageAttached: (message) => { sendingMessage = message; },
+  onMediaUploadingProgress: (message, currentFileSize, totalFileSize) => {
+    if (totalFileSize > 0) renderProgress(currentFileSize / totalFileSize);
+  },
+};
+
+zim.sendMessage(fileMessage, conversationID, 0, { priority: 1 }, notification) // 0 = 单聊
+  .then((res) => {
+    // 发送成功后获取服务端下载地址。
+    saveDownloadUrl(res.message.fileDownloadUrl);
+  })
+  .catch((err: ZIMError) => {
+    // 先分类错误：参数错误修正后再发，网络类错误才进入续传或重试流程
+    handleSendError(sendingMessage || fileMessage, err);
+  });
+```
+:::
+
+:::if{props.platform="windows"}
+```cpp
+#include <atomic>
+#include <fstream>
+#include <memory>
+#include <string>
+
+#include "ZIM.h"
+
+namespace {
+
+constexpr unsigned long long kFileMaxBytes = 1024ULL * 1024ULL * 1024ULL;
+
+unsigned long long GetLocalFileSize(const std::string& path) {
+    std::ifstream file(path.c_str(), std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        return 0;
+    }
+    const auto size = static_cast<std::streamoff>(file.tellg());
+    return size > 0 ? static_cast<unsigned long long>(size) : 0;
+}
+
+} // namespace
+
+void SendLargeFile(zim::ZIM* zim,
+                   const std::string& conversationID,
+                   zim::ZIMConversationType conversationType,
+                   const std::string& localPath,
+                   std::shared_ptr<std::atomic_bool> userClickedCancel) {
+    if (!userClickedCancel) {
+        return;
+    }
+
+    // 1. 发送前预检，拦截必然失败的场景
+    const auto fileSize = GetLocalFileSize(localPath);
+    if (fileSize == 0) {
+        // 文件不存在 / 为空
+        return;
+    }
+    if (fileSize > kFileMaxBytes) {
+        // 超过 1GB，直接提示，不发起发送
+        return;
+    }
+
+    // 2. 构造文件消息
+    auto message = std::make_shared<zim::ZIMFileMessage>(localPath);
+
+    zim::ZIMMessageSendConfig sendConfig;
+    sendConfig.priority = zim::ZIM_MESSAGE_PRIORITY_HIGH;
+
+    // 调用方为每次发送创建独立的标记，用户点击取消时置为 true。
+    // ZIM 实例须在所有发送和取消回调结束前保持有效。
+    // cancelRequested 只用于防止进度回调里重复发起取消。
+    auto cancelRequested = std::make_shared<std::atomic_bool>(false);
+
+    auto notification = std::make_shared<zim::ZIMMessageSendNotification>();
+
+    notification->onMessageAttached =
+        [](std::shared_ptr<zim::ZIMMessage> attachedMessage) {
+            (void)attachedMessage;
+            // UI：展示“发送中”
+        };
+
+    notification->onMediaUploadingProgress =
+        [zim, userClickedCancel, cancelRequested](
+            std::shared_ptr<zim::ZIMMediaMessage> mediaMessage,
+            unsigned long long currentFileSize,
+            unsigned long long totalFileSize) {
+            (void)currentFileSize;
+            (void)totalFileSize;
+            // UI：renderProgress(currentFileSize, totalFileSize)
+
+            // 处于文件上传中时，用户点击取消
+            if (userClickedCancel->load() && !cancelRequested->exchange(true)) {
+                zim->cancelSendingMessage(
+                    mediaMessage, zim::ZIMSendingMessageCancelConfig(),
+                    [](const zim::ZIMError& errorInfo) {
+                        // errorInfo.code == 0：取消指令成功；
+                        // 消息状态随后变为发送失败
+                    });
+            }
+        };
+
+    // 组合消息：需要分文件进度时使用
+    notification->onMultipleMediaUploadingProgress =
+        [](std::shared_ptr<zim::ZIMMultipleMessage> multipleMessage,
+           unsigned long long currentFileSize,
+           unsigned long long totalFileSize,
+           unsigned int messageInfoIndex,
+           unsigned long long currentIndexFileSize,
+           unsigned long long totalIndexFileSize) {
+            (void)multipleMessage;
+            (void)currentFileSize;
+            (void)totalFileSize;
+            (void)messageInfoIndex;
+            (void)currentIndexFileSize;
+            (void)totalIndexFileSize;
+            // messageInfoIndex 用于定位具体失败/上传中的文件
+        };
+
+    // 3. 发送并监控结果
+    zim->sendMessage(
+        message, conversationID, conversationType, sendConfig, notification,
+        [](std::shared_ptr<zim::ZIMMessage> sentMessage,
+           const zim::ZIMError& errorInfo) {
+            if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+                auto fileMessage =
+                    std::static_pointer_cast<zim::ZIMFileMessage>(sentMessage);
+                if (fileMessage) {
+                    // 发送成功：持久化 fileMessage->fileDownloadUrl
+                    // saveDownloadUrl(fileMessage->fileDownloadUrl);
+                }
+                return;
+            }
+
+            if (errorInfo.code ==
+                zim::ZIM_ERROR_CODE_COMMON_MODULE_PARAMS_INVALID) {
+                // 6000001：参数错误（空白消息、发给自己等），不重试
+            } else if (errorInfo.code ==
+                       zim::ZIM_ERROR_CODE_MESSAGE_MODULE_FILE_SIZE_INVALID) {
+                // 6000214：文件大小超限，不重试
+            } else if (errorInfo.code ==
+                       zim::ZIM_ERROR_CODE_MESSAGE_MODULE_FILE_DURATION_INVALID) {
+                // 6000215：音视频时长超限，不重试
+            } else if (errorInfo.code ==
+                       zim::ZIM_ERROR_CODE_MESSAGE_MODULE_FILE_TYPE_UNSUPPORTED) {
+                // 6000213：文件类型/格式不支持，不重试
+            } else if (errorInfo.code ==
+                           zim::ZIM_ERROR_CODE_MESSAGE_MODULE_SEND_MESSAGE_FAILED ||
+                       errorInfo.code ==
+                           zim::ZIM_ERROR_CODE_MESSAGE_MODULE_TARGET_DOES_NOT_EXIST ||
+                       errorInfo.code ==
+                           zim::ZIM_ERROR_CODE_MESSAGE_MODULE_SEND_MESSAGE_FAILED_FOR_CANCELLED ||
+                       errorInfo.code ==
+                           zim::ZIM_ERROR_CODE_MESSAGE_MODULE_FILE_ERROR ||
+                       errorInfo.code ==
+                           zim::ZIM_ERROR_CODE_MESSAGE_MODULE_FILE_NOT_EXIST ||
+                       errorInfo.code ==
+                           zim::ZIM_ERROR_CODE_MESSAGE_MODULE_FILE_SERVER_ERROR) {
+                // 6000203 / 6000204 / 6000206 / 6000210 / 6000211 / 6000212：
+                // 业务、文件或用户取消类错误，按错误码处理，不要等待续传。
+            } else if (errorInfo.code ==
+                           zim::ZIM_ERROR_CODE_NETWORK_MODULE_NETWORK_ERROR ||
+                       errorInfo.code ==
+                           zim::ZIM_ERROR_CODE_NETWORK_MODULE_REQUEST_TIMEOUT) {
+                // 最终回调返回网络错误：保留本地文件，并提供重发入口。
+            } else {
+                // 其他错误：按错误码处理，不要一律当成网络错误。
+            }
+        });
+}
+```
+
+发送视频时，传入视频时长，并替换消息类型及成功回调中的类型转换。
+
+```cpp
+// 在 SendLargeFile 中，把：
+// auto message = std::make_shared<zim::ZIMFileMessage>(localPath);
+// 换成：
+auto message = std::make_shared<zim::ZIMVideoMessage>(localPath, durationSeconds);
+// durationSeconds 为视频时长（秒），必须填写。
+// 发送成功回调里把 ZIMFileMessage 换成 ZIMVideoMessage 取 fileDownloadUrl。
+```
+:::
+:::if{props.platform="flutter"}
+```dart
+import 'dart:io';
+
+import 'package:zego_zim/zego_zim.dart';
+
+const int kFileMaxBytes = 1024 * 1024 * 1024;
+
+/// 业务侧 UI 与进度回调共享的取消标记。
+/// 调用方创建并持有该对象；UI 取消按钮设置 userClickedCancel = true。
+class UploadCancelToken {
+  bool userClickedCancel = false;
+  bool cancelRequested = false;
+}
+
+Future<void> sendLargeFile(
+  String conversationID,
+  String localPath,
+  UploadCancelToken cancelToken,
+) async {
+  // 1. 发送前预检
+  final file = File(localPath);
+  if (!await file.exists()) {
+    return;
+  }
+  final fileSize = await file.length();
+  if (fileSize == 0) {
+    // 空文件不发起发送
+    return;
+  }
+  if (fileSize > kFileMaxBytes) {
+    // 超过 1GB，直接提示
+    return;
+  }
+
+  final zim = ZIM.getInstance();
+  if (zim == null) {
+    return;
+  }
+
+  // 2. 构造文件消息
+  final message = ZIMFileMessage(localPath);
+
+  final sendConfig = ZIMMessageSendConfig()
+    ..priority = ZIMMessagePriority.high;
+
+  final notification = ZIMMessageSendNotification(
+    onMessageAttached: (ZIMMessage attachedMessage) {
+      // UI：展示“发送中”
+    },
+    onMediaUploadingProgress: (
+      ZIMMediaMessage mediaMessage,
+      int currentFileSize,
+      int totalFileSize,
+    ) {
+      // UI：renderProgress(currentFileSize, totalFileSize)
+
+      // 处于文件上传中时，用户点击取消
+      if (cancelToken.userClickedCancel && !cancelToken.cancelRequested) {
+        cancelToken.userClickedCancel = false;
+        cancelToken.cancelRequested = true;
+        zim
+            .cancelSendingMessage(
+              mediaMessage,
+              ZIMSendingMessageCancelConfig(),
+            )
+            .then((_) {
+              // 取消成功：消息状态会变为发送失败
+            })
+            .catchError((Object error) {
+              // 取消失败时允许用户再次点击取消
+              cancelToken.cancelRequested = false;
+              if (error is ZIMError && error.code == 6000207) {
+                // 当前已经不在上传中
+              } else {
+                // 其他错误：按错误码处理
+              }
+            });
+      }
+    },
+    onMultipleMediaUploadingProgress: (
+      ZIMMultipleMessage multipleMessage,
+      int currentFileSize,
+      int totalFileSize,
+      int messageInfoIndex,
+      int currentIndexFileSize,
+      int totalIndexFileSize,
+    ) {
+      // 组合消息：messageInfoIndex 定位具体文件
+    },
+  );
+
+  // 3. 发送并监控结果
+  try {
+    final sentResult = await zim.sendMessage(
+      message,
+      conversationID,
+      ZIMConversationType.peer,
+      sendConfig,
+      notification,
+    );
+
+    final sentMessage = sentResult.message;
+    if (sentMessage is ZIMFileMessage) {
+      // 发送成功：业务侧持久化 sentMessage.fileDownloadUrl
+      // saveDownloadUrl(sentMessage.fileDownloadUrl);
+    }
+  } catch (e) {
+    if (e is ZIMError) {
+      if (e.code == 6000001) {
+        // 参数错误（空白消息、发给自己等），不重试
+      } else if (e.code == 6000214) {
+        // 文件大小超限，不重试
+      } else if (e.code == 6000215) {
+        // 音视频时长超限，不重试
+      } else if (e.code == 6000213) {
+        // 文件类型/格式不支持，不重试
+      } else {
+        // 其他错误：按错误码处理，不要一律当成网络错误。
+      }
+    } else {
+      rethrow;
+    }
+  }
+}
+```
+
+发送视频时，传入视频时长，并替换消息类型及成功回调中的类型转换。
+
+```dart
+// 在 sendLargeFile 中，把：
+// final message = ZIMFileMessage(localPath);
+// 换成：
+final message = ZIMVideoMessage(
+  localPath,
+  videoDuration: durationSeconds,
+);
+// durationSeconds 为视频时长（秒），必须填写。
+// 发送成功回调里把 ZIMFileMessage 换成 ZIMVideoMessage 取 fileDownloadUrl。
+```
+:::
+
+### 按用户操作取消上传
+
+在上传进度回调中保存当前消息对象，即可由取消按钮触发以下调用。Windows 和 Flutter 可以沿用上文的取消标记，也可以直接调用以下方法。每个上传任务选择一种取消方式。
+
+:::if{props.platform=undefined}
+```java
+// sendingMessage 为当前仍在上传的消息对象。
+zim.cancelSendingMessage(sendingMessage, new ZIMSendingMessageCancelConfig(),
+    new ZIMSendingMessageCancelledCallback() {
+        @Override
+        public void onSendingMessageCancelled(ZIMError errorInfo) {
+            // 根据取消结果更新 UI；确认放弃后再清理本地文件。
+        }
+    });
+```
+:::
+
+:::if{props.platform="ios|mac"}
+```objc
+ZIMSendingMessageCancelConfig *config = [[ZIMSendingMessageCancelConfig alloc] init];
+[zim cancelSendingMessage:sendingMessage config:config callback:^(ZIMError *errorInfo) {
+    // 根据取消结果更新 UI；确认放弃后再清理本地文件。
+}];
+```
+:::
+
+:::if{props.platform="web"}
+```typescript
+// sendingMessage 为 onMessageAttached 或上传进度回调中保存的消息对象。
+zim.cancelSendingMessage(sendingMessage, {} as ZIMSendingMessageCancelConfig)
+  .then(() => { /* 更新取消状态；确认放弃后再清理本地文件 */ })
+  .catch((err: ZIMError) => { /* 展示取消失败原因 */ });
+```
+:::
+
+:::if{props.platform="windows"}
+```cpp
+void CancelMediaSending(zim::ZIM* zim,
+                        std::shared_ptr<zim::ZIMMessage> message) {
+    zim->cancelSendingMessage(
+        message, zim::ZIMSendingMessageCancelConfig(),
+        [](const zim::ZIMError& errorInfo) {
+            (void)errorInfo;
+            if (errorInfo.code == zim::ZIM_ERROR_CODE_SUCCESS) {
+                // 取消成功：消息状态会变为发送失败
+            } else if (errorInfo.code ==
+                       zim::ZIM_ERROR_CODE_MESSAGE_MODULE_CANCEL_SENDING_MESSAGE_FAILED) {
+                // 6000207：当前已经不在上传中，或任务已结束
+            }
+        });
+}
+```
+:::
+
+:::if{props.platform="flutter"}
+```dart
+Future<void> cancelMediaSending(ZIMMessage message) async {
+  final zim = ZIM.getInstance();
+  if (zim == null) {
+    return;
+  }
+
+  try {
+    await zim.cancelSendingMessage(
+      message,
+      ZIMSendingMessageCancelConfig(),
+    );
+    // 取消成功：消息状态会变为发送失败
+  } catch (e) {
+    if (e is ZIMError && e.code == 6000207) {
+      // 当前已经不在上传中
+    }
+  }
+}
+```
+:::
+
+### 按需下载原文件
+
+以下代码由用户点击文件下载入口触发，`message` 为已接收或已发送成功的文件 / 视频消息。
+
+:::if{props.platform=undefined}
+```java
+ZIMMediaDownloadConfig config = new ZIMMediaDownloadConfig();
+zim.downloadMediaFile(message, ZIMMediaFileType.ORIGINAL_FILE, config,
+    new ZIMMediaDownloadedCallback() {
+        @Override
+        public void onMediaDownloadingProgress(ZIMMessage message, long currentFileSize,
+            long totalFileSize) {
+            // 更新下载进度。
+        }
+
+        @Override
+        public void onMediaDownloaded(ZIMMessage message, ZIMError errorInfo) {
+            if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+                String localPath = ((ZIMMediaMessage) message).getFileLocalPath();
+                // 使用本地文件。
+            } else {
+                // 展示下载失败原因，并提供重试入口。
+            }
+        }
+    });
+```
+:::
+
+:::if{props.platform="ios|mac"}
+```objc
+ZIMMediaDownloadConfig *config = [[ZIMMediaDownloadConfig alloc] init];
+[zim downloadMediaFileWithMessage:(ZIMMediaMessage *)message
+                        fileType:ZIMMediaFileTypeOriginalFile
+                          config:config
+                        progress:^(ZIMMessage *message, unsigned long long currentFileSize,
+                                   unsigned long long totalFileSize) {
+    // 更新下载进度。
+} callback:^(ZIMMessage *message, ZIMError *errorInfo) {
+    if (errorInfo.code == 0) {
+        NSString *localPath = ((ZIMMediaMessage *)message).fileLocalPath;
+        // 使用本地文件。
+    } else {
+        // 展示下载失败原因，并提供重试入口。
+    }
+}];
+```
+:::
+
+:::if{props.platform="web"}
+```typescript
+// message 为文件或视频消息，业务侧按需展示下载链接。
+renderDownloadLink(message.fileDownloadUrl);
+```
+:::
+
+:::if{props.platform="windows"}
+```cpp
+// 用户点击下载后调用。message 为选中的文件或视频消息。
+void DownloadOriginalFile(zim::ZIM* zim,
+                          const std::shared_ptr<zim::ZIMMessage>& message) {
+    zim::ZIMMediaDownloadConfig config;
+    // 组合消息内下载时，用 config.messageInfoIndex 指定子文件下标
+
+    zim->downloadMediaFile(
+        message, zim::ZIM_MEDIA_FILE_TYPE_ORIGINAL_FILE, config,
+        [](std::shared_ptr<zim::ZIMMessage> /*message*/,
+           unsigned long long currentFileSize,
+           unsigned long long totalFileSize) {
+            (void)currentFileSize;
+            (void)totalFileSize;
+            // UI：下载进度
+        },
+        [](std::shared_ptr<zim::ZIMMessage> downloadedMessage,
+           const zim::ZIMError& errorInfo) {
+            if (errorInfo.code != zim::ZIM_ERROR_CODE_SUCCESS) {
+                return;
+            }
+
+            auto mediaMessage =
+                std::static_pointer_cast<zim::ZIMMediaMessage>(
+                    downloadedMessage);
+            (void)mediaMessage;
+            // 下载成功后，本地路径在 mediaMessage->fileLocalPath
+            // play(mediaMessage->fileLocalPath);
+        });
+}
+```
+:::
+
+:::if{props.platform="flutter"}
+```dart
+// 用户点击下载后调用。message 为选中的文件或视频消息。
+Future<void> downloadOriginalFile(ZIM zim, ZIMMessage message) async {
+  try {
+    final downloaded = await zim.downloadMediaFile(
+      message,
+      ZIMMediaFileType.originalFile,
+      ZIMMediaDownloadConfig(),
+      (
+        ZIMMessage msg,
+        int currentFileSize,
+        int totalFileSize,
+      ) {
+        // UI：下载进度
+      },
+    );
+
+    final mediaMessage = downloaded.message as ZIMMediaMessage;
+    // 下载成功后，本地路径在 mediaMessage.fileLocalPath（API 类型为 dynamic）
+    final localPath = mediaMessage.fileLocalPath;
+    if (localPath is String) {
+      // play(localPath);
+    }
+  } catch (_) {
+    // 处理下载失败
+  }
+}
+```
+:::
+
+## 接入最佳实践
+
+- **移动网络体积预警**：对接近上限的文件提供流量提示或仅 Wi-Fi 发送选项，由用户决定是否继续。
+- **统一任务状态**：区分上传中、发送成功、发送失败、取消中与已取消。恢复期间避免用户重复提交同一任务。
+- **验证弱网与生命周期场景**：重点验证网络中断和恢复、取消后重试、本地文件丢失、应用退出，以及多端 SDK 版本差异下的表现。
+
+## 常见问题
+
+<Accordion title="为什么升级后仍无法发送超过 100 MB 的文件？" defaultOpen="false">
+检查实际运行的 SDK 是否为 3.2.0 及以上版本，并确认业务侧发送前预检的大小阈值已同步放宽。
+</Accordion>
+
+<Accordion title="为什么断点续传没有生效？" defaultOpen="false">
+确认 SDK 版本、续传配置、本地记录和文件可访问性。具体配置方式与恢复条件请联系 ZEGO 技术支持确认。
+</Accordion>
+
+<Accordion title="上传进度长时间不变时，应该如何处理？" defaultOpen="false">
+检查网络与最终发送结果，根据错误类型决定是否恢复，避免仅凭进度判断任务已失败。
+</Accordion>
+
+<Accordion title="参数错误可以通过重试恢复吗？" defaultOpen="false">
+应先停止重试，检查文件、消息内容和会话参数，修正后再发送。
+</Accordion>
+
+<Accordion title="为什么上传进度达到 100%，消息仍显示发送失败？" defaultOpen="false">
+上传完成后还需投递消息，最终状态应以发送结果回调为准，不能仅以进度达到 100% 判定发送成功。
+</Accordion>
+
+<Accordion title="下载或播放文件返回 404 时，应该如何处理？" defaultOpen="false">
+检查消息是否发送成功、下载地址是否有效。网络文件直发模式下，需要由业务侧恢复链接或提供替代下载源。
+</Accordion>
+
+<Accordion title="为什么换设备后无法重发失败消息？" defaultOpen="false">
+重发依赖原本地文件，应检查文件是否仍存在且可访问。已发送成功的消息可通过下载地址重新下载文件。
+</Accordion>
+
+<Accordion title="旧版本客户端接收或下载大文件异常时，应该如何处理？" defaultOpen="false">
+核对双方 SDK 版本及文件大小，按实际支持情况限制文件大小或引导用户升级。
+</Accordion>

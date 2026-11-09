@@ -1,0 +1,508 @@
+---
+date: "2026-11-09"
+---
+# 配置离线推送规则
+---
+
+## 功能简介
+
+本文介绍了如何使用 ZIM SDK 配置当前用户的离线推送规则，包括推送总开关与分类开关、多端在线时抑制指定端推送，以及免打扰时段（支持每天重复、自定义星期重复与指定时区）。
+
+## 前提条件
+
+已参考 [快速开始](../Send%20and%20receive%20messages.mdx) 集成 ZIM SDK 并登录。
+
+## 规则结构说明
+
+离线推送规则由 `ZIMUserOfflinePushRule` 描述，包含以下成员：
+
+| 成员 | 类型 | 说明 |
+| --- | --- | --- |
+| offlinePushEnabled | boolean | 离线推送总开关，默认开。关闭后任何离线推送（消息与来电）都不下发。 |
+| messageOfflinePushEnabled | boolean | 是否接收消息类离线推送，默认开。只影响消息推送，不影响来电推送。 |
+| callOfflinePushEnabled | boolean | 是否接收来电类离线推送，默认开。只影响来电推送，不影响消息推送。 |
+| onlinePlatforms | List&lt;int&gt; | 与 notToReceiveOfflinePushPlatforms 搭配使用：此处指定平台在线时，后者指定的平台不收离线推送。平台取值见 `ZIMPlatformType`（如 WIN = 1、IPHONE_OS = 2、ANDROID = 3、MAC_OS = 4）。 |
+| notToReceiveOfflinePushPlatforms | List&lt;int&gt; | 被抑制推送的平台列表，语义同上。 |
+| doNotDisturbRule | ZIMUserOfflinePushDoNotDisturbRule | 免打扰时段规则，对消息类与来电类推送同时生效。 |
+
+免打扰时段规则 `ZIMUserOfflinePushDoNotDisturbRule` 的成员如下：
+
+| 成员 | 类型 | 说明 |
+| --- | --- | --- |
+| enabled | boolean | 是否启用免打扰，默认关。 |
+| startHour / startMinute | int | 开始时间，取值 [0, 23] / [0, 59]。 |
+| endHour / endMinute | int | 结束时间，取值 [0, 23] / [0, 59]。结束时间早于开始时间表示跨零点时段（如 22:00 - 次日 08:00）。 |
+| repeatMode | enum | 重复模式，见下表。 |
+| customRepeatDays | int | 自定义重复日的位掩码，bit0 = 周一 … bit6 = 周日。仅自定义模式生效。 |
+| onceEndTimestamp | unsigned long long | 一次性免打扰时段的结束时间戳（UNIX 秒）。该值由服务端在保存规则时记录，本端设置时无需填写，回读时获取。 |
+| timeZoneID | string | 免打扰时段所在时区的 IANA 名称，如 "Asia/Shanghai"。为空表示未指定（服务端按 UTC 计算）。SDK 纯透传，不校验合法性；需要按用户当地时区生效时请显式传入。 |
+
+重复模式 `ZIMUserOfflinePushDoNotDisturbRepeatMode`：
+
+| 取值 | 含义 |
+| --- | --- |
+| Unknown（-1） | 未设置，或服务端返回了本 SDK 未识别的模式。更新规则时 SDK 按"不重复"上报。 |
+| None（1） | 不重复：规则仅在保存当日生效一次。 |
+| Daily（2） | 每天重复。 |
+| Custom（3） | 自定义重复：配合 customRepeatDays 位掩码指定每周几生效。 |
+
+## 推送过滤的判定优先级
+
+用户收到离线推送前，服务端按以下优先级链过滤（前台在线时不走推送链路，正常投递）：
+
+**总开关 > 免打扰窗口（按 timeZoneID 折算时段 + 重复日判定）> 分类开关 = 在线平台规则**
+
+同级取与、任一层命中即不推送。各开关覆盖的产生离线推送的接口范围如下：
+
+| 开关 | 覆盖范围 |
+| --- | --- |
+| offlinePushEnabled（总开关） | 一切离线推送通知，不限于消息与来电两类。 |
+| messageOfflinePushEnabled（消息通知） | 仅 `sendMessage`（单聊 / 群聊；房间消息不产生离线推送）与 `revokeMessage`（撤回通知），与消息类型无关。 |
+| callOfflinePushEnabled（来电通知） | `callInvite`、`callInviting`、`callCancel`、`callQuit`、`callEnd` 呼叫链路产生的全部离线推送。 |
+
+<Warning title="注意">
+- 群 / 好友 / 社群申请审批类接口（如 `sendGroupJoinApplication`、`sendFriendApplication` 等）产生的通知推送**不属于两个分类开关的管辖范围**，仅受总开关与免打扰约束。
+- **@ 提及消息不穿透任何一层**：总开关、消息开关或免打扰任一生效时，@ 消息推送与普通消息同样被拦截。
+- 用户级各层与发送端既有的消息级推送配置（pushConfig.enablePush / callInviteConfig.enableOfflinePush）为叠加关系，两层均放行才会推送。
+</Warning>
+
+## 设置离线推送规则
+
+通过 [updateUserOfflinePushRule](@updateUserOfflinePushRule) 可以修改当前用户的离线推送规则。
+
+<Warning title="注意">
+[updateUserOfflinePushRule](@updateUserOfflinePushRule) 的调用为**全量更新**：每次调用都会按传入对象的全部成员覆盖服务端存储的规则，传入空值时会使用默认规则配置，而不是保留旧规则配置。
+
+如需只修改某一项规则，请先通过 [querySelfUserInfo](@querySelfUserInfo) 获取现有的完整规则，在返回的副本上修改目标字段后整体提交。**不要新构造规则配置直接提交**，新的规则有未设置的成员会使用默认值覆盖（例如，开关回到 true、免打扰关闭、时区清空）。
+</Warning>
+
+### 场景一：关闭个人通知
+
+<Frame width="512" height="auto" >
+  <img src="https://doc-media.zego.im/core_products/zim/zh/docs_zim_android_zh/best-practice/scenario-one-notifications.png" />
+</Frame>
+
+按需求选择关闭方式：`offlinePushEnabled` 关闭全部离线推送（消息与来电都不再下发）；`messageOfflinePushEnabled`、`callOfflinePushEnabled` 分别只关闭消息或来电通知。
+
+:::if{props.platform=undefined}
+```java
+ZIM.getInstance().querySelfUserInfo(new ZIMSelfUserInfoQueriedCallback() {
+    @Override
+    public void onSelfUserInfoQueried(ZIMSelfUserInfo userInfo, ZIMError errorInfo) {
+        if (errorInfo.code != ZIMErrorCode.SUCCESS) {
+            return;
+        }
+        // 全量更新：基于查询到的完整规则修改目标字段后整体提交
+        ZIMUserOfflinePushRule rule = userInfo.userRule.offlinePushRule;
+        rule.setOfflinePushEnabled(false);            // 关闭全部离线推送
+        // rule.setMessageOfflinePushEnabled(false);  // 仅关闭消息类离线推送
+        // rule.setCallOfflinePushEnabled(false);     // 仅关闭来电类离线推送
+        ZIM.getInstance().updateUserOfflinePushRule(rule, new ZIMUserOfflinePushRuleUpdatedCallback() {
+            @Override
+            public void onUserOfflinePushRuleUpdated(ZIMError errorInfo) {
+                // errorInfo.code == ZIMErrorCode.SUCCESS 表示修改成功
+            }
+        });
+    }
+});
+```
+:::
+:::if{props.platform="ios|mac"}
+```objc
+[zim querySelfUserInfo:^(ZIMSelfUserInfo *userInfo, ZIMError *errorInfo) {
+    if (errorInfo.code != ZIMErrorCodeSuccess) {
+        return;
+    }
+    // 全量更新：基于查询到的完整规则修改目标字段后整体提交
+    ZIMUserOfflinePushRule *rule = userInfo.userRule.offlinePushRule;
+    rule.offlinePushEnabled = NO;            // 关闭全部离线推送
+    // rule.messageOfflinePushEnabled = NO;  // 仅关闭消息类离线推送
+    // rule.callOfflinePushEnabled = NO;     // 仅关闭来电类离线推送
+    [zim updateUserOfflinePushRule:rule callback:^(ZIMError *errorInfo) {
+        // errorInfo.code == ZIMErrorCodeSuccess 表示修改成功
+    }];
+}];
+```
+:::
+:::if{props.platform="windows"}
+```cpp
+zim->QuerySelfUserInfo([=](unsigned int seq, const ZIMSelfUserInfo &userInfo,
+                           const ZIM::ZIMError &errorInfo) {
+    if (errorInfo.code != 0) {
+        return;
+    }
+    // 全量更新：基于查询到的完整规则修改目标字段后整体提交
+    ZIMUserOfflinePushRule rule = userInfo.userRule_.offline_push_rule_;
+    rule.offline_push_enabled_ = false;            // 关闭全部离线推送
+    // rule.message_offline_push_enabled_ = false; // 仅关闭消息类离线推送
+    // rule.call_offline_push_enabled_ = false;    // 仅关闭来电类离线推送
+    zim->UpdateUserOfflinePushRule(rule, [=](const ZIM::ZIMError &errorInfo) {
+        // errorInfo.code == 0 表示修改成功
+    });
+});
+```
+:::
+:::if{props.platform="flutter"}
+```dart
+final result = await ZIM.getInstance()!.querySelfUserInfo();
+if (result.error.code == 0) {
+  // 全量更新：基于查询到的完整规则修改目标字段后整体提交
+  final rule = result.userInfo.userRule.offlinePushRule;
+  rule.offlinePushEnabled = false;          // 关闭全部离线推送
+  // rule.messageOfflinePushEnabled = false; // 仅关闭消息类离线推送
+  // rule.callOfflinePushEnabled = false;    // 仅关闭来电类离线推送
+  final updateResult = await ZIM.getInstance()!.updateUserOfflinePushRule(rule);
+}
+```
+:::
+:::if{props.platform="web"}
+```js
+try {
+  const zim = ZIM.getInstance();
+  const result = await zim.querySelfUserInfo();
+  // 全量更新：基于查询到的完整规则修改目标字段后整体提交
+  const rule = result.selfUserInfo.userRule.offlinePushRule;
+  rule.offlinePushEnabled = false;          // 关闭全部离线推送
+  // rule.messageOfflinePushEnabled = false; // 仅关闭消息类离线推送
+  // rule.callOfflinePushEnabled = false;    // 仅关闭来电类离线推送
+  await zim.updateUserOfflinePushRule(rule);
+} catch (error) {
+  // error.code 为错误码
+}
+```
+:::
+### 场景二：设置个人免打扰
+
+<Frame width="512" height="auto">
+  <img src="https://doc-media.zego.im/core_products/zim/zh/docs_zim_android_zh/best-practice/scenario-two-dnd.png" />
+</Frame>
+
+`doNotDisturbRule.enabled = true` 时，每次提交都必须**同份显式携带完整时段参数**（起止时分 + repeatMode；custom 模式另带 customRepeatDays；需按非 UTC 时区生效的必须显式带 timeZoneID）——不存在「先开启、后补时段」的用法。仅关闭免打扰（enabled = false）时无此要求。
+
+<Note title="说明">
+结束时间早于开始时间表示跨零点时段。
+</Note>
+
+:::if{props.platform=undefined}
+```java
+ZIMUserOfflinePushDoNotDisturbRule dndRule = new ZIMUserOfflinePushDoNotDisturbRule();
+dndRule.setEnabled(true);
+dndRule.setStartHour(22);      // 22:00 开始
+dndRule.setEndHour(8);         // 次日 08:00 结束（end < start 表示跨零点）
+dndRule.setRepeatMode(ZIMUserOfflinePushDoNotDisturbRepeatMode.DAILY);
+dndRule.setTimeZoneID("Asia/Shanghai"); // 按用户所在时区生效；留空则服务端按 UTC 计算
+
+ZIMUserOfflinePushRule rule = new ZIMUserOfflinePushRule();
+rule.setDoNotDisturbRule(dndRule);
+
+ZIM.getInstance().updateUserOfflinePushRule(rule, new ZIMUserOfflinePushRuleUpdatedCallback() {
+    @Override
+    public void onUserOfflinePushRuleUpdated(ZIMError errorInfo) {
+    }
+});
+```
+:::
+:::if{props.platform="ios|mac"}
+```objc
+ZIMUserOfflinePushDoNotDisturbRule *dndRule = [[ZIMUserOfflinePushDoNotDisturbRule alloc] init];
+dndRule.enabled = YES;
+dndRule.startHour = 22;        // 22:00 开始
+dndRule.endHour = 8;           // 次日 08:00 结束（end < start 表示跨零点）
+dndRule.repeatMode = ZIMUserOfflinePushDoNotDisturbRepeatModeDaily;
+dndRule.timeZoneID = @"Asia/Shanghai"; // 按用户所在时区生效；留空则服务端按 UTC 计算
+
+ZIMUserOfflinePushRule *rule = [[ZIMUserOfflinePushRule alloc] init];
+rule.doNotDisturbRule = dndRule;
+
+[zim updateUserOfflinePushRule:rule callback:^(ZIMError *errorInfo) {
+}];
+```
+:::
+:::if{props.platform="windows"}
+```cpp
+ZIMUserOfflinePushDoNotDisturbRule dnd_rule;
+dnd_rule.enabled_ = true;
+dnd_rule.start_hour_ = 22;     // 22:00 开始
+dnd_rule.end_hour_ = 8;        // 次日 08:00 结束（end < start 表示跨零点）
+dnd_rule.repeat_mode_ = zim_user_offline_push_do_not_disturb_repeat_mode_daily;
+dnd_rule.time_zone_id_ = "Asia/Shanghai"; // 按用户所在时区生效；留空则服务端按 UTC 计算
+
+ZIMUserOfflinePushRule rule;
+rule.do_not_disturb_rule_ = dnd_rule;
+
+zim->UpdateUserOfflinePushRule(rule, [=](const ZIM::ZIMError &errorInfo) {
+});
+```
+:::
+:::if{props.platform="flutter"}
+```dart
+final dndRule = ZIMUserOfflinePushDoNotDisturbRule()
+  ..enabled = true
+  ..startHour = 22      // 22:00 开始
+  ..endHour = 8         // 次日 08:00 结束（end < start 表示跨零点）
+  ..repeatMode = ZIMUserOfflinePushDoNotDisturbRepeatMode.daily
+  ..timeZoneID = 'Asia/Shanghai'; // 按用户所在时区生效；留空则服务端按 UTC 计算
+
+final rule = ZIMUserOfflinePushRule()..doNotDisturbRule = dndRule;
+
+await ZIM.getInstance()!.updateUserOfflinePushRule(rule);
+```
+:::
+:::if{props.platform="web"}
+```js
+const zim = ZIM.getInstance();
+const dndRule = {
+  enabled: true,
+  startHour: 22,      // 22:00 开始
+  startMinute: 0,
+  endHour: 8,         // 次日 08:00 结束（end < start 表示跨零点）
+  endMinute: 0,
+  repeatMode: ZIMUserOfflinePushDoNotDisturbRepeatMode.Daily,
+  customRepeatDays: 0,
+  onceEndTimestamp: 0, // 只读字段，设置时传 0
+  timeZoneID: 'Asia/Shanghai' // 按用户所在时区生效；留空则服务端按 UTC 计算
+};
+
+const rule = {
+  onlinePlatforms: [],
+  notToReceiveOfflinePushPlatforms: [],
+  offlinePushEnabled: true,
+  messageOfflinePushEnabled: true,
+  callOfflinePushEnabled: true,
+  doNotDisturbRule: dndRule
+};
+
+await zim.updateUserOfflinePushRule(rule);
+```
+:::
+
+
+如需仅每周指定几天生效，将 repeatMode 改为 CUSTOM，并通过 `customRepeatDays` 位掩码指定星期：
+
+| 星期 | 所在位 | 数值 |
+| --- | --- | --- |
+| 周一 | bit0 | 1 |
+| 周二 | bit1 | 2 |
+| 周三 | bit2 | 4 |
+| 周四 | bit3 | 8 |
+| 周五 | bit4 | 16 |
+| 周六 | bit5 | 32 |
+| 周日 | bit6 | 64 |
+
+将需要生效的星期对应数值按**位或**运算后填入，如工作日（一 ~ 五）为 31（0b011111）、周末（六、日）为 96（0b1100000）、周一三五为 21（0b10101）。
+
+<Warning title="注意">
+- `customRepeatDays = 0` 表示无重复日，规则在任何一天都不会屏蔽推送。
+- 该字段仅在 `repeatMode = Custom` 时生效；切换到其他模式后服务端联动清零，回读为 0。
+</Warning>
+
+### 场景三：桌面端在线时，移动端不接收离线推送
+
+<Frame width="512" height="auto" >
+  <img src="https://doc-media.zego.im/core_products/zim/zh/docs_zim_android_zh/best-practice/scenario-three-multi-device.png" />
+</Frame>
+
+多端登录场景下，`onlinePlatforms` 指定的平台在线时，`notToReceiveOfflinePushPlatforms` 指定的平台将不会收到离线推送。
+
+:::if{props.platform=undefined}
+```java
+ZIMUserOfflinePushRule rule = new ZIMUserOfflinePushRule();
+// 桌面端（WIN = 1、MAC_OS = 4）在线时……
+rule.setOnlinePlatforms(new ArrayList<>(Arrays.asList(1, 4)));
+// ……移动端（ANDROID = 3、IPHONE_OS = 2）不收离线推送
+rule.setNotToReceiveOfflinePushPlatforms(new ArrayList<>(Arrays.asList(2, 3)));
+
+ZIM.getInstance().updateUserOfflinePushRule(rule, new ZIMUserOfflinePushRuleUpdatedCallback() {
+    @Override
+    public void onUserOfflinePushRuleUpdated(ZIMError errorInfo) {
+    }
+});
+```
+:::
+:::if{props.platform="ios|mac"}
+```objc
+ZIMUserOfflinePushRule *rule = [[ZIMUserOfflinePushRule alloc] init];
+// 桌面端（WIN = 1、MAC_OS = 4）在线时……
+rule.onlinePlatforms = @[@(1), @(4)];
+// ……移动端（ANDROID = 3、IPHONE_OS = 2）不收离线推送
+rule.notToReceiveOfflinePushPlatforms = @[@(2), @(3)];
+
+[zim updateUserOfflinePushRule:rule callback:^(ZIMError *errorInfo) {
+}];
+```
+:::
+:::if{props.platform="windows"}
+```cpp
+ZIMUserOfflinePushRule rule;
+// 桌面端（WIN = 1、MAC_OS = 4）在线时……
+rule.online_platforms_ = {1, 4};
+// ……移动端（ANDROID = 3、IPHONE_OS = 2）不收离线推送
+rule.not_to_receive_offline_push_platforms_ = {2, 3};
+
+zim->UpdateUserOfflinePushRule(rule, [=](const ZIM::ZIMError &errorInfo) {
+});
+```
+:::
+:::if{props.platform="flutter"}
+```dart
+final rule = ZIMUserOfflinePushRule()
+  // 桌面端（WIN = 1、MAC_OS = 4）在线时……
+  ..onlinePlatforms = [1, 4]
+  // ……移动端（ANDROID = 3、IPHONE_OS = 2）不收离线推送
+  ..notToReceiveOfflinePushPlatforms = [2, 3];
+
+await ZIM.getInstance()!.updateUserOfflinePushRule(rule);
+```
+:::
+:::if{props.platform="web"}
+```js
+const zim = ZIM.getInstance();
+const rule = {
+  // 桌面端（Win、MacOS）在线时……
+  onlinePlatforms: [ZIMPlatformType.Win, ZIMPlatformType.MacOS],
+  // ……移动端（IPhoneOS、Android）不收离线推送
+  notToReceiveOfflinePushPlatforms: [ZIMPlatformType.IPhoneOS, ZIMPlatformType.Android],
+  offlinePushEnabled: true,
+  messageOfflinePushEnabled: true,
+  callOfflinePushEnabled: true,
+  doNotDisturbRule: {
+    enabled: false, startHour: 0, startMinute: 0, endHour: 0, endMinute: 0,
+    repeatMode: ZIMUserOfflinePushDoNotDisturbRepeatMode.Unknown,
+    customRepeatDays: 0, onceEndTimestamp: 0, timeZoneID: ''
+  }
+};
+
+await zim.updateUserOfflinePushRule(rule);
+```
+:::
+
+
+## 查询当前规则
+
+调用 `querySelfUserInfo` 获取当前用户信息，其中 `userRule.offlinePushRule` 即当前生效的离线推送规则。修改规则前的"先查后改"也依赖此接口。
+
+:::if{props.platform=undefined}
+```java
+ZIM.getInstance().querySelfUserInfo(new ZIMSelfUserInfoQueriedCallback() {
+    @Override
+    public void onSelfUserInfoQueried(ZIMSelfUserInfo userInfo, ZIMError errorInfo) {
+        if (errorInfo.code == ZIMErrorCode.SUCCESS) {
+            ZIMUserOfflinePushRule rule = userInfo.userRule.offlinePushRule;
+            ZIMUserOfflinePushDoNotDisturbRule dnd = rule.getDoNotDisturbRule();
+            // dnd.getOnceEndTimestamp() 为一次性免打扰时段的服务端记录结束时刻，
+            // 本端设置时传 0 即可，回读在此处获取
+        }
+    }
+});
+```
+:::
+:::if{props.platform="ios|mac"}
+```objc
+[zim querySelfUserInfo:^(ZIMSelfUserInfo *userInfo, ZIMError *errorInfo) {
+    if (errorInfo.code == ZIMErrorCodeSuccess) {
+        ZIMUserOfflinePushRule *rule = userInfo.userRule.offlinePushRule;
+        ZIMUserOfflinePushDoNotDisturbRule *dnd = rule.doNotDisturbRule;
+        // dnd.onceEndTimestamp 为一次性免打扰时段的服务端记录结束时刻，
+        // 本端设置时传 0 即可，回读在此处获取
+    }
+}];
+```
+:::
+:::if{props.platform="windows"}
+```cpp
+zim->QuerySelfUserInfo([=](unsigned int seq, const ZIMSelfUserInfo &userInfo,
+                           const ZIM::ZIMError &errorInfo) {
+    if (errorInfo.code == 0) {
+        auto rule = userInfo.userRule_.offline_push_rule_;
+        auto dnd = rule.do_not_disturb_rule_;
+        // dnd.once_end_timestamp_ 为一次性免打扰时段的服务端记录结束时刻，
+        // 本端设置时传 0 即可，回读在此处获取
+    }
+});
+```
+:::
+:::if{props.platform="flutter"}
+```dart
+final result = await ZIM.getInstance()!.querySelfUserInfo();
+if (result.error.code == 0) {
+  final rule = result.userInfo.userRule.offlinePushRule;
+  final dnd = rule.doNotDisturbRule;
+  // dnd.onceEndTimestamp 为一次性免打扰时段的服务端记录结束时刻，
+  // 本端设置时传 0 即可，回读在此处获取
+}
+```
+:::
+:::if{props.platform="web"}
+```js
+try {
+  const zim = ZIM.getInstance();
+  const result = await zim.querySelfUserInfo();
+  const rule = result.selfUserInfo.userRule.offlinePushRule;
+  const dnd = rule.doNotDisturbRule;
+  // dnd.onceEndTimestamp 为一次性免打扰时段的服务端记录结束时刻，
+  // 本端设置时传 0 即可，回读在此处获取
+} catch (error) {
+  // error.code 为错误码
+}
+```
+:::
+
+
+## 监听多端规则变更
+
+任一端调用 `updateUserOfflinePushRule` 成功后，该用户**所有在线端**都会收到 `onUserRuleUpdated` 回调。建议各端在收到回调后刷新本地设置页展示。
+
+:::if{props.platform=undefined}
+```java
+ZIM.getInstance().setEventHandler(new ZIMEventHandler() {
+    @Override
+    public void onUserRuleUpdated(ZIM zim, ZIMUserRule userRule) {
+        ZIMUserOfflinePushRule rule = userRule.offlinePushRule;
+        // 刷新本地展示
+    }
+});
+```
+:::
+:::if{props.platform="ios|mac"}
+```objc
+// 设置 ZIMEventHandler 后
+- (void)zim:(ZIM *)zim onUserRuleUpdated:(ZIMUserRule *)userRule {
+    ZIMUserOfflinePushRule *rule = userRule.offlinePushRule;
+    // 刷新本地展示
+}
+```
+:::
+:::if{props.platform="windows"}
+```cpp
+// 继承 ZIMEventHandler 并重写：
+void MyHandler::OnUserRuleUpdated(ZIM *zim, const ZIMUserRule &user_rule) {
+    auto rule = user_rule.offline_push_rule_;
+    // 刷新本地展示
+}
+```
+:::
+:::if{props.platform="flutter"}
+```dart
+ZIMEventHandler.onUserRuleUpdated = (zim, userRule) {
+  final rule = userRule.offlinePushRule;
+  // 刷新本地展示
+};
+```
+:::
+:::if{props.platform="web"}
+```js
+const zim = ZIM.getInstance();
+zim.on('userRuleUpdated', (zim, result) => {
+  const rule = result.userRule.offlinePushRule;
+  // 刷新本地展示
+});
+```
+:::
+
+## 注意事项
+
+- **全量更新语义**：`updateUserOfflinePushRule` 每次调用都会覆盖全部成员。单项修改务必"先 `querySelfUserInfo` 查全量、改副本、再整体提交"。
+- **重复模式回读**：对外仅提供不重复 / 每天 / 自定义三种模式；「工作日 / 周末」等需求请用 custom 模式位掩码表达（工作日 = 0b011111 = 31、周末 = 0b1100000 = 96）。**不设置 repeatMode 是合法用法**（等价仅当日生效一次），更新时 SDK 按不重复上报，回读为 None(1)。
+- **版本兼容**：旧版本 SDK 端（不含新字段）调用 updateUserOfflinePushRule 不会清除新版本端已配置的开关与免打扰设置。
+- **时区**：`timeZoneID` 为 IANA 名称（如 "Asia/Shanghai"），服务端按该时区（含夏令时规则）计算免打扰窗口；留空表示未指定，服务端按 UTC 计算。
+- **跨零点**：结束时间早于开始时间即表示跨零点时段（22:00 - 08:00 = 22:00 至次日 08:00）。
