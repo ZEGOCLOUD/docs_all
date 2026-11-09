@@ -1,35 +1,64 @@
 ---
-date: "2026-07-13"
+date: "2026-11-06"
 ---
 # 配置翻译
 
 ---
 
-## 功能介绍
+## 功能简介
 
 在实时语音识别（ASR）过程中，您可以开启翻译功能，将识别到的音频内容实时翻译成目标语言。
 - 该功能支持以下两种主要的配置模式：
     - **房间维度翻译**：房间内所有流共用一套翻译配置。
     - **流维度翻译**：为房间内不同的流设置个性化的翻译配置（如不同的目标语言）。
-- 目前支持的翻译模型包括：doubao-seed-translation、Qwen-MT 等。对应不同模型支持的翻译语种，请分别参考对应的模型的官方文档。
+- 支持的翻译厂商/模型：豆包 doubao-seed-translation、通义千问 Qwen-MT、Google 翻译（GoogleTranslateV2）。各厂商支持的翻译语种，请分别参考对应模型的官方文档。
 - 支持获取翻译结果的方式：
     - 服务端回调获取翻译结果。
     - 实时音视频房间信令（ZEGO Express SDK）回调。
 
-## 核心参数配置
-创建实时语音识别任务（[StartRealtimeASRTask](/cloud-realtime-asr/api-reference/start)）时配置参数。
+## 前提条件
+
+1. 使用 ZEGO 云端实时语音识别支持的翻译模型。
+2. 已自行开通对应翻译厂商的服务，并获取了模型的 API Key：
+<Tabs>
+<Tab title="豆包翻译">
+
+火山方舟 doubao-seed-translation 翻译模型，字节跳动自研多语言翻译模型，支持数十种语言互译，译文忠实流畅。详情请参考 [doubao-seed-translation 模型说明](https://www.volcengine.com/docs/82379/1820188?lang=zh)。
+
+</Tab>
+<Tab title="千问翻译">
+
+阿里云百炼 Qwen-MT 机器翻译大模型，基于 Qwen3 优化，支持 92 个语种互译。详情请参考 [翻译能力 Qwen-MT](https://help.aliyun.com/zh/model-studio/machine-translation)。
+
+</Tab>
+<Tab title="Google 翻译">
+
+Google Cloud Translation API（v2），默认使用 nmt 神经网络翻译模型，支持百余种语言互译。详情请参考 [Google Cloud Translation 文档](https://cloud.google.com/translate/docs)。
+
+<Warning title="注意">Google 翻译仅支持部署在海外服务器的场景使用，国内服务器无法访问 Google 服务。</Warning>
+
+</Tab>
+</Tabs>
+
+## 使用方式
+
+创建实时语音识别任务（[StartRealtimeASRTask](/cloud-realtime-asr/api-reference/start)）、添加识别流（[AddStream](/cloud-realtime-asr/api-reference/add-stream)）时，通过 `EnableTranslation` 开启翻译，并在 `Translation` 中配置翻译厂商、源语言、目标语言等参数：
+- **房间维度翻译**：在任务级配置 `EnableTranslation` 和 `Translation`，房间内所有流共用该翻译配置。
+- **流维度翻译**：在 `StreamList` 中为每条流单独配置 `EnableTranslation` 和 `Translation`（如不同的目标语言）。当 `RecognitionRange` 为 `1` 时，系统优先读取流级配置，流级未配置时使用外层的 `EnableTranslation` 和 `Translation` 作为兜底配置。
+
+## 翻译参数说明 <a id="translation-params" />
+
+创建实时语音识别任务时，与翻译相关的参数如下：
 
 | 参数 | 类型 | 是否必选 | 描述 |
 | :--- | :--- | :--- | :--- |
-| `RoomId` | String | 是 | RTC 房间 Id |
-| `RecognitionRange` | Int | 否 | 识别返回。0: 整个房间，1: 指定 StreamList |
-| `StreamList` | array of object | 否 | 需要识别的流列表，RecognitionRange 为 1 时生效。 |
+| `RecognitionRange` | Int | 否 | 识别范围。0: 整个房间，1: 指定 StreamList |
+| `StreamList` | array of object | 否 | 需要识别的流列表，RecognitionRange 为 1 时生效 |
 | `EnableTranslation` | Bool | 否 | 是否开启翻译 |
 | `Translation` | Object | 否 | 翻译 LLM 配置项 |
-| `SubtitleType` | Int | 否 | 字幕通过房间信令下发类型，默认值为 0：<ul><li>0: 不下发</li><li>1: 仅下发识别结果（如用户说中文"你好"，则下发"你好"）</li><li>2: 仅下发翻译结果（如用户说中文"你好"，则下发翻译后的"Hello"）</li><li>3: 同时下发识别结果和翻译结果（如用户说中文"你好"，则同时下发"你好"和"Hello"）</li></ul> 若需要客户端UI展示字幕，则推荐配置为 <code>1</code>、<code>2</code> 或 <code>3</code> |
+| `SubtitleType` | Int | 否 | 字幕通过房间信令下发类型，默认值为 0：<ul><li>0: 不下发</li><li>1: 仅下发识别结果（如用户说中文"你好"，则下发"你好"）</li><li>2: 仅下发翻译结果（如用户说中文"你好"，则下发翻译后的"Hello"）</li><li>3: 同时下发识别结果和翻译结果（如用户说中文"你好"，则同时下发"你好"和"Hello"）</li></ul> 若需要客户端 UI 展示字幕，则推荐配置为 <code>1</code>、<code>2</code> 或 <code>3</code> |
 
-<Tabs>
-<Tab title="StreamList">
+`StreamList` 中与翻译相关的参数如下：
 
 | 参数 | 类型 | 是否必选 | 描述 |
 | :--- | :--- | :--- | :--- |
@@ -38,37 +67,109 @@ date: "2026-07-13"
 | `EnableTranslation` | Bool | 否 | 是否开启翻译 |
 | `Translation` | Object | 否 | 翻译 LLM 配置项 |
 
-</Tab>
-<Tab title="Translation">
+### Translation
+
 | 参数 | 类型 | 是否必选 | 说明 |
 | :--- | :--- | :--- | :--- |
-| `Vendor` | String | 是 | 调用 LLM 供应商：DoubaoSeedTranslation、QwenMT |
-| `SourceLanguage` | String | 是 | 源语言 |
+| `Vendor` | String | 是 | 翻译服务供应商：<ul><li>`DoubaoSeedTranslation`：豆包翻译</li><li>`QwenMT`：通义千问翻译</li><li>`GoogleTranslateV2`：Google 翻译</li></ul> |
+| `SourceLanguage` | String | 是 | 源语言。`GoogleTranslateV2` 支持省略或填空字符串自动检测源语言。 |
 | `TargetLanguage` | String | 是 | 目标语言 |
-| `LLM` | Object | 是 | LLM 参数 |
-</Tab>
-<Tab title="LLM">
+| `LLM` | Object | 是 | LLM 参数，详见下表 |
+
+### LLM
+
 |参数-100px | 类型-100px | 是否必选-100px | 说明|
 | :--- | :--- | :--- | :--- |
-| `Url` | String | 是 | 供应商：DoubaoSeedTranslation、QwenMT 等模型的调用地址 |
-| `ApiKey` | String | 否 | LLM 校验 API key。默认为空，生产环境中务必启用 API key。 |
-| `Model` | String | 是 | 调用的模型。不同的 LLM 供应商支持的配置不同，请参考对应文档填入。 |
-| `Params` | Object | 否 | LLM 或应用平台的请求参数，具体支持的参数请参考对应模型的能力。 |
+| `Url` | String | 视厂商 | 调用 LLM 地址，不同供应商不一样：<ul><li>`DoubaoSeedTranslation`：必填，例如 `https://ark.cn-beijing.volces.com/api/v3/responses`</li><li>`QwenMT`：必填，例如 `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions`（国内站）或 `https://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1`（国际站）</li><li>`GoogleTranslateV2`：选填，不传时使用服务端默认地址（`https://translation.googleapis.com/language/translate/v2`）</li></ul> |
+| `ApiKey` | String | 否 | LLM 校验 API key。默认为空，生产环境中务必填写对应的 API key。 |
+| `Model` | String | 视厂商 | 调用的模型，不同供应商不一样：<ul><li>`DoubaoSeedTranslation`：填写对应翻译模型，例如 `doubao-seed-translation-250915`</li><li>`QwenMT`：填写对应翻译模型，例如 `qwen-mt-lite`</li><li>`GoogleTranslateV2`：选填，不传时默认使用 `nmt`</li></ul> |
+| `Params` | Object | 否 | LLM 或应用平台的请求参数，具体支持的参数请参考对应模型的官方文档。`GoogleTranslateV2` 不支持透传参数。 |
+
+各厂商的详细说明及参考调用示例如下（支持的翻译语种请参考各厂商官方文档）：
+
+<Tabs titleSize="h3">
+<Tab title="豆包翻译（DoubaoSeedTranslation）">
+
+字节跳动自研多语言翻译模型 doubao-seed-translation，支持数十种语言互译，译文忠实流畅。模型介绍及支持的翻译语种请参考 [doubao-seed-translation](https://www.volcengine.com/docs/82379/1820188?lang=zh)。
+
+#### 使用示例
+
+```json
+{
+    "EnableTranslation": true,
+    "Translation": {
+        "Vendor": "DoubaoSeedTranslation",
+        "SourceLanguage": "zh",
+        "TargetLanguage": "en",
+        "LLM": {
+            "Url": "https://ark.cn-beijing.volces.com/api/v3/responses",
+            "ApiKey": "***",
+            "Model": "doubao-seed-translation-250915",
+            "Params": {}
+        }
+    }
+}
+```
 
 </Tab>
+<Tab title="千问翻译（QwenMT）">
 
+基于 Qwen3 优化的机器翻译大模型 Qwen-MT，支持 92 个语种互译，并有术语干预、领域提示、记忆库功能。模型介绍及支持的翻译语种请参考 [翻译能力 Qwen-MT](https://help.aliyun.com/zh/model-studio/machine-translation)。
+
+#### 使用示例
+
+```json
+{
+    "EnableTranslation": true,
+    "Translation": {
+        "Vendor": "QwenMT",
+        "SourceLanguage": "zh",
+        "TargetLanguage": "en",
+        "LLM": {
+            "Url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+            "ApiKey": "***",
+            "Model": "qwen-mt-flash",
+            "Params": {}
+        }
+    }
+}
+```
+
+</Tab>
+<Tab title="Google 翻译（GoogleTranslateV2）">
+
+接入 Google Cloud Translation API（v2），默认使用 nmt 神经网络翻译模型，支持百余种语言互译。支持的语言请参考 [Google Cloud Translation 支持的语言](https://cloud.google.com/translate/docs/languages)。
+
+参数说明：
+- `LLM.Url`、`LLM.Model` 均可省略：省略 `Url` 时使用服务端默认地址；省略 `Model` 时默认使用 `nmt`。
+- `ApiKey` 需填写 Google Cloud 的 API Key。
+- `SourceLanguage` 省略或填空字符串时，自动检测源语言。
+- 不支持 `LLM.Params` 透传参数。
+
+<Warning title="注意">Google 翻译仅支持部署在海外服务器的场景使用，国内服务器无法访问 Google 服务。</Warning>
+
+#### 使用示例
+
+```json
+{
+    "EnableTranslation": true,
+    "Translation": {
+        "Vendor": "GoogleTranslateV2",
+        "SourceLanguage": "zh",
+        "TargetLanguage": "en",
+        "LLM": {
+            "Url": "https://translation.googleapis.com/language/translate/v2",
+            "ApiKey": "***",
+            "Model": "nmt"
+        }
+    }
+}
+```
+
+</Tab>
 </Tabs>
 
-
-
-
-
 ## 使用示例
-
-#### 前提条件
-
-1. 使用 ZEGO 云端实时语音识别支持的翻译模型
-2. 已经自行开通翻译服务，并获取了模型的 API Key。
 
 #### 开启带翻译的识别任务，并在客户端展示翻译结果
 <Tabs titleSize="h5">
@@ -120,7 +221,8 @@ date: "2026-07-13"
                 "LLM": {
                     "Url": "https://ark.cn-beijing.volces.com/api/v3/responses",
                     "ApiKey": "",
-                    "Model": "doubao-seed-translation-250915"                }
+                    "Model": "doubao-seed-translation-250915"
+                }
             }
         },
         {
@@ -133,7 +235,8 @@ date: "2026-07-13"
                 "LLM": {
                     "Url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
                     "ApiKey": "",
-                    "Model": "qwen-mt-flash"                }
+                    "Model": "qwen-mt-flash"
+                }
             }
         }
     ],
@@ -150,7 +253,7 @@ date: "2026-07-13"
 
 #### 获取翻译结果
 ##### 通过服务端获取翻译结果（非流式）
-参考[接受回调](./../callbacks/receiving-callback.mdx)文档，获取 `Event` 为 `TranslationResult` 的 `Data` 结果.
+参考[接收回调](./../callbacks/receiving-callback.mdx)文档，获取 `Event` 为 `TranslationResult` 的 `Data` 结果.
 
 ##### （可选）客户端展示字幕
 显示翻译字幕，请参考[展示字幕](/cloud-realtime-asr/guides/display-subtitles)文档。
