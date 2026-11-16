@@ -28,8 +28,10 @@ The core fields involved in the subtitle component are described as follows:
 | Timestamp | Number | Timestamp, in seconds |
 | SeqId | Number | Packet sequence number, may be out of order, please sort messages by sequence number. In extreme cases, IDs may not be consecutive. |
 | Round | Number | Conversation round, increases each time the user actively speaks |
-| Cmd | Number | 201: ASR speech recognition text<br/>202: LLM translated text |
+| Cmd | Number | 201: ASR speech recognition text<br/>202: Incremental translated text<br/>203: Complete translated text |
 | Data | Object | Specific content, different Cmd corresponds to different Data |
+
+The delivery mode of translated text is controlled by `AdvancedConfig.TranslationRoomMessageMode` when starting the [Cloud Realtime ASR StartRealtimeASRTask](/cloud-realtime-asr/api-reference/start): 0 delivers incremental text only, cmd=202 (default); 1 delivers complete text only, cmd=203; 2 delivers both cmd=202 and cmd=203.
 
 Different Cmd values correspond to different Data, as follows:
 
@@ -38,20 +40,36 @@ Different Cmd values correspond to different Data, as follows:
 
 | Field | Type | Description |
 | --- | --- | --- |
-| UserId | string | Speaker's user ID |
 | Text | string | User speech recognition (ASR) text<br/>Each delivery is full text, supporting text correction |
 | MessageId | string | Message ID, unique for each round of ASR text messages |
+| UserId | string | Speaker's user ID |
+| StreamId | string | Stream ID of the speaker |
+| StartFlag | bool | Start flag, true indicates that this round of ASR text has started |
 | EndFlag | bool | End flag, true indicates that this round of ASR text processing is complete |
 
 </Tab>
-<Tab title="Cmd is 202, LLM Translation Text">
+<Tab title="Cmd is 202, Incremental Translated Text">
 
 | Field | Type | Description |
 | --- | --- | --- |
+| Text | string | Incremental translated text<br/>Each delivery is incremental text |
+| MessageId | string | Message ID, unique for each round of incremental translated text messages |
 | UserId | string | Speaker's user ID |
-| Text | string | LLM translated text<br/>Each delivery is incremental text |
-| MessageId | string | Message ID, unique for each round of LLM translation text messages |
-| EndFlag | bool | End flag, true indicates that this round of LLM translation text processing is complete |
+| StreamId | string | Stream ID of the speaker |
+| StartFlag | bool | Start flag, true indicates that this round of incremental translated text has started |
+| EndFlag | bool | End flag, true indicates that this round of incremental translated text processing is complete |
+
+</Tab>
+<Tab title="Cmd is 203, Complete Translated Text">
+
+| Field | Type | Description |
+| --- | --- | --- |
+| Text | string | Complete translated text of this round |
+| MessageId | string | Message ID. The message ID of each round of translated text is unique. |
+| UserId | string | User ID of the speaker |
+| StreamId | string | Stream ID of the speaker |
+| StartFlag | bool | Start flag, fixed to true |
+| EndFlag | bool | End flag, fixed to true |
 
 </Tab>
 </Tabs>
@@ -298,7 +316,10 @@ function handleMessage() {
 
 The client can obtain room custom messages with `method` as `liveroom.room.on_recive_room_channel_message` by listening to the `onRecvExperimentalAPI` callback.
 
-Determine the message type based on the Cmd field, and get the message content based on the Data field.
+Determine the message type based on the Cmd field (201: ASR speech recognition text, 202: incremental translated text, 203: complete translated text), and get the message content based on the Data field.
+
+The delivery mode of translated text is controlled by `AdvancedConfig.TranslationRoomMessageMode`; see the description above.
+
 <Tabs>
 <Tab title="Cmd is 201, ASR Recognition Text">
 The corresponding message processing flow is shown in the following diagram:
@@ -326,7 +347,7 @@ flowchart TD
 
 </Tab>
 
-<Tab title="Cmd is 202, LLM Translation Text">
+<Tab title="Cmd is 202, Incremental Translated Text">
 The corresponding message processing flow is shown in the following diagram. Where:
 - AI message cache: A HashMap with MessageId as key and new message as value.
 - UI message list: An array containing user messages and AI messages, storing all messages displayed on the UI.
@@ -356,6 +377,20 @@ flowchart TD
     UpdateDisplay --> End
 ```
 </Tab>
+
+<Tab title="Cmd is 203, Complete Translated Text">
+
+| Field | Type | Description |
+| --- | --- | --- |
+| Text | string | Complete translated text of this round |
+| MessageId | string | Message ID. The message ID of each round of translated text is unique. |
+| UserId | string | User ID of the speaker |
+| StreamId | string | Stream ID of the speaker |
+| StartFlag | bool | Start flag, fixed to true |
+| EndFlag | bool | End flag, fixed to true |
+
+Each round delivers the complete translated text, so you can display it by overwriting the message with the same MessageId without accumulation.
+</Tab>
 </Tabs>
 
 #### Notes
@@ -363,5 +398,6 @@ flowchart TD
 - Message sorting: Data received through room custom messages may be out of order and needs to be sorted by SeqId field.
 - Streaming text processing:
  - ASR text delivers full text each time. Messages with the same MessageId need to completely replace previous content.
- - LLM text delivers incremental text each time. Messages with the same MessageId need to be sorted and accumulated for display.
+ - LLM text delivers incremental text each time (Cmd 202). Messages with the same MessageId need to be sorted and accumulated for display.
+ - Complete translated text (Cmd 203, delivered when `TranslationRoomMessageMode` is 1 or 2) is the full text of the round. Overwrite the message with the same MessageId instead of accumulating.
 - Memory management: Please clean up completed message caches in a timely manner, especially when users engage in long conversations.
