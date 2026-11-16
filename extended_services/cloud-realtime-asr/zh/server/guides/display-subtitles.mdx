@@ -28,8 +28,10 @@ date: "2026-07-13"
 | Timestamp | Number | 时间戳，秒级别 |
 | SeqId | Number | 包序列号，可能乱序，请根据序列号对消息进行排序。极端情况下 Id 可能不连续。 |
 | Round | Number | 对话轮次，每次用户主动说话轮次增加 |
-| Cmd | Number | 201: ASR 语音识别的文本<br/>202: LLM 翻译的文本 |
+| Cmd | Number | 201: ASR 语音识别的文本<br/>202: 增量翻译文本<br/>203: 完整翻译文本 |
 | Data | Object | 具体内容，各 Cmd 对应不同 Data |
+
+翻译文本的下发模式由创建任务时 `AdvancedConfig.TranslationRoomMessageMode` 控制：0 仅下发增量文本（默认）、1 仅下发完整文本、2 同时下发。
 
 Cmd 不同对应的 Data 也不同，具体如下：
 
@@ -44,14 +46,26 @@ Cmd 不同对应的 Data 也不同，具体如下：
 | EndFlag | bool | 结束标识，true 表示本轮 ASR 文本已处理完成 |
 
 </Tab>
-<Tab title="Cmd 为 202，LLM 翻译文本">
+<Tab title="Cmd 为 202，增量翻译文本">
 
 | 字段 | 类型 | 描述 |
 | --- | --- | --- |
 | UserId | string | 说话人的用户 id |
-| Text | string | LLM 翻译文本<br/>每次下发增量文本 |
+| Text | string | 增量翻译文本<br/>每次下发增量文本 |
 | MessageId | string | 消息 id，每轮 LLM 翻译文本消息 id 唯一 |
 | EndFlag | bool | 结束标识，true 表示本轮 LLM 翻译文本已处理完成 |
+
+</Tab>
+<Tab title="Cmd 为 203，完整翻译文本">
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| Text | string | 本轮完整翻译文本 |
+| MessageId | string | 消息 id。每轮翻译文本消息 id 唯一。 |
+| UserId | string | 说话的用户 Id |
+| StreamId | string | 说话的流 id |
+| StartFlag | bool | 开始标识，固定为 true |
+| EndFlag | bool | 结束标识，固定为 true |
 
 </Tab>
 </Tabs>
@@ -298,7 +312,10 @@ function handleMessage() {
 
 客户端可通过监听 `onRecvExperimentalAPI` 回调获取 `method` 为 `liveroom.room.on_recive_room_channel_message` 的房间自定义消息。
 
-根据 Cmd 字段判断消息类型，并根据 Data 字段获取消息内容。
+根据 Cmd 字段判断消息类型（201：ASR 语音识别的文本、202：增量翻译文本、203：完整翻译文本），并根据 Data 字段获取消息内容。
+
+翻译文本的下发模式由 `AdvancedConfig.TranslationRoomMessageMode` 控制，详见上文说明。
+
 <Tabs>
 <Tab title="Cmd 为 201，ASR 识别文本">
 对应消息处理流程如下图所示：
@@ -326,7 +343,7 @@ flowchart TD
 
 </Tab>
 
-<Tab title="Cmd 为 202，LLM 翻译文本">
+<Tab title="Cmd 为 202，增量翻译文本">
 对应消息处理流程如下图所示。其中：
 - AI 消息缓存：一个 HashMap，key 为 MessageId，value 为新消息。
 - UI 消息列表：包含用户消息和 AI 消息的数组，存储所有在 UI 上展示的消息。
@@ -356,6 +373,20 @@ flowchart TD
     UpdateDisplay --> End
 ```
 </Tab>
+
+<Tab title="Cmd 为 203，完整翻译文本">
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| Text | string | 本轮完整翻译文本 |
+| MessageId | string | 消息 id。每轮翻译文本消息 id 唯一。 |
+| UserId | string | 说话的用户 Id |
+| StreamId | string | 说话的流 id |
+| StartFlag | bool | 开始标识，固定为 true |
+| EndFlag | bool | 结束标识，固定为 true |
+
+每轮下发的是完整翻译文本，可直接按 MessageId 覆盖展示，无需累加。
+</Tab>
 </Tabs>
 
 #### 注意事项
@@ -363,5 +394,6 @@ flowchart TD
 - 消息排序处理：通过房间自定义消息收到的数据可能会乱序，需要根据 SeqId 字段进行排序。
 - 流式文本处理：
  - ASR 文本每次下发的是全量文本，同一个 MessageId 的消息需要完全替换之前的内容。
- - LLM 文本每次下发的是增量文本，同一个 MessageId 的消息需要在排序后累加显示。
+ - LLM 文本每次下发的是增量文本（Cmd 202），同一个 MessageId 的消息需要在排序后累加显示。
+ - 完整翻译文本（Cmd 203，`TranslationRoomMessageMode` 为 1 或 2 时下发）每次为整轮完整文本，同一 MessageId 的消息直接覆盖显示，无需累加。
 - 内存管理：请及时清理已完成的消息缓存，特别是当用户进行长时间对话时。
